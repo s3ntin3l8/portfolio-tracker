@@ -20,5 +20,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
   }
 }

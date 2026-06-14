@@ -20,5 +20,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "decimal.js": "^10.4.3"
   }
 }

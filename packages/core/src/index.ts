@@ -1,4 +1,11 @@
-// @portfolio/core — holdings, average cost, realized P&L, XIRR, corp-action math, FX.
-// Filled in during phases 1, 2 and 4. Placeholder export keeps the package buildable.
-export const CORE_PACKAGE = "@portfolio/core";
-
+export * from "./types.js";
+export { computeHoldings, marketValue, unrealizedPnL } from "./holdings.js";
+export { cashFlow, cashBalances } from "./cash.js";
+export { xirr, type CashFlowPoint } from "./xirr.js";
+export {
+  netWorth,
+  convert,
+  type FxRateFn,
+  type PriceQuote,
+  type NetWorthInput,
+} from "./networth.js";
