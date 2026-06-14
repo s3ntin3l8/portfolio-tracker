@@ -398,6 +398,55 @@ describe("auth + portfolios + transactions", () => {
     expect(bond.marketValue).toBe("5000000"); // 5 units × 1,000,000
   });
 
+  it("converts a non-base-currency holding via cached FX into the display currency", async () => {
+    const { fxRates } = await import("@portfolio/db");
+    const t = await token("fx-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "USD book", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // A holding priced in USD; the fixture prices "BBCA" at 9500 (in the ref currency).
+    // Symbol "BBCA" (fixture price 9500) on a distinct market to avoid the
+    // (market, symbol) uniqueness clash with the IDX instrument above.
+    const [us] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBCA", market: "NYSE", assetClass: "equity", currency: "USD", name: "BCA (USD)" })
+      .returning();
+    await app.db
+      .insert(fxRates)
+      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) });
+
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: us.id,
+        quantity: "10",
+        price: "9500",
+        currency: "USD",
+        executedAt: "2026-01-10T00:00:00.000Z",
+      },
+    });
+
+    const summary = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/summary`,
+        headers: auth(t),
+      })
+    ).json();
+    // Per-holding market value stays in USD; the total is converted to IDR.
+    expect(summary.holdings[0].marketValue).toBe("95000"); // 10 × 9500 USD
+    expect(summary.totalMarketValue).toBe("1520000000"); // × 16000 IDR/USD
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

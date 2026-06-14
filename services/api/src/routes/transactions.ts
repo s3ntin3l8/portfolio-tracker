@@ -12,6 +12,7 @@ import {
 import type { InstrumentRef } from "@portfolio/market-data";
 import { getMarketData } from "../services/market-data.js";
 import { getCachedQuotes } from "../services/price-cache.js";
+import { getFxRates, makeFxRateFn } from "../services/fx.js";
 import { requireUser } from "../plugins/auth.js";
 
 interface PortfolioParams {
@@ -118,10 +119,19 @@ export async function transactionsRoute(app: FastifyInstance) {
       executedAt: r.executedAt,
     }));
 
+    // Resolve FX so holdings/cash in other currencies convert to the display
+    // currency (no-op when everything is already in baseCurrency).
+    const currencies = new Set<string>();
+    for (const p of Object.values(prices)) currencies.add(p.currency);
+    for (const r of rows) currencies.add(r.currency);
+    const rates = await getFxRates(app.db, [...currencies], baseCurrency);
+    const fx = makeFxRateFn(rates, baseCurrency);
+
     const summary = summarizePortfolio({
       transactions: coreTxns,
       prices,
       displayCurrency: baseCurrency,
+      fx,
     });
     return { coreTxns, summary, metaById };
   }
