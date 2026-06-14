@@ -1,15 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import {
-  instruments,
-  portfolios,
-  screenshotImports,
-  transactions,
-} from "@portfolio/db";
+import { portfolios, screenshotImports, transactions } from "@portfolio/db";
 import { parsedTransactionSchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
+import {
+  findOrCreateInstrument,
+  marketForAssetClass,
+} from "../services/instruments.js";
 
 const csvBodySchema = z.object({ content: z.string().min(1) });
 const screenshotBodySchema = z.object({
@@ -19,10 +18,6 @@ const screenshotBodySchema = z.object({
 const confirmBodySchema = z.object({
   transactions: z.array(parsedTransactionSchema).min(1),
 });
-
-function marketFor(assetClass: string): string {
-  return assetClass === "gold" ? "XAU" : "IDX";
-}
 
 export async function importsRoute(app: FastifyInstance) {
   async function ownedPortfolio(userId: string, portfolioId: string) {
@@ -165,30 +160,16 @@ export async function importsRoute(app: FastifyInstance) {
       for (let i = 0; i < drafts.length; i++) {
         const d = drafts[i];
         const symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
-        const market = marketFor(d.assetClass);
 
-        // Find or create the instrument.
-        let [instrument] = await app.db
-          .select()
-          .from(instruments)
-          .where(
-            and(eq(instruments.symbol, symbol), eq(instruments.market, market)),
-          )
-          .limit(1);
-        if (!instrument) {
-          [instrument] = await app.db
-            .insert(instruments)
-            .values({
-              symbol,
-              market,
-              assetClass: d.assetClass,
-              unit: d.unit,
-              currency: d.currency,
-              name: d.name ?? symbol,
-              isin: d.isin ?? null,
-            })
-            .returning();
-        }
+        const instrument = await findOrCreateInstrument(app.db, {
+          symbol,
+          market: marketForAssetClass(d.assetClass),
+          assetClass: d.assetClass,
+          unit: d.unit,
+          currency: d.currency,
+          name: d.name ?? symbol,
+          isin: d.isin ?? null,
+        });
 
         const [tx] = await app.db
           .insert(transactions)

@@ -11,6 +11,7 @@ import { healthRoute } from "./routes/health.js";
 import { meRoute } from "./routes/me.js";
 import { portfoliosRoute } from "./routes/portfolios.js";
 import { transactionsRoute } from "./routes/transactions.js";
+import { instrumentsRoute } from "./routes/instruments.js";
 import { importsRoute } from "./routes/imports.js";
 import type { ScreenshotParser } from "./services/parsers/types.js";
 import { getScreenshotParser } from "./services/screenshot-parser.js";
@@ -55,6 +56,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(meRoute);
   await app.register(portfoliosRoute);
   await app.register(transactionsRoute);
+  await app.register(instrumentsRoute);
   await app.register(importsRoute);
 
   return app;

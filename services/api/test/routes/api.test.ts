@@ -158,6 +158,51 @@ describe("auth + portfolios + transactions", () => {
     expect(summary.netWorth).toBe("0");
   });
 
+  it("finds-or-creates and searches instruments", async () => {
+    const t = await token("user-a");
+
+    // First POST creates; a second with the same (market, symbol) returns the same row.
+    const create = await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: {
+        symbol: "TLKM",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "idr",
+        name: "Telkom Indonesia",
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const tlkm = create.json();
+    expect(tlkm.symbol).toBe("TLKM");
+    expect(tlkm.currency).toBe("IDR"); // normalised
+
+    const again = await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: {
+        symbol: "TLKM",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Telkom (dup)",
+      },
+    });
+    expect(again.json().id).toBe(tlkm.id); // same instrument, not a duplicate
+
+    // Search matches symbol or name, case-insensitively.
+    const search = await app.inject({
+      method: "GET",
+      url: "/instruments?q=telkom",
+      headers: auth(t),
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().some((i: { id: string }) => i.id === tlkm.id)).toBe(true);
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

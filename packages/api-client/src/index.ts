@@ -1,6 +1,7 @@
 import type {
   PortfolioInput,
   TransactionInput,
+  InstrumentInput,
   ParsedTransaction,
 } from "@portfolio/schema";
 
@@ -27,6 +28,17 @@ export interface InstrumentMeta {
   name: string;
   assetClass: string;
   unit: string;
+}
+
+export interface Instrument {
+  id: string;
+  isin: string | null;
+  symbol: string;
+  market: string;
+  assetClass: string;
+  unit: string;
+  currency: string;
+  name: string;
 }
 
 export interface Transaction {
@@ -145,6 +157,14 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/transactions`,
         input,
       ),
+
+    searchInstruments: (q?: string) =>
+      request<Instrument[]>(
+        "GET",
+        `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    createInstrument: (input: InstrumentInput) =>
+      request<Instrument>("POST", "/instruments", input),
 
     getHoldings: (portfolioId: string) =>
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
