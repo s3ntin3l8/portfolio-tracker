@@ -203,6 +203,57 @@ describe("auth + portfolios + transactions", () => {
     expect(search.json().some((i: { id: string }) => i.id === tlkm.id)).toBe(true);
   });
 
+  it("deletes a transaction (owner only)", async () => {
+    const t = await token("user-a");
+    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+
+    const [oas] = await app.db
+      .insert(instruments)
+      .values({ symbol: "ORI", market: "IDX", assetClass: "bond", currency: "IDR", name: "ORI023" })
+      .returning();
+    const txId = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: oas.id,
+          quantity: "10",
+          price: "100000",
+          currency: "IDR",
+          executedAt: "2026-01-10T00:00:00.000Z",
+        },
+      })
+    ).json().id;
+
+    // Another user can't delete it.
+    const tB = await token("user-b");
+    const cross = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(tB),
+    });
+    expect(cross.statusCode).toBe(404);
+
+    // The owner can.
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(t),
+    });
+    expect(del.statusCode).toBe(204);
+
+    // It's gone; deleting again 404s.
+    const again = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(t),
+    });
+    expect(again.statusCode).toBe(404);
+    expect(again.json().error).toBe("transaction_not_found");
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

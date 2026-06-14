@@ -119,6 +119,12 @@
     "addTransaction": "Tambah transaksi",
     "createPortfolio": "Buat portofolio",
     "back": "Kembali",
+    "actions": "Tindakan",
+    "delete": {
+      "label": "Hapus transaksi",
+      "confirm": "Hapus",
+      "cancel": "Batal"
+    },
     "portfolio": {
       "title": "Buat portofolio",
       "subtitle": "Beri nama dan mata uang dasar untuk menilainya.",
