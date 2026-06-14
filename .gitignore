@@ -4,6 +4,17 @@ coverage/
 .vitest-cache/
 data/
 *.db
+
+# Next.js / Turborepo build output
+.next/
+.turbo/
+next-env.d.ts
+*.tsbuildinfo
+
+# env files (keep .env.example)
 .env
 .env.*
 !.env.example
+
+# Claude Code local plans (keep settings.json + hooks tracked)
+.claude/plans/

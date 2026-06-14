@@ -30,5 +30,5 @@ typecheck: ## Run type checking
 build: ## Production build
 	npm run build
 
-clean: ## Remove node_modules and caches
-	rm -rf node_modules dist coverage .vitest-cache
+clean: ## Remove node_modules and build/cache artifacts (all workspaces)
+	rm -rf node_modules **/node_modules **/dist **/.next **/.turbo **/coverage .vitest-cache .turbo

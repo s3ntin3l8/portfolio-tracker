@@ -13,6 +13,8 @@ jobs:
     uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@main
     with:
       node-version: "26"
+      # Root scripts fan out across all workspaces via Turborepo.
+      typecheck-script: "typecheck"
       test-script: "test:coverage"
     secrets: inherit
 

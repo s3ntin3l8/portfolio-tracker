@@ -1,0 +1,23 @@
+{
+  "name": "@portfolio/market-data",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "MarketDataProvider interface + provider implementations",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  }
+}

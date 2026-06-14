@@ -1,0 +1,31 @@
+{
+  "name": "@portfolio/web",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Portfolio tracker PWA (Next.js + Tailwind + shadcn/ui)",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "next-intl": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.0.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint-config-next": "^15.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "Landing": {
+    "title": "Portfolio Tracker",
+    "tagline": "Track Indonesian stocks, gold, bonds, mutual funds and cash — import transactions straight from a screenshot.",
+    "cta": "Sign in",
+    "assets": {
+      "stocks": "Stocks",
+      "gold": "Gold",
+      "bonds": "Bonds",
+      "funds": "Mutual funds",
+      "cash": "Cash"
+    }
+  }
+}

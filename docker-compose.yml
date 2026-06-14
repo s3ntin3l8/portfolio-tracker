@@ -1,0 +1,74 @@
+# Local-dev parity for the Supabase-Cloud stack.
+#
+#   docker compose up -d postgres minio   # usual local backing services
+#   npm run dev                           # run API + web with hot reload
+#
+# Optional profiles:
+#   docker compose --profile full up      # also build + run the API container
+#   docker compose --profile ollama up -d ollama   # local vision-model fallback
+#
+# Authentik is NOT run here — point the API at your existing self-hosted instance
+# via AUTHENTIK_ISSUER (see .env.example).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: portfolio
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portfolio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage (screenshots) — local stand-in for Supabase Storage.
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # The API container. Usually you run `npm run dev` instead; enable with --profile full.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/portfolio
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - full
+
+  # Local vision-model fallback for screenshot parsing (Qwen2.5-VL via Ollama).
+  # Also runnable on a separate RTX box; the API points at it via OLLAMA_BASE_URL.
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    profiles:
+      - ollama
+
+volumes:
+  pgdata:
+  miniodata:
+  ollamadata:

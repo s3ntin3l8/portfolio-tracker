@@ -1,0 +1,14 @@
+{
+  "Landing": {
+    "title": "Pelacak Portofolio",
+    "tagline": "Lacak saham Indonesia, emas, obligasi, reksa dana, dan kas — impor transaksi langsung dari tangkapan layar.",
+    "cta": "Masuk",
+    "assets": {
+      "stocks": "Saham",
+      "gold": "Emas",
+      "bonds": "Obligasi",
+      "funds": "Reksa dana",
+      "cash": "Kas"
+    }
+  }
+}
