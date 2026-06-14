@@ -120,6 +120,7 @@
     "createPortfolio": "Buat portofolio",
     "back": "Kembali",
     "actions": "Tindakan",
+    "edit": "Ubah transaksi",
     "delete": {
       "label": "Hapus transaksi",
       "confirm": "Hapus",
@@ -138,7 +139,9 @@
     },
     "tx": {
       "title": "Tambah transaksi",
+      "editTitle": "Ubah transaksi",
       "subtitle": "Catat transaksi, dividen, atau pergerakan kas.",
+      "save": "Simpan perubahan",
       "type": "Jenis",
       "instrument": "Instrumen",
       "search": "Cari berdasarkan simbol atau nama",

@@ -254,6 +254,66 @@ describe("auth + portfolios + transactions", () => {
     expect(again.json().error).toBe("transaction_not_found");
   });
 
+  it("updates a transaction (owner only)", async () => {
+    const t = await token("user-a");
+    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+
+    const [gld] = await app.db
+      .insert(instruments)
+      .values({ symbol: "GLD", market: "XAU", assetClass: "gold", unit: "grams", currency: "IDR", name: "Antam Gold" })
+      .returning();
+    const txId = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: gld.id,
+          quantity: "5",
+          price: "1140000",
+          currency: "IDR",
+          executedAt: "2026-02-08T00:00:00.000Z",
+        },
+      })
+    ).json().id;
+
+    // A non-owner can't update it.
+    const cross = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(await token("user-b")),
+      payload: { type: "buy", quantity: "9", price: "1140000", currency: "IDR", executedAt: "2026-02-08T00:00:00.000Z" },
+    });
+    expect(cross.statusCode).toBe(404);
+
+    // The owner can change the quantity.
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: gld.id,
+        quantity: "8",
+        price: "1150000",
+        currency: "IDR",
+        executedAt: "2026-02-08T00:00:00.000Z",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: txId, quantity: "8", price: "1150000" });
+
+    // Unknown id 404s.
+    const missing = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}/transactions/${gld.id}`,
+      headers: auth(t),
+      payload: { type: "buy", quantity: "1", price: "1", currency: "IDR", executedAt: "2026-02-08T00:00:00.000Z" },
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

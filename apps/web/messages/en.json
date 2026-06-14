@@ -120,6 +120,7 @@
     "createPortfolio": "Create portfolio",
     "back": "Back",
     "actions": "Actions",
+    "edit": "Edit transaction",
     "delete": {
       "label": "Delete transaction",
       "confirm": "Delete",
@@ -138,7 +139,9 @@
     },
     "tx": {
       "title": "Add a transaction",
+      "editTitle": "Edit transaction",
       "subtitle": "Record a trade, dividend or cash movement.",
+      "save": "Save changes",
       "type": "Type",
       "instrument": "Instrument",
       "search": "Search by symbol or name",

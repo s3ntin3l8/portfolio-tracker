@@ -11,8 +11,28 @@ import { Label } from "@/components/ui/label";
 /** The slice of the API client this form needs (injectable for tests). */
 export type AddTransactionClient = Pick<
   ApiClient,
-  "searchInstruments" | "createInstrument" | "createTransaction"
+  | "searchInstruments"
+  | "createInstrument"
+  | "createTransaction"
+  | "updateTransaction"
 >;
+
+/** Prefill values when editing an existing transaction. */
+export interface AddTransactionInitial {
+  type: string;
+  instrumentId: string | null;
+  instrument: {
+    symbol: string;
+    name: string;
+    assetClass: string;
+    unit: string;
+  } | null;
+  quantity: string;
+  price: string;
+  fees: string;
+  currency: string;
+  executedAt: string;
+}
 
 const TX_TYPES = ["buy", "sell", "dividend", "deposit", "withdrawal"] as const;
 type TxType = (typeof TX_TYPES)[number];
@@ -31,27 +51,47 @@ function marketForAssetClass(assetClass: string): string {
 export function AddTransactionForm({
   client,
   portfolioId,
+  initial,
+  transactionId,
   onSuccess,
 }: {
   client: AddTransactionClient;
   portfolioId: string;
+  initial?: AddTransactionInitial;
+  transactionId?: string;
   onSuccess?: () => void;
 }) {
   const t = useTranslations("Manage.tx");
   const tt = useTranslations("TxType");
   const tc = useTranslations("AssetClass");
 
-  const [type, setType] = useState<TxType>("buy");
-  const [currency, setCurrency] = useState("IDR");
-  const [date, setDate] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState("");
-  const [fees, setFees] = useState("");
+  const isEdit = Boolean(transactionId);
+  const [type, setType] = useState<TxType>(
+    () => (initial?.type as TxType) ?? "buy",
+  );
+  const [currency, setCurrency] = useState(() => initial?.currency ?? "IDR");
+  const [date, setDate] = useState(() => initial?.executedAt?.slice(0, 10) ?? "");
+  const [quantity, setQuantity] = useState(() => initial?.quantity ?? "");
+  const [price, setPrice] = useState(() => initial?.price ?? "");
+  const [fees, setFees] = useState(() => initial?.fees ?? "");
 
-  // Instrument selection (non-cash types).
+  // Instrument selection (non-cash types). Prefilled from the edited row.
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Instrument[]>([]);
-  const [selected, setSelected] = useState<Instrument | null>(null);
+  const [selected, setSelected] = useState<Instrument | null>(() =>
+    initial?.instrument && initial.instrumentId
+      ? {
+          id: initial.instrumentId,
+          isin: null,
+          symbol: initial.instrument.symbol,
+          market: marketForAssetClass(initial.instrument.assetClass),
+          assetClass: initial.instrument.assetClass,
+          unit: initial.instrument.unit,
+          currency: initial.currency,
+          name: initial.instrument.name,
+        }
+      : null,
+  );
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
   const [assetClass, setAssetClass] =
@@ -99,7 +139,7 @@ export function AddTransactionForm({
     setError(false);
     try {
       const instrumentId = await resolveInstrumentId();
-      await client.createTransaction(portfolioId, {
+      const payload = {
         type,
         instrumentId,
         quantity: isTrade ? quantity || "0" : "0",
@@ -107,8 +147,13 @@ export function AddTransactionForm({
         fees: isTrade ? fees || "0" : "0",
         currency,
         executedAt: new Date(date),
-        source: "manual",
-      });
+        source: "manual" as const,
+      };
+      if (transactionId) {
+        await client.updateTransaction(portfolioId, transactionId, payload);
+      } else {
+        await client.createTransaction(portfolioId, payload);
+      }
       onSuccess?.();
     } catch {
       setError(true);
@@ -302,7 +347,7 @@ export function AddTransactionForm({
 
       <Button type="submit" disabled={busy}>
         {busy && <Loader2 className="size-4 animate-spin" />}
-        {busy ? t("submitting") : t("submit")}
+        {busy ? t("submitting") : isEdit ? t("save") : t("submit")}
       </Button>
     </form>
   );

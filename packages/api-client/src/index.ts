@@ -157,6 +157,16 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/transactions`,
         input,
       ),
+    updateTransaction: (
+      portfolioId: string,
+      txId: string,
+      input: Omit<TransactionInput, "portfolioId">,
+    ) =>
+      request<Transaction>(
+        "PATCH",
+        `/portfolios/${portfolioId}/transactions/${txId}`,
+        input,
+      ),
     deleteTransaction: (portfolioId: string, txId: string) =>
       request<void>(
         "DELETE",

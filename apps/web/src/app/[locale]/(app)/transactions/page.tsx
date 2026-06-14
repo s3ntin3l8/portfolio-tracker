@@ -6,6 +6,7 @@ import {
   Landmark,
   Receipt,
   Plus,
+  Pencil,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -173,7 +174,22 @@ export default async function TransactionsPage({
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <DeleteTransactionButton portfolioId={portfolioId} txId={tx.id} />
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        asChild
+                        aria-label={tm("edit")}
+                      >
+                        <Link href={`/transactions/${tx.id}/edit`}>
+                          <Pencil className="size-4" />
+                        </Link>
+                      </Button>
+                      <DeleteTransactionButton
+                        portfolioId={portfolioId}
+                        txId={tx.id}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               );

@@ -197,6 +197,47 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Update a transaction (owner only) — full replacement of the editable fields.
+  app.patch<{ Params: PortfolioParams & { txId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const input = transactionInputSchema.parse({
+        ...(request.body as Record<string, unknown>),
+        portfolioId,
+      });
+      const [updated] = await app.db
+        .update(transactions)
+        .set({
+          instrumentId: input.instrumentId ?? null,
+          type: input.type,
+          quantity: input.quantity,
+          price: input.price,
+          fees: input.fees,
+          currency: input.currency,
+          executedAt: input.executedAt,
+          source: input.source,
+          externalId: input.externalId,
+        })
+        .where(
+          and(
+            eq(transactions.id, txId),
+            eq(transactions.portfolioId, portfolioId),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        return reply.code(404).send({ error: "transaction_not_found" });
+      }
+      return updated;
+    },
+  );
+
   // Derived holdings for a portfolio (computed via @portfolio/core).
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/holdings",

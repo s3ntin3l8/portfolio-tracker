@@ -26,6 +26,7 @@ function makeClient(over: Partial<AddTransactionClient> = {}): AddTransactionCli
     searchInstruments: vi.fn(async () => []),
     createInstrument: vi.fn(async () => INSTRUMENT),
     createTransaction: vi.fn(async () => ({}) as never),
+    updateTransaction: vi.fn(async () => ({}) as never),
     ...over,
   };
 }
@@ -38,6 +39,22 @@ function renderForm(client: AddTransactionClient, onSuccess = vi.fn()) {
   );
   return onSuccess;
 }
+
+const EDIT_INITIAL = {
+  type: "buy",
+  instrumentId: "i1",
+  instrument: {
+    symbol: "BBCA",
+    name: "Bank Central Asia",
+    assetClass: "equity",
+    unit: "shares",
+  },
+  quantity: "100",
+  price: "9500",
+  fees: "0",
+  currency: "IDR",
+  executedAt: "2026-02-03T00:00:00.000Z",
+};
 
 describe("AddTransactionForm", () => {
   it("creates a new instrument and records a buy", async () => {
@@ -144,6 +161,40 @@ describe("AddTransactionForm", () => {
     expect(client.createTransaction).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ instrumentId: "i1" }),
+    );
+  });
+
+  it("updates an existing transaction in edit mode", async () => {
+    const client = makeClient();
+    const onSuccess = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AddTransactionForm
+          client={client}
+          portfolioId="p1"
+          transactionId="t9"
+          initial={EDIT_INITIAL}
+          onSuccess={onSuccess}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // Prefilled from the row, with the instrument already selected.
+    expect(screen.getByDisplayValue("100")).toBeInTheDocument();
+    expect(screen.getByText("BBCA")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(m.quantity), {
+      target: { value: "120" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.save }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(client.createTransaction).not.toHaveBeenCalled();
+    expect(client.createInstrument).not.toHaveBeenCalled();
+    expect(client.updateTransaction).toHaveBeenCalledWith(
+      "p1",
+      "t9",
+      expect.objectContaining({ instrumentId: "i1", quantity: "120" }),
     );
   });
 });
