@@ -61,5 +61,67 @@
       "noDrafts": "No transactions were found in that file.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "Dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Your net worth across every portfolio.",
+    "netWorth": "Net worth",
+    "today": "today",
+    "totalPnL": "Total P&L",
+    "positions": "Positions",
+    "valueOverTime": "Value over time",
+    "allocation": "Allocation",
+    "topHoldings": "Top holdings",
+    "topMovers": "Top movers"
+  },
+  "Holdings": {
+    "title": "Holdings",
+    "subtitle": "Every position across your portfolios.",
+    "instrument": "Instrument",
+    "quantity": "Quantity",
+    "avgCost": "Avg cost",
+    "price": "Price",
+    "value": "Value",
+    "pnl": "P&L",
+    "all": "All"
+  },
+  "Transactions": {
+    "title": "Transactions",
+    "subtitle": "Every buy, sell, dividend and cash flow.",
+    "date": "Date",
+    "type": "Type",
+    "instrument": "Instrument",
+    "quantity": "Quantity",
+    "amount": "Amount",
+    "source": "Source",
+    "sources": {
+      "screenshot": "Screenshot",
+      "csv": "CSV",
+      "manual": "Manual",
+      "pytr": "Trade Republic"
+    }
+  },
+  "TxType": {
+    "buy": "Buy",
+    "sell": "Sell",
+    "dividend": "Dividend",
+    "coupon": "Coupon",
+    "fee": "Fee",
+    "split": "Split",
+    "bonus": "Bonus",
+    "rights": "Rights",
+    "savings_plan": "Savings plan",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal"
+  },
+  "AssetClass": {
+    "equity": "Stocks",
+    "gold": "Gold",
+    "bond": "Bonds",
+    "mutual_fund": "Mutual funds",
+    "etf": "ETFs",
+    "crypto": "Crypto",
+    "derivative": "Derivatives",
+    "cash": "Cash"
   }
 }

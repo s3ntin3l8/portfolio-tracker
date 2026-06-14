@@ -61,5 +61,67 @@
       "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
+  },
+  "Dashboard": {
+    "title": "Dasbor",
+    "subtitle": "Kekayaan bersih Anda di seluruh portofolio.",
+    "netWorth": "Kekayaan bersih",
+    "today": "hari ini",
+    "totalPnL": "Total Untung/Rugi",
+    "positions": "Posisi",
+    "valueOverTime": "Nilai dari waktu ke waktu",
+    "allocation": "Alokasi",
+    "topHoldings": "Kepemilikan teratas",
+    "topMovers": "Pergerak teratas"
+  },
+  "Holdings": {
+    "title": "Kepemilikan",
+    "subtitle": "Setiap posisi di seluruh portofolio Anda.",
+    "instrument": "Instrumen",
+    "quantity": "Jumlah",
+    "avgCost": "Rata-rata biaya",
+    "price": "Harga",
+    "value": "Nilai",
+    "pnl": "Untung/Rugi",
+    "all": "Semua"
+  },
+  "Transactions": {
+    "title": "Transaksi",
+    "subtitle": "Setiap beli, jual, dividen, dan arus kas.",
+    "date": "Tanggal",
+    "type": "Jenis",
+    "instrument": "Instrumen",
+    "quantity": "Jumlah",
+    "amount": "Nominal",
+    "source": "Sumber",
+    "sources": {
+      "screenshot": "Tangkapan layar",
+      "csv": "CSV",
+      "manual": "Manual",
+      "pytr": "Trade Republic"
+    }
+  },
+  "TxType": {
+    "buy": "Beli",
+    "sell": "Jual",
+    "dividend": "Dividen",
+    "coupon": "Kupon",
+    "fee": "Biaya",
+    "split": "Pemecahan",
+    "bonus": "Bonus",
+    "rights": "Rights",
+    "savings_plan": "Rencana menabung",
+    "deposit": "Setor",
+    "withdrawal": "Tarik"
+  },
+  "AssetClass": {
+    "equity": "Saham",
+    "gold": "Emas",
+    "bond": "Obligasi",
+    "mutual_fund": "Reksa dana",
+    "etf": "ETF",
+    "crypto": "Kripto",
+    "derivative": "Derivatif",
+    "cash": "Kas"
   }
 }
