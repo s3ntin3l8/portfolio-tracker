@@ -16,7 +16,8 @@
     "holdings": "Kepemilikan",
     "transactions": "Transaksi",
     "import": "Impor",
-    "settings": "Pengaturan"
+    "settings": "Pengaturan",
+    "signOut": "Keluar"
   },
   "Import": {
     "title": "Impor transaksi",

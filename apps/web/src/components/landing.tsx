@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { signIn } from "next-auth/react";
 
 const ASSET_KEYS = ["stocks", "gold", "bonds", "funds", "cash"] as const;
 
@@ -28,7 +29,10 @@ export function Landing() {
       </ul>
 
       <div>
-        <button className="rounded-lg bg-emerald-500 px-5 py-2.5 font-medium text-neutral-950 transition hover:bg-emerald-400">
+        <button
+          onClick={() => signIn("authentik", { callbackUrl: "/dashboard" })}
+          className="rounded-lg bg-emerald-500 px-5 py-2.5 font-medium text-neutral-950 transition hover:bg-emerald-400"
+        >
           {t("cta")}
         </button>
       </div>

@@ -16,7 +16,8 @@
     "holdings": "Holdings",
     "transactions": "Transactions",
     "import": "Import",
-    "settings": "Settings"
+    "settings": "Settings",
+    "signOut": "Sign out"
   },
   "Import": {
     "title": "Import transactions",
