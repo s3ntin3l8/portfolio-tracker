@@ -60,6 +60,25 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   pre-commit/CI against `.secrets.baseline`.
 - **Before committing:** `npm run lint && npm run typecheck && npm test`.
 
+## Testing & coverage
+
+- **Runner:** Vitest. The root `vitest.config.ts` aggregates every workspace via
+  `test.projects`; `npm test` / `npm run test:coverage` run them together and merge
+  coverage into `./coverage`.
+- **Coverage gate: 70%** (lines/functions/branches/statements) enforced two ways — the
+  root Vitest `thresholds` (fails `test:coverage` locally) and `coverage-fail-under: 70`
+  in CI. **Keep it green: new code lands with tests.** Excluded from the gate:
+  entrypoints/CLIs (`server.ts`, `db/seed.ts`) and framework boilerplate
+  (`app/**`, `middleware.ts`, `i18n/**`, configs, `*.d.ts`).
+- **API/packages:** Node env. The API uses embedded **PGlite** (`pglite://` URLs) so
+  tests need no external Postgres; routes use `app.inject()`.
+- **Web:** **jsdom + React Testing Library** (`@vitejs/plugin-react`). Render client
+  components inside `NextIntlClientProvider` with `messages/en.json`. Server components
+  / pages are excluded from coverage (cover via e2e later).
+- **Note:** Vitest 4 bundles Vite 8, so the root `package.json` pins
+  `overrides.vite: ^8` to dedupe Vite (otherwise `plugin-react` binds the wrong copy
+  and JSX fails to transform).
+
 ## CI/CD
 
 `.github/workflows/` are thin callers of the reusable workflows in

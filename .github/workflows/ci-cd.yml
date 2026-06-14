@@ -13,9 +13,11 @@ jobs:
     uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@main
     with:
       node-version: "26"
-      # Root scripts fan out across all workspaces via Turborepo.
+      # Root scripts fan out across all workspaces (Turbo for build/lint/typecheck,
+      # Vitest projects for tests with aggregated coverage).
       typecheck-script: "typecheck"
       test-script: "test:coverage"
+      coverage-fail-under: "70"
     secrets: inherit
 
   build-docker:

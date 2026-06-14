@@ -1,13 +1,20 @@
 // @portfolio/market-data — provider abstraction. Implementations (Sectors/iTick,
 // GoldSpot, Antam, mutual-fund NAV, bonds, EODHD) land in phase 2 / phase 5.
-export type AssetClass =
-  | "equity"
-  | "gold"
-  | "bond"
-  | "mutual_fund"
-  | "etf"
-  | "crypto"
-  | "derivative";
+export const ASSET_CLASSES = [
+  "equity",
+  "gold",
+  "bond",
+  "mutual_fund",
+  "etf",
+  "crypto",
+  "derivative",
+] as const;
+
+export type AssetClass = (typeof ASSET_CLASSES)[number];
+
+export function isAssetClass(value: string): value is AssetClass {
+  return (ASSET_CLASSES as readonly string[]).includes(value);
+}
 
 export interface Quote {
   price: number;
