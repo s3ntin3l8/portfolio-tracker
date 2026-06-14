@@ -89,6 +89,10 @@ Caller jobs invoking reusable workflows with write scopes **must declare a
 `permissions:` block** or the run fails at startup. `codeql`, `dependency-review`,
 `release-please`, `cleanup-ghcr` are also wired.
 
+`codeql` and `dependency-review` are gated on `github.event.repository.private == false`
+— they need GitHub Advanced Security on a private repo, so they **skip while private and
+auto-activate once the repo is made public** (both features are free on public repos).
+
 ## Phased plan (see `.claude/plans/`)
 
 0. **Restructure** (this) — monorepo, API→Postgres, web skeleton, compose, CI.
