@@ -115,6 +115,50 @@
       "pytr": "Trade Republic"
     }
   },
+  "Manage": {
+    "addTransaction": "Tambah transaksi",
+    "createPortfolio": "Buat portofolio",
+    "back": "Kembali",
+    "portfolio": {
+      "title": "Buat portofolio",
+      "subtitle": "Beri nama dan mata uang dasar untuk menilainya.",
+      "name": "Nama portofolio",
+      "namePlaceholder": "mis. Stockbit",
+      "currency": "Mata uang dasar",
+      "create": "Buat portofolio",
+      "creating": "Membuat…",
+      "error": "Tidak dapat membuat portofolio. Silakan coba lagi.",
+      "needFirst": "Buat portofolio dulu untuk mulai menambahkan transaksi."
+    },
+    "tx": {
+      "title": "Tambah transaksi",
+      "subtitle": "Catat transaksi, dividen, atau pergerakan kas.",
+      "type": "Jenis",
+      "instrument": "Instrumen",
+      "search": "Cari berdasarkan simbol atau nama",
+      "searching": "Mencari…",
+      "noResults": "Tidak ada kecocokan — tambahkan sebagai instrumen baru di bawah.",
+      "newInstrument": "Tambah instrumen baru",
+      "symbol": "Simbol",
+      "name": "Nama",
+      "assetClass": "Kelas aset",
+      "unit": "Satuan",
+      "quantity": "Jumlah",
+      "price": "Harga per satuan",
+      "amount": "Nominal",
+      "fees": "Biaya",
+      "currency": "Mata uang",
+      "date": "Tanggal",
+      "submit": "Tambah transaksi",
+      "submitting": "Menyimpan…",
+      "error": "Tidak dapat menyimpan transaksi. Periksa kolom dan coba lagi.",
+      "units": {
+        "shares": "Lembar",
+        "grams": "Gram",
+        "units": "Unit"
+      }
+    }
+  },
   "TxType": {
     "buy": "Beli",
     "sell": "Jual",

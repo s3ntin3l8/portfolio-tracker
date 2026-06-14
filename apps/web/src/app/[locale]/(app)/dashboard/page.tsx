@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { LineChart, TrendingUp, Wallet } from "lucide-react";
+import { LineChart, Plus, TrendingUp, Wallet } from "lucide-react";
 import type { AllocationSlice } from "@/lib/mock-data";
 import {
   Card,
@@ -10,6 +10,8 @@ import {
 import { StatCard } from "@/components/stat-card";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
 import { EmptyState } from "@/components/empty-state";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
 import { loadPortfolio } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
@@ -23,6 +25,7 @@ export default async function DashboardPage({
   const t = await getTranslations("Dashboard");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
+  const tm = await getTranslations("Manage");
 
   const result = await loadPortfolio((api, portfolio) =>
     api.getSummary(portfolio.id),
@@ -35,10 +38,28 @@ export default async function DashboardPage({
     </div>
   );
 
-  const fullState = (title: string, description: string) => (
+  const ctaButton = (label: string) => (
+    <Button asChild>
+      <Link href="/transactions/new">
+        <Plus className="size-4" />
+        {label}
+      </Link>
+    </Button>
+  );
+
+  const fullState = (
+    title: string,
+    description: string,
+    action?: React.ReactNode,
+  ) => (
     <div className="space-y-6">
       {Heading}
-      <EmptyState icon={Wallet} title={title} description={description} />
+      <EmptyState
+        icon={Wallet}
+        title={title}
+        description={description}
+        action={action}
+      />
     </div>
   );
 
@@ -46,7 +67,11 @@ export default async function DashboardPage({
     return fullState(te("unavailableTitle"), te("unavailableBody"));
   }
   if (result.status === "empty") {
-    return fullState(te("noPortfolioTitle"), te("noPortfolioBody"));
+    return fullState(
+      te("noPortfolioTitle"),
+      te("noPortfolioBody"),
+      ctaButton(tm("createPortfolio")),
+    );
   }
 
   const summary = result.data;
@@ -58,7 +83,11 @@ export default async function DashboardPage({
     h.marketValue !== null ? Number(h.marketValue) : Number(h.costBasis);
 
   if (openHoldings.length === 0 && Number(summary.netWorth) === 0) {
-    return fullState(te("noHoldingsTitle"), te("noHoldingsBody"));
+    return fullState(
+      te("noHoldingsTitle"),
+      te("noHoldingsBody"),
+      ctaButton(tm("addTransaction")),
+    );
   }
 
   const totalPnL = Number(summary.totalUnrealizedPnL);

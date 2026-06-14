@@ -5,6 +5,7 @@ import {
   PencilLine,
   Landmark,
   Receipt,
+  Plus,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -16,7 +17,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { Link } from "@/i18n/navigation";
 import { loadPortfolio } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 
@@ -42,6 +45,7 @@ export default async function TransactionsPage({
   const t = await getTranslations("Transactions");
   const tt = await getTranslations("TxType");
   const te = await getTranslations("Empty");
+  const tm = await getTranslations("Manage");
   const m = (n: number) => formatMoney(n, "IDR", locale);
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
@@ -49,17 +53,29 @@ export default async function TransactionsPage({
     api.listTransactions(portfolio.id),
   );
 
-  const Heading = (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+  const addButton = (
+    <Button asChild>
+      <Link href="/transactions/new">
+        <Plus className="size-4" />
+        {tm("addTransaction")}
+      </Link>
+    </Button>
+  );
+
+  const heading = (action?: React.ReactNode) => (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+      </div>
+      {action}
     </div>
   );
 
   if (result.status === "unavailable") {
     return (
       <div className="space-y-6">
-        {Heading}
+        {heading()}
         <EmptyState
           icon={Receipt}
           title={te("unavailableTitle")}
@@ -76,20 +92,23 @@ export default async function TransactionsPage({
       : [];
 
   if (transactions.length === 0) {
+    const isEmptyPortfolio = result.status === "empty";
     return (
       <div className="space-y-6">
-        {Heading}
+        {heading()}
         <EmptyState
           icon={Receipt}
-          title={
-            result.status === "empty"
-              ? te("noPortfolioTitle")
-              : te("noTransactionsTitle")
-          }
+          title={isEmptyPortfolio ? te("noPortfolioTitle") : te("noTransactionsTitle")}
           description={
-            result.status === "empty"
-              ? te("noPortfolioBody")
-              : te("noTransactionsBody")
+            isEmptyPortfolio ? te("noPortfolioBody") : te("noTransactionsBody")
+          }
+          action={
+            <Button asChild>
+              <Link href="/transactions/new">
+                <Plus className="size-4" />
+                {isEmptyPortfolio ? tm("createPortfolio") : tm("addTransaction")}
+              </Link>
+            </Button>
           }
         />
       </div>
@@ -98,7 +117,7 @@ export default async function TransactionsPage({
 
   return (
     <div className="space-y-6">
-      {Heading}
+      {heading(addButton)}
 
       <div className="rounded-xl border border-border">
         <Table>

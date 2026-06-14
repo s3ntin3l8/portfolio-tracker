@@ -115,6 +115,50 @@
       "pytr": "Trade Republic"
     }
   },
+  "Manage": {
+    "addTransaction": "Add transaction",
+    "createPortfolio": "Create portfolio",
+    "back": "Back",
+    "portfolio": {
+      "title": "Create a portfolio",
+      "subtitle": "Give it a name and a base currency to value it in.",
+      "name": "Portfolio name",
+      "namePlaceholder": "e.g. Stockbit",
+      "currency": "Base currency",
+      "create": "Create portfolio",
+      "creating": "Creating…",
+      "error": "Couldn't create the portfolio. Please try again.",
+      "needFirst": "Create a portfolio first to start adding transactions."
+    },
+    "tx": {
+      "title": "Add a transaction",
+      "subtitle": "Record a trade, dividend or cash movement.",
+      "type": "Type",
+      "instrument": "Instrument",
+      "search": "Search by symbol or name",
+      "searching": "Searching…",
+      "noResults": "No matches — add it as a new instrument below.",
+      "newInstrument": "Add a new instrument",
+      "symbol": "Symbol",
+      "name": "Name",
+      "assetClass": "Asset class",
+      "unit": "Unit",
+      "quantity": "Quantity",
+      "price": "Price per unit",
+      "amount": "Amount",
+      "fees": "Fees",
+      "currency": "Currency",
+      "date": "Date",
+      "submit": "Add transaction",
+      "submitting": "Saving…",
+      "error": "Couldn't save the transaction. Check the fields and try again.",
+      "units": {
+        "shares": "Shares",
+        "grams": "Grams",
+        "units": "Units"
+      }
+    }
+  },
   "TxType": {
     "buy": "Buy",
     "sell": "Sell",
