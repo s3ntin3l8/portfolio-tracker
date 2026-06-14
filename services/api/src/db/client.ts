@@ -40,7 +40,9 @@ export async function initDb(databaseUrl?: string): Promise<DB> {
     pglite = client;
     dbInstance = drizzlePglite(client, { schema }) as unknown as DB;
   } else {
-    sql = postgres(url!, { max: 10 });
+    // Remote Postgres (e.g. Supabase) requires SSL; local does not.
+    const isLocal = /@(localhost|127\.0\.0\.1|0\.0\.0\.0|postgres)[:/]/.test(url!);
+    sql = postgres(url!, { max: 10, ssl: isLocal ? undefined : "require" });
     dbInstance = drizzlePostgres(sql, { schema });
   }
 
