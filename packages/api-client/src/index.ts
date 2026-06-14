@@ -94,6 +94,13 @@ export interface PortfolioSummary {
   totalRealizedPnL: string;
 }
 
+export interface PortfolioPerformance {
+  /** Money-weighted annualised return (XIRR), or null when undefined. */
+  xirr: number | null;
+  netWorth: string;
+  asOf: string;
+}
+
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
@@ -208,6 +215,11 @@ export function createApiClient(config: ApiClientConfig) {
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
     getSummary: (portfolioId: string) =>
       request<PortfolioSummary>("GET", `/portfolios/${portfolioId}/summary`),
+    getPerformance: (portfolioId: string) =>
+      request<PortfolioPerformance>(
+        "GET",
+        `/portfolios/${portfolioId}/performance`,
+      ),
 
     importCsv: (portfolioId: string, content: string) =>
       request<CsvImportResult>(

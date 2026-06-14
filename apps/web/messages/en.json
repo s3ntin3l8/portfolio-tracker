@@ -71,6 +71,7 @@
     "totalPnL": "Total P&L",
     "positions": "Positions",
     "cash": "Cash",
+    "return": "Return (p.a.)",
     "valueOverTime": "Value over time",
     "allocation": "Allocation",
     "topHoldings": "Top holdings",

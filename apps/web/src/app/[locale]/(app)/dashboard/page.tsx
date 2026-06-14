@@ -28,9 +28,10 @@ export default async function DashboardPage({
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
 
-  const result = await loadPortfolio((api, portfolio) =>
-    api.getSummary(portfolio.id),
-  );
+  const result = await loadPortfolio(async (api, portfolio) => ({
+    summary: await api.getSummary(portfolio.id),
+    performance: await api.getPerformance(portfolio.id),
+  }));
 
   const Heading = (
     <div>
@@ -76,7 +77,7 @@ export default async function DashboardPage({
     );
   }
 
-  const summary = result.data;
+  const { summary, performance } = result.data;
   const currency = summary.displayCurrency;
   const m = (n: number) => formatMoney(n, currency, locale);
 
@@ -126,13 +127,21 @@ export default async function DashboardPage({
 
       <GoldTicker />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />
         <StatCard
           label={t("totalPnL")}
           value={m(totalPnL)}
           delta={totalCost > 0 ? formatPercent(totalPnL / totalCost, locale) : undefined}
           deltaTone={totalPnL >= 0 ? "up" : "down"}
+        />
+        <StatCard
+          label={t("return")}
+          value={
+            performance.xirr !== null
+              ? formatPercent(performance.xirr, locale)
+              : "—"
+          }
         />
         <StatCard label={t("positions")} value={String(openHoldings.length)} />
       </div>
