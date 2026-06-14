@@ -51,6 +51,42 @@ describe("createApiClient", () => {
     expect(JSON.parse(sentBody!)).toMatchObject({ name: "Stockbit" });
   });
 
+  it("posts a base64 image + mimeType to the screenshot import endpoint", async () => {
+    let seen: { url: string; init: RequestInit } | undefined;
+    const fetchImpl = mockFetch((url, init) => {
+      seen = { url, init };
+      return { status: 201, body: { importId: "imp1", drafts: [], errors: [] } };
+    });
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      getToken: () => "tok",
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    const result = await client.importScreenshot("port1", "ZmFrZQ==", "image/jpeg");
+    expect(result).toMatchObject({ importId: "imp1" });
+    expect(seen?.url).toBe("http://api.test/portfolios/port1/imports/screenshot");
+    expect(JSON.parse(seen?.init.body as string)).toEqual({
+      image: "ZmFrZQ==",
+      mimeType: "image/jpeg",
+    });
+  });
+
+  it("defaults the screenshot mimeType to image/png", async () => {
+    let sentBody: string | undefined;
+    const fetchImpl = mockFetch((_url, init) => {
+      sentBody = init.body as string;
+      return { status: 201, body: { importId: "imp2", drafts: [], errors: [] } };
+    });
+    const client = createApiClient({
+      baseUrl: "http://api.test",
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+
+    await client.importScreenshot("port1", "ZmFrZQ==");
+    expect(JSON.parse(sentBody!).mimeType).toBe("image/png");
+  });
+
   it("throws ApiError on non-2xx", async () => {
     const fetchImpl = mockFetch(() => ({ status: 404, body: { error: "x" } }));
     const client = createApiClient({

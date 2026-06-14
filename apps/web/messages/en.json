@@ -10,5 +10,56 @@
       "funds": "Mutual funds",
       "cash": "Cash"
     }
+  },
+  "Nav": {
+    "dashboard": "Dashboard",
+    "holdings": "Holdings",
+    "transactions": "Transactions",
+    "import": "Import",
+    "settings": "Settings"
+  },
+  "Import": {
+    "title": "Import transactions",
+    "subtitle": "Upload a screenshot or CSV — review the draft, then confirm.",
+    "steps": {
+      "upload": "Upload",
+      "review": "Review",
+      "done": "Done"
+    },
+    "tabs": {
+      "screenshot": "Screenshot",
+      "csv": "CSV file"
+    },
+    "dropzone": {
+      "title": "Add a transaction",
+      "hint": "From a broker, gold app or bank confirmation",
+      "cta": "Choose a screenshot",
+      "csvCta": "Choose a CSV file"
+    },
+    "parsing": "Reading your transactions…",
+    "reviewHint": "Check the details before confirming — nothing is saved until you do.",
+    "draftCount": "{count, plural, one {# draft} other {# drafts}}",
+    "confidence": "{pct}% sure",
+    "remove": "Remove",
+    "fields": {
+      "name": "Name",
+      "executedAt": "Date",
+      "quantity": "Quantity",
+      "price": "Price"
+    },
+    "discard": "Discard",
+    "confirm": "Confirm",
+    "done": {
+      "title": "Imported",
+      "hint": "{count, plural, one {# transaction added} other {# transactions added}} to your portfolio.",
+      "again": "Import another"
+    },
+    "errors": {
+      "notConfigured": "No vision parser is configured yet. Add an API key to enable screenshot import.",
+      "parseFailed": "Couldn't read that screenshot. Try a clearer image or enter it manually.",
+      "fileRead": "Couldn't read that file. Please try again.",
+      "noDrafts": "No transactions were found in that file.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }

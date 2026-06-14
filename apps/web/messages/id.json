@@ -10,5 +10,56 @@
       "funds": "Reksa dana",
       "cash": "Kas"
     }
+  },
+  "Nav": {
+    "dashboard": "Dasbor",
+    "holdings": "Kepemilikan",
+    "transactions": "Transaksi",
+    "import": "Impor",
+    "settings": "Pengaturan"
+  },
+  "Import": {
+    "title": "Impor transaksi",
+    "subtitle": "Unggah tangkapan layar atau CSV — periksa drafnya, lalu konfirmasi.",
+    "steps": {
+      "upload": "Unggah",
+      "review": "Periksa",
+      "done": "Selesai"
+    },
+    "tabs": {
+      "screenshot": "Tangkapan layar",
+      "csv": "Berkas CSV"
+    },
+    "dropzone": {
+      "title": "Tambah transaksi",
+      "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
+      "cta": "Pilih tangkapan layar",
+      "csvCta": "Pilih berkas CSV"
+    },
+    "parsing": "Membaca transaksi Anda…",
+    "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
+    "draftCount": "{count, plural, other {# draf}}",
+    "confidence": "Yakin {pct}%",
+    "remove": "Hapus",
+    "fields": {
+      "name": "Nama",
+      "executedAt": "Tanggal",
+      "quantity": "Jumlah",
+      "price": "Harga"
+    },
+    "discard": "Buang",
+    "confirm": "Konfirmasi",
+    "done": {
+      "title": "Terimpor",
+      "hint": "{count, plural, other {# transaksi ditambahkan}} ke portofolio Anda.",
+      "again": "Impor lagi"
+    },
+    "errors": {
+      "notConfigured": "Belum ada pembaca visi yang dikonfigurasi. Tambahkan kunci API untuk mengaktifkan impor tangkapan layar.",
+      "parseFailed": "Tidak dapat membaca tangkapan layar itu. Coba gambar yang lebih jelas atau masukkan manual.",
+      "fileRead": "Tidak dapat membaca berkas itu. Silakan coba lagi.",
+      "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi."
+    }
   }
 }

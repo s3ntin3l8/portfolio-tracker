@@ -66,6 +66,12 @@ export interface CsvImportResult {
   errors: { line: number; message: string }[];
 }
 
+export interface ScreenshotImportResult {
+  importId: string;
+  drafts: ParsedTransaction[];
+  errors: { line: number; message: string }[];
+}
+
 // --- Client --------------------------------------------------------------
 
 export class ApiError extends Error {
@@ -140,6 +146,16 @@ export function createApiClient(config: ApiClientConfig) {
         "POST",
         `/portfolios/${portfolioId}/imports/csv`,
         { content },
+      ),
+    importScreenshot: (
+      portfolioId: string,
+      image: string,
+      mimeType = "image/png",
+    ) =>
+      request<ScreenshotImportResult>(
+        "POST",
+        `/portfolios/${portfolioId}/imports/screenshot`,
+        { image, mimeType },
       ),
     confirmImport: (importId: string, transactions: ParsedTransaction[]) =>
       request<{ confirmed: number; transactions: Transaction[] }>(
