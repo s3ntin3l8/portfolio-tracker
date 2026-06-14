@@ -1,0 +1,36 @@
+# Align Codecov with the repo's coverage policy (see CLAUDE.md + vitest.config.ts).
+# Overall coverage is already enforced two ways — the root Vitest `thresholds` and
+# CI's `coverage-fail-under: 70`. Here we keep Codecov from flagging framework glue
+# that we deliberately don't unit-test (entrypoints, app-router shells, auth wiring),
+# and we make the per-PR `patch` status informational so it never blocks a merge on
+# inherently-untestable boilerplate — the `project` floor still tracks regressions.
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 2%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        informational: true
+
+# Mirror vitest.config.ts `coverage.exclude` so Codecov measures the same surface.
+ignore:
+  - "**/*.d.ts"
+  - "**/*.config.*"
+  - "**/dist/**"
+  - "services/api/src/server.ts"
+  - "services/api/src/db/seed.ts"
+  - "services/api/src/db/migrate.ts"
+  - "services/api/src/services/market-data.ts"
+  - "apps/web/src/app/**"
+  - "apps/web/src/middleware.ts"
+  - "apps/web/src/i18n/**"
+  - "apps/web/src/components/**"
+  - "apps/web/src/auth.ts"
+
+comment:
+  layout: "reach, diff, files"
+  require_changes: true

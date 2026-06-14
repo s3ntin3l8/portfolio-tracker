@@ -26,6 +26,7 @@ export default defineConfig({
         // Entrypoints / CLIs — covered by e2e or not unit-testable.
         "services/api/src/server.ts",
         "services/api/src/db/seed.ts",
+        "services/api/src/db/migrate.ts",
         // Provider wiring depends on env keys + network; covered by live use.
         "services/api/src/services/market-data.ts",
         // Web: app router shells + i18n. The React components are RTL-tested, but v8
@@ -35,6 +36,8 @@ export default defineConfig({
         "apps/web/src/middleware.ts",
         "apps/web/src/i18n/**",
         "apps/web/src/components/**",
+        // NextAuth framework config (provider wiring) — covered by live login / e2e.
+        "apps/web/src/auth.ts",
       ],
       thresholds: {
         lines: 70,
