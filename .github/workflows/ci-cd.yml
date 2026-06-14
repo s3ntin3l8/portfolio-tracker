@@ -22,6 +22,11 @@ jobs:
 
   build-docker:
     needs: [test-node]
+    # Only build/publish the image when something lands on main. PRs are validated by
+    # the cheap test-node job alone; there's no need to run the slow multi-arch Docker
+    # build (and nothing to publish) on every PR commit. Policy lives here in the
+    # caller, not the shared reusable workflow, so other repos can still build on PRs.
+    if: ${{ github.event_name == 'push' }}
     permissions:
       contents: read
       packages: write
