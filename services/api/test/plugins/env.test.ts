@@ -26,6 +26,7 @@ describe("env plugin", () => {
     expect(app.config.CORS_ORIGIN).toBe("");
     expect(app.config.RATE_LIMIT_MAX).toBe(100);
     expect(app.config.RATE_LIMIT_WINDOW).toBe("1 minute");
+    expect(app.config.MARKET_DATA_TTL_MS).toBe(900000);
     await app.close();
   });
 

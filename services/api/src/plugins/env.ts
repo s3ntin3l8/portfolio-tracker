@@ -51,6 +51,11 @@ const schema = {
       type: "string",
       default: "1 minute",
     },
+    // How long a cached last-price stays fresh before a live re-fetch (ms).
+    MARKET_DATA_TTL_MS: {
+      type: "number",
+      default: 900000, // 15 minutes
+    },
   },
 };
 
@@ -76,6 +81,7 @@ declare module "fastify" {
       CORS_ORIGIN: string;
       RATE_LIMIT_MAX: number;
       RATE_LIMIT_WINDOW: string;
+      MARKET_DATA_TTL_MS: number;
     };
   }
 }
