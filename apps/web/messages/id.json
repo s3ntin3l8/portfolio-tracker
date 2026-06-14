@@ -70,10 +70,23 @@
     "today": "hari ini",
     "totalPnL": "Total Untung/Rugi",
     "positions": "Posisi",
+    "cash": "Kas",
     "valueOverTime": "Nilai dari waktu ke waktu",
     "allocation": "Alokasi",
     "topHoldings": "Kepemilikan teratas",
     "topMovers": "Pergerak teratas"
+  },
+  "Empty": {
+    "unavailableTitle": "Tidak dapat menjangkau API",
+    "unavailableBody": "Masuk dan pastikan server API berjalan, lalu segarkan.",
+    "noPortfolioTitle": "Belum ada portofolio",
+    "noPortfolioBody": "Buat portofolio dan tambahkan transaksi untuk mulai melacak kepemilikan Anda.",
+    "noHoldingsTitle": "Belum ada kepemilikan",
+    "noHoldingsBody": "Tambahkan transaksi beli — lewat tangkapan layar, CSV, atau manual — untuk melihat posisi di sini.",
+    "noTransactionsTitle": "Belum ada transaksi",
+    "noTransactionsBody": "Impor tangkapan layar atau CSV, atau tambahkan transaksi manual, untuk memulai.",
+    "historyTitle": "Segera dengan pelacakan harga",
+    "historyBody": "Riwayat kinerja muncul setelah harga harian dikumpulkan."
   },
   "Holdings": {
     "title": "Kepemilikan",

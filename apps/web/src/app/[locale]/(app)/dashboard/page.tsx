@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { LineChart, TrendingUp, Wallet } from "lucide-react";
+import type { AllocationSlice } from "@/lib/mock-data";
 import {
   Card,
   CardContent,
@@ -8,16 +9,9 @@ import {
 } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
-import { ValueAreaChart } from "@/components/charts/value-area-chart";
-import { formatMoney, formatPercent, cn } from "@/lib/utils";
-import {
-  summary,
-  getAllocation,
-  valueOverTime,
-  topMovers,
-  holdings,
-  marketValue,
-} from "@/lib/mock-data";
+import { EmptyState } from "@/components/empty-state";
+import { loadPortfolio } from "@/lib/server-api";
+import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function DashboardPage({
   params,
@@ -27,30 +21,87 @@ export default async function DashboardPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Dashboard");
+  const tc = await getTranslations("AssetClass");
+  const te = await getTranslations("Empty");
 
-  const m = (n: number) => formatMoney(n, summary.currency, locale);
+  const result = await loadPortfolio((api, portfolio) =>
+    api.getSummary(portfolio.id),
+  );
+
+  const Heading = (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    </div>
+  );
+
+  const fullState = (title: string, description: string) => (
+    <div className="space-y-6">
+      {Heading}
+      <EmptyState icon={Wallet} title={title} description={description} />
+    </div>
+  );
+
+  if (result.status === "unavailable") {
+    return fullState(te("unavailableTitle"), te("unavailableBody"));
+  }
+  if (result.status === "empty") {
+    return fullState(te("noPortfolioTitle"), te("noPortfolioBody"));
+  }
+
+  const summary = result.data;
+  const currency = summary.displayCurrency;
+  const m = (n: number) => formatMoney(n, currency, locale);
+
+  const openHoldings = summary.holdings.filter((h) => Number(h.quantity) !== 0);
+  const holdingValue = (h: (typeof openHoldings)[number]) =>
+    h.marketValue !== null ? Number(h.marketValue) : Number(h.costBasis);
+
+  if (openHoldings.length === 0 && Number(summary.netWorth) === 0) {
+    return fullState(te("noHoldingsTitle"), te("noHoldingsBody"));
+  }
+
+  const totalPnL = Number(summary.totalUnrealizedPnL);
+  const totalCost = Number(summary.totalCost);
+  const cashTotal = Object.values(summary.cash).reduce(
+    (s, v) => s + Number(v),
+    0,
+  );
+
+  // Allocation by asset class (priced where possible, else at cost) plus cash.
+  const byClass = new Map<string, number>();
+  for (const h of openHoldings) {
+    const cls = h.instrument?.assetClass ?? "equity";
+    byClass.set(cls, (byClass.get(cls) ?? 0) + holdingValue(h));
+  }
+  const allocation: AllocationSlice[] = [
+    ...[...byClass.entries()].map(([key, value]) => ({
+      key: key as AllocationSlice["key"],
+      label: tc(key),
+      value,
+    })),
+    ...(cashTotal > 0
+      ? [{ key: "cash" as AllocationSlice["key"], label: tc("cash"), value: cashTotal }]
+      : []),
+  ].filter((s) => s.value > 0);
+
+  const topHoldings = [...openHoldings]
+    .sort((a, b) => holdingValue(b) - holdingValue(a))
+    .slice(0, 4);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
+      {Heading}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          label={t("netWorth")}
-          value={m(summary.netWorth)}
-          delta={`${m(summary.dayChange)} (${formatPercent(summary.dayChangePct, locale)}) ${t("today")}`}
-          deltaTone={summary.dayChange >= 0 ? "up" : "down"}
-        />
+        <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />
         <StatCard
           label={t("totalPnL")}
-          value={m(summary.totalPnL)}
-          delta={formatPercent(summary.totalPnLPct, locale)}
-          deltaTone={summary.totalPnL >= 0 ? "up" : "down"}
+          value={m(totalPnL)}
+          delta={totalCost > 0 ? formatPercent(totalPnL / totalCost, locale) : undefined}
+          deltaTone={totalPnL >= 0 ? "up" : "down"}
         />
-        <StatCard label={t("positions")} value={String(holdings.length)} />
+        <StatCard label={t("positions")} value={String(openHoldings.length)} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -59,7 +110,11 @@ export default async function DashboardPage({
             <CardTitle>{t("valueOverTime")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ValueAreaChart data={valueOverTime} />
+            <EmptyState
+              icon={LineChart}
+              title={te("historyTitle")}
+              description={te("historyBody")}
+            />
           </CardContent>
         </Card>
         <Card>
@@ -67,7 +122,7 @@ export default async function DashboardPage({
             <CardTitle>{t("allocation")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <AllocationDonut data={getAllocation()} />
+            <AllocationDonut data={allocation} />
           </CardContent>
         </Card>
       </div>
@@ -78,49 +133,32 @@ export default async function DashboardPage({
             <CardTitle>{t("topHoldings")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[...holdings]
-              .sort((a, b) => marketValue(b) - marketValue(a))
-              .slice(0, 4)
-              .map((h) => (
-                <div key={h.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{h.symbol}</p>
-                    <p className="text-xs text-muted-foreground">{h.name}</p>
-                  </div>
-                  <p className="tabular text-sm">{m(marketValue(h))}</p>
+            {topHoldings.map((h) => (
+              <div
+                key={h.instrumentId}
+                className="flex items-center justify-between"
+              >
+                <div>
+                  <p className="font-medium">{h.instrument?.symbol ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {h.instrument?.name ?? h.instrumentId}
+                  </p>
                 </div>
-              ))}
+                <p className="tabular text-sm">{m(holdingValue(h))}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>{t("topMovers")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {topMovers.map((mv) => {
-              const up = mv.changePct >= 0;
-              return (
-                <div key={mv.symbol} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{mv.symbol}</p>
-                    <p className="text-xs text-muted-foreground">{mv.name}</p>
-                  </div>
-                  <span
-                    className={cn(
-                      "tabular flex items-center gap-1 text-sm",
-                      up ? "text-success" : "text-destructive",
-                    )}
-                  >
-                    {up ? (
-                      <ArrowUpRight className="size-4" />
-                    ) : (
-                      <ArrowDownRight className="size-4" />
-                    )}
-                    {formatPercent(mv.changePct, locale)}
-                  </span>
-                </div>
-              );
-            })}
+          <CardContent>
+            <EmptyState
+              icon={TrendingUp}
+              title={te("historyTitle")}
+              description={te("historyBody")}
+            />
           </CardContent>
         </Card>
       </div>

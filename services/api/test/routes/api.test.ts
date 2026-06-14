@@ -117,6 +117,19 @@ describe("auth + portfolios + transactions", () => {
     expect(holdings.json()).toEqual([
       { instrumentId: bbca.id, quantity: "100", avgCost: "9500", costBasis: "950000", realizedPnL: "0" },
     ]);
+
+    // The transaction list carries instrument metadata for rendering.
+    const txList = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
+    expect(txList.json()[0].instrument).toEqual({
+      symbol: "BBCA",
+      name: "BCA",
+      assetClass: "equity",
+      unit: "shares",
+    });
   });
 
   it("values the portfolio via /summary (priced by market data)", async () => {
@@ -133,6 +146,12 @@ describe("auth + portfolios + transactions", () => {
     // BBCA priced at 9500 by the fixture provider → 100 * 9500 market value.
     expect(summary.totalMarketValue).toBe("950000");
     expect(summary.holdings[0].marketValue).toBe("950000");
+    expect(summary.holdings[0].instrument).toEqual({
+      symbol: "BBCA",
+      name: "BCA",
+      assetClass: "equity",
+      unit: "shares",
+    });
     expect(summary.totalUnrealizedPnL).toBe("0");
     // Bought without a prior cash deposit, so cash is negative and net worth nets to 0.
     expect(summary.cash.IDR).toBe("-950000");

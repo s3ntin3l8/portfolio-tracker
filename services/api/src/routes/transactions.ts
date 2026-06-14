@@ -17,6 +17,16 @@ interface PortfolioParams {
   portfolioId: string;
 }
 
+// Presentation metadata for an instrument, attached to holdings/transactions so
+// the web app can render names without a second round-trip. Cash (instrument-less)
+// rows carry `null`.
+interface InstrumentMeta {
+  symbol: string;
+  name: string;
+  assetClass: string;
+  unit: string;
+}
+
 export async function transactionsRoute(app: FastifyInstance) {
   // Confirm the portfolio exists and belongs to the user.
   async function ownedPortfolio(userId: string, portfolioId: string) {
@@ -26,6 +36,24 @@ export async function transactionsRoute(app: FastifyInstance) {
       .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, userId)))
       .limit(1);
     return p ?? null;
+  }
+
+  // Build an instrumentId → presentation-metadata lookup for the given ids.
+  async function instrumentMeta(
+    ids: (string | null)[],
+  ): Promise<Map<string, InstrumentMeta>> {
+    const unique = [...new Set(ids.filter((x): x is string => x !== null))];
+    if (!unique.length) return new Map();
+    const rows = await app.db
+      .select()
+      .from(instruments)
+      .where(inArray(instruments.id, unique));
+    return new Map(
+      rows.map((i) => [
+        i.id,
+        { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit },
+      ]),
+    );
   }
 
   // Load a portfolio's transactions, price its instruments via market data, and
@@ -47,6 +75,13 @@ export async function transactionsRoute(app: FastifyInstance) {
           .from(instruments)
           .where(inArray(instruments.id, instrumentIds))
       : [];
+
+    const metaById = new Map(
+      instrumentRows.map((i) => [
+        i.id,
+        { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit },
+      ]),
+    );
 
     const refs = instrumentRows.map((i) => ({
       id: i.id,
@@ -78,10 +113,10 @@ export async function transactionsRoute(app: FastifyInstance) {
       prices,
       displayCurrency: baseCurrency,
     });
-    return { coreTxns, summary };
+    return { coreTxns, summary, metaById };
   }
 
-  // List a portfolio's transactions.
+  // List a portfolio's transactions, each enriched with instrument metadata.
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/transactions",
     { preHandler: app.authenticate },
@@ -90,10 +125,15 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!(await ownedPortfolio(id, request.params.portfolioId))) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      return app.db
+      const rows = await app.db
         .select()
         .from(transactions)
         .where(eq(transactions.portfolioId, request.params.portfolioId));
+      const meta = await instrumentMeta(rows.map((r) => r.instrumentId));
+      return rows.map((r) => ({
+        ...r,
+        instrument: r.instrumentId ? (meta.get(r.instrumentId) ?? null) : null,
+      }));
     },
   );
 
@@ -169,8 +209,17 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
-      return summary;
+      const { summary, metaById } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+      );
+      return {
+        ...summary,
+        holdings: summary.holdings.map((h) => ({
+          ...h,
+          instrument: metaById.get(h.instrumentId) ?? null,
+        })),
+      };
     },
   );
 

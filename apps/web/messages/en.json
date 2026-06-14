@@ -70,10 +70,23 @@
     "today": "today",
     "totalPnL": "Total P&L",
     "positions": "Positions",
+    "cash": "Cash",
     "valueOverTime": "Value over time",
     "allocation": "Allocation",
     "topHoldings": "Top holdings",
     "topMovers": "Top movers"
+  },
+  "Empty": {
+    "unavailableTitle": "Can't reach the API",
+    "unavailableBody": "Sign in and make sure the API server is running, then refresh.",
+    "noPortfolioTitle": "No portfolio yet",
+    "noPortfolioBody": "Create a portfolio and add transactions to start tracking your holdings.",
+    "noHoldingsTitle": "No holdings yet",
+    "noHoldingsBody": "Add a buy transaction — by screenshot, CSV or manually — to see positions here.",
+    "noTransactionsTitle": "No transactions yet",
+    "noTransactionsBody": "Import a screenshot or CSV, or add a transaction manually, to get started.",
+    "historyTitle": "Coming with price tracking",
+    "historyBody": "Performance history appears once daily prices are collected."
   },
   "Holdings": {
     "title": "Holdings",

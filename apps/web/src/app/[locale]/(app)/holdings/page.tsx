@@ -1,4 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { Layers } from "lucide-react";
+import type { HoldingValuation } from "@portfolio/api-client";
 import {
   Table,
   TableBody,
@@ -8,22 +10,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/empty-state";
+import { loadPortfolio } from "@/lib/server-api";
 import { formatMoney, cn } from "@/lib/utils";
-import {
-  holdings,
-  marketValue,
-  unrealizedPnL,
-  type AssetClass,
-  type Holding,
-} from "@/lib/mock-data";
 
-const CLASS_TABS: { key: "all" | AssetClass }[] = [
-  { key: "all" },
-  { key: "equity" },
-  { key: "gold" },
-  { key: "bond" },
-  { key: "mutual_fund" },
-];
+const CLASS_TABS = ["all", "equity", "gold", "bond", "mutual_fund"] as const;
 
 export default async function HoldingsPage({
   params,
@@ -34,9 +25,62 @@ export default async function HoldingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("Holdings");
   const tc = await getTranslations("AssetClass");
-  const m = (n: number) => formatMoney(n, "IDR", locale);
+  const te = await getTranslations("Empty");
 
-  function HoldingsTable({ rows }: { rows: Holding[] }) {
+  const result = await loadPortfolio((api, portfolio) =>
+    api.getSummary(portfolio.id),
+  );
+
+  const Heading = (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    </div>
+  );
+
+  if (result.status === "unavailable") {
+    return (
+      <div className="space-y-6">
+        {Heading}
+        <EmptyState
+          icon={Layers}
+          title={te("unavailableTitle")}
+          description={te("unavailableBody")}
+        />
+      </div>
+    );
+  }
+
+  // Open positions only (computeHoldings also returns closed, zero-quantity ones).
+  const holdings =
+    result.status === "ok"
+      ? result.data.holdings.filter((h) => Number(h.quantity) !== 0)
+      : [];
+  const currency = result.status === "ok" ? result.data.displayCurrency : "IDR";
+  const m = (n: number) => formatMoney(n, currency, locale);
+
+  if (holdings.length === 0) {
+    return (
+      <div className="space-y-6">
+        {Heading}
+        <EmptyState
+          icon={Layers}
+          title={
+            result.status === "empty"
+              ? te("noPortfolioTitle")
+              : te("noHoldingsTitle")
+          }
+          description={
+            result.status === "empty"
+              ? te("noPortfolioBody")
+              : te("noHoldingsBody")
+          }
+        />
+      </div>
+    );
+  }
+
+  function HoldingsTable({ rows }: { rows: HoldingValuation[] }) {
     return (
       <Table>
         <TableHeader>
@@ -51,29 +95,38 @@ export default async function HoldingsPage({
         </TableHeader>
         <TableBody>
           {rows.map((h) => {
-            const pnl = unrealizedPnL(h);
+            const pnl = h.unrealizedPnL !== null ? Number(h.unrealizedPnL) : null;
             return (
-              <TableRow key={h.id}>
+              <TableRow key={h.instrumentId}>
                 <TableCell>
-                  <div className="font-medium">{h.symbol}</div>
-                  <div className="text-xs text-muted-foreground">{h.name}</div>
+                  <div className="font-medium">{h.instrument?.symbol ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {h.instrument?.name ?? h.instrumentId}
+                  </div>
                 </TableCell>
                 <TableCell className="tabular text-right">
-                  {h.quantity} {h.unit}
+                  {Number(h.quantity)} {h.instrument?.unit ?? ""}
                 </TableCell>
-                <TableCell className="tabular text-right">{m(h.avgCost)}</TableCell>
-                <TableCell className="tabular text-right">{m(h.price)}</TableCell>
                 <TableCell className="tabular text-right">
-                  {m(marketValue(h))}
+                  {m(Number(h.avgCost))}
+                </TableCell>
+                <TableCell className="tabular text-right">
+                  {h.price !== null ? m(Number(h.price)) : "—"}
+                </TableCell>
+                <TableCell className="tabular text-right">
+                  {h.marketValue !== null ? m(Number(h.marketValue)) : "—"}
                 </TableCell>
                 <TableCell
                   className={cn(
                     "tabular text-right",
-                    pnl >= 0 ? "text-success" : "text-destructive",
+                    pnl === null
+                      ? "text-muted-foreground"
+                      : pnl >= 0
+                        ? "text-success"
+                        : "text-destructive",
                   )}
                 >
-                  {pnl >= 0 ? "+" : ""}
-                  {m(pnl)}
+                  {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${m(pnl)}`}
                 </TableCell>
               </TableRow>
             );
@@ -85,27 +138,24 @@ export default async function HoldingsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
+      {Heading}
 
       <Tabs defaultValue="all">
         <TabsList>
-          {CLASS_TABS.map(({ key }) => (
+          {CLASS_TABS.map((key) => (
             <TabsTrigger key={key} value={key}>
               {key === "all" ? t("all") : tc(key)}
             </TabsTrigger>
           ))}
         </TabsList>
-        {CLASS_TABS.map(({ key }) => (
+        {CLASS_TABS.map((key) => (
           <TabsContent key={key} value={key}>
             <div className="rounded-xl border border-border">
               <HoldingsTable
                 rows={
                   key === "all"
                     ? holdings
-                    : holdings.filter((h) => h.assetClass === key)
+                    : holdings.filter((h) => h.instrument?.assetClass === key)
                 }
               />
             </div>

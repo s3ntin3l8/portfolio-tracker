@@ -21,6 +21,14 @@ export interface Portfolio {
   baseCurrency: string;
 }
 
+/** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */
+export interface InstrumentMeta {
+  symbol: string;
+  name: string;
+  assetClass: string;
+  unit: string;
+}
+
 export interface Transaction {
   id: string;
   portfolioId: string;
@@ -32,6 +40,7 @@ export interface Transaction {
   currency: string;
   executedAt: string;
   source: string;
+  instrument: InstrumentMeta | null;
 }
 
 export interface Holding {
@@ -47,6 +56,7 @@ export interface HoldingValuation extends Holding {
   currency: string | null;
   marketValue: string | null;
   unrealizedPnL: string | null;
+  instrument: InstrumentMeta | null;
 }
 
 export interface PortfolioSummary {
