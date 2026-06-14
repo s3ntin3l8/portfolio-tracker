@@ -1,11 +1,12 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { jwtVerify, createRemoteJWKSet } from "jose";
+import type { JWTVerifyGetKey, JWTVerifyOptions, KeyLike } from "jose";
 import { eq } from "drizzle-orm";
 import { users } from "@portfolio/db";
 
 // A key (local public key for tests) or a JWKS resolver function (remote, prod).
-export type AuthKey = Parameters<typeof jwtVerify>[1];
+export type AuthKey = KeyLike | Uint8Array | JWTVerifyGetKey;
 
 export interface AuthPluginOptions {
   authKey?: AuthKey;
@@ -49,10 +50,16 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
       let sub: string;
       let email: string;
       try {
-        const { payload } = await jwtVerify(header.slice(7), keyResolver, {
+        const token = header.slice(7);
+        const verifyOpts: JWTVerifyOptions = {
           issuer: app.config.AUTHENTIK_ISSUER || undefined,
           audience: app.config.AUTHENTIK_AUDIENCE || undefined,
-        });
+        };
+        // Narrow the union so the right jwtVerify overload is selected.
+        const { payload } =
+          typeof keyResolver === "function"
+            ? await jwtVerify(token, keyResolver, verifyOpts)
+            : await jwtVerify(token, keyResolver, verifyOpts);
         if (!payload.sub) throw new Error("missing sub");
         sub = payload.sub;
         email =

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { generateKeyPair, SignJWT, exportJWK, type JWK } from "jose";
+import { generateKeyPair, SignJWT, exportJWK, type JWK, type KeyLike } from "jose";
 import { instruments } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
@@ -10,7 +10,7 @@ const AUDIENCE = "portfolio-tracker";
 type App = Awaited<ReturnType<typeof buildApp>>;
 
 let app: App;
-let privateKey: CryptoKey;
+let privateKey: KeyLike;
 let publicJwk: JWK;
 
 async function token(sub: string, email = `${sub}@example.com`) {
