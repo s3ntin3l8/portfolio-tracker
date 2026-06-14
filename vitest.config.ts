@@ -29,6 +29,9 @@ export default defineConfig({
         "services/api/src/db/migrate.ts",
         // Provider wiring depends on env keys + network; covered by live use.
         "services/api/src/services/market-data.ts",
+        // pg-boss glue needs external Postgres; the refresh logic it runs
+        // (refresh.ts / market-hours.ts) is unit-tested independently.
+        "services/api/src/services/scheduler.ts",
         // Web: app router shells + i18n. The React components are RTL-tested, but v8
         // can't reliably instrument JSX in the aggregate run, so they're kept out of
         // the % gate (their tests still run). Pure web logic (lib/) stays gated.
