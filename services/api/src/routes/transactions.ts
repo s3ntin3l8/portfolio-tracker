@@ -11,6 +11,7 @@ import {
 } from "@portfolio/core";
 import type { InstrumentRef } from "@portfolio/market-data";
 import { getMarketData } from "../services/market-data.js";
+import { getCachedQuotes } from "../services/price-cache.js";
 import { requireUser } from "../plugins/auth.js";
 
 interface PortfolioParams {
@@ -92,11 +93,12 @@ export async function transactionsRoute(app: FastifyInstance) {
         currency: i.currency,
       } satisfies InstrumentRef,
     }));
-    const quotes = await getMarketData().getQuotes(refs);
-    const prices: Record<string, { price: string; currency: string }> = {};
-    for (const [instrumentId, q] of Object.entries(quotes)) {
-      prices[instrumentId] = { price: q.price, currency: q.currency };
-    }
+    const prices = await getCachedQuotes(
+      app.db,
+      getMarketData(),
+      refs,
+      app.config.MARKET_DATA_TTL_MS,
+    );
 
     const coreTxns: CoreTransaction[] = rows.map((r) => ({
       instrumentId: r.instrumentId,
