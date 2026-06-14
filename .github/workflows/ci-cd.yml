@@ -1,0 +1,29 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-node:
+    permissions:
+      contents: read
+    uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@main
+    with:
+      node-version: "26"
+      test-script: "test:coverage"
+    secrets: inherit
+
+  build-docker:
+    needs: [test-node]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: s3ntin3l8/.github/.github/workflows/docker-publish.yml@main
+    with:
+      image-name: "s3ntin3l8/${{ github.event.repository.name }}"
+      push-edge: ${{ github.event_name == 'push' }}
+    secrets: inherit

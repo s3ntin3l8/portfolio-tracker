@@ -1,0 +1,11 @@
+name: "Dependency Review"
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  dependency-review:
+    permissions:
+      contents: read
+    uses: s3ntin3l8/.github/.github/workflows/dependency-review.yml@main
