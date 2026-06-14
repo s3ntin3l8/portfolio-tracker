@@ -6,6 +6,7 @@ import {
   MarketDataService,
   TwelveDataProvider,
   GoldApiProvider,
+  YahooFinanceProvider,
   type InstrumentRef,
   type MarketDataProvider,
 } from "../src/index.js";
@@ -85,6 +86,80 @@ describe("MarketDataService", () => {
     ]);
     expect(quotes.i1.price).toBe("9500");
     expect(quotes.i2).toBeUndefined();
+  });
+
+  it("falls through to the next supporting provider when the primary returns null", async () => {
+    const primary: MarketDataProvider = {
+      name: "primary",
+      supports: (ac) => ac === "equity",
+      getQuote: async () => null, // rate-limited / not found
+      getHistory: async () => [],
+    };
+    const fallback: MarketDataProvider = {
+      name: "fallback",
+      supports: (ac) => ac === "equity",
+      getQuote: async (ref) => ({
+        price: "9999",
+        currency: ref.currency,
+        asOf: "2026-02-08T00:00:00.000Z",
+      }),
+      getHistory: async () => [{ date: "2026-02-08", close: "9999" }],
+    };
+    const svc = new MarketDataService([primary, fallback]);
+    expect((await svc.getQuote(bbca))?.price).toBe("9999");
+    expect((await svc.getHistory(bbca, "1mo"))[0].close).toBe("9999");
+  });
+});
+
+describe("YahooFinanceProvider", () => {
+  const chartBody = (price: number) => ({
+    chart: {
+      result: [
+        {
+          meta: { regularMarketPrice: price, currency: "IDR", regularMarketTime: 1738972800 },
+          timestamp: [1738972800, 1739059200],
+          indicators: { quote: [{ close: [price, null] }] },
+        },
+      ],
+    },
+  });
+
+  it("quotes an IDX equity via the .JK chart endpoint", async () => {
+    let calledUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return { body: chartBody(9500) };
+      }),
+    });
+    const quote = await provider.getQuote(bbca);
+    expect(calledUrl).toContain("/v8/finance/chart/BBCA.JK");
+    expect(quote).toMatchObject({ price: "9500", currency: "IDR" });
+    expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
+  });
+
+  it("supports equities/ETFs but not gold", () => {
+    const provider = new YahooFinanceProvider();
+    expect(provider.supports("equity", "IDX")).toBe(true);
+    expect(provider.supports("etf", "IDX")).toBe(true);
+    expect(provider.supports("gold", "XAU")).toBe(false);
+  });
+
+  it("returns history candles, skipping null closes", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: chartBody(9500) })),
+    });
+    const candles = await provider.getHistory(bbca, "1mo");
+    expect(candles).toHaveLength(1); // second close is null → skipped
+    expect(candles[0]).toMatchObject({ close: "9500" });
+  });
+
+  it("returns null on a non-200 and empty history when unavailable", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.getQuote(bbca)).toBeNull();
+    expect(await provider.getHistory(bbca, "1mo")).toEqual([]);
   });
 });
 
