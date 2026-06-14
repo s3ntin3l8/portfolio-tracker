@@ -95,6 +95,20 @@
     "asOf": "as of {time}",
     "live": "Live"
   },
+  "Settings": {
+    "title": "Settings",
+    "subtitle": "Your account and preferences.",
+    "account": "Account",
+    "name": "Name",
+    "email": "Email",
+    "authVia": "Signed in via Authentik (OIDC).",
+    "preferences": "Preferences",
+    "appearance": "Appearance",
+    "language": "Language",
+    "displayCurrency": "Display currency",
+    "displayCurrencyHint": "Net worth and totals are shown in this currency.",
+    "signOut": "Sign out"
+  },
   "Holdings": {
     "title": "Holdings",
     "subtitle": "Every position across your portfolios.",

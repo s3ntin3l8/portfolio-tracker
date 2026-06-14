@@ -3,6 +3,7 @@ import {
   createApiClient,
   type ApiClient,
   type Portfolio,
+  type User,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 
@@ -23,6 +24,17 @@ async function getServerApi(): Promise<ApiClient | null> {
   const token = session?.accessToken;
   if (!token) return null;
   return createApiClient({ baseUrl: apiBaseUrl, getToken: () => token });
+}
+
+/** The authenticated user (or null when signed out / API unreachable). */
+export async function loadMe(): Promise<User | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    return await api.me();
+  } catch {
+    return null;
+  }
 }
 
 export type PortfolioResult<T> =

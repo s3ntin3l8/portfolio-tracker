@@ -95,6 +95,20 @@
     "asOf": "per {time}",
     "live": "Langsung"
   },
+  "Settings": {
+    "title": "Pengaturan",
+    "subtitle": "Akun dan preferensi Anda.",
+    "account": "Akun",
+    "name": "Nama",
+    "email": "Email",
+    "authVia": "Masuk melalui Authentik (OIDC).",
+    "preferences": "Preferensi",
+    "appearance": "Tampilan",
+    "language": "Bahasa",
+    "displayCurrency": "Mata uang tampilan",
+    "displayCurrencyHint": "Kekayaan bersih dan total ditampilkan dalam mata uang ini.",
+    "signOut": "Keluar"
+  },
   "Holdings": {
     "title": "Kepemilikan",
     "subtitle": "Setiap posisi di seluruh portofolio Anda.",
