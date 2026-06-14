@@ -12,6 +12,10 @@ import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
 
 const csvBodySchema = z.object({ content: z.string().min(1) });
+const screenshotBodySchema = z.object({
+  image: z.string().min(1), // base64-encoded image bytes
+  mimeType: z.string().default("image/png"),
+});
 const confirmBodySchema = z.object({
   transactions: z.array(parsedTransactionSchema).min(1),
 });
@@ -50,6 +54,56 @@ export async function importsRoute(app: FastifyInstance) {
           portfolioId,
           parser: "csv",
           parsedJson: result,
+          status: "draft",
+        })
+        .returning();
+
+      reply.code(201);
+      return { importId: imp.id, drafts: result.drafts, errors: result.errors };
+    },
+  );
+
+  // Parse a screenshot into draft transactions and store them as a draft import.
+  // The raw image is parsed then discarded (never persisted) — privacy by default.
+  app.post<{ Params: { portfolioId: string } }>(
+    "/portfolios/:portfolioId/imports/screenshot",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      if (!app.screenshotParser.isConfigured()) {
+        return reply.code(503).send({ error: "screenshot_parser_not_configured" });
+      }
+
+      const { image, mimeType } = screenshotBodySchema.parse(request.body);
+      let drafts;
+      try {
+        drafts = await app.screenshotParser.parse({
+          data: Buffer.from(image, "base64"),
+          mimeType,
+        });
+      } catch (err) {
+        request.log.error({ err }, "screenshot parse failed");
+        return reply.code(502).send({ error: "screenshot_parse_failed" });
+      }
+
+      const confidence =
+        drafts.length > 0
+          ? String(drafts.reduce((s, d) => s + d.confidence, 0) / drafts.length)
+          : null;
+      const result = { drafts, errors: [] as { line: number; message: string }[] };
+
+      const [imp] = await app.db
+        .insert(screenshotImports)
+        .values({
+          userId: id,
+          portfolioId,
+          parser: app.screenshotParser.name,
+          parsedJson: result,
+          confidence,
           status: "draft",
         })
         .returning();
@@ -104,7 +158,8 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       const { transactions: drafts } = confirmBodySchema.parse(request.body);
-      const source = imp.parser === "screenshot" ? "screenshot" : "csv";
+      // Anything that isn't a CSV import (claude/ollama/gemini/...) is a screenshot.
+      const source = imp.parser === "csv" ? "csv" : "screenshot";
       const created = [];
 
       for (let i = 0; i < drafts.length; i++) {

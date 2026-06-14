@@ -12,8 +12,13 @@ import { meRoute } from "./routes/me.js";
 import { portfoliosRoute } from "./routes/portfolios.js";
 import { transactionsRoute } from "./routes/transactions.js";
 import { importsRoute } from "./routes/imports.js";
+import type { ScreenshotParser } from "./services/parsers/types.js";
+import { getScreenshotParser } from "./services/screenshot-parser.js";
 
-export type BuildAppOptions = AuthPluginOptions;
+export type BuildAppOptions = AuthPluginOptions & {
+  // Injectable so tests can supply a mock parser instead of hitting Anthropic.
+  screenshotParser?: ScreenshotParser;
+};
 
 export async function buildApp(opts: BuildAppOptions = {}) {
   const app = Fastify({
@@ -43,6 +48,8 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);
 
+  app.decorate("screenshotParser", opts.screenshotParser ?? getScreenshotParser());
+
   await app.register(rootRoute);
   await app.register(healthRoute);
   await app.register(meRoute);
@@ -51,4 +58,10 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(importsRoute);
 
   return app;
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    screenshotParser: ScreenshotParser;
+  }
 }
