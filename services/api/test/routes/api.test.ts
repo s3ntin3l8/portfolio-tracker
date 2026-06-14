@@ -314,6 +314,40 @@ describe("auth + portfolios + transactions", () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it("returns a live quote for the gold ticker", async () => {
+    const t = await token("user-a");
+    const res = await app.inject({
+      method: "GET",
+      url: "/quotes?symbol=GOLD&market=XAU&assetClass=gold&currency=idr",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    // Fixture provider prices GOLD at 1,150,000/gram.
+    expect(res.json()).toMatchObject({
+      symbol: "GOLD",
+      assetClass: "gold",
+      price: "1150000",
+      currency: "IDR",
+    });
+    expect(typeof res.json().asOf).toBe("string");
+
+    // Unknown symbol → no provider can price it.
+    const missing = await app.inject({
+      method: "GET",
+      url: "/quotes?symbol=NOPE&market=XAU&assetClass=gold&currency=IDR",
+      headers: auth(t),
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json().error).toBe("quote_unavailable");
+
+    // Requires auth.
+    const anon = await app.inject({
+      method: "GET",
+      url: "/quotes?symbol=GOLD&market=XAU&assetClass=gold&currency=IDR",
+    });
+    expect(anon.statusCode).toBe(401);
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

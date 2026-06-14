@@ -10,6 +10,7 @@ import {
 import { StatCard } from "@/components/stat-card";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
 import { EmptyState } from "@/components/empty-state";
+import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { loadPortfolio } from "@/lib/server-api";
@@ -54,6 +55,7 @@ export default async function DashboardPage({
   ) => (
     <div className="space-y-6">
       {Heading}
+      <GoldTicker />
       <EmptyState
         icon={Wallet}
         title={title}
@@ -121,6 +123,8 @@ export default async function DashboardPage({
   return (
     <div className="space-y-6">
       {Heading}
+
+      <GoldTicker />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />

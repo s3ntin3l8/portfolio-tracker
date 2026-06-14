@@ -41,6 +41,18 @@ export interface Instrument {
   name: string;
 }
 
+export interface QuoteRef {
+  symbol: string;
+  market: string;
+  assetClass: string;
+  currency: string;
+}
+
+export interface Quote extends QuoteRef {
+  price: string;
+  asOf: string;
+}
+
 export interface Transaction {
   id: string;
   portfolioId: string;
@@ -171,6 +183,17 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(
         "DELETE",
         `/portfolios/${portfolioId}/transactions/${txId}`,
+      ),
+
+    getQuote: (ref: QuoteRef) =>
+      request<Quote>(
+        "GET",
+        `/quotes?${new URLSearchParams({
+          symbol: ref.symbol,
+          market: ref.market,
+          assetClass: ref.assetClass,
+          currency: ref.currency,
+        }).toString()}`,
       ),
 
     searchInstruments: (q?: string) =>

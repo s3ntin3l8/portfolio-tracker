@@ -88,6 +88,12 @@
     "historyTitle": "Coming with price tracking",
     "historyBody": "Performance history appears once daily prices are collected."
   },
+  "Gold": {
+    "title": "Gold spot",
+    "perGram": "per gram, 24k",
+    "asOf": "as of {time}",
+    "live": "Live"
+  },
   "Holdings": {
     "title": "Holdings",
     "subtitle": "Every position across your portfolios.",

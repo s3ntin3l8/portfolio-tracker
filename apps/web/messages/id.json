@@ -88,6 +88,12 @@
     "historyTitle": "Segera dengan pelacakan harga",
     "historyBody": "Riwayat kinerja muncul setelah harga harian dikumpulkan."
   },
+  "Gold": {
+    "title": "Harga emas",
+    "perGram": "per gram, 24k",
+    "asOf": "per {time}",
+    "live": "Langsung"
+  },
   "Holdings": {
     "title": "Kepemilikan",
     "subtitle": "Setiap posisi di seluruh portofolio Anda.",
