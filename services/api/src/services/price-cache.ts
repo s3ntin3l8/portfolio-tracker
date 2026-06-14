@@ -11,6 +11,23 @@ export interface PricedRef {
 /** Latest price + currency, keyed by instrument id (the shape core valuation wants). */
 export type PriceMap = Record<string, { price: string; currency: string }>;
 
+/** Write fetched quotes into the last_prices cache (one upsert per instrument). */
+export async function upsertLastPrices(
+  db: DB,
+  quotes: Record<string, { price: string; currency: string }>,
+  now: Date,
+): Promise<void> {
+  for (const [instrumentId, q] of Object.entries(quotes)) {
+    await db
+      .insert(lastPrices)
+      .values({ instrumentId, price: q.price, currency: q.currency, asOf: now })
+      .onConflictDoUpdate({
+        target: lastPrices.instrumentId,
+        set: { price: q.price, currency: q.currency, asOf: now },
+      });
+  }
+}
+
 /**
  * Read-through last-price cache. Serves quotes fresher than `ttlMs` from the
  * `last_prices` table; for anything missing or stale, fetches live via the
@@ -54,13 +71,7 @@ export async function getCachedQuotes(
   );
   for (const [instrumentId, q] of Object.entries(quotes)) {
     prices[instrumentId] = { price: q.price, currency: q.currency };
-    await db
-      .insert(lastPrices)
-      .values({ instrumentId, price: q.price, currency: q.currency, asOf: now })
-      .onConflictDoUpdate({
-        target: lastPrices.instrumentId,
-        set: { price: q.price, currency: q.currency, asOf: now },
-      });
   }
+  await upsertLastPrices(db, quotes, now);
   return prices;
 }
