@@ -11,6 +11,7 @@ import { healthRoute } from "./routes/health.js";
 import { meRoute } from "./routes/me.js";
 import { portfoliosRoute } from "./routes/portfolios.js";
 import { transactionsRoute } from "./routes/transactions.js";
+import { importsRoute } from "./routes/imports.js";
 
 export type BuildAppOptions = AuthPluginOptions;
 
@@ -47,6 +48,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(meRoute);
   await app.register(portfoliosRoute);
   await app.register(transactionsRoute);
+  await app.register(importsRoute);
 
   return app;
 }
