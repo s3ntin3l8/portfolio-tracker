@@ -10,7 +10,9 @@ import {
   Settings,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  const signOutButton = (
+    <button
+      type="button"
+      onClick={() => signOut({ callbackUrl: "/" })}
+      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+    >
+      <LogOut className="size-4" />
+      {t("signOut")}
+    </button>
+  );
 
   const navLinks = (
     <nav className="flex flex-col gap-1">
@@ -61,6 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 md:flex">
         <Brand />
         <div className="mt-6">{navLinks}</div>
+        <div className="mt-auto pt-4">{signOutButton}</div>
       </aside>
 
       {/* Mobile drawer */}
@@ -78,6 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Button>
             </div>
             <div className="mt-6">{navLinks}</div>
+            <div className="mt-auto pt-4">{signOutButton}</div>
           </aside>
         </div>
       )}

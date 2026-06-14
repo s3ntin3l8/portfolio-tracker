@@ -6,6 +6,7 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { routing } from "@/i18n/routing";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthSessionProvider } from "@/components/session-provider";
 import "../globals.css";
 
 export const metadata: Metadata = {
@@ -40,7 +41,9 @@ export default async function LocaleLayout({
     >
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <NextIntlClientProvider>{children}</NextIntlClientProvider>
+          <AuthSessionProvider>
+            <NextIntlClientProvider>{children}</NextIntlClientProvider>
+          </AuthSessionProvider>
         </ThemeProvider>
       </body>
     </html>
