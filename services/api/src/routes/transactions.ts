@@ -100,6 +100,14 @@ export async function transactionsRoute(app: FastifyInstance) {
       app.config.MARKET_DATA_TTL_MS,
     );
 
+    // Bonds without a live market price are valued at par (face value) — the v1
+    // default; tradable ORI/SR market prices can override via a provider later.
+    for (const i of instrumentRows) {
+      if (i.assetClass === "bond" && i.faceValue && !prices[i.id]) {
+        prices[i.id] = { price: i.faceValue, currency: i.currency };
+      }
+    }
+
     const coreTxns: CoreTransaction[] = rows.map((r) => ({
       instrumentId: r.instrumentId,
       type: r.type,

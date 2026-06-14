@@ -348,6 +348,56 @@ describe("auth + portfolios + transactions", () => {
     expect(anon.statusCode).toBe(401);
   });
 
+  it("values bonds at par (face value) when there is no market price", async () => {
+    const t = await token("bond-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Bonds", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const [sr] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "SR021", // not in the fixture → no market price
+        market: "IDX",
+        assetClass: "bond",
+        unit: "units",
+        currency: "IDR",
+        name: "Sukuk Ritel 021",
+        faceValue: "1000000",
+      })
+      .returning();
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: sr.id,
+        quantity: "5",
+        price: "1000000",
+        currency: "IDR",
+        executedAt: "2026-01-10T00:00:00.000Z",
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/summary`,
+      headers: auth(t),
+    });
+    const summary = res.json();
+    const bond = summary.holdings.find(
+      (h: { instrumentId: string }) => h.instrumentId === sr.id,
+    );
+    expect(bond.price).toBe("1000000"); // valued at par
+    expect(bond.marketValue).toBe("5000000"); // 5 units × 1,000,000
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");
