@@ -57,7 +57,8 @@ const schema = {
 export const envPlugin = fp(async (app) => {
   await app.register(env, {
     schema: schema,
-    dotenv: true,
+    // Keep tests hermetic: don't let a developer's local .env leak into test config.
+    dotenv: process.env.NODE_ENV !== "test",
   });
 });
 
