@@ -447,6 +447,62 @@ describe("auth + portfolios + transactions", () => {
     expect(summary.totalMarketValue).toBe("1520000000"); // × 16000 IDR/USD
   });
 
+  it("applies a corporate action (2:1 split) to derived holdings", async () => {
+    const t = await token("ca-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Splits", baseCurrency: "IDR" },
+      })
+    ).json().id;
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "SPLT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Splitco" })
+      .returning();
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: inst.id,
+        quantity: "100",
+        price: "1000",
+        currency: "IDR",
+        executedAt: "2026-01-05T00:00:00.000Z",
+      },
+    });
+
+    // 2:1 split with an ex-date after the purchase.
+    const ca = await app.inject({
+      method: "POST",
+      url: "/corporate-actions",
+      headers: auth(t),
+      payload: { instrumentId: inst.id, type: "split", ratio: "2", exDate: "2026-02-01" },
+    });
+    expect(ca.statusCode).toBe(201);
+
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    const held = holdings.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id);
+    expect(held.quantity).toBe("200"); // 100 shares → 200 after the split
+    expect(held.costBasis).toBe("100000"); // basis unchanged
+
+    // The action is listed for the instrument.
+    const list = await app.inject({
+      method: "GET",
+      url: `/instruments/${inst.id}/corporate-actions`,
+      headers: auth(t),
+    });
+    expect(list.json()).toHaveLength(1);
+    expect(list.json()[0].type).toBe("split");
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

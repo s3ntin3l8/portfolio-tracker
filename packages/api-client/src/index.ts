@@ -2,6 +2,7 @@ import type {
   PortfolioInput,
   TransactionInput,
   InstrumentInput,
+  CorporateActionInput,
   ParsedTransaction,
 } from "@portfolio/schema";
 
@@ -39,6 +40,15 @@ export interface Instrument {
   unit: string;
   currency: string;
   name: string;
+}
+
+export interface CorporateAction {
+  id: string;
+  instrumentId: string;
+  type: string;
+  ratio: string;
+  exDate: string;
+  terms: string | null;
 }
 
 export interface QuoteRef {
@@ -210,6 +220,14 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     createInstrument: (input: InstrumentInput) =>
       request<Instrument>("POST", "/instruments", input),
+
+    createCorporateAction: (input: CorporateActionInput) =>
+      request<CorporateAction>("POST", "/corporate-actions", input),
+    listCorporateActions: (instrumentId: string) =>
+      request<CorporateAction[]>(
+        "GET",
+        `/instruments/${instrumentId}/corporate-actions`,
+      ),
 
     getHoldings: (portfolioId: string) =>
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),

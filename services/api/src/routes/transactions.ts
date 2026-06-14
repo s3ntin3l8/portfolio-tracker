@@ -1,12 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray } from "drizzle-orm";
-import { instruments, portfolios, transactions } from "@portfolio/db";
+import {
+  corporateActions,
+  instruments,
+  portfolios,
+  transactions,
+} from "@portfolio/db";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
   summarizePortfolio,
   xirr,
   type CoreTransaction,
+  type CorporateAction,
   type CashFlowPoint,
 } from "@portfolio/core";
 import type { InstrumentRef } from "@portfolio/market-data";
@@ -38,6 +44,24 @@ export async function transactionsRoute(app: FastifyInstance) {
       .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, userId)))
       .limit(1);
     return p ?? null;
+  }
+
+  // Load corporate actions for the given instruments, shaped for @portfolio/core.
+  async function corporateActionsFor(
+    instrumentIds: (string | null)[],
+  ): Promise<CorporateAction[]> {
+    const ids = [...new Set(instrumentIds.filter((x): x is string => x !== null))];
+    if (ids.length === 0) return [];
+    const rows = await app.db
+      .select()
+      .from(corporateActions)
+      .where(inArray(corporateActions.instrumentId, ids));
+    return rows.map((r) => ({
+      instrumentId: r.instrumentId,
+      type: r.type,
+      ratio: r.ratio,
+      exDate: new Date(r.exDate),
+    }));
   }
 
   // Build an instrumentId → presentation-metadata lookup for the given ids.
@@ -129,6 +153,7 @@ export async function transactionsRoute(app: FastifyInstance) {
 
     const summary = summarizePortfolio({
       transactions: coreTxns,
+      corporateActions: await corporateActionsFor(instrumentIds),
       prices,
       displayCurrency: baseCurrency,
       fx,
@@ -281,7 +306,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         currency: r.currency,
         executedAt: r.executedAt,
       }));
-      return computeHoldings(coreTxns);
+      const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
+      return computeHoldings(coreTxns, cas);
     },
   );
 

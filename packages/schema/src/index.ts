@@ -62,6 +62,18 @@ export const portfolioInputSchema = z.object({
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
+export const corporateActionTypeSchema = z.enum(["split", "bonus", "rights"]);
+export type CorporateActionType = z.infer<typeof corporateActionTypeSchema>;
+
+export const corporateActionInputSchema = z.object({
+  instrumentId: z.string().uuid(),
+  type: corporateActionTypeSchema,
+  ratio: decimalString,
+  exDate: z.coerce.date(),
+  terms: z.string().optional(),
+});
+export type CorporateActionInput = z.infer<typeof corporateActionInputSchema>;
+
 export const instrumentInputSchema = z.object({
   isin: z.string().optional(),
   symbol: z.string().min(1),
