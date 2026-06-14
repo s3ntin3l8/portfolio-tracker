@@ -1,7 +1,9 @@
 import {
+  AntamProvider,
   FixtureProvider,
   GoldApiProvider,
   MarketDataService,
+  NavProvider,
   TwelveDataProvider,
   YahooFinanceProvider,
   type MarketDataProvider,
@@ -26,6 +28,14 @@ export function getMarketData(): MarketDataService {
       }
       if (process.env.GOLDAPI_KEY) {
         providers.push(new GoldApiProvider(process.env.GOLDAPI_KEY));
+      }
+      // Gold buyback (Antam/Pegadaian) for holdings valuation, and reksa-dana NAV —
+      // unofficial sources, enabled by pointing at a configured endpoint.
+      if (process.env.ANTAM_BUYBACK_URL) {
+        providers.push(new AntamProvider({ baseUrl: process.env.ANTAM_BUYBACK_URL }));
+      }
+      if (process.env.NAV_BASE_URL) {
+        providers.push(new NavProvider({ baseUrl: process.env.NAV_BASE_URL }));
       }
       // Keyless IDX equity/ETF fallback — no signup, unofficial endpoint.
       providers.push(new YahooFinanceProvider());

@@ -30,8 +30,10 @@ export class TwelveDataProvider implements MarketDataProvider {
     this.doFetch = opts.fetch ?? globalThis.fetch;
   }
 
-  supports(assetClass: AssetClass): boolean {
-    return assetClass === "equity" || assetClass === "etf" || assetClass === "gold";
+  supports(assetClass: AssetClass, market: string): boolean {
+    if (assetClass === "equity" || assetClass === "etf") return true;
+    // Gold spot only (XAU); buyback valuation is the Antam provider's job.
+    return assetClass === "gold" && market === "XAU";
   }
 
   private query(ref: InstrumentRef): string {

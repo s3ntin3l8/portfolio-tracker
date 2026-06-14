@@ -5,9 +5,13 @@ import type { DB } from "../db/client.js";
 
 type Instrument = typeof instruments.$inferSelect;
 
-/** Default market for an asset class when the caller doesn't specify one. */
+/**
+ * Default market for an asset class when the caller doesn't specify one. Gold
+ * holdings use the Antam buyback market (valued at the buyback price); XAU spot is
+ * reserved for the live ticker.
+ */
 export function marketForAssetClass(assetClass: string): string {
-  return assetClass === "gold" ? "XAU" : "IDX";
+  return assetClass === "gold" ? "ANTAM" : "IDX";
 }
 
 /**

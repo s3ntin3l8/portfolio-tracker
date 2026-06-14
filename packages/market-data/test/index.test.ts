@@ -6,6 +6,8 @@ import {
   MarketDataService,
   TwelveDataProvider,
   GoldApiProvider,
+  AntamProvider,
+  NavProvider,
   YahooFinanceProvider,
   type InstrumentRef,
   type MarketDataProvider,
@@ -247,8 +249,9 @@ describe("GoldApiProvider", () => {
     });
     expect(quote?.price).toBe("1150000");
     expect(token).toBe("gold-key");
-    expect(provider.supports("gold")).toBe(true);
-    expect(provider.supports("equity")).toBe(false);
+    expect(provider.supports("gold", "XAU")).toBe(true);
+    expect(provider.supports("gold", "ANTAM")).toBe(false); // buyback ≠ spot
+    expect(provider.supports("equity", "IDX")).toBe(false);
   });
 
   const goldRef: InstrumentRef = {
@@ -270,5 +273,86 @@ describe("GoldApiProvider", () => {
       fetch: mockFetch(() => ({ body: {} })),
     });
     expect(await provider.getQuote(goldRef)).toBeNull();
+  });
+});
+
+describe("AntamProvider", () => {
+  const antamRef: InstrumentRef = {
+    symbol: "GOLD",
+    market: "ANTAM",
+    assetClass: "gold",
+    currency: "IDR",
+  };
+
+  it("supports gold buyback (ANTAM market) but not spot", () => {
+    const p = new AntamProvider({ baseUrl: "https://x", fetch: mockFetch(() => ({ body: {} })) });
+    expect(p.supports("gold", "ANTAM")).toBe(true);
+    expect(p.supports("gold", "XAU")).toBe(false);
+    expect(p.supports("equity", "IDX")).toBe(false);
+  });
+
+  it("reads the per-gram buyback price (incl. nested under data)", async () => {
+    const top = new AntamProvider({
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: { buyback: 1120000 } })),
+    });
+    expect((await top.getQuote(antamRef))?.price).toBe("1120000");
+
+    const nested = new AntamProvider({
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: { data: { harga_buyback: 1115000 } } })),
+    });
+    expect((await nested.getQuote(antamRef))?.price).toBe("1115000");
+  });
+
+  it("returns null on an unrecognised shape or a failed request", async () => {
+    const bad = new AntamProvider({
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: { something: "else" } })),
+    });
+    expect(await bad.getQuote(antamRef)).toBeNull();
+
+    const down = new AntamProvider({
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await down.getQuote(antamRef)).toBeNull();
+  });
+});
+
+describe("NavProvider", () => {
+  const fundRef: InstrumentRef = {
+    symbol: "RDPU",
+    market: "IDX",
+    assetClass: "mutual_fund",
+    currency: "IDR",
+  };
+
+  it("supports mutual funds only", () => {
+    const p = new NavProvider({ baseUrl: "https://x", fetch: mockFetch(() => ({ body: {} })) });
+    expect(p.supports("mutual_fund", "IDX")).toBe(true);
+    expect(p.supports("equity", "IDX")).toBe(false);
+    expect(p.supports("gold", "XAU")).toBe(false);
+  });
+
+  it("fetches NAV per unit by fund symbol", async () => {
+    let calledUrl = "";
+    const p = new NavProvider({
+      baseUrl: "https://funds.example/nav/",
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return { body: { nav: 1234.56 } };
+      }),
+    });
+    expect((await p.getQuote(fundRef))?.price).toBe("1234.56");
+    expect(calledUrl).toBe("https://funds.example/nav/RDPU"); // trailing slash trimmed
+  });
+
+  it("returns null when NAV is absent or the request fails", async () => {
+    const absent = new NavProvider({
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: {} })),
+    });
+    expect(await absent.getQuote(fundRef)).toBeNull();
   });
 });

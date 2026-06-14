@@ -43,9 +43,9 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 const selectClass =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Gold trades on the XAU market; everything else defaults to IDX (mirrors the API). */
+/** Gold holdings use the Antam buyback market; everything else IDX (mirrors the API). */
 function marketForAssetClass(assetClass: string): string {
-  return assetClass === "gold" ? "XAU" : "IDX";
+  return assetClass === "gold" ? "ANTAM" : "IDX";
 }
 
 export function AddTransactionForm({

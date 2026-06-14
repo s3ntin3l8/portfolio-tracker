@@ -25,8 +25,9 @@ export class GoldApiProvider implements MarketDataProvider {
     this.doFetch = opts.fetch ?? globalThis.fetch;
   }
 
-  supports(assetClass: AssetClass): boolean {
-    return assetClass === "gold";
+  supports(assetClass: AssetClass, market: string): boolean {
+    // Spot only (XAU); gold *holdings* are valued at the Antam buyback instead.
+    return assetClass === "gold" && market === "XAU";
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
