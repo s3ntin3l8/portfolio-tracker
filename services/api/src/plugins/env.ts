@@ -27,6 +27,18 @@ const schema = {
       type: "string",
       default: "",
     },
+    AUTHENTIK_ISSUER: {
+      type: "string",
+      default: "",
+    },
+    AUTHENTIK_AUDIENCE: {
+      type: "string",
+      default: "",
+    },
+    AUTHENTIK_JWKS_URL: {
+      type: "string",
+      default: "",
+    },
     CORS_ORIGIN: {
       type: "string",
       default: "",
@@ -57,6 +69,9 @@ declare module "fastify" {
       LOG_LEVEL: "fatal" | "error" | "warn" | "info" | "debug" | "trace";
       DATABASE_URL: string;
       DB_ENCRYPTION_KEY: string;
+      AUTHENTIK_ISSUER: string;
+      AUTHENTIK_AUDIENCE: string;
+      AUTHENTIK_JWKS_URL: string;
       CORS_ORIGIN: string;
       RATE_LIMIT_MAX: number;
       RATE_LIMIT_WINDOW: string;

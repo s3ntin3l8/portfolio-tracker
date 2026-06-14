@@ -1,7 +1,12 @@
+import path from "node:path";
 import * as schema from "./schema.js";
 
 export * from "./schema.js";
 export { schema };
+
+// Absolute path to this package's generated SQL migrations, for the API to apply
+// at startup. Resolves relative to the built/aliased module location.
+export const migrationsDir = path.resolve(import.meta.dirname, "../drizzle");
 
 // Inferred row types (select) and insert types for each table.
 export type User = typeof schema.users.$inferSelect;

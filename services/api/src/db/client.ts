@@ -1,8 +1,7 @@
-import path from "node:path";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "./schema.js";
+import { schema, migrationsDir } from "@portfolio/db";
 
 export type DB = PostgresJsDatabase<typeof schema>;
 
@@ -13,25 +12,21 @@ let pglite: { close: () => Promise<void> } | null = null;
 
 const PGLITE_PREFIX = "pglite://";
 
-/**
- * Use the embedded PGlite engine when running tests or when the URL opts into it
- * (`pglite://<dataDir>` or empty). This keeps unit tests self-contained — no
- * external Postgres required — while production uses a real Postgres via postgres-js.
- */
 function pgliteDataDir(url: string | undefined): string | undefined {
   if (url?.startsWith(PGLITE_PREFIX)) {
     const dir = url.slice(PGLITE_PREFIX.length);
     return dir.length > 0 ? dir : undefined;
   }
-  if (process.env.NODE_ENV === "test") return undefined; // in-memory
   return undefined;
 }
 
+/**
+ * Use embedded PGlite for tests / when the URL opts in (`pglite://<dataDir>` or
+ * empty); production uses a real Postgres via postgres-js.
+ */
 function usePglite(url: string | undefined): boolean {
   return process.env.NODE_ENV === "test" || !url || url.startsWith(PGLITE_PREFIX);
 }
-
-const migrationsFolder = path.resolve(import.meta.dirname, "../../drizzle");
 
 export async function initDb(databaseUrl?: string): Promise<DB> {
   if (dbInstance) return dbInstance;
@@ -64,11 +59,11 @@ export async function ensureDb(databaseUrl?: string): Promise<DB> {
   if (pglite) {
     const { migrate } = await import("drizzle-orm/pglite/migrator");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await migrate(db as any, { migrationsFolder });
+    await migrate(db as any, { migrationsFolder: migrationsDir });
   } else {
     const { migrate } = await import("drizzle-orm/postgres-js/migrator");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await migrate(db as any, { migrationsFolder });
+    await migrate(db as any, { migrationsFolder: migrationsDir });
   }
   return db;
 }

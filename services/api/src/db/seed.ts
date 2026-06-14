@@ -1,5 +1,5 @@
 import { ensureDb, getDb, closeDb } from "./client.js";
-import { users } from "./schema.js";
+import { users } from "@portfolio/db";
 
 export async function seed() {
   const db = getDb();
@@ -10,7 +10,9 @@ export async function seed() {
     return;
   }
 
-  await db.insert(users).values([{ name: "Admin User", email: "admin@example.com" }]);
+  await db
+    .insert(users)
+    .values([{ authSub: "seed|admin", email: "admin@example.com", name: "Admin" }]);
 
   console.log("Database seeded with initial data.");
 }

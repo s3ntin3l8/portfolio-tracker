@@ -16,8 +16,6 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
@@ -26,17 +24,21 @@
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^11.0.0",
     "@fastify/sensible": "^6.0.1",
+    "@portfolio/core": "*",
+    "@portfolio/db": "*",
+    "@portfolio/schema": "*",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.3.3",
     "fastify-plugin": "^6.0.0",
+    "jose": "^5.9.0",
     "pino": "^10.3.1",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.17",
     "@types/node": "^25.9.2",
     "@vitest/coverage-v8": "^4.1.8",
-    "drizzle-kit": "^0.31.1",
     "tsx": "^4.19.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

@@ -10,7 +10,13 @@ and cash** with live IDX prices and a real-time gold ticker. Built to expand to
 - **Monorepo:** npm workspaces + **Turborepo**. Node ≥26, ESM, TypeScript.
 - **`services/api`** — **Fastify 5 + Drizzle (Postgres)**. The only thing that touches
   the DB; hosts auth, market-data jobs, screenshot parsing, future Trade Republic
-  (`pytr`). Started from `s3ntin3l8/node-backend-template`.
+  (`pytr`). Started from `s3ntin3l8/node-backend-template`. **Auth:** Authentik OIDC —
+  `plugins/auth.ts` verifies Bearer JWTs (remote JWKS in prod, an injectable key in
+  tests via `buildApp({ authKey })`), upserts the user by `sub`, and exposes the
+  `app.authenticate` preHandler; every route scopes queries to `request.user`.
+  **Endpoints:** `/me`, `/portfolios` (list/create), `/portfolios/:id/transactions`
+  (list/create), `/portfolios/:id/holdings` (derived via `@portfolio/core`). Schema +
+  migrations come from `@portfolio/db`; the API applies them at startup.
 - **`apps/web`** — **Next.js (App Router) PWA**, Tailwind + shadcn/ui, **next-intl**
   (EN/ID). Talks to the API over HTTP (base URL is config-driven → Vercel-migratable).
 - **`packages/*`** — `schema` (zod + types), `core` (holdings, cost basis, XIRR,

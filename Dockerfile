@@ -27,9 +27,16 @@ ENV NODE_ENV=production
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/services/api/dist ./services/api/dist
-# Migrations are applied at startup by ensureDb() (resolves ../../drizzle).
-COPY --from=build /app/services/api/drizzle ./services/api/drizzle
 COPY --from=build /app/services/api/package.json ./services/api/package.json
+# Workspace packages the API imports at runtime (node_modules/@portfolio/* are
+# symlinks into these). Migrations are applied at startup from @portfolio/db.
+COPY --from=build /app/packages/db/dist ./packages/db/dist
+COPY --from=build /app/packages/db/drizzle ./packages/db/drizzle
+COPY --from=build /app/packages/db/package.json ./packages/db/package.json
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/package.json ./packages/core/package.json
+COPY --from=build /app/packages/schema/dist ./packages/schema/dist
+COPY --from=build /app/packages/schema/package.json ./packages/schema/package.json
 
 RUN chown -R node:node /app
 USER node
