@@ -1,0 +1,118 @@
+"use client";
+
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import {
+  LayoutDashboard,
+  Wallet,
+  ArrowLeftRight,
+  ScanLine,
+  Settings,
+  Menu,
+  X,
+} from "lucide-react";
+import { Link, usePathname } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LocaleSwitcher } from "@/components/locale-switcher";
+
+const NAV = [
+  { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
+  { href: "/holdings", icon: Wallet, key: "holdings" },
+  { href: "/transactions", icon: ArrowLeftRight, key: "transactions" },
+  { href: "/import", icon: ScanLine, key: "import" },
+  { href: "/settings", icon: Settings, key: "settings" },
+] as const;
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("Nav");
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  const navLinks = (
+    <nav className="flex flex-col gap-1">
+      {NAV.map(({ href, icon: Icon, key }) => {
+        const active = pathname === href;
+        return (
+          <Link
+            key={href}
+            href={href}
+            onClick={() => setOpen(false)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              active
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+            )}
+          >
+            <Icon className="size-4" />
+            {t(key)}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <div className="flex min-h-dvh">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 md:flex">
+        <Brand />
+        <div className="mt-6">{navLinks}</div>
+      </aside>
+
+      {/* Mobile drawer */}
+      {open && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <Brand />
+              <Button variant="ghost" size="icon" aria-label="Close menu" onClick={() => setOpen(false)}>
+                <X />
+              </Button>
+            </div>
+            <div className="mt-6">{navLinks}</div>
+          </aside>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label="Open menu"
+            onClick={() => setOpen(true)}
+          >
+            <Menu />
+          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            <LocaleSwitcher />
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <Wallet className="size-4" />
+      </div>
+      <span className="font-semibold tracking-tight">Portfolio</span>
+    </div>
+  );
+}
