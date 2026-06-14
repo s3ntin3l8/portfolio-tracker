@@ -119,6 +119,12 @@
     "addTransaction": "Add transaction",
     "createPortfolio": "Create portfolio",
     "back": "Back",
+    "actions": "Actions",
+    "delete": {
+      "label": "Delete transaction",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
     "portfolio": {
       "title": "Create a portfolio",
       "subtitle": "Give it a name and a base currency to value it in.",

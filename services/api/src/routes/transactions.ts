@@ -171,6 +171,32 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Delete a transaction from a portfolio (owner only).
+  app.delete<{ Params: PortfolioParams & { txId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const [deleted] = await app.db
+        .delete(transactions)
+        .where(
+          and(
+            eq(transactions.id, txId),
+            eq(transactions.portfolioId, portfolioId),
+          ),
+        )
+        .returning();
+      if (!deleted) {
+        return reply.code(404).send({ error: "transaction_not_found" });
+      }
+      return reply.code(204).send();
+    },
+  );
+
   // Derived holdings for a portfolio (computed via @portfolio/core).
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/holdings",

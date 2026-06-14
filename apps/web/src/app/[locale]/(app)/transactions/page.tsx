@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 import { Link } from "@/i18n/navigation";
 import { loadPortfolio } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
@@ -52,6 +53,7 @@ export default async function TransactionsPage({
   const result = await loadPortfolio((api, portfolio) =>
     api.listTransactions(portfolio.id),
   );
+  const portfolioId = result.status === "ok" ? result.portfolio.id : "";
 
   const addButton = (
     <Button asChild>
@@ -129,6 +131,9 @@ export default async function TransactionsPage({
               <TableHead className="text-right">{t("quantity")}</TableHead>
               <TableHead className="text-right">{t("amount")}</TableHead>
               <TableHead>{t("source")}</TableHead>
+              <TableHead className="text-right">
+                <span className="sr-only">{tm("actions")}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -166,6 +171,9 @@ export default async function TransactionsPage({
                       <Icon className="size-3.5" />
                       {t(`sources.${tx.source}`)}
                     </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DeleteTransactionButton portfolioId={portfolioId} txId={tx.id} />
                   </TableCell>
                 </TableRow>
               );

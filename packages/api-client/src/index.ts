@@ -157,6 +157,11 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/transactions`,
         input,
       ),
+    deleteTransaction: (portfolioId: string, txId: string) =>
+      request<void>(
+        "DELETE",
+        `/portfolios/${portfolioId}/transactions/${txId}`,
+      ),
 
     searchInstruments: (q?: string) =>
       request<Instrument[]>(
