@@ -1,0 +1,102 @@
+import { Decimal } from "decimal.js";
+import type { CoreTransaction, CorporateAction, Holding } from "./types.js";
+
+const D = (v: string | number) => new Decimal(v);
+const ZERO = new Decimal(0);
+
+type Event =
+  | { kind: "tx"; at: Date; tx: CoreTransaction }
+  | { kind: "ca"; at: Date; ca: CorporateAction };
+
+/**
+ * Derive per-instrument holdings from transactions using the **average cost**
+ * method. Handles buys/savings-plan, sells (realized P&L), and split/bonus
+ * corporate actions. Cash movements (null instrument) are ignored here.
+ */
+export function computeHoldings(
+  transactions: CoreTransaction[],
+  corporateActions: CorporateAction[] = [],
+): Holding[] {
+  const byInstrument = new Map<string, Event[]>();
+
+  for (const tx of transactions) {
+    if (!tx.instrumentId) continue;
+    const list = byInstrument.get(tx.instrumentId) ?? [];
+    list.push({ kind: "tx", at: tx.executedAt, tx });
+    byInstrument.set(tx.instrumentId, list);
+  }
+  for (const ca of corporateActions) {
+    const list = byInstrument.get(ca.instrumentId) ?? [];
+    list.push({ kind: "ca", at: ca.exDate, ca });
+    byInstrument.set(ca.instrumentId, list);
+  }
+
+  const holdings: Holding[] = [];
+
+  for (const [instrumentId, events] of byInstrument) {
+    events.sort((a, b) => a.at.getTime() - b.at.getTime());
+
+    let qty = ZERO;
+    let costBasis = ZERO;
+    let realized = ZERO;
+
+    for (const ev of events) {
+      if (ev.kind === "ca") {
+        const ratio = D(ev.ca.ratio);
+        if (ev.ca.type === "split") {
+          // 2:1 split → ratio 2 → quantity doubles, avg cost halves (basis unchanged).
+          qty = qty.mul(ratio);
+        } else if (ev.ca.type === "bonus") {
+          // bonus ratio = extra shares per held share; basis unchanged.
+          qty = qty.add(qty.mul(ratio));
+        }
+        // 'rights' requires a paired subscription transaction; no-op here.
+        continue;
+      }
+
+      const { type, quantity, price, fees } = ev.tx;
+      const q = D(quantity);
+      const p = D(price);
+      const f = D(fees);
+
+      if (type === "buy" || type === "savings_plan") {
+        qty = qty.add(q);
+        costBasis = costBasis.add(q.mul(p)).add(f);
+      } else if (type === "sell") {
+        const sellQty = Decimal.min(q, qty);
+        const avg = qty.gt(0) ? costBasis.div(qty) : ZERO;
+        const costOfSold = avg.mul(sellQty);
+        const proceeds = sellQty.mul(p).sub(f);
+        realized = realized.add(proceeds.sub(costOfSold));
+        qty = qty.sub(sellQty);
+        costBasis = costBasis.sub(costOfSold);
+      }
+      // dividend/coupon/fee/deposit/withdrawal don't change holdings.
+    }
+
+    const avgCost = qty.gt(0) ? costBasis.div(qty) : ZERO;
+    holdings.push({
+      instrumentId,
+      quantity: qty.toString(),
+      avgCost: avgCost.toString(),
+      costBasis: costBasis.toString(),
+      realizedPnL: realized.toString(),
+    });
+  }
+
+  return holdings;
+}
+
+/** Market value of a holding at a given unit price. */
+export function marketValue(quantity: string, price: string): string {
+  return D(quantity).mul(D(price)).toString();
+}
+
+/** Unrealized P&L = market value − remaining cost basis. */
+export function unrealizedPnL(
+  quantity: string,
+  price: string,
+  costBasis: string,
+): string {
+  return D(quantity).mul(D(price)).sub(D(costBasis)).toString();
+}
