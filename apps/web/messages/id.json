@@ -204,7 +204,10 @@
     "saving": "Menyimpan…",
     "saved": "Tersimpan",
     "updateError": "Gagal menyimpan perubahan. Silakan coba lagi.",
-    "signOut": "Keluar"
+    "signOut": "Keluar",
+    "connections": "Koneksi",
+    "tradeRepublic": "Trade Republic",
+    "tradeRepublicHint": "Impor transaksi dari akun Trade Republic Anda."
   },
   "Holdings": {
     "title": "Kepemilikan",
@@ -333,5 +336,33 @@
     "crypto": "Kripto",
     "derivative": "Derivatif",
     "cash": "Kas"
+  },
+  "TradeRepublic": {
+    "title": "Trade Republic",
+    "subtitle": "Hubungkan akun Trade Republic untuk mengimpor transaksi Anda.",
+    "cardTitle": "Koneksi",
+    "status": {
+      "disconnected": "Belum terhubung",
+      "awaiting_2fa": "Menunggu kode",
+      "connected": "Terhubung",
+      "expired": "Sesi kedaluwarsa",
+      "error": "Kesalahan"
+    },
+    "phone": "Nomor telepon",
+    "pin": "PIN",
+    "portfolio": "Impor ke",
+    "advanced": "Lanjutan",
+    "wafToken": "aws-waf-token (opsional)",
+    "wafTokenHint": "Tempel ini dari peramban hanya jika koneksi otomatis gagal.",
+    "connect": "Hubungkan",
+    "codeHint": "Masukkan kode yang dikirim Trade Republic ke aplikasi Anda (atau SMS).",
+    "code": "Kode konfirmasi",
+    "verify": "Verifikasi",
+    "connectedHint": "Akun Anda terhubung. Sinkronisasi menarik aktivitas baru sebagai draf transaksi untuk Anda konfirmasi.",
+    "synced": "Tersinkron — {drafts} draf transaksi disiapkan. Tinjau di halaman Impor.",
+    "syncNow": "Sinkronkan sekarang",
+    "disconnect": "Putuskan",
+    "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
+    "error": "Terjadi kesalahan. Silakan coba lagi."
   }
 }

@@ -204,7 +204,10 @@
     "saving": "Saving…",
     "saved": "Saved",
     "updateError": "Couldn't save changes. Please try again.",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "connections": "Connections",
+    "tradeRepublic": "Trade Republic",
+    "tradeRepublicHint": "Import transactions from your Trade Republic account."
   },
   "Holdings": {
     "title": "Holdings",
@@ -333,5 +336,33 @@
     "crypto": "Crypto",
     "derivative": "Derivatives",
     "cash": "Cash"
+  },
+  "TradeRepublic": {
+    "title": "Trade Republic",
+    "subtitle": "Connect your Trade Republic account to import your transactions.",
+    "cardTitle": "Connection",
+    "status": {
+      "disconnected": "Not connected",
+      "awaiting_2fa": "Awaiting code",
+      "connected": "Connected",
+      "expired": "Session expired",
+      "error": "Error"
+    },
+    "phone": "Phone number",
+    "pin": "PIN",
+    "portfolio": "Import into",
+    "advanced": "Advanced",
+    "wafToken": "aws-waf-token (optional)",
+    "wafTokenHint": "Paste this from your browser only if automatic connection fails.",
+    "connect": "Connect",
+    "codeHint": "Enter the code Trade Republic sent to your app (or SMS).",
+    "code": "Confirmation code",
+    "verify": "Verify",
+    "connectedHint": "Your account is connected. Sync pulls new activity as draft transactions you confirm.",
+    "synced": "Synced — {drafts} draft transactions staged. Review them on the Import page.",
+    "syncNow": "Sync now",
+    "disconnect": "Disconnect",
+    "expiredHint": "Your session expired. Reconnect to resume syncing.",
+    "error": "Something went wrong. Please try again."
   }
 }

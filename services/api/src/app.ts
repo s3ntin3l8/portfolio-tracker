@@ -15,12 +15,17 @@ import { instrumentsRoute } from "./routes/instruments.js";
 import { quotesRoute } from "./routes/quotes.js";
 import { corporateActionsRoute } from "./routes/corporate-actions.js";
 import { importsRoute } from "./routes/imports.js";
+import { trRoute } from "./routes/tr.js";
 import type { ScreenshotParser } from "./services/parsers/types.js";
 import { getScreenshotParser } from "./services/screenshot-parser.js";
+import { getPytrRunner } from "./services/pytr/runner.js";
+import type { PytrRunner } from "./services/pytr/runner.js";
 
 export type BuildAppOptions = AuthPluginOptions & {
   // Injectable so tests can supply a mock parser instead of hitting Anthropic.
   screenshotParser?: ScreenshotParser;
+  // Injectable so tests drive the pytr boundary without spawning Python.
+  pytr?: PytrRunner;
 };
 
 export async function buildApp(opts: BuildAppOptions = {}) {
@@ -52,6 +57,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(authPlugin, opts);
 
   app.decorate("screenshotParser", opts.screenshotParser ?? getScreenshotParser());
+  app.decorate("pytr", opts.pytr ?? getPytrRunner(app.config));
 
   await app.register(rootRoute);
   await app.register(healthRoute);
@@ -62,6 +68,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(quotesRoute);
   await app.register(corporateActionsRoute);
   await app.register(importsRoute);
+  await app.register(trRoute);
 
   return app;
 }
@@ -69,5 +76,6 @@ export async function buildApp(opts: BuildAppOptions = {}) {
 declare module "fastify" {
   interface FastifyInstance {
     screenshotParser: ScreenshotParser;
+    pytr: PytrRunner;
   }
 }

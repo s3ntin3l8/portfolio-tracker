@@ -1,10 +1,12 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { ChevronRight, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
 import { UpdateProfile } from "@/components/update-profile";
+import { Link } from "@/i18n/navigation";
 import { loadMe } from "@/lib/server-api";
 
 export default async function SettingsPage({
@@ -46,6 +48,29 @@ export default async function SettingsPage({
           <p className="mt-4 text-xs text-muted-foreground">{t("authVia")}</p>
           <Separator className="my-4" />
           <SignOutButton />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("connections")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/settings/trade-republic"
+            className="-mx-2 flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted/50"
+          >
+            <span className="flex items-center gap-2">
+              <Landmark className="size-4 text-muted-foreground" />
+              <span>
+                <span className="font-medium">{t("tradeRepublic")}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("tradeRepublicHint")}
+                </span>
+              </span>
+            </span>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
         </CardContent>
       </Card>
 

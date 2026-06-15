@@ -14,6 +14,7 @@ import {
   type HoldingValuation,
   type ImportRecord,
   type IncomeOutlook,
+  type TrConnection,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -234,6 +235,17 @@ export async function loadHoldings(): Promise<HoldingsView> {
     };
   } catch {
     return { status: "unavailable", holdings: [], displayCurrency: "IDR" };
+  }
+}
+
+/** The user's Trade Republic connection state (or null when API unreachable). */
+export async function loadTrConnection(): Promise<TrConnection | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    return await api.getTrConnection();
+  } catch {
+    return null;
   }
 }
 

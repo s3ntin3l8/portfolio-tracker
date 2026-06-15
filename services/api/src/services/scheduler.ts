@@ -1,15 +1,21 @@
 import { PgBoss } from "pg-boss";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { trConnections } from "@portfolio/db";
 import { getDb } from "../db/client.js";
 import { getMarketData } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
 import { recordDailySnapshots } from "./snapshots.js";
+import { syncTrConnection } from "./pytr/sync.js";
 
 const QUEUE = "refresh-prices";
 const SCHEDULE_CRON = "*/5 * * * *"; // every 5 minutes; the job self-gates on market hours
 
 const SNAPSHOT_QUEUE = "daily-snapshot";
 const SNAPSHOT_CRON = "0 16 * * *"; // daily 16:00 UTC (~23:00 WIB, after the IDX close)
+
+const TR_SYNC_QUEUE = "tr-sync";
+const TR_SYNC_CRON = "0 * * * *"; // hourly — TR data isn't intraday; be gentle on their API
 
 function usesPglite(url: string): boolean {
   return !url || url.startsWith("pglite://");
@@ -60,8 +66,33 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(SNAPSHOT_QUEUE, SNAPSHOT_CRON);
 
+  // Hourly Trade Republic sync: stage each connected account's timeline as a draft
+  // import the user later confirms. syncTrConnection itself is unit-tested apart from
+  // pg-boss; here we just fan it across the connected rows.
+  await boss.createQueue(TR_SYNC_QUEUE);
+  await boss.work(TR_SYNC_QUEUE, async () => {
+    try {
+      const conns = await getDb()
+        .select()
+        .from(trConnections)
+        .where(eq(trConnections.status, "connected"));
+      for (const conn of conns) {
+        const result = await syncTrConnection(
+          getDb(),
+          app.encryption,
+          app.pytr,
+          conn,
+        );
+        app.log.info({ connectionId: conn.id, result }, "tr sync complete");
+      }
+    } catch (err) {
+      app.log.error({ err }, "tr sync failed");
+    }
+  });
+  await boss.schedule(TR_SYNC_QUEUE, TR_SYNC_CRON);
+
   app.log.info(
-    { priceCron: SCHEDULE_CRON, snapshotCron: SNAPSHOT_CRON },
+    { priceCron: SCHEDULE_CRON, snapshotCron: SNAPSHOT_CRON, trSyncCron: TR_SYNC_CRON },
     "Schedulers started",
   );
 

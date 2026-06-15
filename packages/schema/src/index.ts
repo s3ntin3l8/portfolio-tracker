@@ -142,6 +142,8 @@ export const parsedTransactionSchema = z.object({
   executedAt: z.coerce.date(),
   exchangeCode: z.string().nullish(),
   externalId: z.string().nullish(),
+  // Groups recurring savings-plan executions (set by the Trade Republic importer).
+  savingsPlanId: z.string().nullish(),
   confidence: z.number().min(0).max(1),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;

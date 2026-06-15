@@ -56,6 +56,24 @@ const schema = {
       type: "number",
       default: 900000, // 15 minutes
     },
+    // --- Trade Republic (pytr) ---
+    // Interpreter that runs the vendored pytr entrypoints; the venv's python in prod.
+    PYTR_PYTHON_BIN: {
+      type: "string",
+      default: "python3",
+    },
+    // How pytr mints the AWS-WAF token at pairing time. The no-browser solver by
+    // default; 'playwright' needs a bundled Chromium (not installed by default).
+    PYTR_WAF_STRATEGY: {
+      type: "string",
+      default: "awswaf",
+      enum: ["awswaf", "playwright"],
+    },
+    // Master switch for the Trade Republic feature (subprocess + routes).
+    PYTR_ENABLED: {
+      type: "boolean",
+      default: true,
+    },
   },
 };
 
@@ -82,6 +100,9 @@ declare module "fastify" {
       RATE_LIMIT_MAX: number;
       RATE_LIMIT_WINDOW: string;
       MARKET_DATA_TTL_MS: number;
+      PYTR_PYTHON_BIN: string;
+      PYTR_WAF_STRATEGY: "awswaf" | "playwright";
+      PYTR_ENABLED: boolean;
     };
   }
 }

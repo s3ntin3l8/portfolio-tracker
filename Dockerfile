@@ -38,6 +38,19 @@ COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/schema/dist ./packages/schema/dist
 COPY --from=build /app/packages/schema/package.json ./packages/schema/package.json
 
+# --- Trade Republic sync (pytr) runs as a Python subprocess ---
+# Install pytr into an isolated venv (sidesteps PEP-668 on slim). DELIBERATELY do NOT
+# run `playwright install`: with PYTR_WAF_STRATEGY=awswaf the headless-browser code path
+# is never taken, so no Chromium (~400MB) is pulled. Without the venv the feature simply
+# returns 503 — it never crashes the API.
+COPY services/api/python ./services/api/python
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/pytr-venv \
+    && /opt/pytr-venv/bin/pip install --no-cache-dir -r ./services/api/python/requirements.txt
+ENV PYTR_PYTHON_BIN=/opt/pytr-venv/bin/python
+
 RUN chown -R node:node /app
 USER node
 

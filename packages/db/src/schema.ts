@@ -59,6 +59,14 @@ export const importStatusEnum = pgEnum("import_status", [
   "discarded",
 ]);
 
+export const trConnectionStatusEnum = pgEnum("tr_connection_status", [
+  "disconnected",
+  "awaiting_2fa",
+  "connected",
+  "expired",
+  "error",
+]);
+
 // --- Tables --------------------------------------------------------------
 
 // Users are keyed to the Authentik OIDC subject; the API never stores passwords.
@@ -129,6 +137,30 @@ export const screenshotImports = pgTable("screenshot_imports", {
   confidence: numeric("confidence"),
   status: importStatusEnum("status").notNull().default("draft"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A user's link to their Trade Republic account (one per user for v1). Phone, PIN and
+// the pytr cookie session are encrypted at rest (EncryptionService) — never plaintext.
+// pytr sync writes drafts into screenshotImports (parser='pytr'); see services/pytr.
+export const trConnections = pgTable("tr_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Which portfolio confirmed pytr transactions land in.
+  portfolioId: uuid("portfolio_id").references(() => portfolios.id, {
+    onDelete: "set null",
+  }),
+  phoneEnc: text("phone_enc").notNull(),
+  pinEnc: text("pin_enc").notNull(),
+  // The pytr cookie file contents (encrypted). Null until the 2FA pairing completes.
+  sessionEnc: text("session_enc"),
+  status: trConnectionStatusEnum("status").notNull().default("disconnected"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // The source of truth. Holdings, P&L, cash balance, XIRR and net worth are derived
@@ -251,8 +283,12 @@ export const fxRates = pgTable(
 
 // --- Relations -----------------------------------------------------------
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   portfolios: many(portfolios),
+  trConnection: one(trConnections, {
+    fields: [users.id],
+    references: [trConnections.userId],
+  }),
 }));
 
 export const portfoliosRelations = relations(portfolios, ({ one, many }) => ({

@@ -262,17 +262,25 @@ export async function importsRoute(app: FastifyInstance) {
 
       const { transactions: drafts } = confirmBodySchema.parse(request.body);
       const isDkb = imp.parser === "dkb";
-      // DKB exports are CSV too; anything that isn't a CSV/DKB import is a screenshot.
-      const source = imp.parser === "csv" || isDkb ? "csv" : "screenshot";
+      const isPytr = imp.parser === "pytr";
+      // pytr is its own source; DKB exports are CSV too; otherwise a screenshot.
+      const source = isPytr
+        ? "pytr"
+        : imp.parser === "csv" || isDkb
+          ? "csv"
+          : "screenshot";
+      // DKB and Trade Republic are both EU/ISIN brokers — identical instrument resolution.
+      const isEu = isDkb || isPytr;
       const created = [];
 
-      // Resolve DKB ISINs to a ticker/market/currency once each (best-effort, cached).
-      // OpenFIGI is keyless; failures and unknown ISINs fall back to Xetra/ISIN/EUR.
+      // Resolve EU broker (DKB/Trade Republic) ISINs to a ticker/market/currency once
+      // each (best-effort, cached). OpenFIGI is keyless; failures and unknown ISINs fall
+      // back to Xetra/ISIN/EUR.
       const isinCache = new Map<
         string,
         { symbol: string; market: string; currency: string; assetClass: AssetClass } | null
       >();
-      async function resolveDkbIsin(isin: string) {
+      async function resolveEuIsin(isin: string) {
         if (isinCache.has(isin)) return isinCache.get(isin)!;
         let resolved: {
           symbol: string;
@@ -306,14 +314,14 @@ export async function importsRoute(app: FastifyInstance) {
 
         if (!isCash) {
           let symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
-          let market = isDkb
+          let market = isEu
             ? marketForEuInstrument(d.assetClass)
             : marketForAssetClass(d.assetClass ?? "equity");
           let instrumentCurrency = d.currency;
           let assetClass = d.assetClass ?? "equity";
 
-          if (isDkb && d.isin) {
-            const r = await resolveDkbIsin(d.isin);
+          if (isEu && d.isin) {
+            const r = await resolveEuIsin(d.isin);
             if (r) {
               symbol = r.symbol;
               market = r.market;
@@ -350,6 +358,7 @@ export async function importsRoute(app: FastifyInstance) {
             source,
             importId: imp.id,
             externalId: d.externalId ?? `import:${imp.id}:${i}`,
+            savingsPlanId: d.savingsPlanId ?? null,
           })
           .onConflictDoNothing()
           .returning();

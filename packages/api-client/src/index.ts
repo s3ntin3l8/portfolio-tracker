@@ -211,6 +211,36 @@ export interface ImportRecord {
   createdAt: string;
 }
 
+export type TrStatus =
+  | "disconnected"
+  | "awaiting_2fa"
+  | "connected"
+  | "expired"
+  | "error";
+
+/** Public state of the user's Trade Republic connection — never includes secrets. */
+export interface TrConnection {
+  status: TrStatus;
+  portfolioId: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+}
+
+export interface TrConnectInput {
+  phone: string;
+  pin: string;
+  portfolioId: string;
+  /** Break-glass: a manually pasted aws-waf-token instead of the solver. */
+  wafToken?: string;
+}
+
+export interface TrSyncResult {
+  status: TrStatus;
+  importId?: string;
+  drafts?: number;
+  errors?: number;
+}
+
 // --- Client --------------------------------------------------------------
 
 export class ApiError extends Error {
@@ -401,5 +431,18 @@ export function createApiClient(config: ApiClientConfig) {
     /** Undo an import: remove any transactions it wrote, then mark it discarded. */
     deleteImport: (importId: string) =>
       request<{ removed: number }>("DELETE", `/imports/${importId}`),
+
+    // --- Trade Republic ---
+    getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),
+    connectTr: (input: TrConnectInput) =>
+      request<{ status: TrStatus; countdown: number }>(
+        "POST",
+        "/tr/connection",
+        input,
+      ),
+    verifyTr: (code: string) =>
+      request<{ status: TrStatus }>("POST", "/tr/connection/verify", { code }),
+    syncTr: () => request<TrSyncResult>("POST", "/tr/connection/sync"),
+    disconnectTr: () => request<void>("DELETE", "/tr/connection"),
   };
 }
