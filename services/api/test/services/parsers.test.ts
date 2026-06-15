@@ -223,6 +223,30 @@ describe("ClaudeVisionParser", () => {
     });
     await expect(parser.parse(IMAGE)).rejects.toThrow("claude_vision_error_429");
   });
+
+  it("sends a PDF as a document block and an image as an image block", async () => {
+    let body: { messages: { content: { type: string; source?: { media_type: string } }[] }[] };
+    const capture = (async (_url: string, init: { body: string }) => {
+      body = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: "tool_use", input: { transactions: [DRAFT] } }],
+        }),
+      };
+    }) as unknown as typeof fetch;
+    const parser = new ClaudeVisionParser("sk-test", { fetch: capture });
+
+    await parser.parse({ data: Buffer.from("%PDF-1.4"), mimeType: "application/pdf" });
+    expect(body!.messages[0].content[0]).toMatchObject({
+      type: "document",
+      source: { media_type: "application/pdf" },
+    });
+
+    await parser.parse(IMAGE);
+    expect(body!.messages[0].content[0].type).toBe("image");
+  });
 });
 
 describe("GeminiVisionParser", () => {

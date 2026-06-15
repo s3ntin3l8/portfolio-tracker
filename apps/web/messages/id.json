@@ -80,7 +80,7 @@
     "dropzone": {
       "title": "Tambah transaksi",
       "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
-      "cta": "Pilih tangkapan layar",
+      "cta": "Pilih tangkapan layar atau PDF",
       "csvCta": "Pilih berkas CSV"
     },
     "parsing": "Membaca transaksi Anda…",

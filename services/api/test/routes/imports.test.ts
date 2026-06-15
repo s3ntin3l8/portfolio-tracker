@@ -449,6 +449,38 @@ describe("screenshot import → confirm flow", () => {
     expect(confirm.json().transactions[0].source).toBe("screenshot");
   });
 
+  it("accepts a PDF document and rejects an unsupported media type", async () => {
+    const t = await ssToken("ss-pdf-user");
+    const portfolioId = (
+      await ssApp.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "PDF", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const pdf = await ssApp.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      headers: auth(t),
+      payload: {
+        image: Buffer.from("%PDF-1.4 fake").toString("base64"),
+        mimeType: "application/pdf",
+      },
+    });
+    expect(pdf.statusCode).toBe(201);
+    expect(pdf.json().drafts).toHaveLength(1);
+
+    const bad = await ssApp.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      headers: auth(t),
+      payload: { image: "abc", mimeType: "text/plain" },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it("503s when the configured parser has no key", async () => {
     const kp = await generateKeyPair("ES256");
     const inertApp = await buildApp({

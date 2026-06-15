@@ -42,6 +42,18 @@ export class ClaudeVisionParser implements ScreenshotParser {
       throw new Error("claude_parser_not_configured");
     }
 
+    // PDFs go in a `document` block; screenshots in an `image` block. Both carry
+    // base64 data + media type and are read by the same vision model.
+    const source = {
+      type: "base64" as const,
+      media_type: image.mimeType,
+      data: image.data.toString("base64"),
+    };
+    const mediaBlock =
+      image.mimeType === "application/pdf"
+        ? { type: "document", source }
+        : { type: "image", source };
+
     const res = await this.doFetch(`${this.baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
@@ -55,7 +67,7 @@ export class ClaudeVisionParser implements ScreenshotParser {
         tools: [
           {
             name: TOOL_NAME,
-            description: "Record the transactions found in the screenshot.",
+            description: "Record the transactions found in the document.",
             input_schema: TRANSACTIONS_TOOL_SCHEMA,
           },
         ],
@@ -63,17 +75,7 @@ export class ClaudeVisionParser implements ScreenshotParser {
         messages: [
           {
             role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: image.mimeType,
-                  data: image.data.toString("base64"),
-                },
-              },
-              { type: "text", text: EXTRACTION_PROMPT },
-            ],
+            content: [mediaBlock, { type: "text", text: EXTRACTION_PROMPT }],
           },
         ],
       }),

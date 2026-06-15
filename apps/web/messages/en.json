@@ -80,7 +80,7 @@
     "dropzone": {
       "title": "Add a transaction",
       "hint": "From a broker, gold app or bank confirmation",
-      "cta": "Choose a screenshot",
+      "cta": "Choose a screenshot or PDF",
       "csvCta": "Choose a CSV file"
     },
     "parsing": "Reading your transactions…",

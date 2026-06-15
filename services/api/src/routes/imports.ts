@@ -37,8 +37,14 @@ const CSV_PARSERS = {
 // broker presets are all CSV-sourced).
 const PARSER_TAG: Record<string, "dkb" | "csv"> = { dkb: "dkb" };
 const screenshotBodySchema = z.object({
-  image: z.string().min(1), // base64-encoded image bytes
-  mimeType: z.string().default("image/png"),
+  image: z.string().min(1), // base64-encoded document bytes (image or PDF)
+  mimeType: z
+    .string()
+    .default("image/png")
+    .refine(
+      (m) => m.startsWith("image/") || m === "application/pdf",
+      "unsupported_media_type",
+    ),
 });
 const confirmBodySchema = z.object({
   transactions: z.array(parsedTransactionSchema).min(1),

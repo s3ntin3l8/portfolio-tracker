@@ -341,7 +341,7 @@ export function ImportFlow({
           <input
             ref={fileRef}
             type="file"
-            accept={mode === "csv" ? ".csv,text/csv" : "image/*"}
+            accept={mode === "csv" ? ".csv,text/csv" : "image/*,application/pdf"}
             className="sr-only"
             aria-label={t("dropzone.cta")}
             onChange={onPick}
