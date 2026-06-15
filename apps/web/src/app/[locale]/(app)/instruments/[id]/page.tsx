@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PriceChart } from "@/components/charts/price-chart";
+import { CorporateActionsManager } from "@/components/corporate-actions-manager";
 import { loadInstrument } from "@/lib/server-api";
 
 export default async function InstrumentPage({
@@ -17,8 +18,6 @@ export default async function InstrumentPage({
   setRequestLocale(locale);
   const t = await getTranslations("Instrument");
   const tc = await getTranslations("AssetClass");
-  const tt = await getTranslations("TxType");
-  const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
   const data = await loadInstrument(id);
 
@@ -84,23 +83,7 @@ export default async function InstrumentPage({
           <CardTitle>{t("corporateActions")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {corporateActions.length > 0 ? (
-            <ul className="divide-y divide-border text-sm">
-              {corporateActions.map((ca) => (
-                <li key={ca.id} className="flex items-center justify-between py-2">
-                  <Badge variant="outline">{tt(ca.type)}</Badge>
-                  <span className="tabular text-muted-foreground">
-                    {t("ratio")} {ca.ratio} · {t("exDate")}{" "}
-                    {df.format(new Date(ca.exDate))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {t("noCorporateActions")}
-            </p>
-          )}
+          <CorporateActionsManager items={corporateActions} />
         </CardContent>
       </Card>
     </div>

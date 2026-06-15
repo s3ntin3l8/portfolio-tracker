@@ -161,7 +161,11 @@
     "submit": "Record action",
     "submitting": "Recording…",
     "needInstrument": "Search for and select an instrument first.",
-    "error": "Couldn't record the action. Check the fields and try again."
+    "error": "Couldn't record the action. Check the fields and try again.",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "Settings": {
     "title": "Settings",

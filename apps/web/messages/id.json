@@ -161,7 +161,11 @@
     "submit": "Catat aksi",
     "submitting": "Mencatat…",
     "needInstrument": "Cari dan pilih instrumen dulu.",
-    "error": "Tidak dapat mencatat aksi. Periksa kolom dan coba lagi."
+    "error": "Tidak dapat mencatat aksi. Periksa kolom dan coba lagi.",
+    "edit": "Ubah",
+    "delete": "Hapus",
+    "save": "Simpan",
+    "cancel": "Batal"
   },
   "Settings": {
     "title": "Pengaturan",
