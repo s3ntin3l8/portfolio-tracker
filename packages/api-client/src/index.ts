@@ -111,6 +111,21 @@ export interface PortfolioPerformance {
   asOf: string;
 }
 
+/** Net worth aggregated across all of a user's portfolios. */
+export interface NetWorth {
+  displayCurrency: string;
+  holdings: HoldingValuation[];
+  cash: Record<string, string>;
+  netWorth: string;
+  totalCost: string;
+  totalMarketValue: string;
+  totalUnrealizedPnL: string;
+  totalRealizedPnL: string;
+  xirr: number | null;
+  portfolioCount: number;
+  asOf: string;
+}
+
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
@@ -170,6 +185,8 @@ export function createApiClient(config: ApiClientConfig) {
 
   return {
     me: () => request<User>("GET", "/me"),
+
+    getNetWorth: () => request<NetWorth>("GET", "/networth"),
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
     createPortfolio: (input: PortfolioInput) =>

@@ -8,8 +8,10 @@ import {
   xirr,
   netWorth,
   summarizePortfolio,
+  aggregatePortfolios,
   type CoreTransaction,
   type CorporateAction,
+  type PortfolioSummary,
 } from "../src/index.js";
 
 const AAPL = "inst-aapl";
@@ -233,5 +235,97 @@ describe("netWorth", () => {
     });
     // 300*11000 + 1,000,000 + 100*17000 = 3,300,000 + 1,000,000 + 1,700,000
     expect(value).toBe("6000000");
+  });
+});
+
+describe("aggregatePortfolios", () => {
+  const mk = (over: Partial<PortfolioSummary>): PortfolioSummary => ({
+    displayCurrency: "IDR",
+    holdings: [],
+    cash: {},
+    netWorth: "0",
+    totalCost: "0",
+    totalMarketValue: "0",
+    totalUnrealizedPnL: "0",
+    totalRealizedPnL: "0",
+    ...over,
+  });
+
+  it("merges holdings by instrument, cash by currency, and sums totals", () => {
+    const a = mk({
+      holdings: [
+        {
+          instrumentId: "i1",
+          quantity: "100",
+          avgCost: "9000",
+          costBasis: "900000",
+          realizedPnL: "0",
+          price: "9500",
+          currency: "IDR",
+          marketValue: "950000",
+          unrealizedPnL: "50000",
+        },
+      ],
+      cash: { IDR: "1000000" },
+      netWorth: "1950000",
+      totalCost: "900000",
+      totalMarketValue: "950000",
+      totalUnrealizedPnL: "50000",
+      totalRealizedPnL: "0",
+    });
+    const b = mk({
+      holdings: [
+        {
+          instrumentId: "i1",
+          quantity: "100",
+          avgCost: "9500",
+          costBasis: "950000",
+          realizedPnL: "10000",
+          price: "9500",
+          currency: "IDR",
+          marketValue: "950000",
+          unrealizedPnL: "0",
+        },
+        {
+          instrumentId: "i2",
+          quantity: "5",
+          avgCost: "1000000",
+          costBasis: "5000000",
+          realizedPnL: "0",
+          price: "1150000",
+          currency: "IDR",
+          marketValue: "5750000",
+          unrealizedPnL: "750000",
+        },
+      ],
+      cash: { IDR: "500000", USD: "100" },
+      netWorth: "7200000",
+      totalCost: "5950000",
+      totalMarketValue: "6700000",
+      totalUnrealizedPnL: "750000",
+      totalRealizedPnL: "10000",
+    });
+
+    const out = aggregatePortfolios([a, b], "IDR");
+
+    const i1 = out.holdings.find((h) => h.instrumentId === "i1")!;
+    expect(i1.quantity).toBe("200"); // 100 + 100
+    expect(i1.costBasis).toBe("1850000"); // 900k + 950k
+    expect(i1.avgCost).toBe("9250"); // 1,850,000 / 200
+    expect(i1.marketValue).toBe("1900000"); // 950k + 950k
+    expect(i1.realizedPnL).toBe("10000");
+    expect(out.holdings).toHaveLength(2); // i1 merged, i2 distinct
+
+    expect(out.cash).toEqual({ IDR: "1500000", USD: "100" });
+    expect(out.netWorth).toBe("9150000"); // 1,950,000 + 7,200,000
+    expect(out.totalCost).toBe("6850000");
+    expect(out.totalUnrealizedPnL).toBe("800000"); // totalMV − totalCost
+    expect(out.totalRealizedPnL).toBe("10000");
+  });
+
+  it("handles an empty list", () => {
+    const out = aggregatePortfolios([], "IDR");
+    expect(out.netWorth).toBe("0");
+    expect(out.holdings).toEqual([]);
   });
 });

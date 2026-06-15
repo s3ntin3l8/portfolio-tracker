@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/empty-state";
 import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadPortfolio } from "@/lib/server-api";
+import { loadNetWorth } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function DashboardPage({
@@ -28,10 +28,7 @@ export default async function DashboardPage({
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
 
-  const result = await loadPortfolio(async (api, portfolio) => ({
-    summary: await api.getSummary(portfolio.id),
-    performance: await api.getPerformance(portfolio.id),
-  }));
+  const result = await loadNetWorth();
 
   const Heading = (
     <div>
@@ -77,7 +74,8 @@ export default async function DashboardPage({
     );
   }
 
-  const { summary, performance } = result.data;
+  const summary = result.data; // NetWorth carries the same fields as a summary
+  const performance = { xirr: result.data.xirr };
   const currency = summary.displayCurrency;
   const m = (n: number) => formatMoney(n, currency, locale);
 

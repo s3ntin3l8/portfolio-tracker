@@ -100,3 +100,69 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     totalRealizedPnL: totalRealized.toString(),
   };
 }
+
+/**
+ * Combine several already-valued portfolio summaries (all expressed in the same
+ * display currency) into one: holdings merged by instrument, cash by currency,
+ * and totals summed. Net worth across portfolios.
+ */
+export function aggregatePortfolios(
+  summaries: PortfolioSummary[],
+  displayCurrency: string,
+): PortfolioSummary {
+  const holdings = new Map<string, HoldingValuation>();
+  const cash: Record<string, string> = {};
+  let totalCost = new Decimal(0);
+  let totalMarketValue = new Decimal(0);
+  let totalRealized = new Decimal(0);
+  let netWorth = new Decimal(0);
+
+  const addNullable = (a: string | null, b: string | null): string | null => {
+    if (a === null) return b;
+    if (b === null) return a;
+    return new Decimal(a).add(b).toString();
+  };
+
+  for (const s of summaries) {
+    netWorth = netWorth.add(s.netWorth);
+    totalCost = totalCost.add(s.totalCost);
+    totalMarketValue = totalMarketValue.add(s.totalMarketValue);
+    totalRealized = totalRealized.add(s.totalRealizedPnL);
+
+    for (const [currency, amount] of Object.entries(s.cash)) {
+      cash[currency] = new Decimal(cash[currency] ?? "0").add(amount).toString();
+    }
+
+    for (const h of s.holdings) {
+      const ex = holdings.get(h.instrumentId);
+      if (!ex) {
+        holdings.set(h.instrumentId, { ...h });
+        continue;
+      }
+      const qty = new Decimal(ex.quantity).add(h.quantity);
+      const costBasis = new Decimal(ex.costBasis).add(h.costBasis);
+      holdings.set(h.instrumentId, {
+        instrumentId: h.instrumentId,
+        quantity: qty.toString(),
+        avgCost: qty.isZero() ? "0" : costBasis.div(qty).toString(),
+        costBasis: costBasis.toString(),
+        realizedPnL: new Decimal(ex.realizedPnL).add(h.realizedPnL).toString(),
+        price: h.price ?? ex.price,
+        currency: h.currency ?? ex.currency,
+        marketValue: addNullable(ex.marketValue, h.marketValue),
+        unrealizedPnL: addNullable(ex.unrealizedPnL, h.unrealizedPnL),
+      });
+    }
+  }
+
+  return {
+    displayCurrency,
+    holdings: [...holdings.values()],
+    cash,
+    netWorth: netWorth.toString(),
+    totalCost: totalCost.toString(),
+    totalMarketValue: totalMarketValue.toString(),
+    totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
+    totalRealizedPnL: totalRealized.toString(),
+  };
+}

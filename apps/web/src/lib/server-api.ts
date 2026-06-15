@@ -4,6 +4,7 @@ import {
   type ApiClient,
   type Portfolio,
   type User,
+  type NetWorth,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 
@@ -24,6 +25,24 @@ async function getServerApi(): Promise<ApiClient | null> {
   const token = session?.accessToken;
   if (!token) return null;
   return createApiClient({ baseUrl: apiBaseUrl, getToken: () => token });
+}
+
+export type NetWorthResult =
+  | { status: "ok"; data: NetWorth }
+  | { status: "empty" }
+  | { status: "unavailable" };
+
+/** Aggregate net worth across every portfolio, folding empty/unavailable states. */
+export async function loadNetWorth(): Promise<NetWorthResult> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const data = await api.getNetWorth();
+    if (data.portfolioCount === 0) return { status: "empty" };
+    return { status: "ok", data };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
 /** The authenticated user (or null when signed out / API unreachable). */

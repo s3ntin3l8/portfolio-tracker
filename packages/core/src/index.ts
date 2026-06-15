@@ -11,6 +11,7 @@ export {
 } from "./networth.js";
 export {
   summarizePortfolio,
+  aggregatePortfolios,
   type PortfolioSummary,
   type HoldingValuation,
   type SummarizeInput,

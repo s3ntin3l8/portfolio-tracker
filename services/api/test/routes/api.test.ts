@@ -503,6 +503,50 @@ describe("auth + portfolios + transactions", () => {
     expect(list.json()[0].type).toBe("split");
   });
 
+  it("aggregates net worth across a user's portfolios", async () => {
+    const t = await token("nw-user");
+    const mkPortfolio = async (name: string) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: "/portfolios",
+          headers: auth(t),
+          payload: { name, baseCurrency: "IDR" },
+        })
+      ).json().id;
+    const p1 = await mkPortfolio("One");
+    const p2 = await mkPortfolio("Two");
+
+    // BBCA priced 9500 by the fixture; distinct market avoids the IDX clash.
+    const [bbca] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBCA", market: "JKSE", assetClass: "equity", currency: "IDR", name: "BCA" })
+      .returning();
+
+    const post = (portfolioId: string, payload: object) =>
+      app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload,
+      });
+    await post(p1, { type: "deposit", price: "2000000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+    await post(p1, { type: "buy", instrumentId: bbca.id, quantity: "100", price: "9000", currency: "IDR", executedAt: "2026-01-02T00:00:00.000Z" });
+    await post(p2, { type: "deposit", price: "1000000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+    await post(p2, { type: "buy", instrumentId: bbca.id, quantity: "50", price: "9000", currency: "IDR", executedAt: "2026-01-02T00:00:00.000Z" });
+
+    const res = await app.inject({ method: "GET", url: "/networth", headers: auth(t) });
+    expect(res.statusCode).toBe(200);
+    const nw = res.json();
+    expect(nw.portfolioCount).toBe(2);
+    // P1: cash 1,100,000 + 100×9500 = 2,050,000; P2: 550,000 + 50×9500 = 1,025,000.
+    expect(nw.netWorth).toBe("3075000");
+    expect(nw.cash.IDR).toBe("1650000"); // 1,100,000 + 550,000
+    const merged = nw.holdings.find((h: { instrumentId: string }) => h.instrumentId === bbca.id);
+    expect(merged.quantity).toBe("150"); // 100 + 50 across portfolios
+    expect(merged.instrument.symbol).toBe("BBCA");
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

@@ -5,11 +5,13 @@ import {
   instruments,
   portfolios,
   transactions,
+  users,
 } from "@portfolio/db";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
   summarizePortfolio,
+  aggregatePortfolios,
   xirr,
   type CoreTransaction,
   type CorporateAction,
@@ -372,4 +374,56 @@ export async function transactionsRoute(app: FastifyInstance) {
       };
     },
   );
+
+  // Aggregate net worth across all of the user's portfolios, in their display
+  // currency — combined holdings, cash, totals, and money-weighted return.
+  app.get("/networth", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const [u] = await app.db
+      .select({ displayCurrency: users.displayCurrency })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    const display = u?.displayCurrency ?? "IDR";
+
+    const pfs = await app.db
+      .select()
+      .from(portfolios)
+      .where(eq(portfolios.userId, id));
+
+    const summaries = [];
+    const flows: CashFlowPoint[] = [];
+    const instrumentIds = new Set<string>();
+    for (const p of pfs) {
+      const { coreTxns, summary } = await loadValuation(p.id, display);
+      summaries.push(summary);
+      for (const tx of coreTxns) {
+        if (tx.type === "deposit") {
+          flows.push({ amount: -Number(tx.price), date: tx.executedAt });
+        } else if (tx.type === "withdrawal") {
+          flows.push({ amount: Number(tx.price), date: tx.executedAt });
+        }
+      }
+      for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
+    }
+
+    const aggregated = aggregatePortfolios(summaries, display);
+    const meta = await instrumentMeta([...instrumentIds]);
+    const holdings = aggregated.holdings.map((h) => ({
+      ...h,
+      instrument: meta.get(h.instrumentId) ?? null,
+    }));
+
+    const asOf = new Date();
+    flows.push({ amount: Number(aggregated.netWorth), date: asOf });
+    const rate = xirr(flows);
+
+    return {
+      ...aggregated,
+      holdings,
+      xirr: Number.isFinite(rate) ? rate : null,
+      portfolioCount: pfs.length,
+      asOf: asOf.toISOString(),
+    };
+  });
 }
