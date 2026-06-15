@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
+import { SessionErrorGuard } from "@/components/session-error-guard";
 import { auth } from "@/auth";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
@@ -24,5 +25,10 @@ export default async function AppLayout({
     if (!session) redirect(`/${locale}`);
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <>
+      <SessionErrorGuard />
+      <AppShell>{children}</AppShell>
+    </>
+  );
 }
