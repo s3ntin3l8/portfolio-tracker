@@ -3,6 +3,7 @@ import { Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { CreatePortfolio } from "@/components/create-portfolio";
+import { PortfolioActions } from "@/components/portfolio-actions";
 import { loadPortfolios } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 
@@ -38,10 +39,18 @@ export default async function PortfoliosPage({
               {result.portfolios.map(({ portfolio, netWorth }) => (
                 <Card key={portfolio.id}>
                   <CardContent className="p-5">
-                    <p className="font-medium">{portfolio.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {portfolio.baseCurrency}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{portfolio.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {portfolio.baseCurrency}
+                        </p>
+                      </div>
+                      <PortfolioActions
+                        portfolioId={portfolio.id}
+                        name={portfolio.name}
+                      />
+                    </div>
                     <p className="tabular mt-3 text-xl font-semibold">
                       {formatMoney(
                         Number(netWorth),

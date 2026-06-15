@@ -21,10 +21,17 @@ const DRAFT: ImportDraft = {
   confidence: 0.94,
 };
 
-function renderFlow(client: ImportClient) {
+function renderFlow(
+  client: ImportClient,
+  portfolios: { id: string; name: string }[] = [{ id: "p1", name: "Main" }],
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <ImportFlow client={client} portfolioId="p1" />
+      <ImportFlow
+        client={client}
+        portfolios={portfolios}
+        defaultPortfolioId={portfolios[0].id}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -82,7 +89,8 @@ describe("ImportFlow", () => {
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
-    expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "generic");
+    // Format defaults to auto-detect.
+    expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "auto");
     expect(client.importScreenshot).not.toHaveBeenCalled();
   });
 
@@ -95,12 +103,37 @@ describe("ImportFlow", () => {
     const { container } = renderFlow(client);
 
     fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
-    fireEvent.click(screen.getByRole("radio", { name: messages.Import.csvFormat.dkb }));
+    fireEvent.change(screen.getByLabelText(messages.Import.csvFormat.label), {
+      target: { value: "dkb" },
+    });
     const csv = new File(["Datum der Erstellung;..."], "dkb.csv", { type: "text/csv" });
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() =>
       expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "dkb"),
+    );
+  });
+
+  it("routes the import to the chosen target portfolio", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
+      confirmImport: vi.fn(),
+    };
+    const { container } = renderFlow(client, [
+      { id: "p1", name: "Main" },
+      { id: "p2", name: "DKB" },
+    ]);
+
+    fireEvent.change(screen.getByLabelText(messages.Import.targetPortfolio), {
+      target: { value: "p2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    const csv = new File(["date,action\n2026-01-01,buy"], "t.csv", { type: "text/csv" });
+    fireEvent.change(fileInput(container), { target: { files: [csv] } });
+
+    await waitFor(() =>
+      expect(client.importCsv).toHaveBeenCalledWith("p2", expect.any(String), "auto"),
     );
   });
 

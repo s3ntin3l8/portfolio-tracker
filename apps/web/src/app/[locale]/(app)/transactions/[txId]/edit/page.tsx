@@ -5,7 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { EditTransaction } from "@/components/edit-transaction";
-import { loadPortfolio } from "@/lib/server-api";
+import { loadTransactionsAcrossPortfolios } from "@/lib/server-api";
 
 export default async function EditTransactionPage({
   params,
@@ -17,9 +17,8 @@ export default async function EditTransactionPage({
   const t = await getTranslations("Manage");
   const te = await getTranslations("Empty");
 
-  const result = await loadPortfolio((api, portfolio) =>
-    api.listTransactions(portfolio.id),
-  );
+  // Resolve across all portfolios so an aggregate-view row edits regardless of scope.
+  const result = await loadTransactionsAcrossPortfolios();
 
   const header = (title: string, subtitle: string) => (
     <div className="flex items-center gap-3">
@@ -48,14 +47,14 @@ export default async function EditTransactionPage({
     );
   }
 
-  const tx = result.data.find((x) => x.id === txId);
+  const tx = result.transactions.find((x) => x.id === txId);
   if (!tx) notFound();
 
   return (
     <div className="space-y-6">
       {header(t("tx.editTitle"), t("tx.subtitle"))}
       <EditTransaction
-        portfolioId={result.portfolio.id}
+        portfolioId={tx.portfolioId}
         txId={tx.id}
         initial={{
           type: tx.type,

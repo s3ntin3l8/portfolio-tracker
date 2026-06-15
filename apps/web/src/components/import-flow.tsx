@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 // A draft transaction as it comes back from the API (executedAt is an ISO string).
@@ -61,7 +62,12 @@ export interface ImportClient {
 
 type Step = "upload" | "parsing" | "review" | "done";
 type Mode = "screenshot" | "csv";
-type CsvFormat = "generic" | "dkb";
+type CsvFormat = "auto" | "generic" | "dkb";
+
+export interface ImportTargetPortfolio {
+  id: string;
+  name: string;
+}
 
 const STEPS: Step[] = ["upload", "review", "done"];
 
@@ -113,15 +119,20 @@ function fileToText(file: File): Promise<string> {
 
 export function ImportFlow({
   client = demoClient,
-  portfolioId = "demo",
+  portfolios = [{ id: "demo", name: "Demo" }],
+  defaultPortfolioId,
 }: {
   client?: ImportClient;
-  portfolioId?: string;
+  portfolios?: ImportTargetPortfolio[];
+  defaultPortfolioId?: string;
 } = {}) {
   const t = useTranslations("Import");
   const [step, setStep] = useState<Step>("upload");
   const [mode, setMode] = useState<Mode>("screenshot");
-  const [csvFormat, setCsvFormat] = useState<CsvFormat>("generic");
+  const [csvFormat, setCsvFormat] = useState<CsvFormat>("auto");
+  const [portfolioId, setPortfolioId] = useState<string>(
+    defaultPortfolioId ?? portfolios[0]?.id ?? "demo",
+  );
   const [drafts, setDrafts] = useState<ImportDraft[]>([]);
   const [importId, setImportId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +249,24 @@ export function ImportFlow({
 
       {step === "upload" && (
         <div className="space-y-4">
+          {/* Target portfolio — which portfolio the confirmed transactions land in */}
+          {portfolios.length > 1 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="import-portfolio">{t("targetPortfolio")}</Label>
+              <Select
+                id="import-portfolio"
+                value={portfolioId}
+                onChange={(e) => setPortfolioId(e.target.value)}
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
           {/* Mode tabs */}
           <div className="inline-flex rounded-lg border border-border p-1 text-sm">
             <button
@@ -268,35 +297,25 @@ export function ImportFlow({
             </button>
           </div>
 
-          {/* CSV source format — generic columns or a DKB (German) export */}
+          {/* CSV source format — auto-detected by default; override for edge cases */}
           {mode === "csv" && (
             <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground">
+              <Label htmlFor="csv-format" className="text-sm text-muted-foreground">
                 {t("csvFormat.label")}
               </Label>
-              <div
-                role="radiogroup"
+              <Select
+                id="csv-format"
                 aria-label={t("csvFormat.label")}
-                className="inline-flex rounded-lg border border-border p-1 text-sm"
+                value={csvFormat}
+                onChange={(e) => setCsvFormat(e.target.value as CsvFormat)}
+                className="h-8 w-auto"
               >
-                {(["generic", "dkb"] as const).map((fmt) => (
-                  <button
-                    key={fmt}
-                    type="button"
-                    role="radio"
-                    aria-checked={csvFormat === fmt}
-                    onClick={() => setCsvFormat(fmt)}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 font-medium transition-colors",
-                      csvFormat === fmt
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
+                {(["auto", "generic", "dkb"] as const).map((fmt) => (
+                  <option key={fmt} value={fmt}>
                     {t(`csvFormat.${fmt}`)}
-                  </button>
+                  </option>
                 ))}
-              </div>
+              </Select>
             </div>
           )}
 

@@ -39,6 +39,18 @@
     "create": "Buat portofolio",
     "empty": "Belum ada portofolio — buat yang pertama di bawah."
   },
+  "PortfolioSwitcher": {
+    "label": "Portofolio",
+    "all": "Semua portofolio"
+  },
+  "PortfolioActions": {
+    "rename": "Ganti nama portofolio",
+    "delete": "Hapus portofolio",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "deleteWarning": "Ini menghapus portofolio beserta semua transaksinya secara permanen.",
+    "confirmDelete": "Hapus"
+  },
   "Import": {
     "title": "Impor transaksi",
     "subtitle": "Unggah tangkapan layar atau CSV — periksa drafnya, lalu konfirmasi.",
@@ -51,8 +63,10 @@
       "screenshot": "Tangkapan layar",
       "csv": "Berkas CSV"
     },
+    "targetPortfolio": "Impor ke",
     "csvFormat": {
       "label": "Format",
+      "auto": "Deteksi otomatis",
       "generic": "Umum",
       "dkb": "DKB (Jerman)"
     },
@@ -184,14 +198,25 @@
     "date": "Tanggal",
     "type": "Jenis",
     "instrument": "Instrumen",
+    "portfolio": "Portofolio",
     "quantity": "Jumlah",
     "amount": "Nominal",
     "source": "Sumber",
+    "empty": "Tidak ada transaksi.",
     "sources": {
       "screenshot": "Tangkapan layar",
       "csv": "CSV",
       "manual": "Manual",
       "pytr": "Trade Republic"
+    },
+    "batch": {
+      "selected": "{count, plural, one {# dipilih} other {# dipilih}}",
+      "delete": "Hapus yang dipilih",
+      "confirmPrompt": "Hapus transaksi ini?",
+      "confirm": "Hapus",
+      "cancel": "Batal",
+      "selectAll": "Pilih semua transaksi",
+      "selectRow": "Pilih transaksi"
     }
   },
   "Manage": {

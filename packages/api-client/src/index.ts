@@ -232,6 +232,10 @@ export function createApiClient(config: ApiClientConfig) {
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
     createPortfolio: (input: PortfolioInput) =>
       request<Portfolio>("POST", "/portfolios", input),
+    updatePortfolio: (portfolioId: string, input: Partial<PortfolioInput>) =>
+      request<Portfolio>("PATCH", `/portfolios/${portfolioId}`, input),
+    deletePortfolio: (portfolioId: string) =>
+      request<void>("DELETE", `/portfolios/${portfolioId}`),
 
     listTransactions: (portfolioId: string) =>
       request<Transaction[]>("GET", `/portfolios/${portfolioId}/transactions`),
@@ -258,6 +262,12 @@ export function createApiClient(config: ApiClientConfig) {
       request<void>(
         "DELETE",
         `/portfolios/${portfolioId}/transactions/${txId}`,
+      ),
+    bulkDeleteTransactions: (portfolioId: string, ids: string[]) =>
+      request<{ deleted: number }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/bulk-delete`,
+        { ids },
       ),
 
     getQuote: (ref: QuoteRef) =>
@@ -313,7 +323,7 @@ export function createApiClient(config: ApiClientConfig) {
     importCsv: (
       portfolioId: string,
       content: string,
-      format: "generic" | "dkb" = "generic",
+      format: "auto" | "generic" | "dkb" = "auto",
     ) =>
       request<CsvImportResult>(
         "POST",

@@ -1,41 +1,17 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import {
-  ScanLine,
-  FileSpreadsheet,
-  PencilLine,
-  Landmark,
-  Receipt,
-  Plus,
-  Pencil,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Receipt, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { DeleteTransactionButton } from "@/components/delete-transaction-button";
+import {
+  TransactionsTable,
+  type TxRow,
+} from "@/components/transactions-table";
 import { Link } from "@/i18n/navigation";
-import { loadPortfolio } from "@/lib/server-api";
-import { formatMoney } from "@/lib/utils";
-
-const SOURCE_ICON: Record<string, LucideIcon> = {
-  screenshot: ScanLine,
-  csv: FileSpreadsheet,
-  manual: PencilLine,
-  pytr: Landmark,
-};
-
-const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
-  buy: "success",
-  sell: "destructive",
-};
+import {
+  getSelectedPortfolioId,
+  loadPortfolio,
+  loadTransactionsAcrossPortfolios,
+} from "@/lib/server-api";
 
 export default async function TransactionsPage({
   params,
@@ -45,16 +21,29 @@ export default async function TransactionsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Transactions");
-  const tt = await getTranslations("TxType");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
-  const m = (n: number) => formatMoney(n, "IDR", locale);
-  const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
-  const result = await loadPortfolio((api, portfolio) =>
-    api.listTransactions(portfolio.id),
-  );
-  const portfolioId = result.status === "ok" ? result.portfolio.id : "";
+  // Aggregate across all portfolios unless one is selected in the global switcher.
+  const selectedId = await getSelectedPortfolioId();
+  const aggregate = selectedId === null;
+
+  let status: "ok" | "empty" | "unavailable";
+  let rows: TxRow[] = [];
+  if (aggregate) {
+    const result = await loadTransactionsAcrossPortfolios();
+    status = result.status;
+    rows = result.transactions;
+  } else {
+    const result = await loadPortfolio((api, portfolio) =>
+      api.listTransactions(portfolio.id),
+    );
+    status = result.status;
+    rows = result.status === "ok" ? result.data : [];
+  }
+
+  // Newest first.
+  rows = [...rows].sort((a, b) => b.executedAt.localeCompare(a.executedAt));
 
   const addButton = (
     <Button asChild>
@@ -75,7 +64,7 @@ export default async function TransactionsPage({
     </div>
   );
 
-  if (result.status === "unavailable") {
+  if (status === "unavailable") {
     return (
       <div className="space-y-6">
         {heading()}
@@ -88,14 +77,8 @@ export default async function TransactionsPage({
     );
   }
 
-  // Newest first.
-  const transactions =
-    result.status === "ok"
-      ? [...result.data].sort((a, b) => b.executedAt.localeCompare(a.executedAt))
-      : [];
-
-  if (transactions.length === 0) {
-    const isEmptyPortfolio = result.status === "empty";
+  if (rows.length === 0) {
+    const isEmptyPortfolio = status === "empty";
     return (
       <div className="space-y-6">
         {heading()}
@@ -121,82 +104,7 @@ export default async function TransactionsPage({
   return (
     <div className="space-y-6">
       {heading(addButton)}
-
-      <div className="rounded-xl border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("date")}</TableHead>
-              <TableHead>{t("type")}</TableHead>
-              <TableHead>{t("instrument")}</TableHead>
-              <TableHead className="text-right">{t("quantity")}</TableHead>
-              <TableHead className="text-right">{t("amount")}</TableHead>
-              <TableHead>{t("source")}</TableHead>
-              <TableHead className="text-right">
-                <span className="sr-only">{tm("actions")}</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {transactions.map((tx) => {
-              const Icon = SOURCE_ICON[tx.source] ?? PencilLine;
-              const qty = Number(tx.quantity);
-              const price = Number(tx.price);
-              const amount = qty > 0 ? qty * price : price;
-              return (
-                <TableRow key={tx.id}>
-                  <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {df.format(new Date(tx.executedAt))}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
-                      {tt(tx.type)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">
-                      {tx.instrument?.symbol ?? "—"}
-                    </div>
-                    {tx.instrument?.name && (
-                      <div className="text-xs text-muted-foreground">
-                        {tx.instrument.name}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular text-right">
-                    {qty || "—"}
-                  </TableCell>
-                  <TableCell className="tabular text-right">{m(amount)}</TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Icon className="size-3.5" />
-                      {t(`sources.${tx.source}`)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        asChild
-                        aria-label={tm("edit")}
-                      >
-                        <Link href={`/transactions/${tx.id}/edit`}>
-                          <Pencil className="size-4" />
-                        </Link>
-                      </Button>
-                      <DeleteTransactionButton
-                        portfolioId={portfolioId}
-                        txId={tx.id}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      <TransactionsTable rows={rows} showPortfolio={aggregate} />
     </div>
   );
 }
