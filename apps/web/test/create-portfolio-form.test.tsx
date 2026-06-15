@@ -24,6 +24,7 @@ describe("CreatePortfolioForm", () => {
         userId: "u1",
         name: "Stockbit",
         baseCurrency: "IDR",
+        birthYear: null,
       })),
     };
     const onSuccess = renderForm(client);

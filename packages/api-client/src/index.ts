@@ -22,6 +22,8 @@ export interface Portfolio {
   userId: string;
   name: string;
   baseCurrency: string;
+  /** Beneficiary birth year (e.g. a child's account), or null. */
+  birthYear: number | null;
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */
@@ -204,6 +206,8 @@ export interface ContributionStats {
   xirr: number | null;
   /** Default annual return to seed the forecast (xirr clamped, else "0.07"). */
   seedAnnualReturn: string;
+  /** Beneficiary birth year for the "to age 18" target (single portfolio only). */
+  birthYear: number | null;
   asOf: string;
 }
 

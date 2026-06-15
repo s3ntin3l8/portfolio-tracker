@@ -20,7 +20,12 @@ export async function portfoliosRoute(app: FastifyInstance) {
     const input = portfolioInputSchema.parse(request.body);
     const [created] = await app.db
       .insert(portfolios)
-      .values({ userId: id, name: input.name, baseCurrency: input.baseCurrency })
+      .values({
+        userId: id,
+        name: input.name,
+        baseCurrency: input.baseCurrency,
+        birthYear: input.birthYear ?? null,
+      })
       .returning();
     reply.code(201);
     return created;

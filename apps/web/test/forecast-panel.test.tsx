@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
@@ -11,7 +11,7 @@ vi.mock("@/components/charts/forecast-chart", () => ({
 
 import { ForecastPanel } from "../src/components/savings/forecast-panel";
 
-function renderPanel() {
+function renderPanel(props: Partial<React.ComponentProps<typeof ForecastPanel>> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <ForecastPanel
@@ -19,10 +19,13 @@ function renderPanel() {
         monthlyAverage="100"
         seedAnnualReturn="0"
         currency="EUR"
+        {...props}
       />
     </NextIntlClientProvider>,
   );
 }
+
+afterEach(() => vi.useRealTimers());
 
 describe("ForecastPanel", () => {
   it("seeds the projection from the contribution defaults", () => {
@@ -45,5 +48,19 @@ describe("ForecastPanel", () => {
     fireEvent.change(screen.getByLabelText(/Horizon/), { target: { value: "5" } });
     // 100 * 60 = 6,000.
     expect(screen.getByTestId("projected-value")).toHaveTextContent("€6,000");
+  });
+
+  it("offers a 'To age 18' preset that sets the horizon from the birth year", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    // Born 2017 → age 9 in 2026 → 9 years to 18 → 100 * 108 = 10,800.
+    renderPanel({ birthYear: 2017 });
+    fireEvent.click(screen.getByRole("button", { name: "To age 18" }));
+    expect(screen.getByTestId("projected-value")).toHaveTextContent("€10,800");
+  });
+
+  it("hides the 'To age 18' preset when no birth year is known", () => {
+    renderPanel();
+    expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
   });
 });

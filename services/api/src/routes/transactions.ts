@@ -103,6 +103,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     coreTxns: CoreTransaction[],
     summary: PortfolioSummary,
     display: string,
+    birthYear: number | null = null,
   ) {
     const ccys = [
       ...new Set(
@@ -145,6 +146,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       simpleGainPct,
       xirr: xirrVal,
       seedAnnualReturn,
+      birthYear,
       asOf: asOf.toISOString(),
     };
   }
@@ -423,7 +425,12 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolioId,
         portfolio.baseCurrency,
       );
-      return buildContributions(coreTxns, summary, portfolio.baseCurrency);
+      return buildContributions(
+        coreTxns,
+        summary,
+        portfolio.baseCurrency,
+        portfolio.birthYear,
+      );
     },
   );
 

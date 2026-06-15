@@ -44,11 +44,14 @@ export default async function PortfoliosPage({
                         <p className="truncate font-medium">{portfolio.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {portfolio.baseCurrency}
+                          {portfolio.birthYear !== null &&
+                            ` · ${t("born", { year: String(portfolio.birthYear) })}`}
                         </p>
                       </div>
                       <PortfolioActions
                         portfolioId={portfolio.id}
                         name={portfolio.name}
+                        birthYear={portfolio.birthYear}
                       />
                     </div>
                     <p className="tabular mt-3 text-xl font-semibold">

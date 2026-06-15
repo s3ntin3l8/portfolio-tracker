@@ -134,6 +134,42 @@ describe("contribution analytics", () => {
     expect(c.monthlyAverage).toBe("8000"); // 24000 / 3
   });
 
+  it("persists a portfolio birth year and surfaces it on contributions", async () => {
+    const t = await token("parent");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    const pf = await createPortfolio(t, "Kid");
+
+    // Set the birth year via PATCH.
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${pf}`,
+      headers: auth(t),
+      payload: { birthYear: 2017 },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().birthYear).toBe(2017);
+
+    // It rides the list and the contributions payload.
+    const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
+    expect(list.json().find((p: { id: string }) => p.id === pf).birthYear).toBe(2017);
+
+    const contrib = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pf}/contributions`,
+      headers: auth(t),
+    });
+    expect(contrib.json().birthYear).toBe(2017);
+
+    // Clearing it with null works too.
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${pf}`,
+      headers: auth(t),
+      payload: { birthYear: null },
+    });
+    expect(cleared.json().birthYear).toBeNull();
+  });
+
   it("404s a portfolio the user does not own; 401s without a token", async () => {
     const t = await token("saver");
     const stranger = await token("intruder");

@@ -59,6 +59,9 @@ export const currencyCode = z
 export const portfolioInputSchema = z.object({
   name: z.string().min(1),
   baseCurrency: currencyCode.default("IDR"),
+  // Optional beneficiary birth year (e.g. a child's account). Nullable so a PATCH
+  // can clear it.
+  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 

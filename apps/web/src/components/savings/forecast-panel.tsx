@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { forecastSeries } from "@portfolio/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ForecastChart } from "@/components/charts/forecast-chart";
@@ -26,20 +27,27 @@ export function ForecastPanel({
   monthlyAverage,
   seedAnnualReturn,
   currency,
+  birthYear = null,
 }: {
   currentValue: string;
   monthlyAverage: string;
   seedAnnualReturn: string;
   currency: string;
+  birthYear?: number | null;
 }) {
   const t = useTranslations("Savings");
   const locale = useLocale();
+
+  // Years from now until the beneficiary turns 18 (clamped to the slider range).
+  const yearsToEighteen = birthYear
+    ? Math.min(25, Math.max(1, 18 - (new Date().getFullYear() - birthYear)))
+    : null;
 
   const [monthly, setMonthly] = useState(Math.round(Number(monthlyAverage)));
   const [returnPct, setReturnPct] = useState(
     Math.round(Number(seedAnnualReturn) * 1000) / 10,
   );
-  const [years, setYears] = useState(10);
+  const [years, setYears] = useState(yearsToEighteen ?? 10);
 
   const series = useMemo(
     () =>
@@ -95,9 +103,22 @@ export function ForecastPanel({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="forecast-years">
-              {t("horizonYears")}: {t("years", { count: years })}
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="forecast-years">
+                {t("horizonYears")}: {t("years", { count: years })}
+              </Label>
+              {yearsToEighteen !== null && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setYears(yearsToEighteen)}
+                >
+                  {t("toAge18")}
+                </Button>
+              )}
+            </div>
             <input
               id="forecast-years"
               type="range"

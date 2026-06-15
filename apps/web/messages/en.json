@@ -57,6 +57,7 @@
     "projectedValue": "Projected value",
     "projectedContributed": "You contribute",
     "projectedGrowth": "Growth",
+    "toAge18": "To age 18",
     "emptyTitle": "No contributions yet",
     "emptyBody": "Record deposits or savings-plan purchases and your saving progress appears here."
   },
@@ -65,7 +66,8 @@
     "subtitle": "Create and manage your portfolios.",
     "value": "Value",
     "create": "Create a portfolio",
-    "empty": "No portfolios yet — create your first below."
+    "empty": "No portfolios yet — create your first below.",
+    "born": "Born {year}"
   },
   "PortfolioSwitcher": {
     "label": "Portfolio",
@@ -74,6 +76,8 @@
   "PortfolioActions": {
     "rename": "Rename portfolio",
     "delete": "Delete portfolio",
+    "setBirthYear": "Set birth year",
+    "birthYearPlaceholder": "e.g. 2017",
     "save": "Save",
     "cancel": "Cancel",
     "deleteWarning": "This permanently deletes the portfolio and all its transactions.",

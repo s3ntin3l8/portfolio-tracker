@@ -94,6 +94,7 @@ export default async function SavingsPage({
         monthlyAverage={c.monthlyAverage}
         seedAnnualReturn={c.seedAnnualReturn}
         currency={currency}
+        birthYear={c.birthYear}
       />
     </div>
   );

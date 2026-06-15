@@ -57,6 +57,7 @@
     "projectedValue": "Proyeksi nilai",
     "projectedContributed": "Setoran Anda",
     "projectedGrowth": "Pertumbuhan",
+    "toAge18": "Hingga usia 18",
     "emptyTitle": "Belum ada setoran",
     "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini."
   },
@@ -65,7 +66,8 @@
     "subtitle": "Buat dan kelola portofolio Anda.",
     "value": "Nilai",
     "create": "Buat portofolio",
-    "empty": "Belum ada portofolio — buat yang pertama di bawah."
+    "empty": "Belum ada portofolio — buat yang pertama di bawah.",
+    "born": "Lahir {year}"
   },
   "PortfolioSwitcher": {
     "label": "Portofolio",
@@ -74,6 +76,8 @@
   "PortfolioActions": {
     "rename": "Ganti nama portofolio",
     "delete": "Hapus portofolio",
+    "setBirthYear": "Atur tahun lahir",
+    "birthYearPlaceholder": "mis. 2017",
     "save": "Simpan",
     "cancel": "Batal",
     "deleteWarning": "Ini menghapus portofolio beserta semua transaksinya secara permanen.",

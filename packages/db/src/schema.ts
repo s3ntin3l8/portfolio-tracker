@@ -5,6 +5,7 @@ import {
   uuid,
   text,
   numeric,
+  integer,
   timestamp,
   date,
   jsonb,
@@ -88,6 +89,9 @@ export const portfolios = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     baseCurrency: text("base_currency").notNull().default("IDR"),
+    // Optional birth year of the account's beneficiary (e.g. a child's savings
+    // account) — powers the "to age 18" forecast target.
+    birthYear: integer("birth_year"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
