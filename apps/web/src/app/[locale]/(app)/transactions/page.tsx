@@ -6,6 +6,7 @@ import {
   TransactionsTable,
   type TxRow,
 } from "@/components/transactions-table";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { Link } from "@/i18n/navigation";
 import {
   getSelectedPortfolioId,
@@ -45,13 +46,43 @@ export default async function TransactionsPage({
   // Newest first.
   rows = [...rows].sort((a, b) => b.executedAt.localeCompare(a.executedAt));
 
+  // Plain-data CSV of the visible transactions (built client-side on click).
+  const exportHeaders = [
+    "Date",
+    "Type",
+    "Symbol",
+    "Name",
+    "Quantity",
+    "Price",
+    "Source",
+    ...(aggregate ? ["Portfolio"] : []),
+  ];
+  const exportRows: (string | number)[][] = rows.map((r) => [
+    r.executedAt.slice(0, 10),
+    r.type,
+    r.instrument?.symbol ?? "",
+    r.instrument?.name ?? "",
+    r.quantity,
+    r.price,
+    r.source,
+    ...(aggregate ? [r.portfolioName ?? ""] : []),
+  ]);
+
   const addButton = (
-    <Button asChild>
-      <Link href="/transactions/new">
-        <Plus className="size-4" />
-        {tm("addTransaction")}
-      </Link>
-    </Button>
+    <div className="flex items-center gap-2">
+      <ExportCsvButton
+        filename="transactions.csv"
+        headers={exportHeaders}
+        rows={exportRows}
+        label={t("exportCsv")}
+      />
+      <Button asChild>
+        <Link href="/transactions/new">
+          <Plus className="size-4" />
+          {tm("addTransaction")}
+        </Link>
+      </Button>
+    </div>
   );
 
   const heading = (action?: React.ReactNode) => (

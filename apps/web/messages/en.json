@@ -208,7 +208,18 @@
     "price": "Price",
     "value": "Value",
     "pnl": "P&L",
-    "all": "All"
+    "all": "All",
+    "exportCsv": "Export CSV"
+  },
+  "Chart": {
+    "range": {
+      "label": "Time range",
+      "1m": "1M",
+      "3m": "3M",
+      "6m": "6M",
+      "1y": "1Y",
+      "all": "All"
+    }
   },
   "Transactions": {
     "title": "Transactions",
@@ -221,6 +232,7 @@
     "amount": "Amount",
     "source": "Source",
     "empty": "No transactions.",
+    "exportCsv": "Export CSV",
     "sources": {
       "screenshot": "Screenshot",
       "csv": "CSV",

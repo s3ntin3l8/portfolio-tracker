@@ -208,7 +208,18 @@
     "price": "Harga",
     "value": "Nilai",
     "pnl": "Untung/Rugi",
-    "all": "Semua"
+    "all": "Semua",
+    "exportCsv": "Ekspor CSV"
+  },
+  "Chart": {
+    "range": {
+      "label": "Rentang waktu",
+      "1m": "1B",
+      "3m": "3B",
+      "6m": "6B",
+      "1y": "1T",
+      "all": "Semua"
+    }
   },
   "Transactions": {
     "title": "Transaksi",
@@ -221,6 +232,7 @@
     "amount": "Nominal",
     "source": "Sumber",
     "empty": "Tidak ada transaksi.",
+    "exportCsv": "Ekspor CSV",
     "sources": {
       "screenshot": "Tangkapan layar",
       "csv": "CSV",

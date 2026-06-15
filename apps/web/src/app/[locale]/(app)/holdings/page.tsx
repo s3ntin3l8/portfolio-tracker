@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { Link } from "@/i18n/navigation";
 import { loadHoldings } from "@/lib/server-api";
 import { formatMoney, cn } from "@/lib/utils";
@@ -32,6 +33,27 @@ export default async function HoldingsPage({
 
   const result = await loadHoldings();
 
+  // Open positions only (computeHoldings also returns closed, zero-quantity ones).
+  const holdings =
+    result.status === "ok"
+      ? result.holdings.filter((h) => Number(h.quantity) !== 0)
+      : [];
+  const currency = result.status === "ok" ? result.displayCurrency : "IDR";
+  const m = (n: number) => formatMoney(n, currency, locale);
+
+  const exportRows: (string | number)[][] = holdings.map((h) => [
+    h.instrument?.symbol ?? "",
+    h.instrument?.name ?? "",
+    h.instrument?.assetClass ?? "",
+    Number(h.quantity),
+    h.instrument?.unit ?? "",
+    h.avgCost,
+    h.price ?? "",
+    h.marketValue ?? "",
+    h.unrealizedPnL ?? "",
+    currency,
+  ]);
+
   const Heading = (
     <div className="flex items-start justify-between gap-4">
       <div>
@@ -39,12 +61,33 @@ export default async function HoldingsPage({
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       {result.status === "ok" && (
-        <Button variant="outline" asChild>
-          <Link href="/corporate-actions/new">
-            <GitBranch className="size-4" />
-            {tca("link")}
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {holdings.length > 0 && (
+            <ExportCsvButton
+              filename="holdings.csv"
+              headers={[
+                "Symbol",
+                "Name",
+                "AssetClass",
+                "Quantity",
+                "Unit",
+                "AvgCost",
+                "Price",
+                "MarketValue",
+                "UnrealizedPnL",
+                "Currency",
+              ]}
+              rows={exportRows}
+              label={t("exportCsv")}
+            />
+          )}
+          <Button variant="outline" asChild>
+            <Link href="/corporate-actions/new">
+              <GitBranch className="size-4" />
+              {tca("link")}
+            </Link>
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -61,14 +104,6 @@ export default async function HoldingsPage({
       </div>
     );
   }
-
-  // Open positions only (computeHoldings also returns closed, zero-quantity ones).
-  const holdings =
-    result.status === "ok"
-      ? result.holdings.filter((h) => Number(h.quantity) !== 0)
-      : [];
-  const currency = result.status === "ok" ? result.displayCurrency : "IDR";
-  const m = (n: number) => formatMoney(n, currency, locale);
 
   if (holdings.length === 0) {
     return (

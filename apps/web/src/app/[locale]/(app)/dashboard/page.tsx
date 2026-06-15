@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { LineChart, Plus, TrendingUp, Wallet } from "lucide-react";
+import { Plus, TrendingUp, Wallet } from "lucide-react";
 import type { AllocationSlice } from "@/lib/mock-data";
 import {
   Card,
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
-import { PriceChart } from "@/components/charts/price-chart";
+import { NetWorthHistoryChart } from "@/components/charts/net-worth-history-chart";
 import { EmptyState } from "@/components/empty-state";
 import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
@@ -187,18 +187,7 @@ export default async function DashboardPage({
             <CardTitle>{t("valueOverTime")}</CardTitle>
           </CardHeader>
           <CardContent>
-            {history.length > 1 ? (
-              <PriceChart
-                data={history.map((p) => ({ date: p.date, close: p.netWorth }))}
-                currency={currency}
-              />
-            ) : (
-              <EmptyState
-                icon={LineChart}
-                title={te("historyTitle")}
-                description={te("historyBody")}
-              />
-            )}
+            <NetWorthHistoryChart initial={history} currency={currency} />
           </CardContent>
         </Card>
         <Card>
