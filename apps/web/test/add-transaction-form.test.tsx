@@ -24,6 +24,7 @@ const INSTRUMENT: Instrument = {
 function makeClient(over: Partial<AddTransactionClient> = {}): AddTransactionClient {
   return {
     searchInstruments: vi.fn(async () => []),
+    lookupInstruments: vi.fn(async () => []),
     createInstrument: vi.fn(async () => INSTRUMENT),
     createTransaction: vi.fn(async () => ({}) as never),
     updateTransaction: vi.fn(async () => ({}) as never),
@@ -161,6 +162,58 @@ describe("AddTransactionForm", () => {
     expect(client.createTransaction).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ instrumentId: "i1" }),
+    );
+  });
+
+  it("auto-fills the new-instrument fields from a market-data match", async () => {
+    const client = makeClient({
+      lookupInstruments: vi.fn(async () => [
+        {
+          symbol: "AAPL",
+          name: "Apple Inc",
+          market: "US",
+          assetClass: "equity",
+          currency: "USD",
+          isin: "US0378331005",
+          source: "openfigi",
+        },
+      ]),
+    });
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.search), {
+      target: { value: "apple" },
+    });
+    // Debounced market-data lookup surfaces a discovered match.
+    const match = await screen.findByRole("button", { name: /Apple Inc/ });
+    fireEvent.click(match);
+
+    // Fields are prefilled (and editable) from the discovery result.
+    expect(screen.getByLabelText(m.symbol)).toHaveValue("AAPL");
+    expect(screen.getByLabelText(m.name)).toHaveValue("Apple Inc");
+    expect(screen.getByLabelText(m.currency)).toHaveValue("USD");
+
+    fireEvent.change(screen.getByLabelText(m.quantity), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText(m.price), {
+      target: { value: "190" },
+    });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-04-01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
+    expect(client.createInstrument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "AAPL",
+        market: "US", // the discovered market, not the IDX default
+        assetClass: "equity",
+        currency: "USD",
+        name: "Apple Inc",
+        isin: "US0378331005",
+      }),
     );
   });
 

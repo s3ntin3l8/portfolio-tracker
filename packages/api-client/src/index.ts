@@ -43,6 +43,17 @@ export interface Instrument {
   name: string;
 }
 
+/** A market-data discovery match used to prefill the manual-entry form. */
+export interface InstrumentSearchResult {
+  symbol: string;
+  name: string;
+  market: string;
+  assetClass: string;
+  currency: string;
+  isin?: string;
+  source: string;
+}
+
 export interface CorporateAction {
   id: string;
   instrumentId: string;
@@ -264,6 +275,12 @@ export function createApiClient(config: ApiClientConfig) {
       request<Instrument[]>(
         "GET",
         `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    /** Discover instruments from market data (ticker/name search or ISIN). */
+    lookupInstruments: (q: string) =>
+      request<InstrumentSearchResult[]>(
+        "GET",
+        `/instruments/lookup?q=${encodeURIComponent(q)}`,
       ),
     getInstrument: (id: string) =>
       request<Instrument>("GET", `/instruments/${id}`),

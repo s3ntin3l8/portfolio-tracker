@@ -2,9 +2,11 @@ import type {
   AssetClass,
   Candle,
   InstrumentRef,
+  InstrumentSearchResult,
   MarketDataProvider,
   Quote,
 } from "./types.js";
+import { assetClassFromType, mapExchange } from "./instrument-mapping.js";
 
 export interface YahooProviderOptions {
   baseUrl?: string;
@@ -76,6 +78,42 @@ export class YahooFinanceProvider implements MarketDataProvider {
       asOf,
       previousClose: prev === undefined ? null : String(prev),
     };
+  }
+
+  async search(query: string): Promise<InstrumentSearchResult[]> {
+    // Keyless autocomplete endpoint. Returns cross-market matches; we keep only those
+    // whose exchange maps to a currency we recognise (so the form can value them).
+    const res = await this.doFetch(
+      `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`,
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      quotes?: {
+        symbol?: string;
+        shortname?: string;
+        longname?: string;
+        quoteType?: string;
+        exchange?: string;
+      }[];
+    };
+    const out: InstrumentSearchResult[] = [];
+    for (const q of data.quotes ?? []) {
+      if (!q.symbol) continue;
+      const info = mapExchange(q.exchange);
+      if (!info) continue; // unknown venue → no reliable currency, skip
+      // IDX tickers come back as `BBCA.JK`; store the bare symbol (quotes re-add .JK).
+      const symbol =
+        info.market === "IDX" ? q.symbol.replace(/\.JK$/i, "") : q.symbol;
+      out.push({
+        symbol,
+        name: q.longname ?? q.shortname ?? symbol,
+        market: info.market,
+        assetClass: assetClassFromType(q.quoteType),
+        currency: info.currency,
+        source: this.name,
+      });
+    }
+    return out;
   }
 
   async getHistory(ref: InstrumentRef, range = "1mo"): Promise<Candle[]> {

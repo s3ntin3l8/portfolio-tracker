@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   ASSET_CLASSES,
   isAssetClass,
+  isIsin,
   FixtureProvider,
   MarketDataService,
   TwelveDataProvider,
@@ -9,7 +10,9 @@ import {
   AntamProvider,
   NavProvider,
   YahooFinanceProvider,
+  OpenFigiProvider,
   type InstrumentRef,
+  type InstrumentSearchResult,
   type MarketDataProvider,
 } from "../src/index.js";
 
@@ -53,6 +56,37 @@ describe("FixtureProvider", () => {
 
   it("supports any asset class / market", () => {
     expect(provider.supports("gold", "XAU")).toBe(true);
+  });
+
+  it("searches its catalogue by symbol, name, or ISIN", async () => {
+    expect((await provider.search("bbca"))[0]).toMatchObject({
+      symbol: "BBCA",
+      name: "Bank Central Asia Tbk",
+      assetClass: "equity",
+      currency: "IDR",
+    });
+    expect(await provider.search("telkom")).toHaveLength(1);
+    expect(await provider.search("ID1000109507")).toHaveLength(1); // by ISIN
+    expect(await provider.search("   ")).toEqual([]);
+    expect(await provider.search("nope")).toEqual([]);
+  });
+
+  it("resolves a known ISIN and rejects malformed ones", async () => {
+    expect(await provider.resolveISIN("ID1000109507")).toMatchObject({
+      symbol: "BBCA",
+      exchange: "IDX",
+    });
+    expect(await provider.resolveISIN("not-an-isin")).toBeNull();
+    expect(await provider.resolveISIN("US0000000000")).toBeNull(); // valid shape, unknown
+  });
+});
+
+describe("isIsin", () => {
+  it("matches 12-char ISINs and rejects anything else", () => {
+    expect(isIsin("US0378331005")).toBe(true);
+    expect(isIsin("id1000109507")).toBe(true); // case-insensitive
+    expect(isIsin("BBCA")).toBe(false);
+    expect(isIsin("US037833100")).toBe(false); // too short
   });
 });
 
@@ -111,6 +145,90 @@ describe("MarketDataService", () => {
     const svc = new MarketDataService([primary, fallback]);
     expect((await svc.getQuote(bbca))?.price).toBe("9999");
     expect((await svc.getHistory(bbca, "1mo"))[0].close).toBe("9999");
+  });
+
+  const result = (over: Partial<InstrumentSearchResult>): InstrumentSearchResult => ({
+    symbol: "BBCA",
+    name: "Bank Central Asia",
+    market: "IDX",
+    assetClass: "equity",
+    currency: "IDR",
+    source: "primary",
+    ...over,
+  });
+
+  it("merges search results across providers and dedupes by market:symbol (first wins)", async () => {
+    const primary: MarketDataProvider = {
+      name: "primary",
+      supports: () => false,
+      getQuote: async () => null,
+      search: async () => [result({ name: "Primary BCA" })],
+    };
+    const secondary: MarketDataProvider = {
+      name: "secondary",
+      supports: () => false,
+      getQuote: async () => null,
+      // duplicate BBCA (dropped) + a fresh symbol (kept)
+      search: async () => [
+        result({ name: "Secondary BCA", source: "secondary" }),
+        result({ symbol: "TLKM", name: "Telkom", source: "secondary" }),
+      ],
+    };
+    const svc = new MarketDataService([primary, secondary]);
+    const out = await svc.search("b");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ symbol: "BBCA", name: "Primary BCA" }); // first wins
+    expect(out[1]).toMatchObject({ symbol: "TLKM", source: "secondary" });
+  });
+
+  it("routes ISIN queries to resolveISIN and tolerates a throwing provider", async () => {
+    const flaky: MarketDataProvider = {
+      name: "flaky",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveISIN: async () => {
+        throw new Error("rate limited");
+      },
+    };
+    const figi: MarketDataProvider = {
+      name: "figi",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveISIN: async () => ({
+        symbol: "AAPL",
+        exchange: "US",
+        name: "Apple Inc",
+        type: "Common Stock",
+      }),
+      // search must NOT be consulted for an ISIN query
+      search: async () => [result({ symbol: "WRONG" })],
+    };
+    const svc = new MarketDataService([flaky, figi]);
+    const out = await svc.search("US0378331005");
+    expect(out).toEqual([
+      {
+        symbol: "AAPL",
+        name: "Apple Inc",
+        market: "US",
+        assetClass: "equity",
+        currency: "USD",
+        isin: "US0378331005",
+        source: "figi",
+      },
+    ]);
+  });
+
+  it("returns [] for a blank query and caps the result count", async () => {
+    const many: MarketDataProvider = {
+      name: "many",
+      supports: () => false,
+      getQuote: async () => null,
+      search: async () =>
+        Array.from({ length: 25 }, (_, i) => result({ symbol: `SYM${i}` })),
+    };
+    const svc = new MarketDataService([many]);
+    expect(await svc.search("  ")).toEqual([]);
+    expect(await svc.search("x")).toHaveLength(10);
   });
 });
 
@@ -369,5 +487,145 @@ describe("NavProvider", () => {
       fetch: mockFetch(() => ({ body: {} })),
     });
     expect(await absent.getQuote(fundRef)).toBeNull();
+  });
+});
+
+describe("TwelveDataProvider.search", () => {
+  it("maps symbol_search results, deriving market/asset class and skipping currency-less rows", async () => {
+    let seenUrl = "";
+    const provider = new TwelveDataProvider("key", {
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return {
+          body: {
+            data: [
+              {
+                symbol: "BBCA",
+                instrument_name: "Bank Central Asia",
+                exchange: "IDX",
+                mic_code: "XIDX",
+                currency: "IDR",
+                instrument_type: "Common Stock",
+              },
+              {
+                symbol: "QQQ",
+                instrument_name: "Invesco QQQ Trust",
+                exchange: "NASDAQ",
+                currency: "USD",
+                instrument_type: "ETF",
+              },
+              { symbol: "NOPE", instrument_name: "No currency" }, // skipped
+            ],
+          },
+        };
+      }),
+    });
+    const out = await provider.search("ba");
+    expect(seenUrl).toContain("/symbol_search?symbol=ba");
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({
+      symbol: "BBCA",
+      market: "IDX",
+      assetClass: "equity",
+      currency: "IDR",
+      source: "twelvedata",
+    });
+    expect(out[1]).toMatchObject({ symbol: "QQQ", market: "US", assetClass: "etf" });
+  });
+
+  it("returns [] on a non-ok response", async () => {
+    const provider = new TwelveDataProvider("key", {
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.search("x")).toEqual([]);
+  });
+});
+
+describe("YahooFinanceProvider.search", () => {
+  it("strips the .JK suffix for IDX and drops unknown venues", async () => {
+    let seenUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return {
+          body: {
+            quotes: [
+              {
+                symbol: "BBCA.JK",
+                longname: "Bank Central Asia Tbk",
+                quoteType: "EQUITY",
+                exchange: "JKT",
+              },
+              { symbol: "MYSTERY", quoteType: "EQUITY", exchange: "ZZZ" }, // unknown → skip
+            ],
+          },
+        };
+      }),
+    });
+    const out = await provider.search("bca");
+    expect(seenUrl).toContain("/v1/finance/search?q=bca");
+    expect(out).toEqual([
+      {
+        symbol: "BBCA",
+        name: "Bank Central Asia Tbk",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        source: "yahoo",
+      },
+    ]);
+  });
+
+  it("returns [] on a non-ok response", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.search("x")).toEqual([]);
+  });
+});
+
+describe("OpenFigiProvider", () => {
+  it("does not quote (discovery-only)", async () => {
+    const p = new OpenFigiProvider({ fetch: mockFetch(() => ({ body: [] })) });
+    expect(p.supports("equity", "IDX")).toBe(false);
+    expect(await p.getQuote(bbca)).toBeNull();
+  });
+
+  it("resolves an ISIN, prefers a record with a ticker, and sends the api key", async () => {
+    let apiKey: string | undefined;
+    let body: unknown;
+    const p = new OpenFigiProvider({
+      apiKey: "figi-key",
+      fetch: mockFetch((_url, init) => {
+        apiKey = (init?.headers as Record<string, string>)["X-OPENFIGI-APIKEY"];
+        body = JSON.parse(init?.body as string);
+        return {
+          body: [
+            {
+              data: [
+                { exchCode: "US", securityType: "Common Stock" }, // no ticker
+                { ticker: "AAPL", name: "APPLE INC", exchCode: "US", securityType: "Common Stock" },
+              ],
+            },
+          ],
+        };
+      }),
+    });
+    const resolved = await p.resolveISIN("US0378331005");
+    expect(resolved).toMatchObject({ symbol: "AAPL", exchange: "US", name: "APPLE INC" });
+    expect(apiKey).toBe("figi-key");
+    expect(body).toEqual([{ idType: "ID_ISIN", idValue: "US0378331005" }]);
+  });
+
+  it("returns null for malformed ISINs, empty data, and failed requests", async () => {
+    const ok = new OpenFigiProvider({
+      fetch: mockFetch(() => ({ body: [{ data: [] }] })),
+    });
+    expect(await ok.resolveISIN("not-isin")).toBeNull(); // never calls fetch
+    expect(await ok.resolveISIN("US0378331005")).toBeNull(); // empty data
+    const down = new OpenFigiProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await down.resolveISIN("US0378331005")).toBeNull();
   });
 });

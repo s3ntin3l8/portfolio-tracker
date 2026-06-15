@@ -2,9 +2,11 @@ import type {
   AssetClass,
   Candle,
   InstrumentRef,
+  InstrumentSearchResult,
   MarketDataProvider,
   Quote,
 } from "./types.js";
+import { assetClassFromType, mapExchange } from "./instrument-mapping.js";
 
 const TROY_OUNCE_GRAMS = 31.1034768;
 
@@ -66,6 +68,41 @@ export class TwelveDataProvider implements MarketDataProvider {
       asOf: new Date().toISOString(),
       previousClose: data.previous_close ? toGram(data.previous_close) : null,
     };
+  }
+
+  async search(query: string): Promise<InstrumentSearchResult[]> {
+    // `/symbol_search` returns instruments matching a ticker or name across exchanges,
+    // each carrying the currency + instrument type we need to prefill the form.
+    const res = await this.doFetch(
+      `${this.baseUrl}/symbol_search?symbol=${encodeURIComponent(query)}&apikey=${this.apiKey}`,
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      data?: {
+        symbol?: string;
+        instrument_name?: string;
+        exchange?: string;
+        mic_code?: string;
+        currency?: string;
+        instrument_type?: string;
+      }[];
+    };
+    const out: InstrumentSearchResult[] = [];
+    for (const d of data.data ?? []) {
+      if (!d.symbol) continue;
+      const info = mapExchange(d.mic_code) ?? mapExchange(d.exchange);
+      const currency = d.currency ?? info?.currency;
+      if (!currency) continue; // can't price/value it without a currency
+      out.push({
+        symbol: d.symbol,
+        name: d.instrument_name ?? d.symbol,
+        market: info?.market ?? d.exchange ?? d.mic_code ?? "",
+        assetClass: assetClassFromType(d.instrument_type),
+        currency,
+        source: this.name,
+      });
+    }
+    return out;
   }
 
   async getHistory(ref: InstrumentRef, range = "30"): Promise<Candle[]> {

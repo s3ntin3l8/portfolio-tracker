@@ -36,10 +36,33 @@ export interface Candle {
   close: string;
 }
 
+/** A discovered instrument's metadata, enough to prefill the manual-entry form. */
+export interface InstrumentSearchResult {
+  symbol: string;
+  name: string;
+  market: string; // 'IDX' | 'XETRA' | ...
+  assetClass: AssetClass;
+  currency: string;
+  isin?: string;
+  source: string; // the provider that surfaced it (display/debug)
+}
+
 export interface MarketDataProvider {
   readonly name: string;
   supports(assetClass: AssetClass, market: string): boolean;
   getQuote(ref: InstrumentRef): Promise<Quote | null>;
   getHistory?(ref: InstrumentRef, range: string): Promise<Candle[]>;
-  resolveISIN?(isin: string): Promise<{ symbol: string; exchange: string } | null>;
+  /** Free-text ticker/name discovery (not `supports`-gated; cross-market). */
+  search?(query: string): Promise<InstrumentSearchResult[]>;
+  /** Resolve an ISIN to a symbol + exchange (+ optional name/type for enrichment). */
+  resolveISIN?(
+    isin: string,
+  ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
+}
+
+/** A 12-char ISIN: 2-letter country, 9 alphanumerics, 1 check digit. */
+export const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+export function isIsin(value: string): boolean {
+  return ISIN_PATTERN.test(value.trim().toUpperCase());
 }

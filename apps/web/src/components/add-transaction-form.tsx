@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, X } from "lucide-react";
-import type { ApiClient, Instrument } from "@portfolio/api-client";
+import { AlertCircle, Loader2, Sparkles, X } from "lucide-react";
+import type {
+  ApiClient,
+  Instrument,
+  InstrumentSearchResult,
+} from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +16,7 @@ import { Label } from "@/components/ui/label";
 export type AddTransactionClient = Pick<
   ApiClient,
   | "searchInstruments"
+  | "lookupInstruments"
   | "createInstrument"
   | "createTransaction"
   | "updateTransaction"
@@ -56,6 +61,20 @@ function marketForAssetClass(assetClass: string): string {
   return assetClass === "gold" ? "ANTAM" : "IDX";
 }
 
+/** Narrow a discovered asset class to one the form's picker offers (else equity). */
+function clampAssetClass(value: string): (typeof ASSET_CLASSES)[number] {
+  return (ASSET_CLASSES as readonly string[]).includes(value)
+    ? (value as (typeof ASSET_CLASSES)[number])
+    : "equity";
+}
+
+/** Default the unit from the asset class (gold by the gram, funds by the unit). */
+function unitForClass(assetClass: string): (typeof UNITS)[number] {
+  if (assetClass === "gold") return "grams";
+  if (assetClass === "mutual_fund") return "units";
+  return "shares";
+}
+
 export function AddTransactionForm({
   client,
   portfolioId,
@@ -86,6 +105,8 @@ export function AddTransactionForm({
   // Instrument selection (non-cash types). Prefilled from the edited row.
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Instrument[]>([]);
+  const [discovered, setDiscovered] = useState<InstrumentSearchResult[]>([]);
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selected, setSelected] = useState<Instrument | null>(() =>
     initial?.instrument && initial.instrumentId
       ? {
@@ -105,6 +126,10 @@ export function AddTransactionForm({
   const [assetClass, setAssetClass] =
     useState<(typeof ASSET_CLASSES)[number]>("equity");
   const [unit, setUnit] = useState<(typeof UNITS)[number]>("shares");
+  // Set when fields were auto-filled from a discovery match: carries the ISIN +
+  // resolved market so they persist on create. Cleared once the user edits the symbol.
+  const [isin, setIsin] = useState<string | null>(null);
+  const [discoveredMarket, setDiscoveredMarket] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -113,18 +138,43 @@ export function AddTransactionForm({
   const isCash = type === "deposit" || type === "withdrawal" || type === "fee";
   const isTrade = type === "buy" || type === "sell";
 
-  async function runSearch(q: string) {
+  function runSearch(q: string) {
     setQuery(q);
     setSelected(null);
-    if (!q.trim()) {
+    const trimmed = q.trim();
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    if (!trimmed) {
       setResults([]);
+      setDiscovered([]);
       return;
     }
-    try {
-      setResults(await client.searchInstruments(q.trim()));
-    } catch {
-      setResults([]);
-    }
+    // Local reference data is fast; query it immediately.
+    void client
+      .searchInstruments(trimmed)
+      .then(setResults)
+      .catch(() => setResults([]));
+    // Market-data discovery hits the network — debounce it.
+    lookupTimer.current = setTimeout(() => {
+      void client
+        .lookupInstruments(trimmed)
+        .then(setDiscovered)
+        .catch(() => setDiscovered([]));
+    }, 300);
+  }
+
+  /** Auto-fill the create fields from a market-data match (user can still edit). */
+  function prefillFrom(match: InstrumentSearchResult) {
+    const ac = clampAssetClass(match.assetClass);
+    setSymbol(match.symbol.toUpperCase());
+    setName(match.name);
+    setAssetClass(ac);
+    setUnit(unitForClass(ac));
+    setCurrency(match.currency);
+    setIsin(match.isin ?? null);
+    setDiscoveredMarket(match.market || null);
+    setQuery("");
+    setResults([]);
+    setDiscovered([]);
   }
 
   async function resolveInstrumentId(): Promise<string | null> {
@@ -132,11 +182,12 @@ export function AddTransactionForm({
     if (selected) return selected.id;
     const created = await client.createInstrument({
       symbol: symbol.trim(),
-      market: marketForAssetClass(assetClass),
+      market: discoveredMarket ?? marketForAssetClass(assetClass),
       assetClass,
       unit,
       currency,
       name: name.trim() || symbol.trim(),
+      isin: isin ?? undefined,
     });
     return created.id;
   }
@@ -226,23 +277,55 @@ export function AddTransactionForm({
                 aria-label={t("search")}
               />
               {results.length > 0 && (
-                <ul className="divide-y divide-border rounded-md border border-border">
-                  {results.map((i) => (
-                    <li key={i.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelected(i);
-                          setResults([]);
-                        }}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                      >
-                        <span className="font-medium">{i.symbol}</span>
-                        <span className="text-muted-foreground">{i.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {t("savedResults")}
+                  </p>
+                  <ul className="divide-y divide-border rounded-md border border-border">
+                    {results.map((i) => (
+                      <li key={i.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelected(i);
+                            setResults([]);
+                            setDiscovered([]);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+                        >
+                          <span className="font-medium">{i.symbol}</span>
+                          <span className="text-muted-foreground">{i.name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {discovered.length > 0 && (
+                <div className="space-y-1">
+                  <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                    <Sparkles className="size-3" />
+                    {t("discoveredResults")}
+                  </p>
+                  <ul className="divide-y divide-border rounded-md border border-border">
+                    {discovered.map((i) => (
+                      <li key={`${i.market}:${i.symbol}:${i.source}`}>
+                        <button
+                          type="button"
+                          onClick={() => prefillFrom(i)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                        >
+                          <span className="font-medium">{i.symbol}</span>
+                          <span className="truncate text-muted-foreground">{i.name}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {i.currency}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               <p className="pt-1 text-xs font-medium text-muted-foreground">
@@ -253,7 +336,12 @@ export function AddTransactionForm({
                   <Input
                     id="tx-symbol"
                     value={symbol}
-                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      setSymbol(e.target.value.toUpperCase());
+                      // Manual edits override a discovered identity.
+                      setIsin(null);
+                      setDiscoveredMarket(null);
+                    }}
                   />
                 </Field>
                 <Field label={t("name")} htmlFor="tx-name">

@@ -10,6 +10,7 @@ const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+const lookupQuerySchema = z.object({ q: z.string().trim().min(1) });
 const historyQuerySchema = z.object({ range: z.string().default("1y") });
 
 export async function instrumentsRoute(app: FastifyInstance) {
@@ -37,6 +38,23 @@ export async function instrumentsRoute(app: FastifyInstance) {
         .from(instruments)
         .orderBy(asc(instruments.symbol))
         .limit(limit);
+    },
+  );
+
+  // Discover instruments from market-data providers (ticker/name search or ISIN
+  // resolution) to auto-fill the manual-entry form. Complements `GET /instruments`,
+  // which only matches already-saved reference data. Provider failures degrade to [].
+  app.get(
+    "/instruments/lookup",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { q } = lookupQuerySchema.parse(request.query);
+      try {
+        return await getMarketData().search(q);
+      } catch (err) {
+        request.log.warn({ err }, "instrument lookup failed");
+        return [];
+      }
     },
   );
 

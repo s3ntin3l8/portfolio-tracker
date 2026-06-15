@@ -239,6 +239,52 @@ describe("auth + portfolios + transactions", () => {
     expect(search.json().some((i: { id: string }) => i.id === tlkm.id)).toBe(true);
   });
 
+  it("looks up instrument metadata from market data (auto-discovery)", async () => {
+    const t = await token("user-a");
+
+    // Tests use the FixtureProvider, whose catalogue stands in for the live providers.
+    const byTicker = await app.inject({
+      method: "GET",
+      url: "/instruments/lookup?q=BBCA",
+      headers: auth(t),
+    });
+    expect(byTicker.statusCode).toBe(200);
+    expect(byTicker.json()).toContainEqual(
+      expect.objectContaining({
+        symbol: "BBCA",
+        name: "Bank Central Asia Tbk",
+        assetClass: "equity",
+        currency: "IDR",
+        market: "IDX",
+      }),
+    );
+
+    // An ISIN routes through resolveISIN.
+    const byIsin = await app.inject({
+      method: "GET",
+      url: "/instruments/lookup?q=ID1000109507",
+      headers: auth(t),
+    });
+    expect(byIsin.json()[0]).toMatchObject({ symbol: "BBCA", isin: "ID1000109507" });
+
+    // A no-match still returns 200 + [].
+    const miss = await app.inject({
+      method: "GET",
+      url: "/instruments/lookup?q=ZZZZZ",
+      headers: auth(t),
+    });
+    expect(miss.statusCode).toBe(200);
+    expect(miss.json()).toEqual([]);
+
+    // A blank query is rejected by validation.
+    const blank = await app.inject({
+      method: "GET",
+      url: "/instruments/lookup?q=",
+      headers: auth(t),
+    });
+    expect(blank.statusCode).toBe(400);
+  });
+
   it("deletes a transaction (owner only)", async () => {
     const t = await token("user-a");
     const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;

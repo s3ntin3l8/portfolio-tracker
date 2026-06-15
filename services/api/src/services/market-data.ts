@@ -4,6 +4,7 @@ import {
   GoldApiProvider,
   MarketDataService,
   NavProvider,
+  OpenFigiProvider,
   TwelveDataProvider,
   YahooFinanceProvider,
   type MarketDataProvider,
@@ -39,6 +40,8 @@ export function getMarketData(): MarketDataService {
       }
       // Keyless IDX equity/ETF fallback — no signup, unofficial endpoint.
       providers.push(new YahooFinanceProvider());
+      // ISIN → instrument discovery (keyless; OPENFIGI_API_KEY raises the rate limit).
+      providers.push(new OpenFigiProvider({ apiKey: process.env.OPENFIGI_API_KEY }));
     }
     providers.push(new FixtureProvider());
     service = new MarketDataService(providers);

@@ -6,3 +6,9 @@ export { GoldApiProvider } from "./gold-api.js";
 export { AntamProvider } from "./antam.js";
 export { NavProvider } from "./nav.js";
 export { YahooFinanceProvider, type YahooProviderOptions } from "./yahoo-finance.js";
+export { OpenFigiProvider, type OpenFigiOptions } from "./open-figi.js";
+export {
+  mapExchange,
+  assetClassFromType,
+  type MarketInfo,
+} from "./instrument-mapping.js";
