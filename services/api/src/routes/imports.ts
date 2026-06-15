@@ -6,6 +6,8 @@ import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
 import { parseDkb } from "../services/parsers/dkb.js";
+import { parseIbkr } from "../services/parsers/ibkr.js";
+import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
 import {
   findOrCreateInstrument,
@@ -16,10 +18,24 @@ import { getMarketData } from "../services/market-data.js";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
-  // `auto` sniffs the content (default); `dkb` forces the German DKB depot/Girokonto
-  // parser; `generic` forces the simple column CSV.
-  format: z.enum(["auto", "generic", "dkb"]).default("auto"),
+  // `auto` sniffs the content (default); otherwise force a specific parser: `dkb`
+  // (German DKB depot/Girokonto), `ibkr` (Interactive Brokers Flex Trades), `coinbase`,
+  // or `generic` (the simple column CSV).
+  format: z
+    .enum(["auto", "generic", "dkb", "ibkr", "coinbase"])
+    .default("auto"),
 });
+
+const CSV_PARSERS = {
+  dkb: parseDkb,
+  ibkr: parseIbkr,
+  coinbase: parseCoinbase,
+  generic: parseCsv,
+} as const;
+
+// How a resolved format maps to the stored `parser` tag (DKB keeps its own; the
+// broker presets are all CSV-sourced).
+const PARSER_TAG: Record<string, "dkb" | "csv"> = { dkb: "dkb" };
 const screenshotBodySchema = z.object({
   image: z.string().min(1), // base64-encoded image bytes
   mimeType: z.string().default("image/png"),
@@ -50,14 +66,14 @@ export async function importsRoute(app: FastifyInstance) {
       }
       const { content, format } = csvBodySchema.parse(request.body);
       const resolved = format === "auto" ? detectCsvFormat(content) : format;
-      const result = resolved === "dkb" ? parseDkb(content) : parseCsv(content);
+      const result = CSV_PARSERS[resolved](content);
 
       const [imp] = await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
           portfolioId,
-          parser: resolved === "dkb" ? "dkb" : "csv",
+          parser: PARSER_TAG[resolved] ?? "csv",
           parsedJson: result,
           status: "draft",
         })

@@ -73,7 +73,9 @@
       "label": "Format",
       "auto": "Deteksi otomatis",
       "generic": "Umum",
-      "dkb": "DKB (Jerman)"
+      "dkb": "DKB (Jerman)",
+      "ibkr": "Interactive Brokers",
+      "coinbase": "Coinbase"
     },
     "dropzone": {
       "title": "Tambah transaksi",

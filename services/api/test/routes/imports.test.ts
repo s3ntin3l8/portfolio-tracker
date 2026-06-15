@@ -323,6 +323,44 @@ describe("CSV import → confirm flow", () => {
     ).toBe(404);
   });
 
+  it("auto-detects and imports an IBKR Flex Trades CSV", async () => {
+    const t = await token("ibkr-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "IBKR", baseCurrency: "USD" },
+      })
+    ).json().id;
+
+    const ibkr = [
+      "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass,Description,TradeID",
+      'AAPL,"20260115;093000",10,190.50,-1.00,USD,STK,"APPLE INC",111',
+      'TSLA,"20260116;100000",-5,250.00,-1.25,USD,STK,"TESLA INC",112',
+    ].join("\n");
+
+    const imp = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/csv`,
+      headers: auth(t),
+      payload: { content: ibkr }, // format omitted → auto
+    });
+    expect(imp.statusCode).toBe(201);
+    expect(imp.json().drafts).toHaveLength(2);
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: imp.json().drafts },
+    });
+    expect(confirm.statusCode).toBe(201);
+    const txns = confirm.json().transactions as Array<{ type: string; source: string }>;
+    expect(txns.map((x) => x.type).sort()).toEqual(["buy", "sell"]);
+    expect(txns.every((x) => x.source === "csv")).toBe(true);
+  });
+
   it("rejects importing into another user's portfolio", async () => {
     const tA = await token("imp-a");
     const tB = await token("imp-b");

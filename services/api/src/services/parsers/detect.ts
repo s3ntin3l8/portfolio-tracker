@@ -2,10 +2,11 @@
  * Sniff which CSV parser a document needs, so the UI can default to "auto" instead of
  * making the user pick. DKB exports are unmistakable: they are `;`-delimited and carry
  * German headers — a depot snapshot starts with `Datum der Erstellung`, a Girokonto
- * Umsatzliste has both `Buchungsdatum` and `Verwendungszweck`. Anything else is treated
- * as the generic column CSV. The signals mirror `parseDkb`'s own format detection.
+ * Umsatzliste has both `Buchungsdatum` and `Verwendungszweck`); IBKR Flex Trades carry
+ * `TradePrice` + `CurrencyPrimary`; Coinbase carries `Quantity Transacted`. Anything
+ * else is the generic column CSV.
  */
-export type CsvFormat = "generic" | "dkb";
+export type CsvFormat = "generic" | "dkb" | "ibkr" | "coinbase";
 
 export function detectCsvFormat(content: string): CsvFormat {
   const stripped = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
@@ -16,5 +17,9 @@ export function detectCsvFormat(content: string): CsvFormat {
   if (lines.some((l) => l.includes("Buchungsdatum") && l.includes("Verwendungszweck"))) {
     return "dkb";
   }
+  if (lines.some((l) => /TradePrice/.test(l) && /CurrencyPrimary/.test(l))) {
+    return "ibkr";
+  }
+  if (lines.some((l) => /Quantity Transacted/i.test(l))) return "coinbase";
   return "generic";
 }

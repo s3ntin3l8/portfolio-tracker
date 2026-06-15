@@ -73,7 +73,9 @@
       "label": "Format",
       "auto": "Auto-detect",
       "generic": "Generic",
-      "dkb": "DKB (Germany)"
+      "dkb": "DKB (Germany)",
+      "ibkr": "Interactive Brokers",
+      "coinbase": "Coinbase"
     },
     "dropzone": {
       "title": "Add a transaction",
