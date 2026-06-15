@@ -40,10 +40,11 @@ describe("asset classes", () => {
 describe("FixtureProvider", () => {
   const provider = new FixtureProvider();
 
-  it("quotes known symbols and returns null for unknown", async () => {
+  it("quotes known symbols (with previous close) and returns null for unknown", async () => {
     expect(await provider.getQuote(bbca)).toMatchObject({
       price: "9500",
       currency: "IDR",
+      previousClose: "9000",
     });
     expect(
       await provider.getQuote({ ...bbca, symbol: "UNKNOWN" }),
@@ -118,7 +119,12 @@ describe("YahooFinanceProvider", () => {
     chart: {
       result: [
         {
-          meta: { regularMarketPrice: price, currency: "IDR", regularMarketTime: 1738972800 },
+          meta: {
+            regularMarketPrice: price,
+            currency: "IDR",
+            regularMarketTime: 1738972800,
+            previousClose: 9000,
+          },
           timestamp: [1738972800, 1739059200],
           indicators: { quote: [{ close: [price, null] }] },
         },
@@ -136,7 +142,11 @@ describe("YahooFinanceProvider", () => {
     });
     const quote = await provider.getQuote(bbca);
     expect(calledUrl).toContain("/v8/finance/chart/BBCA.JK");
-    expect(quote).toMatchObject({ price: "9500", currency: "IDR" });
+    expect(quote).toMatchObject({
+      price: "9500",
+      currency: "IDR",
+      previousClose: "9000",
+    });
     expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
   });
 
@@ -166,23 +176,27 @@ describe("YahooFinanceProvider", () => {
 });
 
 describe("TwelveDataProvider", () => {
-  it("quotes an IDX equity with the exchange param", async () => {
+  it("quotes an IDX equity with the exchange param + previous close", async () => {
     let seenUrl = "";
     const provider = new TwelveDataProvider("key", {
       fetch: mockFetch((url) => {
         seenUrl = url;
-        return { body: { price: "9500" } };
+        return { body: { close: "9500", previous_close: "9000" } };
       }),
     });
     const quote = await provider.getQuote(bbca);
     expect(quote?.price).toBe("9500");
+    expect(quote?.previousClose).toBe("9000");
+    expect(seenUrl).toContain("/quote?");
     expect(seenUrl).toContain("symbol=BBCA");
     expect(seenUrl).toContain("exchange=IDX");
   });
 
-  it("converts gold (per-ounce) to a per-gram price", async () => {
+  it("converts gold (per-ounce) to a per-gram price, incl. previous close", async () => {
     const provider = new TwelveDataProvider("key", {
-      fetch: mockFetch(() => ({ body: { price: "31103.4768" } })),
+      fetch: mockFetch(() => ({
+        body: { close: "31103.4768", previous_close: "31103.4768" },
+      })),
     });
     const quote = await provider.getQuote({
       symbol: "XAU",
@@ -191,6 +205,7 @@ describe("TwelveDataProvider", () => {
       currency: "IDR",
     });
     expect(quote?.price).toBe("1000"); // 31103.4768 / 31.1034768
+    expect(quote?.previousClose).toBe("1000");
   });
 
   it("returns null on a non-ok response", async () => {

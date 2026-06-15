@@ -188,6 +188,10 @@ describe("auth + portfolios + transactions", () => {
     // Bought without a prior cash deposit, so cash is negative and net worth nets to 0.
     expect(summary.cash.IDR).toBe("-950000");
     expect(summary.netWorth).toBe("0");
+    // Day change from the fixture's prior close (BBCA 9000 → 9500): 100 × 500.
+    expect(summary.holdings[0].previousClose).toBe("9000");
+    expect(summary.holdings[0].dayChange).toBe("50000");
+    expect(summary.totalDayChange).toBe("50000");
   });
 
   it("finds-or-creates and searches instruments", async () => {

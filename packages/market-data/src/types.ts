@@ -27,6 +27,8 @@ export interface Quote {
   price: string; // decimal string
   currency: string;
   asOf: string; // ISO timestamp
+  /** Prior session's close, when the provider reports it (for day-change). */
+  previousClose?: string | null;
 }
 
 export interface Candle {

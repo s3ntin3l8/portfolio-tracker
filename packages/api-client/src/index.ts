@@ -96,6 +96,9 @@ export interface HoldingValuation extends Holding {
   currency: string | null;
   marketValue: string | null;
   unrealizedPnL: string | null;
+  previousClose: string | null;
+  dayChange: string | null;
+  dayChangePct: string | null;
   instrument: InstrumentMeta | null;
 }
 
@@ -109,6 +112,7 @@ export interface PortfolioSummary {
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
   totalIncome: string;
+  totalDayChange: string;
 }
 
 export interface PortfolioPerformance {
@@ -129,6 +133,7 @@ export interface NetWorth {
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
   totalIncome: string;
+  totalDayChange: string;
   xirr: number | null;
   portfolioCount: number;
   asOf: string;

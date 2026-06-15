@@ -12,7 +12,13 @@ export interface YahooProviderOptions {
 }
 
 interface ChartResult {
-  meta?: { regularMarketPrice?: number; currency?: string; regularMarketTime?: number };
+  meta?: {
+    regularMarketPrice?: number;
+    currency?: string;
+    regularMarketTime?: number;
+    previousClose?: number;
+    chartPreviousClose?: number;
+  };
   timestamp?: number[];
   indicators?: { quote?: { close?: (number | null)[] }[] };
 }
@@ -63,7 +69,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const asOf = result?.meta?.regularMarketTime
       ? new Date(result.meta.regularMarketTime * 1000).toISOString()
       : new Date().toISOString();
-    return { price: String(price), currency: ref.currency, asOf };
+    const prev = result?.meta?.previousClose ?? result?.meta?.chartPreviousClose;
+    return {
+      price: String(price),
+      currency: ref.currency,
+      asOf,
+      previousClose: prev === undefined ? null : String(prev),
+    };
   }
 
   async getHistory(ref: InstrumentRef, range = "1mo"): Promise<Candle[]> {

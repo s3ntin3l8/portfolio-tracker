@@ -14,7 +14,7 @@ import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { loadNetWorth } from "@/lib/server-api";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { cn, formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function DashboardPage({
   params,
@@ -98,6 +98,20 @@ export default async function DashboardPage({
     0,
   );
 
+  // Today's change: total day change vs. the prior-close value of the holdings.
+  const dayChange = Number(summary.totalDayChange);
+  const priorValue = Number(summary.totalMarketValue) - dayChange;
+  const dayChangePct = priorValue !== 0 ? dayChange / priorValue : undefined;
+
+  // Movers: holdings with a known day move, ranked by the size of the swing.
+  const movers = openHoldings
+    .filter((h) => h.dayChangePct !== null)
+    .sort(
+      (a, b) =>
+        Math.abs(Number(b.dayChangePct)) - Math.abs(Number(a.dayChangePct)),
+    )
+    .slice(0, 5);
+
   // Allocation by asset class (priced where possible, else at cost) plus cash.
   const byClass = new Map<string, number>();
   for (const h of openHoldings) {
@@ -127,6 +141,16 @@ export default async function DashboardPage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />
+        <StatCard
+          label={t("dayChange")}
+          value={m(dayChange)}
+          delta={
+            dayChangePct !== undefined
+              ? formatPercent(dayChangePct, locale)
+              : undefined
+          }
+          deltaTone={dayChange > 0 ? "up" : dayChange < 0 ? "down" : "neutral"}
+        />
         <StatCard
           label={t("totalPnL")}
           value={m(totalPnL)}
@@ -196,11 +220,42 @@ export default async function DashboardPage({
             <CardTitle>{t("topMovers")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmptyState
-              icon={TrendingUp}
-              title={te("historyTitle")}
-              description={te("historyBody")}
-            />
+            {movers.length > 0 ? (
+              <div className="space-y-3">
+                {movers.map((h) => {
+                  const pct = Number(h.dayChangePct) / 100;
+                  return (
+                    <div
+                      key={h.instrumentId}
+                      className="flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {h.instrument?.symbol ?? "—"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {h.instrument?.name ?? h.instrumentId}
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "tabular text-sm",
+                          pct >= 0 ? "text-success" : "text-destructive",
+                        )}
+                      >
+                        {formatPercent(pct, locale)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                icon={TrendingUp}
+                title={te("noMoversTitle")}
+                description={te("noMoversBody")}
+              />
+            )}
           </CardContent>
         </Card>
       </div>

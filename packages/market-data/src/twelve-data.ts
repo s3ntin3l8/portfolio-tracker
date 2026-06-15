@@ -44,18 +44,28 @@ export class TwelveDataProvider implements MarketDataProvider {
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
+    // The `/quote` endpoint carries `previous_close` alongside the latest `close`,
+    // so a single call yields both the price and the day-change baseline.
     const res = await this.doFetch(
-      `${this.baseUrl}/price?${this.query(ref)}&apikey=${this.apiKey}`,
+      `${this.baseUrl}/quote?${this.query(ref)}&apikey=${this.apiKey}`,
     );
     if (!res.ok) return null;
-    const data = (await res.json()) as { price?: string };
-    if (!data.price) return null;
+    const data = (await res.json()) as {
+      close?: string;
+      previous_close?: string;
+    };
+    if (!data.close) return null;
 
-    const price =
+    const toGram = (v: string) =>
       ref.assetClass === "gold"
-        ? (Number(data.price) / TROY_OUNCE_GRAMS).toString()
-        : data.price;
-    return { price, currency: ref.currency, asOf: new Date().toISOString() };
+        ? (Number(v) / TROY_OUNCE_GRAMS).toString()
+        : v;
+    return {
+      price: toGram(data.close),
+      currency: ref.currency,
+      asOf: new Date().toISOString(),
+      previousClose: data.previous_close ? toGram(data.previous_close) : null,
+    };
   }
 
   async getHistory(ref: InstrumentRef, range = "30"): Promise<Candle[]> {

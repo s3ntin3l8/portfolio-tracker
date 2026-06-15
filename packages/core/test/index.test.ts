@@ -195,6 +195,8 @@ describe("summarizePortfolio", () => {
     expect(h1.unrealizedPnL).toBe("150000"); // 1,650,000 - 1,500,000
     expect(h1.realizedPnL).toBe("50000");
 
+    expect(h1.dayChange).toBeNull(); // priced, but no previous close given
+
     const h2 = summary.holdings.find((h) => h.instrumentId === I2)!;
     expect(h2.marketValue).toBeNull(); // no price
 
@@ -218,6 +220,32 @@ describe("summarizePortfolio", () => {
       displayCurrency: "IDR",
     });
     expect(summary.totalIncome).toBe("62500"); // 25,000 + 37,500
+  });
+
+  it("computes per-holding and total day change, FX-converting the total", () => {
+    const summary = summarizePortfolio({
+      transactions: [
+        mk({ type: "buy", quantity: "100", price: "9000" }), // I1, IDR
+        mk({ type: "buy", instrumentId: I2, quantity: "10", price: "100" }), // I2, USD
+      ],
+      prices: {
+        [I1]: { price: "9500", currency: "IDR", previousClose: "9000" },
+        [I2]: { price: "110", currency: "USD", previousClose: "100" },
+      },
+      displayCurrency: "IDR",
+      fx: (from, to) => (from === "USD" && to === "IDR" ? "16000" : "1"),
+    });
+
+    const h1 = summary.holdings.find((h) => h.instrumentId === I1)!;
+    expect(h1.dayChange).toBe("50000"); // 100 * (9500 − 9000)
+    expect(Number(h1.dayChangePct)).toBeCloseTo(5.5556, 3); // 500/9000
+
+    const h2 = summary.holdings.find((h) => h.instrumentId === I2)!;
+    expect(h2.dayChange).toBe("100"); // 10 * (110 − 100) USD
+    expect(h2.dayChangePct).toBe("10");
+
+    // Total in IDR: 50,000 + 100 × 16,000.
+    expect(summary.totalDayChange).toBe("1650000");
   });
 });
 
@@ -262,6 +290,7 @@ describe("aggregatePortfolios", () => {
     totalUnrealizedPnL: "0",
     totalRealizedPnL: "0",
     totalIncome: "0",
+    totalDayChange: "0",
     ...over,
   });
 
@@ -278,6 +307,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "950000",
           unrealizedPnL: "50000",
+          previousClose: "9000",
+          dayChange: "50000",
+          dayChangePct: "5",
         },
       ],
       cash: { IDR: "1000000" },
@@ -286,6 +318,7 @@ describe("aggregatePortfolios", () => {
       totalMarketValue: "950000",
       totalUnrealizedPnL: "50000",
       totalRealizedPnL: "0",
+      totalDayChange: "50000",
     });
     const b = mk({
       holdings: [
@@ -299,6 +332,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "950000",
           unrealizedPnL: "0",
+          previousClose: "9000",
+          dayChange: "50000",
+          dayChangePct: "5",
         },
         {
           instrumentId: "i2",
@@ -310,6 +346,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "5750000",
           unrealizedPnL: "750000",
+          previousClose: "1100000",
+          dayChange: "250000",
+          dayChangePct: "4.5",
         },
       ],
       cash: { IDR: "500000", USD: "100" },
@@ -318,6 +357,7 @@ describe("aggregatePortfolios", () => {
       totalMarketValue: "6700000",
       totalUnrealizedPnL: "750000",
       totalRealizedPnL: "10000",
+      totalDayChange: "300000",
     });
 
     const out = aggregatePortfolios([a, b], "IDR");
@@ -328,6 +368,8 @@ describe("aggregatePortfolios", () => {
     expect(i1.avgCost).toBe("9250"); // 1,850,000 / 200
     expect(i1.marketValue).toBe("1900000"); // 950k + 950k
     expect(i1.realizedPnL).toBe("10000");
+    expect(i1.dayChange).toBe("100000"); // 50k + 50k (same instrument, summed)
+    expect(i1.dayChangePct).toBe("5"); // per-share pct carried, not summed
     expect(out.holdings).toHaveLength(2); // i1 merged, i2 distinct
 
     expect(out.cash).toEqual({ IDR: "1500000", USD: "100" });
@@ -335,6 +377,7 @@ describe("aggregatePortfolios", () => {
     expect(out.totalCost).toBe("6850000");
     expect(out.totalUnrealizedPnL).toBe("800000"); // totalMV − totalCost
     expect(out.totalRealizedPnL).toBe("10000");
+    expect(out.totalDayChange).toBe("350000"); // 50,000 + 300,000
   });
 
   it("handles an empty list", () => {

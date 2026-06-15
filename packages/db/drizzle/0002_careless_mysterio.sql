@@ -1,0 +1,1 @@
+ALTER TABLE "last_prices" ADD COLUMN "previous_close" numeric;

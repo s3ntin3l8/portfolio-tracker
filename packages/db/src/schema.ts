@@ -204,6 +204,8 @@ export const lastPrices = pgTable("last_prices", {
     .primaryKey()
     .references(() => instruments.id, { onDelete: "cascade" }),
   price: numeric("price").notNull(),
+  // Prior session's close, when the provider reports it — drives day-change/movers.
+  previousClose: numeric("previous_close"),
   currency: text("currency").notNull(),
   asOf: timestamp("as_of", { withTimezone: true }).notNull(),
 });

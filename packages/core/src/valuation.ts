@@ -9,6 +9,12 @@ export interface HoldingValuation extends Holding {
   currency: string | null;
   marketValue: string | null;
   unrealizedPnL: string | null;
+  /** Prior session's close (instrument currency), when known. */
+  previousClose: string | null;
+  /** Today's value change for the position (instrument currency), when known. */
+  dayChange: string | null;
+  /** Today's price move as a percentage, when known. */
+  dayChangePct: string | null;
 }
 
 export interface PortfolioSummary {
@@ -22,13 +28,18 @@ export interface PortfolioSummary {
   totalRealizedPnL: string;
   /** Cash income received — dividends + bond coupons — in the display currency. */
   totalIncome: string;
+  /** Sum of per-holding day change, in the display currency. */
+  totalDayChange: string;
 }
 
 export interface SummarizeInput {
   transactions: CoreTransaction[];
   corporateActions?: CorporateAction[];
-  /** Latest price + currency keyed by instrument id. */
-  prices: Record<string, { price: string; currency: string }>;
+  /** Latest price + currency (+ prior close) keyed by instrument id. */
+  prices: Record<
+    string,
+    { price: string; currency: string; previousClose?: string | null }
+  >;
   displayCurrency: string;
   fx?: FxRateFn;
 }
@@ -45,6 +56,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   let totalCost = new Decimal(0);
   let totalMarketValue = new Decimal(0);
   let totalRealized = new Decimal(0);
+  let totalDayChange = new Decimal(0);
 
   const valuations: HoldingValuation[] = holdings.map((h) => {
     const quote = input.prices[h.instrumentId];
@@ -61,6 +73,9 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
         currency: null,
         marketValue: null,
         unrealizedPnL: null,
+        previousClose: null,
+        dayChange: null,
+        dayChangePct: null,
       };
     }
 
@@ -73,12 +88,31 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
       new Decimal(convert(mv, currency, input.displayCurrency, fx)),
     );
 
+    // Day change needs a non-zero prior close; otherwise it's simply unknown.
+    const prev =
+      quote.previousClose != null && !new Decimal(quote.previousClose).isZero()
+        ? new Decimal(quote.previousClose)
+        : null;
+    let dayChange: string | null = null;
+    let dayChangePct: string | null = null;
+    if (prev) {
+      const priceDelta = new Decimal(quote.price).sub(prev);
+      dayChange = priceDelta.mul(h.quantity).toString();
+      dayChangePct = priceDelta.div(prev).mul(100).toString();
+      totalDayChange = totalDayChange.add(
+        new Decimal(convert(dayChange, currency, input.displayCurrency, fx)),
+      );
+    }
+
     return {
       ...h,
       price: quote.price,
       currency: quote.currency,
       marketValue: mv,
       unrealizedPnL: unrealized,
+      previousClose: quote.previousClose ?? null,
+      dayChange,
+      dayChangePct,
     };
   });
 
@@ -115,6 +149,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
     totalIncome: totalIncome.toString(),
+    totalDayChange: totalDayChange.toString(),
   };
 }
 
@@ -133,6 +168,7 @@ export function aggregatePortfolios(
   let totalMarketValue = new Decimal(0);
   let totalRealized = new Decimal(0);
   let totalIncome = new Decimal(0);
+  let totalDayChange = new Decimal(0);
   let netWorth = new Decimal(0);
 
   const addNullable = (a: string | null, b: string | null): string | null => {
@@ -147,6 +183,7 @@ export function aggregatePortfolios(
     totalMarketValue = totalMarketValue.add(s.totalMarketValue);
     totalRealized = totalRealized.add(s.totalRealizedPnL);
     totalIncome = totalIncome.add(s.totalIncome);
+    totalDayChange = totalDayChange.add(s.totalDayChange);
 
     for (const [currency, amount] of Object.entries(s.cash)) {
       cash[currency] = new Decimal(cash[currency] ?? "0").add(amount).toString();
@@ -170,6 +207,11 @@ export function aggregatePortfolios(
         currency: h.currency ?? ex.currency,
         marketValue: addNullable(ex.marketValue, h.marketValue),
         unrealizedPnL: addNullable(ex.unrealizedPnL, h.unrealizedPnL),
+        // Same instrument → same per-share price/prev-close, so the percentage is
+        // shared; quantities sum, so the absolute day change adds.
+        previousClose: h.previousClose ?? ex.previousClose,
+        dayChange: addNullable(ex.dayChange, h.dayChange),
+        dayChangePct: h.dayChangePct ?? ex.dayChangePct,
       });
     }
   }
@@ -184,5 +226,6 @@ export function aggregatePortfolios(
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
     totalIncome: totalIncome.toString(),
+    totalDayChange: totalDayChange.toString(),
   };
 }

@@ -8,22 +8,35 @@ export interface PricedRef {
   ref: InstrumentRef;
 }
 
-/** Latest price + currency, keyed by instrument id (the shape core valuation wants). */
-export type PriceMap = Record<string, { price: string; currency: string }>;
+/** Latest price + currency (+ prior close), keyed by instrument id. */
+export type PriceMap = Record<
+  string,
+  { price: string; currency: string; previousClose?: string | null }
+>;
 
 /** Write fetched quotes into the last_prices cache (one upsert per instrument). */
 export async function upsertLastPrices(
   db: DB,
-  quotes: Record<string, { price: string; currency: string }>,
+  quotes: Record<
+    string,
+    { price: string; currency: string; previousClose?: string | null }
+  >,
   now: Date,
 ): Promise<void> {
   for (const [instrumentId, q] of Object.entries(quotes)) {
+    const previousClose = q.previousClose ?? null;
     await db
       .insert(lastPrices)
-      .values({ instrumentId, price: q.price, currency: q.currency, asOf: now })
+      .values({
+        instrumentId,
+        price: q.price,
+        previousClose,
+        currency: q.currency,
+        asOf: now,
+      })
       .onConflictDoUpdate({
         target: lastPrices.instrumentId,
-        set: { price: q.price, currency: q.currency, asOf: now },
+        set: { price: q.price, previousClose, currency: q.currency, asOf: now },
       });
   }
 }
@@ -58,7 +71,13 @@ export async function getCachedQuotes(
   const fresh = new Set<string>();
   for (const row of cached) {
     if (new Date(row.asOf).getTime() >= cutoff) {
-      prices[row.instrumentId] = { price: row.price, currency: row.currency };
+      prices[row.instrumentId] = {
+        price: row.price,
+        currency: row.currency,
+        ...(row.previousClose != null
+          ? { previousClose: row.previousClose }
+          : {}),
+      };
       fresh.add(row.instrumentId);
     }
   }
@@ -70,7 +89,11 @@ export async function getCachedQuotes(
     stale.map((r) => ({ id: r.id, ref: r.ref })),
   );
   for (const [instrumentId, q] of Object.entries(quotes)) {
-    prices[instrumentId] = { price: q.price, currency: q.currency };
+    prices[instrumentId] = {
+      price: q.price,
+      currency: q.currency,
+      ...(q.previousClose != null ? { previousClose: q.previousClose } : {}),
+    };
   }
   await upsertLastPrices(db, quotes, now);
   return prices;

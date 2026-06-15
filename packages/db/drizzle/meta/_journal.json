@@ -15,6 +15,13 @@
       "when": 1781462153044,
       "tag": "0001_enable_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781516240801,
+      "tag": "0002_careless_mysterio",
+      "breakpoints": true
     }
   ]
 }

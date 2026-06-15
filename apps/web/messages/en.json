@@ -76,6 +76,7 @@
     "subtitle": "Your net worth across every portfolio.",
     "netWorth": "Net worth",
     "today": "today",
+    "dayChange": "Day change",
     "totalPnL": "Total P&L",
     "positions": "Positions",
     "cash": "Cash",
@@ -96,7 +97,9 @@
     "noTransactionsTitle": "No transactions yet",
     "noTransactionsBody": "Import a screenshot or CSV, or add a transaction manually, to get started.",
     "historyTitle": "Coming with price tracking",
-    "historyBody": "Performance history appears once daily prices are collected."
+    "historyBody": "Performance history appears once daily prices are collected.",
+    "noMoversTitle": "No price moves yet",
+    "noMoversBody": "Day changes appear once live prices refresh for your holdings."
   },
   "Gold": {
     "title": "Gold spot",
