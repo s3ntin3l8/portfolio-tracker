@@ -40,4 +40,19 @@ describe("security plugin", () => {
     expect(res.headers["access-control-allow-origin"]).toBe("https://app.example.com");
     await app.close();
   });
+
+  it("allows PATCH on a preflight from an allowlisted origin", async () => {
+    process.env.CORS_ORIGIN = "https://app.example.com";
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "OPTIONS",
+      url: "/me",
+      headers: {
+        origin: "https://app.example.com",
+        "access-control-request-method": "PATCH",
+      },
+    });
+    expect(res.headers["access-control-allow-methods"]).toContain("PATCH");
+    await app.close();
+  });
 });

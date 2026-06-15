@@ -22,5 +22,8 @@ export const securityPlugin = fp(async (app: FastifyInstance) => {
 
   await app.register(cors, {
     origin: allowlist.length > 0 ? allowlist : false,
+    // @fastify/cors defaults to GET,HEAD,POST — must allow PATCH (e.g. PATCH /me) and
+    // future PUT/DELETE so cross-origin browser preflights don't block those methods.
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
   });
 });
