@@ -34,7 +34,15 @@ export interface AddTransactionInitial {
   executedAt: string;
 }
 
-const TX_TYPES = ["buy", "sell", "dividend", "deposit", "withdrawal"] as const;
+const TX_TYPES = [
+  "buy",
+  "sell",
+  "dividend",
+  "coupon",
+  "deposit",
+  "withdrawal",
+  "fee",
+] as const;
 type TxType = (typeof TX_TYPES)[number];
 const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf"] as const;
 const UNITS = ["shares", "grams", "units"] as const;
@@ -101,7 +109,8 @@ export function AddTransactionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
 
-  const isCash = type === "deposit" || type === "withdrawal";
+  // Cash movements carry no instrument; dividend/coupon are instrument income.
+  const isCash = type === "deposit" || type === "withdrawal" || type === "fee";
   const isTrade = type === "buy" || type === "sell";
 
   async function runSearch(q: string) {

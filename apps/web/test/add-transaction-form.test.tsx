@@ -164,6 +164,38 @@ describe("AddTransactionForm", () => {
     );
   });
 
+  it("records a bond coupon against a new instrument (no quantity/fees)", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), {
+      target: { value: "coupon" },
+    });
+    // Coupon is instrument income, not cash — the instrument section stays.
+    fireEvent.change(screen.getByLabelText(m.symbol), {
+      target: { value: "sr021" },
+    });
+    fireEvent.change(screen.getByLabelText(m.amount), {
+      target: { value: "37500" },
+    });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-03-01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        type: "coupon",
+        instrumentId: "i1",
+        quantity: "0",
+        fees: "0",
+        price: "37500",
+      }),
+    );
+  });
+
   it("updates an existing transaction in edit mode", async () => {
     const client = makeClient();
     const onSuccess = vi.fn();
