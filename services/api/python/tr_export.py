@@ -97,7 +97,12 @@ def _walk_rows(obj):
 
 
 def _num(text):
-    """Parse a (possibly European-formatted) number out of a label, e.g. '1.234,56 €'."""
+    """Parse a (possibly European-formatted) number out of a label, e.g. '1.234,56 €'.
+
+    Monetary amounts in the TR timeline are consistently European (dot=thousands,
+    comma=decimal). For share counts use _share_num instead — TR formats those with a
+    mix of dot- and comma-decimals.
+    """
     match = re.search(r"-?\d[\d.\s]*(?:,\d+)?", text)
     if not match:
         return None
@@ -108,10 +113,58 @@ def _num(text):
         return None
 
 
+def _share_num(text):
+    """Parse a share count, tolerating both decimal conventions TR mixes in the timeline.
+
+    Share counts appear as e.g. '9,826228' (comma-decimal), '0.000897' / '12.000000'
+    (dot-decimal). Rule: whichever of '.'/',' appears last is the decimal separator; the
+    other is a thousands group. Only the first numeric token is read (so 'n x price' rows
+    yield the share count, not the price).
+    """
+    match = re.search(r"\d[\d.,]*", text)
+    if not match:
+        return None
+    raw = match.group(0)
+    last_dot, last_comma = raw.rfind("."), raw.rfind(",")
+    if last_comma > last_dot:
+        raw = raw.replace(".", "").replace(",", ".")
+    else:
+        raw = raw.replace(",", "")
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def _field(details, keywords):
     for title, text in _walk_rows(details or {}):
         if any(k in title for k in keywords):
             value = _num(text)
+            if value is not None:
+                return value
+    return None
+
+
+def _extract_shares(details):
+    """Share count for a trade-like event.
+
+    First a labelled row (Anteile/Aktien/Shares/Anzahl/Stück); failing that, the
+    'Transaktion' row that aggregate buys (round-up, saveback) carry as '<shares> x
+    <price>' — distinguished from a plain cash 'transaction' amount by the ' x '/'×'.
+    """
+    for title, text in _walk_rows(details or {}):
+        if any(k in title for k in ("anteile", "aktien", "shares", "anzahl", "stück")) and (
+            # 'aktienkurs' / 'share price' rows contain 'aktien' too — those are a price.
+            not any(p in title for p in ("kurs", "preis", "price"))
+        ):
+            value = _share_num(text)
+            if value is not None:
+                return value
+    for title, text in _walk_rows(details or {}):
+        if ("transaktion" in title or "transaction" in title) and (
+            " x " in text or "×" in text
+        ):
+            value = _share_num(text)
             if value is not None:
                 return value
     return None
@@ -142,7 +195,7 @@ def _normalize(event):
         "amount": amount.get("value", 0) or 0,
         "currency": amount.get("currency") or "EUR",
         "isin": _extract_isin(event),
-        "shares": _field(details, ["shares", "anteile", "anzahl"]),
+        "shares": _extract_shares(details),
         "fees": _field(details, ["fee", "gebühr", "provision"]),
         "savingsPlanId": event.get("savingsPlanId"),
     }

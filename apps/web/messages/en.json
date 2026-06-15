@@ -370,7 +370,7 @@
     "cardTitle": "Connection",
     "status": {
       "disconnected": "Not connected",
-      "awaiting_2fa": "Awaiting code",
+      "awaiting_2fa": "Awaiting approval",
       "connected": "Connected",
       "expired": "Session expired",
       "error": "Error"
@@ -382,9 +382,11 @@
     "wafToken": "aws-waf-token (optional)",
     "wafTokenHint": "Paste this from your browser only if automatic connection fails.",
     "connect": "Connect",
-    "codeHint": "Enter the code Trade Republic sent to your app (or SMS).",
-    "code": "Confirmation code",
-    "verify": "Verify",
+    "approveTitle": "Approve the login in your app",
+    "approveHint": "Open Trade Republic on your phone and approve the login request. If you don't see it, fully close and reopen the app.",
+    "approveWaiting": "Waiting for approval…",
+    "approvalError": "The login wasn't approved in time. Please try again.",
+    "cancel": "Cancel",
     "connectedHint": "Your account is connected. Sync pulls new activity as draft transactions you confirm.",
     "synced": "Synced — {drafts} draft transactions staged. Review them on the Import page.",
     "syncNow": "Sync now",

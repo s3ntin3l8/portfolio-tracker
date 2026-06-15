@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, RefreshCw, Plug, Unplug } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw, Plug, Smartphone, Unplug } from "lucide-react";
 import type { ApiClient, TrConnection, TrSyncResult } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,6 @@ export function TrConnectFlow({
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [wafToken, setWafToken] = useState("");
-  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sync, setSync] = useState<TrSyncResult | null>(null);
@@ -79,16 +78,36 @@ export function TrConnectFlow({
     });
   };
 
-  const verify = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (busy || !code) return;
-    void run(async () => {
-      await client.verifyTr(code);
-      setCode("");
-      setPhase("connected");
-      onChanged?.();
-    });
-  };
+  // Once awaiting, long-poll the verify endpoint until the user approves the push in the
+  // TR app (resolves → connected) or it is declined / expires (→ back to the form). An
+  // effect (not the connect handler) drives this so a page refresh mid-pairing resumes it.
+  const pollingRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "awaiting" || pollingRef.current) return;
+    pollingRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await client.verifyTr();
+        if (!cancelled) {
+          setError(null);
+          setPhase("connected");
+          onChanged?.();
+        }
+      } catch {
+        if (!cancelled) {
+          setError(t("approvalError"));
+          setPhase("form");
+        }
+      } finally {
+        pollingRef.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   const doSync = () =>
     void run(async () => {
@@ -185,23 +204,22 @@ export function TrConnectFlow({
       )}
 
       {phase === "awaiting" && (
-        <form onSubmit={verify} className="space-y-4">
-          <p className="text-sm text-muted-foreground">{t("codeHint")}</p>
-          <div className="space-y-1.5">
-            <Label htmlFor="tr-code">{t("code")}</Label>
-            <Input
-              id="tr-code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-md border bg-muted/40 px-3 py-3">
+            <Smartphone className="size-5 shrink-0 text-muted-foreground" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">{t("approveTitle")}</p>
+              <p className="text-sm text-muted-foreground">{t("approveHint")}</p>
+            </div>
           </div>
-          <Button type="submit" disabled={busy || !code}>
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {t("verify")}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            {t("approveWaiting")}
+          </div>
+          <Button variant="outline" onClick={disconnect} disabled={busy}>
+            {t("cancel")}
           </Button>
-        </form>
+        </div>
       )}
 
       {phase === "connected" && (

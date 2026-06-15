@@ -17,29 +17,57 @@ const trEventSchema = z.object({
 });
 export type TrEvent = z.infer<typeof trEventSchema>;
 
-// eventType → action for events whose action is fixed. ORDER_EXECUTED / TRADE_INVOICE
-// are resolved to buy/sell by the sign of `amount` (see below). INTEREST is folded into
-// `deposit` for v1 (a cash increase with no instrument).
+// The TR timeline event taxonomy (validated against a real 912-event account, 2026-06-15).
+//
+// eventType → action for events whose action is fixed. Trades (TRADE_EVENTS) resolve to
+// buy/sell by the sign of `amount`; ambiguous cash transfers (CASH_BY_SIGN) resolve to
+// deposit/withdrawal by sign. INTEREST_PAYOUT is folded into `deposit` (a cash increase
+// with no instrument). Card spending is recorded as a `withdrawal` so the derived cash
+// balance stays correct.
 const FIXED_ACTIONS: Record<string, ParsedAction> = {
+  // --- cash in ---
   PAYMENT_INBOUND: "deposit",
+  PAYMENT_INBOUND_SEPA_DIRECT_DEBIT: "deposit",
+  PAYMENT_INBOUND_CREDIT_CARD: "deposit",
   PAYMENT_INBOUND_APPLE_PAY: "deposit",
   PAYMENT_INBOUND_GOOGLE_PAY: "deposit",
   INCOMING_TRANSFER: "deposit",
   ACCOUNT_TRANSFER_INCOMING: "deposit",
-  card_refund: "deposit",
+  BANK_TRANSACTION_INCOMING: "deposit",
+  INTEREST_PAYOUT: "deposit",
+  CARD_REFUND: "deposit",
+  // --- cash out ---
   PAYMENT_OUTBOUND: "withdrawal",
   OUTGOING_TRANSFER: "withdrawal",
-  card_successful_transaction: "withdrawal",
-  card_successful_atm_withdrawal: "withdrawal",
-  INTEREST_PAYOUT: "deposit",
-  INTEREST_PAYOUT_CREATED: "deposit",
-  CREDIT: "dividend", // a bond would be a coupon; mapper has no asset class → default dividend
+  BANK_TRANSACTION_OUTGOING: "withdrawal",
+  CARD_TRANSACTION: "withdrawal", // debit-card spend from the cash account
+  CARD_ATM_WITHDRAWAL: "withdrawal",
+  CARD_ORDER_FEE: "withdrawal",
+  // --- income tied to a holding (a bond would be a coupon; no asset class → dividend) ---
+  CREDIT: "dividend",
+  // --- recurring / fractional purchases (need an ISIN + a share count) ---
   SAVINGS_PLAN_EXECUTED: "savings_plan",
   SAVINGS_PLAN_INVOICE_CREATED: "savings_plan",
-  benefits_saveback_execution: "savings_plan",
-  benefits_spare_change_execution: "buy",
+  TRADING_SAVINGSPLAN_EXECUTED: "savings_plan",
+  SAVEBACK_AGGREGATE: "savings_plan", // cashback reinvested into the saveback asset
+  SPARE_CHANGE_AGGREGATE: "buy", // round-up purchases
 };
-const TRADE_EVENTS = new Set(["ORDER_EXECUTED", "TRADE_INVOICE"]);
+const TRADE_EVENTS = new Set(["ORDER_EXECUTED", "TRADE_INVOICE", "TRADING_TRADE_EXECUTED"]);
+
+// Cash transfers whose direction is only known from the amount's sign.
+const CASH_BY_SIGN = new Set(["JUNIOR_P2P_TRANSFER", "SSP_TAX_CORRECTION", "CARD_AFT"]);
+
+// A cash corporate action (e.g. "Bardividende") — a dividend when tied to an instrument,
+// otherwise a plain cash credit.
+const CASH_CORPORATE_ACTION = "SSP_CORPORATE_ACTION_CASH";
+
+// Events deliberately not turned into transactions, with the reason surfaced (not dropped).
+const SKIP_EVENTS = new Map<string, string>([
+  ["CARD_VERIFICATION", "card verification (no cash movement)"],
+  ["TRADING_SAVINGSPLAN_EXECUTION_FAILED", "failed savings-plan execution"],
+  ["INTEREST_PAYOUT_CREATED", "interest accrual notice (settled by INTEREST_PAYOUT)"],
+  ["SSP_CORPORATE_ACTION_INSTRUMENT", "share-based corporate action — needs manual entry"],
+]);
 
 // Actions that move shares (need an instrument + a per-share price). The rest are pure
 // cash movements recorded as a lump sum in `price`.
@@ -74,10 +102,22 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   }
   const ev = parsed.data;
 
+  const skipReason = SKIP_EVENTS.get(ev.eventType);
+  if (skipReason) {
+    return { skip: true, reason: skipReason };
+  }
+
   let action: ParsedAction | undefined = FIXED_ACTIONS[ev.eventType];
   if (!action && TRADE_EVENTS.has(ev.eventType)) {
     // Negative amount = cash out = buy; positive = proceeds = sell.
     action = ev.amount < 0 ? "buy" : "sell";
+  }
+  if (!action && CASH_BY_SIGN.has(ev.eventType)) {
+    // Negative = money leaving the account; positive = money arriving.
+    action = ev.amount < 0 ? "withdrawal" : "deposit";
+  }
+  if (!action && ev.eventType === CASH_CORPORATE_ACTION) {
+    action = ev.isin ? "dividend" : "deposit";
   }
   if (!action) {
     return { skip: true, reason: `unmapped event type: ${ev.eventType}` };

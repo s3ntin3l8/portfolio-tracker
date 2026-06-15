@@ -15,7 +15,8 @@ export interface PytrRunnerOptions {
   wafStrategy: "awswaf" | "playwright";
   enabled: boolean;
   spawn?: SpawnFn;
-  // How long a pairing child may stay alive waiting for the 2FA code (ms).
+  // How long a pairing child may stay alive waiting for the app-push approval (ms).
+  // Must exceed the Python side's own approval timeout (PYTR_APPROVAL_TIMEOUT_S, 180s).
   pairingTimeoutMs?: number;
   // How long an export may run before being killed (ms).
   exportTimeoutMs?: number;
@@ -36,6 +37,14 @@ export class PytrAuthError extends Error {
   }
 }
 
+// Thrown when the v2 app-push login is rejected or expires unapproved (exit code 3).
+export class PytrApprovalError extends Error {
+  constructor(message = "login was not approved") {
+    super(message);
+    this.name = "PytrApprovalError";
+  }
+}
+
 export class PytrError extends Error {
   constructor(message: string) {
     super(message);
@@ -52,18 +61,22 @@ interface PendingPairing {
   cookiesFile: string;
   tmpDir: string;
   stderr: string;
-  // Settled when the init line ({processId,countdown}) arrives.
-  onInit: { resolve: (countdown: number) => void; reject: (e: Error) => void } | null;
-  // Settled by submitCode() once the child exits.
-  onFinal: { resolve: (sessionData: string) => void; reject: (e: Error) => void } | null;
+  // Settled when the init line ({processId,status}) arrives — the app push has been sent.
+  onInit: { resolve: (processId: string) => void; reject: (e: Error) => void } | null;
+  // Settled by awaitApproval() once the child exits (approved → sessionData, else reject).
+  onApproval: { resolve: (sessionData: string) => void; reject: (e: Error) => void } | null;
+  // If the child exits before awaitApproval() is attached, the outcome is cached here and
+  // collected by the next awaitApproval() call (handles a fast in-app approval race).
+  settled: { sessionData: string } | { error: Error } | null;
   timer: NodeJS.Timeout;
 }
 
 /**
- * Drives the vendored pytr Python entrypoints as subprocesses. Pairing is stateful —
- * `complete_weblogin` needs the same process as `initiate_weblogin`, so the pairing
- * child is kept alive (held in `pending`) across the "awaiting 2FA" window and the code
- * is delivered on its stdin. Sync (`export`) is a cheap one-shot from saved cookies.
+ * Drives the vendored pytr Python entrypoints as subprocesses. Pairing is the v2
+ * push-approval flow: `tr_login.py` POSTs the login (sending a push to the TR mobile app),
+ * prints its processId, then polls until the user approves in-app and exits. The child is
+ * held in `pending` across that window; `awaitApproval` resolves with the saved session on
+ * exit. Sync (`export`) is a cheap one-shot from saved cookies.
  *
  * Secrets (phone/PIN/WAF token) are passed via env, never argv (argv is world-readable
  * in the process list). Cookie material lives only in a per-op temp dir, removed in a
@@ -80,7 +93,7 @@ export class PytrRunner {
       wafStrategy: options.wafStrategy,
       enabled: options.enabled,
       spawn: options.spawn ?? nodeSpawn,
-      pairingTimeoutMs: options.pairingTimeoutMs ?? 120_000,
+      pairingTimeoutMs: options.pairingTimeoutMs ?? 210_000,
       exportTimeoutMs: options.exportTimeoutMs ?? 120_000,
     };
   }
@@ -94,13 +107,14 @@ export class PytrRunner {
   }
 
   /**
-   * Begin a pairing: spawn `tr_login.py pair`, resolve with the resend countdown once
-   * Trade Republic has sent the 2FA code. The child stays alive until submitCode().
+   * Begin a pairing: spawn `tr_login.py pair`, resolve with the login processId once Trade
+   * Republic has sent the approval push to the mobile app. The child keeps polling for
+   * approval and stays alive until it exits; collect the result with awaitApproval().
    */
   async startPairing(
     userId: string,
     input: { phone: string; pin: string; wafToken?: string },
-  ): Promise<{ countdown: number }> {
+  ): Promise<{ processId: string }> {
     if (!this.opts.enabled) throw new PytrUnavailableError();
     // A fresh attempt supersedes any in-flight one for this user.
     this.cancelPairing(userId);
@@ -137,17 +151,18 @@ export class PytrRunner {
       );
     }
 
-    return new Promise<{ countdown: number }>((resolve, reject) => {
+    return new Promise<{ processId: string }>((resolve, reject) => {
       const entry: PendingPairing = {
         child,
         cookiesFile,
         tmpDir,
         stderr: "",
         onInit: {
-          resolve: (countdown) => resolve({ countdown }),
+          resolve: (processId) => resolve({ processId }),
           reject,
         },
-        onFinal: null,
+        onApproval: null,
+        settled: null,
         timer: setTimeout(() => {
           this.failPairing(userId, new PytrError("pairing timed out"));
         }, this.opts.pairingTimeoutMs),
@@ -166,16 +181,16 @@ export class PytrRunner {
   private onPairLine(userId: string, line: string): void {
     const entry = this.pending.get(userId);
     if (!entry?.onInit) return;
-    let parsed: { processId?: unknown; countdown?: unknown };
+    let parsed: { processId?: unknown; status?: unknown };
     try {
       parsed = JSON.parse(line);
     } catch {
       return; // ignore non-JSON log noise
     }
-    if (parsed.processId !== undefined && typeof parsed.countdown === "number") {
+    if (typeof parsed.processId === "string" && parsed.processId) {
       const { resolve } = entry.onInit;
       entry.onInit = null;
-      resolve(parsed.countdown);
+      resolve(parsed.processId);
     }
   }
 
@@ -183,23 +198,40 @@ export class PytrRunner {
     const entry = this.pending.get(userId);
     if (!entry) return;
     clearTimeout(entry.timer);
-    this.pending.delete(userId);
     const finalize = async () => {
       try {
-        if (code === 0 && entry.onFinal) {
+        if (code === 0) {
           const sessionData = await readFile(entry.cookiesFile, "utf8");
-          entry.onFinal.resolve(sessionData);
+          if (entry.onApproval) {
+            entry.onApproval.resolve(sessionData);
+            this.pending.delete(userId);
+          } else {
+            // Approved before awaitApproval() attached — cache for it to collect.
+            entry.settled = { sessionData };
+          }
         } else {
-          const err = new PytrError(
-            entry.stderr.trim() || `pytr login exited with code ${code}`,
-          );
+          const msg = entry.stderr.trim() || `pytr login exited with code ${code}`;
+          const err = code === 3 ? new PytrApprovalError(msg) : new PytrError(msg);
+          // A failure before the init line means startPairing() is still pending.
           entry.onInit?.reject(err);
-          entry.onFinal?.reject(err);
+          entry.onInit = null;
+          if (entry.onApproval) {
+            entry.onApproval.reject(err);
+            this.pending.delete(userId);
+          } else {
+            entry.settled = { error: err };
+          }
         }
       } catch (err) {
-        entry.onFinal?.reject(
-          err instanceof Error ? err : new PytrError("failed to read session"),
-        );
+        const e = err instanceof Error ? err : new PytrError("failed to read session");
+        entry.onInit?.reject(e);
+        entry.onInit = null;
+        if (entry.onApproval) {
+          entry.onApproval.reject(e);
+          this.pending.delete(userId);
+        } else {
+          entry.settled = { error: e };
+        }
       } finally {
         await rm(entry.tmpDir, { recursive: true, force: true });
       }
@@ -212,9 +244,9 @@ export class PytrRunner {
     if (!entry) return;
     clearTimeout(entry.timer);
     entry.onInit?.reject(err);
-    entry.onFinal?.reject(err);
+    entry.onApproval?.reject(err);
     entry.onInit = null;
-    entry.onFinal = null;
+    entry.onApproval = null;
     try {
       entry.child.kill("SIGKILL");
     } catch {
@@ -224,24 +256,31 @@ export class PytrRunner {
     void rm(entry.tmpDir, { recursive: true, force: true });
   }
 
-  /** True if a pairing is waiting for its 2FA code. */
+  /** True if a pairing is waiting for (or has just received) its app-push approval. */
   hasPendingPairing(userId: string): boolean {
     return this.pending.has(userId);
   }
 
   /**
-   * Deliver the 2FA code to the waiting pairing child and resolve with the saved
-   * session (the pytr cookie file contents) once login completes.
+   * Wait for the user to approve the login push in the TR mobile app, resolving with the
+   * saved session (the pytr cookie file contents). Rejects with PytrApprovalError if the
+   * login is declined or expires unapproved. Safe to call after the child has already
+   * exited (a fast approval) — the cached outcome is returned.
    */
-  submitCode(userId: string, code: string): Promise<string> {
+  awaitApproval(userId: string): Promise<string> {
     const entry = this.pending.get(userId);
     if (!entry) {
       return Promise.reject(new PytrError("no pairing in progress"));
     }
+    if (entry.settled) {
+      const settled = entry.settled;
+      this.pending.delete(userId);
+      return "sessionData" in settled
+        ? Promise.resolve(settled.sessionData)
+        : Promise.reject(settled.error);
+    }
     return new Promise<string>((resolve, reject) => {
-      entry.onFinal = { resolve, reject };
-      entry.child.stdin?.write(`${code}\n`);
-      entry.child.stdin?.end();
+      entry.onApproval = { resolve, reject };
     });
   }
 

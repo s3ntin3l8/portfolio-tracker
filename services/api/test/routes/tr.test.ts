@@ -5,15 +5,18 @@ import { generateKeyPair, SignJWT, type KeyLike } from "jose";
 import { trConnections } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { getDb, closeDb } from "../../src/db/client.js";
-import { PytrError, PytrUnavailableError } from "../../src/services/pytr/runner.js";
+import {
+  PytrApprovalError,
+  PytrUnavailableError,
+} from "../../src/services/pytr/runner.js";
 import type { PytrRunner } from "../../src/services/pytr/runner.js";
 
 // A fake runner so route tests never spawn Python. The route only uses these four
 // methods; behaviour is tweakable per test.
 class FakePytr {
   pending = new Set<string>();
-  startResult: { countdown: number } | Error = { countdown: 30 };
-  submitResult: string | Error = "MOZILLA_COOKIE_JAR";
+  startResult: { processId: string } | Error = { processId: "pid-1" };
+  approvalResult: string | Error = "MOZILLA_COOKIE_JAR";
   async startPairing(userId: string) {
     if (this.startResult instanceof Error) throw this.startResult;
     this.pending.add(userId);
@@ -22,10 +25,10 @@ class FakePytr {
   hasPendingPairing(userId: string) {
     return this.pending.has(userId);
   }
-  async submitCode(userId: string, _code: string) {
-    if (this.submitResult instanceof Error) throw this.submitResult;
+  async awaitApproval(userId: string) {
+    if (this.approvalResult instanceof Error) throw this.approvalResult;
     this.pending.delete(userId);
-    return this.submitResult;
+    return this.approvalResult;
   }
   cancelPairing(userId: string) {
     this.pending.delete(userId);
@@ -86,7 +89,7 @@ describe("Trade Republic connection (encryption enabled)", () => {
     delete process.env.DB_ENCRYPTION_KEY;
   });
 
-  it("pairs end to end: connect → awaiting_2fa → verify → connected", async () => {
+  it("pairs end to end: connect → awaiting_2fa → approve → connected", async () => {
     const t = await token("tr-user");
     const portfolioId = await portfolioFor(app, t);
 
@@ -97,7 +100,7 @@ describe("Trade Republic connection (encryption enabled)", () => {
       payload: { phone: "+4915112345678", pin: "1234", portfolioId },
     });
     expect(start.statusCode).toBe(202);
-    expect(start.json()).toEqual({ status: "awaiting_2fa", countdown: 30 });
+    expect(start.json()).toEqual({ status: "awaiting_2fa" });
 
     const pending = await app.inject({
       method: "GET",
@@ -106,11 +109,11 @@ describe("Trade Republic connection (encryption enabled)", () => {
     });
     expect(pending.json()).toMatchObject({ status: "awaiting_2fa", portfolioId });
 
+    // No body — the v2 flow long-polls until the user approves the push in-app.
     const verify = await app.inject({
       method: "POST",
       url: "/tr/connection/verify",
       headers: auth(t),
-      payload: { code: "9999" },
     });
     expect(verify.statusCode).toBe(200);
     expect(verify.json()).toEqual({ status: "connected" });
@@ -151,12 +154,11 @@ describe("Trade Republic connection (encryption enabled)", () => {
       method: "POST",
       url: "/tr/connection/verify",
       headers: auth(t),
-      payload: { code: "0000" },
     });
     expect(res.statusCode).toBe(409);
   });
 
-  it("400s on a bad 2FA code and records the error", async () => {
+  it("400s when the login is not approved and records the error", async () => {
     const t = await token("tr-badcode");
     const portfolioId = await portfolioFor(app, t);
     await app.inject({
@@ -165,16 +167,15 @@ describe("Trade Republic connection (encryption enabled)", () => {
       headers: auth(t),
       payload: { phone: "+49150", pin: "1234", portfolioId },
     });
-    fake.submitResult = new PytrError("complete_weblogin failed: bad code");
+    fake.approvalResult = new PytrApprovalError("login expired");
 
     const res = await app.inject({
       method: "POST",
       url: "/tr/connection/verify",
       headers: auth(t),
-      payload: { code: "0000" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: "invalid_code" });
+    expect(res.json()).toEqual({ error: "not_approved" });
 
     const state = await app.inject({
       method: "GET",
@@ -182,7 +183,7 @@ describe("Trade Republic connection (encryption enabled)", () => {
       headers: auth(t),
     });
     expect(state.json().status).toBe("error");
-    fake.submitResult = "MOZILLA_COOKIE_JAR"; // restore for other tests
+    fake.approvalResult = "MOZILLA_COOKIE_JAR"; // restore for other tests
   });
 
   it("503s when pytr is unavailable", async () => {
@@ -197,7 +198,7 @@ describe("Trade Republic connection (encryption enabled)", () => {
     });
     expect(res.statusCode).toBe(503);
     expect(res.json()).toEqual({ error: "pytr_not_available" });
-    fake.startResult = { countdown: 30 };
+    fake.startResult = { processId: "pid-1" };
   });
 
   it("disconnects: DELETE wipes the connection", async () => {

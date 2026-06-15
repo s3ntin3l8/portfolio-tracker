@@ -370,7 +370,7 @@
     "cardTitle": "Koneksi",
     "status": {
       "disconnected": "Belum terhubung",
-      "awaiting_2fa": "Menunggu kode",
+      "awaiting_2fa": "Menunggu persetujuan",
       "connected": "Terhubung",
       "expired": "Sesi kedaluwarsa",
       "error": "Kesalahan"
@@ -382,9 +382,11 @@
     "wafToken": "aws-waf-token (opsional)",
     "wafTokenHint": "Tempel ini dari peramban hanya jika koneksi otomatis gagal.",
     "connect": "Hubungkan",
-    "codeHint": "Masukkan kode yang dikirim Trade Republic ke aplikasi Anda (atau SMS).",
-    "code": "Kode konfirmasi",
-    "verify": "Verifikasi",
+    "approveTitle": "Setujui login di aplikasi Anda",
+    "approveHint": "Buka Trade Republic di ponsel Anda dan setujui permintaan login. Jika tidak muncul, tutup lalu buka kembali aplikasinya.",
+    "approveWaiting": "Menunggu persetujuan…",
+    "approvalError": "Login tidak disetujui tepat waktu. Silakan coba lagi.",
+    "cancel": "Batal",
     "connectedHint": "Akun Anda terhubung. Sinkronisasi menarik aktivitas baru sebagai draf transaksi untuk Anda konfirmasi.",
     "synced": "Tersinkron — {drafts} draf transaksi disiapkan. Tinjau di halaman Impor.",
     "syncNow": "Sinkronkan sekarang",

@@ -24,3 +24,8 @@ apps/web/public/swe-worker-*.js
 # Claude Code local plans + scratch (keep settings.json + hooks tracked)
 .claude/plans/
 .claude/tmp/
+
+# Python (vendored pytr entrypoints)
+__pycache__/
+*.pyc
+.venv-pytr/

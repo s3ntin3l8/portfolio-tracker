@@ -236,6 +236,7 @@ export interface ImportRecord {
 
 export type TrStatus =
   | "disconnected"
+  // Push sent — awaiting the user's approval in the Trade Republic mobile app.
   | "awaiting_2fa"
   | "connected"
   | "expired"
@@ -465,13 +466,10 @@ export function createApiClient(config: ApiClientConfig) {
     // --- Trade Republic ---
     getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),
     connectTr: (input: TrConnectInput) =>
-      request<{ status: TrStatus; countdown: number }>(
-        "POST",
-        "/tr/connection",
-        input,
-      ),
-    verifyTr: (code: string) =>
-      request<{ status: TrStatus }>("POST", "/tr/connection/verify", { code }),
+      request<{ status: TrStatus }>("POST", "/tr/connection", input),
+    // No code in the v2 push-approval flow: this long-polls until the user approves the
+    // login in the TR mobile app (or it is declined / the window expires).
+    verifyTr: () => request<{ status: TrStatus }>("POST", "/tr/connection/verify"),
     syncTr: () => request<TrSyncResult>("POST", "/tr/connection/sync"),
     disconnectTr: () => request<void>("DELETE", "/tr/connection"),
   };

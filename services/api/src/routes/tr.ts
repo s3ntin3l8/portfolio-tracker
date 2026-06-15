@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { portfolios, trConnections } from "@portfolio/db";
 import { requireUser } from "../plugins/auth.js";
-import { PytrUnavailableError } from "../services/pytr/runner.js";
+import { PytrApprovalError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
 
 const connectBodySchema = z.object({
@@ -13,7 +13,9 @@ const connectBodySchema = z.object({
   // Break-glass: a manually pasted aws-waf-token, used instead of the solver.
   wafToken: z.string().min(1).optional(),
 });
-const verifyBodySchema = z.object({ code: z.string().min(1) });
+
+// The DB enum value `awaiting_2fa` denotes the v2 state "push sent, awaiting the user's
+// approval in the Trade Republic mobile app" (kept as-is to avoid an enum-rename migration).
 
 type TrConnection = typeof trConnections.$inferSelect;
 
@@ -52,7 +54,8 @@ export async function trRoute(app: FastifyInstance) {
     return serialize(await getConnection(id));
   });
 
-  // Begin pairing: store encrypted creds and kick off the 2FA web-login.
+  // Begin pairing: store encrypted creds and kick off the v2 web-login (sends an approval
+  // push to the user's Trade Republic mobile app).
   app.post("/tr/connection", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = requireUser(request);
     // Refuse to store Trade Republic credentials without encryption at rest.
@@ -64,13 +67,12 @@ export async function trRoute(app: FastifyInstance) {
       return reply.code(404).send({ error: "portfolio_not_found" });
     }
 
-    let countdown: number;
     try {
-      ({ countdown } = await app.pytr.startPairing(id, {
+      await app.pytr.startPairing(id, {
         phone: body.phone,
         pin: body.pin,
         wafToken: body.wafToken,
-      }));
+      });
     } catch (err) {
       if (err instanceof PytrUnavailableError) {
         return reply.code(503).send({ error: "pytr_not_available" });
@@ -104,16 +106,17 @@ export async function trRoute(app: FastifyInstance) {
       });
 
     reply.code(202);
-    return { status: "awaiting_2fa", countdown };
+    return { status: "awaiting_2fa" };
   });
 
-  // Complete pairing by submitting the 2FA code; persists the encrypted session.
+  // Complete pairing: long-poll until the user approves the push in the TR mobile app,
+  // then persist the encrypted session. Takes no body — there is no code in the v2 flow.
+  // The request hangs until approval, rejection, or the approval window expires (~180s).
   app.post(
     "/tr/connection/verify",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
-      const { code } = verifyBodySchema.parse(request.body);
 
       const conn = await getConnection(id);
       if (!conn || conn.status !== "awaiting_2fa" || !app.pytr.hasPendingPairing(id)) {
@@ -122,15 +125,20 @@ export async function trRoute(app: FastifyInstance) {
 
       let sessionData: string;
       try {
-        sessionData = await app.pytr.submitCode(id, code);
+        sessionData = await app.pytr.awaitApproval(id);
       } catch (err) {
-        const error = err instanceof Error ? err.message : "verify failed";
+        const error = err instanceof Error ? err.message : "approval failed";
         await app.db
           .update(trConnections)
           .set({ status: "error", lastError: error, updatedAt: new Date() })
           .where(eq(trConnections.userId, id));
-        request.log.warn({ err }, "tr 2FA verification failed");
-        return reply.code(400).send({ error: "invalid_code" });
+        // A declined/expired push is a user-actionable 400; anything else is a 502.
+        if (err instanceof PytrApprovalError) {
+          request.log.info({ err }, "tr login not approved");
+          return reply.code(400).send({ error: "not_approved" });
+        }
+        request.log.warn({ err }, "tr approval failed");
+        return reply.code(502).send({ error: "tr_approval_failed" });
       }
 
       await app.db

@@ -10,7 +10,7 @@ import messages from "../messages/en.json";
 
 function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
   return {
-    connectTr: vi.fn(async () => ({ status: "awaiting_2fa" as const, countdown: 30 })),
+    connectTr: vi.fn(async () => ({ status: "awaiting_2fa" as const })),
     verifyTr: vi.fn(async () => ({ status: "connected" as const })),
     syncTr: vi.fn(async () => ({ status: "connected" as const, drafts: 3 })),
     disconnectTr: vi.fn(async () => undefined),
@@ -42,7 +42,7 @@ function renderFlow(client: TrConnectClient, initial: TrConnection = DISCONNECTE
 }
 
 describe("TrConnectFlow", () => {
-  it("walks connect → awaiting 2FA → connected", async () => {
+  it("walks connect → awaiting approval → connected (auto-polls, no code)", async () => {
     const client = makeClient();
     const onChanged = renderFlow(client);
 
@@ -60,14 +60,27 @@ describe("TrConnectFlow", () => {
       }),
     );
 
-    // now in the awaiting-2FA step
-    const code = await screen.findByLabelText("Confirmation code");
-    fireEvent.change(code, { target: { value: "9999" } });
-    fireEvent.click(screen.getByRole("button", { name: /Verify/ }));
-
-    await waitFor(() => expect(client.verifyTr).toHaveBeenCalledWith("9999"));
+    // The awaiting step long-polls verify automatically — no confirmation code is entered.
+    await waitFor(() => expect(client.verifyTr).toHaveBeenCalledWith());
     expect(await screen.findByRole("button", { name: /Sync now/ })).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("returns to the form with an error when the approval is not granted", async () => {
+    const client = makeClient({
+      verifyTr: vi.fn(async () => {
+        throw new Error("not approved");
+      }),
+    });
+    renderFlow(client);
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: "+49150" },
+    });
+    fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Connect/ })).toBeTruthy();
   });
 
   it("passes a pasted waf token from the advanced field", async () => {

@@ -6,6 +6,7 @@ import {
   PytrRunner,
   PytrUnavailableError,
   PytrAuthError,
+  PytrApprovalError,
   PytrError,
   type SpawnFn,
 } from "../../src/services/pytr/runner.js";
@@ -66,7 +67,7 @@ function makeRunner(spawn: SpawnFn, overrides = {}) {
 }
 
 describe("PytrRunner pairing", () => {
-  it("resolves the countdown, delivers the code on stdin, returns the saved session", async () => {
+  it("resolves the processId, then awaits approval and returns the saved session", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn);
 
@@ -85,16 +86,32 @@ describe("PytrRunner pairing", () => {
     expect(child.opts.env?.TR_PIN).toBe("1234");
     expect(child.args).not.toContain("1234"); // pin not on the command line
 
-    child.emitLine('{"processId":"pid-1","countdown":30}\n');
-    expect(await startP).toEqual({ countdown: 30 });
+    // The init line carries the processId (push sent) — no SMS countdown in the v2 flow.
+    child.emitLine('{"processId":"pid-1","status":"awaiting_approval"}\n');
+    expect(await startP).toEqual({ processId: "pid-1" });
     expect(runner.hasPendingPairing("u1")).toBe(true);
 
-    const submitP = runner.submitCode("u1", "9999");
-    expect(child.stdin.write).toHaveBeenCalledWith("9999\n");
-    // pytr would have written the cookie jar before exiting cleanly
+    const approvalP = runner.awaitApproval("u1");
+    expect(child.stdin.write).not.toHaveBeenCalled(); // nothing written to the child
+    // pytr writes the cookie jar once the user approves in-app, then exits cleanly
     await writeFile(child.cookiesFile()!, "MOZILLA_COOKIE_JAR");
     child.emit("exit", 0);
-    expect(await submitP).toBe("MOZILLA_COOKIE_JAR");
+    expect(await approvalP).toBe("MOZILLA_COOKIE_JAR");
+    expect(runner.hasPendingPairing("u1")).toBe(false);
+  });
+
+  it("returns the session when approval happens before awaitApproval is called", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const startP = runner.startPairing("u1", { phone: "+49", pin: "1" });
+    const child = await nextChild();
+    child.emitLine('{"processId":"p","status":"awaiting_approval"}\n');
+    await startP;
+    // Fast in-app approval: the child exits before the route long-polls.
+    await writeFile(child.cookiesFile()!, "JAR2");
+    child.emit("exit", 0);
+    await new Promise((r) => setImmediate(r)); // let the exit handler cache the result
+    expect(await runner.awaitApproval("u1")).toBe("JAR2");
     expect(runner.hasPendingPairing("u1")).toBe(false);
   });
 
@@ -109,39 +126,39 @@ describe("PytrRunner pairing", () => {
     const child = await nextChild();
     expect(child.args).toContain("token");
     expect(child.opts.env?.TR_WAF_TOKEN).toBe("pasted-token");
-    child.emitLine('{"processId":"p","countdown":10}\n');
+    child.emitLine('{"processId":"p","status":"awaiting_approval"}\n');
     await startP;
   });
 
-  it("rejects when the child exits before login completes (bad code)", async () => {
+  it("rejects with PytrApprovalError when the login is declined/expires (exit 3)", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn);
     const startP = runner.startPairing("u1", { phone: "+49", pin: "1" });
     const child = await nextChild();
-    child.emitLine('{"processId":"p","countdown":10}\n');
+    child.emitLine('{"processId":"p","status":"awaiting_approval"}\n');
     await startP;
-    const submitP = runner.submitCode("u1", "0000");
-    child.stderr.emit("data", Buffer.from("complete_weblogin failed: bad code"));
+    const approvalP = runner.awaitApproval("u1");
+    child.stderr.emit("data", Buffer.from("login not approved: login expired"));
     child.emit("exit", 3);
-    await expect(submitP).rejects.toThrow(/bad code/);
+    await expect(approvalP).rejects.toThrow(PytrApprovalError);
   });
 
-  it("times out a pairing that never receives its code", async () => {
+  it("times out a pairing that is never approved", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn, { pairingTimeoutMs: 20 });
     const startP = runner.startPairing("u1", { phone: "+49", pin: "1" });
     const child = await nextChild();
-    child.emitLine('{"processId":"p","countdown":10}\n');
+    child.emitLine('{"processId":"p","status":"awaiting_approval"}\n');
     await startP;
-    const submitP = runner.submitCode("u1", "1111");
-    await expect(submitP).rejects.toThrow(/timed out/);
+    const approvalP = runner.awaitApproval("u1");
+    await expect(approvalP).rejects.toThrow(/timed out/);
     expect(child.kill).toHaveBeenCalled();
   });
 
-  it("rejects submitCode when no pairing is in progress", async () => {
+  it("rejects awaitApproval when no pairing is in progress", async () => {
     const { spawn } = makeSpawn();
     const runner = makeRunner(spawn);
-    await expect(runner.submitCode("nobody", "1234")).rejects.toThrow(
+    await expect(runner.awaitApproval("nobody")).rejects.toThrow(
       /no pairing in progress/,
     );
   });

@@ -73,13 +73,25 @@ describe("mapTrEventToDraft", () => {
     });
   });
 
-  it("maps saveback to savings_plan and spare-change to buy", () => {
+  it("maps the aggregate purchases: saveback/savings-plan → savings_plan, round-up → buy", () => {
     expect(
-      draftOf({ ...base, eventType: "benefits_saveback_execution", amount: -1, shares: 0.02, isin: "X" }).action,
+      draftOf({ ...base, eventType: "SAVEBACK_AGGREGATE", amount: -1, shares: 0.02, isin: "X" }).action,
     ).toBe("savings_plan");
     expect(
-      draftOf({ ...base, eventType: "benefits_spare_change_execution", amount: -0.5, shares: 0.01, isin: "X" }).action,
+      draftOf({ ...base, eventType: "TRADING_SAVINGSPLAN_EXECUTED", amount: -50, shares: 0.07, isin: "X" }).action,
+    ).toBe("savings_plan");
+    expect(
+      draftOf({ ...base, eventType: "SPARE_CHANGE_AGGREGATE", amount: -0.5, shares: 0.01, isin: "X" }).action,
     ).toBe("buy");
+  });
+
+  it("maps TRADING_TRADE_EXECUTED to buy/sell by sign", () => {
+    expect(
+      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: -100, shares: 1, isin: "X" }).action,
+    ).toBe("buy");
+    expect(
+      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: 100, shares: 1, isin: "X" }).action,
+    ).toBe("sell");
   });
 
   it("maps CREDIT to a dividend lump sum on the paying instrument", () => {
@@ -107,12 +119,55 @@ describe("mapTrEventToDraft", () => {
     expect(draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 1000 }).action).toBe(
       "deposit",
     );
-    expect(draftOf({ ...base, eventType: "card_refund", amount: 9.99 }).action).toBe(
+    expect(draftOf({ ...base, eventType: "BANK_TRANSACTION_INCOMING", amount: 50 }).action).toBe(
+      "deposit",
+    );
+    expect(draftOf({ ...base, eventType: "CARD_REFUND", amount: 9.99 }).action).toBe(
       "deposit",
     );
     expect(
       draftOf({ ...base, eventType: "PAYMENT_OUTBOUND", amount: -200 }),
     ).toMatchObject({ action: "withdrawal", price: "200" });
+  });
+
+  it("records card spending as a withdrawal so the cash balance stays correct", () => {
+    expect(
+      draftOf({ ...base, eventType: "CARD_TRANSACTION", amount: -1.5 }),
+    ).toMatchObject({ action: "withdrawal", price: "1.5" });
+    expect(draftOf({ ...base, eventType: "CARD_ATM_WITHDRAWAL", amount: -50 }).action).toBe(
+      "withdrawal",
+    );
+  });
+
+  it("maps a cash corporate action to a dividend (or a plain deposit without an ISIN)", () => {
+    expect(
+      draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 1.93, isin: "US02079K3059" }),
+    ).toMatchObject({ action: "dividend", quantity: "0", price: "1.93" });
+    expect(
+      draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 2 }).action,
+    ).toBe("deposit");
+  });
+
+  it("resolves ambiguous transfers by the sign of the amount", () => {
+    expect(draftOf({ ...base, eventType: "JUNIOR_P2P_TRANSFER", amount: -10 }).action).toBe(
+      "withdrawal",
+    );
+    expect(draftOf({ ...base, eventType: "SSP_TAX_CORRECTION", amount: 5 }).action).toBe(
+      "deposit",
+    );
+  });
+
+  it("skips known no-ops with a reason (card verification, failed/accrual, share corp action)", () => {
+    for (const eventType of [
+      "CARD_VERIFICATION",
+      "INTEREST_PAYOUT_CREATED",
+      "TRADING_SAVINGSPLAN_EXECUTION_FAILED",
+      "SSP_CORPORATE_ACTION_INSTRUMENT",
+    ]) {
+      expect(mapTrEventToDraft({ ...base, eventType, amount: 0 })).toMatchObject({
+        skip: true,
+      });
+    }
   });
 
   it("skips (never drops) unknown types and securities missing key data", () => {
