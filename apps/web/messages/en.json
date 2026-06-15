@@ -103,6 +103,16 @@
     "asOf": "as of {time}",
     "live": "Live"
   },
+  "Instrument": {
+    "priceHistory": "Price history",
+    "noHistory": "No price history yet — it appears with a configured market-data source.",
+    "corporateActions": "Corporate actions",
+    "noCorporateActions": "None recorded.",
+    "ratio": "Ratio",
+    "exDate": "Ex-date",
+    "notFound": "Instrument not found",
+    "notFoundBody": "It may have been removed, or the API is unavailable."
+  },
   "CorpAction": {
     "title": "Record a corporate action",
     "subtitle": "Apply a split, bonus or rights issue to an instrument.",

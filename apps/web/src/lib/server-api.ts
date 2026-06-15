@@ -5,6 +5,9 @@ import {
   type Portfolio,
   type User,
   type NetWorth,
+  type Instrument,
+  type Candle,
+  type CorporateAction,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 
@@ -68,6 +71,30 @@ export async function loadPortfolios(): Promise<{
     return { status: "ok", portfolios };
   } catch {
     return { status: "unavailable", portfolios: [] };
+  }
+}
+
+export interface InstrumentDetail {
+  instrument: Instrument;
+  history: Candle[];
+  corporateActions: CorporateAction[];
+}
+
+/** An instrument with its price history and corporate actions (or null). */
+export async function loadInstrument(
+  id: string,
+): Promise<InstrumentDetail | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    const [instrument, history, corporateActions] = await Promise.all([
+      api.getInstrument(id),
+      api.getInstrumentHistory(id),
+      api.listCorporateActions(id),
+    ]);
+    return { instrument, history, corporateActions };
+  } catch {
+    return null;
   }
 }
 

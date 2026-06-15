@@ -1,14 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { asc, ilike, or } from "drizzle-orm";
+import { asc, eq, ilike, or } from "drizzle-orm";
 import { instruments } from "@portfolio/db";
 import { instrumentInputSchema } from "@portfolio/schema";
 import { findOrCreateInstrument } from "../services/instruments.js";
+import { getMarketData } from "../services/market-data.js";
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+const historyQuerySchema = z.object({ range: z.string().default("1y") });
 
 export async function instrumentsRoute(app: FastifyInstance) {
   // Search instruments (shared reference data) for the manual-entry picker.
@@ -35,6 +37,45 @@ export async function instrumentsRoute(app: FastifyInstance) {
         .from(instruments)
         .orderBy(asc(instruments.symbol))
         .limit(limit);
+    },
+  );
+
+  // Fetch a single instrument by id.
+  app.get<{ Params: { id: string } }>(
+    "/instruments/:id",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const [inst] = await app.db
+        .select()
+        .from(instruments)
+        .where(eq(instruments.id, request.params.id))
+        .limit(1);
+      if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
+      return inst;
+    },
+  );
+
+  // Price history (candles) for an instrument's detail chart.
+  app.get<{ Params: { id: string } }>(
+    "/instruments/:id/history",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { range } = historyQuerySchema.parse(request.query);
+      const [inst] = await app.db
+        .select()
+        .from(instruments)
+        .where(eq(instruments.id, request.params.id))
+        .limit(1);
+      if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
+      return getMarketData().getHistory(
+        {
+          symbol: inst.symbol,
+          market: inst.market,
+          assetClass: inst.assetClass,
+          currency: inst.currency,
+        },
+        range,
+      );
     },
   );
 

@@ -51,6 +51,11 @@ export interface CorporateAction {
   terms: string | null;
 }
 
+export interface Candle {
+  date: string; // YYYY-MM-DD
+  close: string;
+}
+
 export interface QuoteRef {
   symbol: string;
   market: string;
@@ -234,6 +239,13 @@ export function createApiClient(config: ApiClientConfig) {
       request<Instrument[]>(
         "GET",
         `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    getInstrument: (id: string) =>
+      request<Instrument>("GET", `/instruments/${id}`),
+    getInstrumentHistory: (id: string, range = "1y") =>
+      request<Candle[]>(
+        "GET",
+        `/instruments/${id}/history?range=${encodeURIComponent(range)}`,
       ),
     createInstrument: (input: InstrumentInput) =>
       request<Instrument>("POST", "/instruments", input),
