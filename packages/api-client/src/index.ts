@@ -371,7 +371,7 @@ export function createApiClient(config: ApiClientConfig) {
     importCsv: (
       portfolioId: string,
       content: string,
-      format: "auto" | "generic" | "dkb" = "auto",
+      format: "auto" | "generic" | "dkb" | "ibkr" | "coinbase" = "auto",
     ) =>
       request<CsvImportResult>(
         "POST",

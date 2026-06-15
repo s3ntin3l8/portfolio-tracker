@@ -62,7 +62,7 @@ export interface ImportClient {
 
 type Step = "upload" | "parsing" | "review" | "done";
 type Mode = "screenshot" | "csv";
-type CsvFormat = "auto" | "generic" | "dkb";
+type CsvFormat = "auto" | "generic" | "dkb" | "ibkr" | "coinbase";
 
 export interface ImportTargetPortfolio {
   id: string;
@@ -310,7 +310,7 @@ export function ImportFlow({
                 onChange={(e) => setCsvFormat(e.target.value as CsvFormat)}
                 className="h-8 w-auto"
               >
-                {(["auto", "generic", "dkb"] as const).map((fmt) => (
+                {(["auto", "generic", "dkb", "ibkr", "coinbase"] as const).map((fmt) => (
                   <option key={fmt} value={fmt}>
                     {t(`csvFormat.${fmt}`)}
                   </option>

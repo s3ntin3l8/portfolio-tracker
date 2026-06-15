@@ -1,5 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { parseCsv } from "../../src/services/parsers/csv.js";
+import { parseIbkr } from "../../src/services/parsers/ibkr.js";
+import { parseCoinbase } from "../../src/services/parsers/coinbase.js";
 import { detectCsvFormat } from "../../src/services/parsers/detect.js";
 import { ClaudeVisionParser } from "../../src/services/parsers/claude.js";
 import { GeminiVisionParser } from "../../src/services/parsers/gemini.js";
@@ -120,9 +122,75 @@ describe("detectCsvFormat", () => {
     expect(detectCsvFormat(giro)).toBe("dkb");
   });
 
+  it("detects an IBKR Flex Trades export by TradePrice + CurrencyPrimary", () => {
+    expect(detectCsvFormat(IBKR_CSV)).toBe("ibkr");
+  });
+
+  it("detects a Coinbase export by Quantity Transacted", () => {
+    expect(detectCsvFormat(COINBASE_CSV)).toBe("coinbase");
+  });
+
   it("treats the generic column CSV (and anything else) as generic", () => {
     expect(detectCsvFormat(CSV)).toBe("generic");
     expect(detectCsvFormat("")).toBe("generic");
+  });
+});
+
+const IBKR_CSV = [
+  "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass,Description,TradeID",
+  'AAPL,"20260115;093000",10,190.50,-1.00,USD,STK,"APPLE INC",111',
+  'TSLA,"2026-01-16, 10:00:00",-5,250.00,-1.25,USD,STK,"TESLA INC",112',
+  'BTC,20260117,0.5,60000,-3,USD,CRYPTO,"Bitcoin",113',
+].join("\n");
+
+const COINBASE_CSV = [
+  "You can use this CSV for your records.",
+  "",
+  "Timestamp,Transaction Type,Asset,Quantity Transacted,Spot Price Currency,Spot Price at Transaction,Subtotal,Total,Fees and/or Spread,Notes",
+  "2026-01-15T12:00:00Z,Buy,BTC,0.1,USD,60000,6000,6010,10,Bought 0.1 BTC",
+  "2026-02-01T08:30:00Z,Sell,ETH,2,USD,3000,6000,5990,10,Sold 2 ETH",
+  '2026-02-03T09:00:00Z,Receive,BTC,0.01,USD,61000,610,610,0,"From a friend"',
+].join("\n");
+
+describe("parseIbkr", () => {
+  it("maps signed quantities to buy/sell and IBKR asset codes to classes", () => {
+    const { drafts, errors } = parseIbkr(IBKR_CSV);
+    expect(errors).toHaveLength(0);
+    expect(drafts).toHaveLength(3);
+
+    const [aapl, tsla, btc] = drafts;
+    expect(aapl).toMatchObject({
+      ticker: "AAPL",
+      action: "buy",
+      quantity: "10",
+      price: "190.50",
+      fees: "1",
+      currency: "USD",
+      assetClass: "equity",
+      unit: "shares",
+    });
+    expect(aapl.executedAt).toEqual(new Date("2026-01-15"));
+    expect(tsla).toMatchObject({ action: "sell", quantity: "5" });
+    expect(btc).toMatchObject({ assetClass: "crypto", unit: "units", action: "buy" });
+  });
+});
+
+describe("parseCoinbase", () => {
+  it("parses Buy/Sell rows and skips transfers", () => {
+    const { drafts, errors } = parseCoinbase(COINBASE_CSV);
+    expect(errors).toHaveLength(0);
+    expect(drafts).toHaveLength(2); // the Receive row is skipped
+    expect(drafts[0]).toMatchObject({
+      ticker: "BTC",
+      action: "buy",
+      assetClass: "crypto",
+      unit: "units",
+      quantity: "0.1",
+      price: "60000",
+      fees: "10",
+      currency: "USD",
+    });
+    expect(drafts[1]).toMatchObject({ ticker: "ETH", action: "sell", quantity: "2" });
   });
 });
 
