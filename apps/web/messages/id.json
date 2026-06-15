@@ -16,6 +16,7 @@
     "holdings": "Kepemilikan",
     "transactions": "Transaksi",
     "income": "Pendapatan",
+    "savings": "Tabungan",
     "import": "Impor",
     "portfolios": "Portofolio",
     "settings": "Pengaturan",
@@ -36,6 +37,19 @@
     "upcomingTitle": "Kupon mendatang",
     "emptyTitle": "Belum ada pendapatan",
     "emptyBody": "Dividen dan kupon muncul di sini setelah Anda mencatatnya sebagai transaksi."
+  },
+  "Savings": {
+    "title": "Tabungan",
+    "subtitle": "Berapa yang Anda setor dari waktu ke waktu, dan ke mana arahnya.",
+    "totalContributed": "Total setoran",
+    "monthlyAverage": "Rata-rata per bulan",
+    "monthsActive": "{count, plural, other {# bulan}}",
+    "currentValue": "Nilai saat ini",
+    "simpleGain": "keuntungan",
+    "xirr": "Imbal hasil tahunan",
+    "contributionsOverTime": "Setoran dari waktu ke waktu",
+    "emptyTitle": "Belum ada setoran",
+    "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini."
   },
   "Portfolios": {
     "title": "Portofolio",

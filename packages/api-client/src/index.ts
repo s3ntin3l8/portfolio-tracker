@@ -188,6 +188,25 @@ export interface IncomeOutlook {
   yields: InstrumentYield[];
 }
 
+/** Contribution analytics + forecast seed for a savings/Sparplan account. */
+export interface ContributionStats {
+  displayCurrency: string;
+  totalContributed: string;
+  totalWithdrawn: string;
+  netContributed: string;
+  monthsActive: number;
+  monthlyAverage: string;
+  /** Net contribution per calendar month, ascending by `month` (YYYY-MM). */
+  series: { month: string; contributed: string }[];
+  currentValue: string;
+  /** (currentValue − netContributed) / netContributed, or null when no basis. */
+  simpleGainPct: number | null;
+  xirr: number | null;
+  /** Default annual return to seed the forecast (xirr clamped, else "0.07"). */
+  seedAnnualReturn: string;
+  asOf: string;
+}
+
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
@@ -292,6 +311,13 @@ export function createApiClient(config: ApiClientConfig) {
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
     getIncomeOutlook: () => request<IncomeOutlook>("GET", "/networth/income"),
+    getContributions: () =>
+      request<ContributionStats>("GET", "/networth/contributions"),
+    getPortfolioContributions: (portfolioId: string) =>
+      request<ContributionStats>(
+        "GET",
+        `/portfolios/${portfolioId}/contributions`,
+      ),
     getNetWorthHistory: (range = "1y") =>
       request<NetWorthPoint[]>(
         "GET",

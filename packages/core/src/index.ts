@@ -23,3 +23,8 @@ export {
   type BondPosition,
   type ProjectedCoupon,
 } from "./income.js";
+export {
+  contributionStats,
+  type ContributionInput,
+  type ContributionStats,
+} from "./contributions.js";

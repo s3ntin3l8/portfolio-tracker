@@ -17,9 +17,11 @@ import {
   projectCoupons,
   trailingIncomeByInstrument,
   trailingYield,
+  contributionStats,
   type CoreTransaction,
   type CorporateAction,
   type CashFlowPoint,
+  type PortfolioSummary,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
@@ -92,6 +94,59 @@ export async function transactionsRoute(app: FastifyInstance) {
       portfolioId,
       displayCurrency,
     );
+  }
+
+  // Contribution analytics (total/average money saved + per-month series) plus a
+  // forecast seed (current value, simple gain, money-weighted return). Derived
+  // entirely from transactions; FX-converts each amount to the display currency.
+  async function buildContributions(
+    coreTxns: CoreTransaction[],
+    summary: PortfolioSummary,
+    display: string,
+  ) {
+    const ccys = [
+      ...new Set(
+        coreTxns
+          .filter(
+            (t) =>
+              t.type === "deposit" ||
+              t.type === "savings_plan" ||
+              t.type === "withdrawal",
+          )
+          .map((t) => t.currency),
+      ),
+    ];
+    const rates = await getFxRates(app.db, ccys, display);
+    const fx = makeFxRateFn(rates, display);
+    const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx });
+
+    const currentValue = summary.netWorth;
+    const net = Number(stats.netContributed);
+    const simpleGainPct = net > 0 ? (Number(currentValue) - net) / net : null;
+
+    // Money-weighted return from the deduped monthly contributions (placed mid-
+    // month) against the current value — used to seed the forecast's return rate.
+    const asOf = new Date();
+    const flows: CashFlowPoint[] = stats.series.map((s) => ({
+      amount: -Number(s.contributed),
+      date: new Date(`${s.month}-15T00:00:00.000Z`),
+    }));
+    flows.push({ amount: Number(currentValue), date: asOf });
+    const rate = stats.series.length ? xirr(flows) : NaN;
+    const xirrVal = Number.isFinite(rate) ? rate : null;
+    const seedAnnualReturn =
+      xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5
+        ? xirrVal.toString()
+        : "0.07";
+
+    return {
+      ...stats,
+      currentValue,
+      simpleGainPct,
+      xirr: xirrVal,
+      seedAnnualReturn,
+      asOf: asOf.toISOString(),
+    };
   }
 
   // List a portfolio's transactions, each enriched with instrument metadata.
@@ -353,6 +408,25 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Contribution analytics for a single portfolio (in its base currency).
+  app.get<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/contributions",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      const portfolio = await ownedPortfolio(id, portfolioId);
+      if (!portfolio) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { coreTxns, summary } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+      );
+      return buildContributions(coreTxns, summary, portfolio.baseCurrency);
+    },
+  );
+
   // Aggregate net worth across all of the user's portfolios, in their display
   // currency — combined holdings, cash, totals, and money-weighted return.
   app.get("/networth", { preHandler: app.authenticate }, async (request) => {
@@ -494,6 +568,37 @@ export async function transactionsRoute(app: FastifyInstance) {
 
     return { displayCurrency: display, upcoming, yields };
   });
+
+  // Aggregate contribution analytics across all of the user's portfolios, in
+  // their display currency.
+  app.get(
+    "/networth/contributions",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+
+      const pfs = await app.db
+        .select({ id: portfolios.id })
+        .from(portfolios)
+        .where(eq(portfolios.userId, id));
+
+      const summaries: PortfolioSummary[] = [];
+      const allTxns: CoreTransaction[] = [];
+      for (const p of pfs) {
+        const { coreTxns, summary } = await loadValuation(p.id, display);
+        summaries.push(summary);
+        allTxns.push(...coreTxns);
+      }
+      const aggregated = aggregatePortfolios(summaries, display);
+      return buildContributions(allTxns, aggregated, display);
+    },
+  );
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
   // day's snapshots converted to the display currency.

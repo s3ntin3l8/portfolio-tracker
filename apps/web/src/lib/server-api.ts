@@ -14,6 +14,7 @@ import {
   type HoldingValuation,
   type ImportRecord,
   type IncomeOutlook,
+  type ContributionStats,
   type TrConnection,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
@@ -235,6 +236,32 @@ export async function loadHoldings(): Promise<HoldingsView> {
     };
   } catch {
     return { status: "unavailable", holdings: [], displayCurrency: "IDR" };
+  }
+}
+
+export type ContributionsView =
+  | { status: "ok"; data: ContributionStats }
+  | { status: "empty" }
+  | { status: "unavailable" };
+
+/**
+ * Contribution analytics for the active scope: a single portfolio when one is
+ * selected, else the cross-portfolio aggregate. Mirrors {@link loadHoldings}.
+ */
+export async function loadContributions(): Promise<ContributionsView> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty" };
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    const data = selected
+      ? await api.getPortfolioContributions(selected.id)
+      : await api.getContributions();
+    return { status: "ok", data };
+  } catch {
+    return { status: "unavailable" };
   }
 }
 
