@@ -16,8 +16,16 @@
     "holdings": "Kepemilikan",
     "transactions": "Transaksi",
     "import": "Impor",
+    "portfolios": "Portofolio",
     "settings": "Pengaturan",
     "signOut": "Keluar"
+  },
+  "Portfolios": {
+    "title": "Portofolio",
+    "subtitle": "Buat dan kelola portofolio Anda.",
+    "value": "Nilai",
+    "create": "Buat portofolio",
+    "empty": "Belum ada portofolio — buat yang pertama di bawah."
   },
   "Import": {
     "title": "Impor transaksi",

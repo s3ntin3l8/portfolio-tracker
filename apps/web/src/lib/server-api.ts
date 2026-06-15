@@ -45,6 +45,32 @@ export async function loadNetWorth(): Promise<NetWorthResult> {
   }
 }
 
+export interface PortfolioWithValue {
+  portfolio: Portfolio;
+  netWorth: string;
+}
+
+/** Every portfolio with its valued net worth (for the management screen). */
+export async function loadPortfolios(): Promise<{
+  status: "ok" | "unavailable";
+  portfolios: PortfolioWithValue[];
+}> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", portfolios: [] };
+  try {
+    const list = await api.listPortfolios();
+    const portfolios = await Promise.all(
+      list.map(async (portfolio) => ({
+        portfolio,
+        netWorth: (await api.getSummary(portfolio.id)).netWorth,
+      })),
+    );
+    return { status: "ok", portfolios };
+  } catch {
+    return { status: "unavailable", portfolios: [] };
+  }
+}
+
 /** The authenticated user (or null when signed out / API unreachable). */
 export async function loadMe(): Promise<User | null> {
   const api = await getServerApi();
