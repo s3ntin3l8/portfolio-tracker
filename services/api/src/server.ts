@@ -18,13 +18,24 @@ async function start() {
     });
   }
 
+  // Best-effort: start the price-refresh scheduler BEFORE listen() so it can register
+  // its onClose cleanup hook (addHook throws once the instance is listening). A
+  // scheduler failure must never block the API from serving requests.
+  try {
+    await startScheduler(app);
+  } catch (err) {
+    app.log.error(
+      { err },
+      "Price-refresh scheduler failed to start; continuing without it",
+    );
+  }
+
   try {
     const address = await app.listen({
       port: app.config.PORT,
       host: "0.0.0.0",
     });
     app.log.info(`Server listening at ${address}`);
-    await startScheduler(app);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
