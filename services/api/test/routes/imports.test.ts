@@ -53,6 +53,19 @@ const auth = (t: string) => ({ authorization: `Bearer ${t}` });
 const CSV = `date,action,assetClass,ticker,name,quantity,unit,price,fees,currency
 2026-01-15,buy,equity,BBCA,Bank Central Asia,100,shares,9500,0,IDR`;
 
+// A DKB Girokonto Umsatzliste (anonymised): a savings-plan buy, a dividend, a cash
+// deposit and a cash withdrawal — the four row kinds the parser must classify.
+const DKB_GIRO_CSV = [
+  '"Girokonto";"DE78120300001066505387"',
+  '"Zeitraum:";"01.01.2026 - 15.06.2026"',
+  '""',
+  '"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"IBAN";"Betrag (€)";"Gläubiger-ID";"Mandatsreferenz";"Kundenreferenz"',
+  '"15.06.26";"12.06.26";"Gebucht";"DKB AG";"Max Mustermann";"Depot 0506740786 Wertpapierertrag 12.06.2026 000066336002660 WKN 870747 MICROSOFT    DL-,00000625 ISIN US5949181045";"Eingang";"0000000000";"0,67";"";"";""',
+  '"08.06.26";"09.06.26";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786 Wertp.Abrechn. 05.06.2026 000006520078300 WKN A2H9Q0 Gesch.Art KV AIS-A.CO.MSCI E.M.UETFDRD ISIN LU1737652583 Ihr Wertpapier-Sparplan Preis       74,50600000 EUR Stück           0,3355";"Ausgang";"0000000000";"-25";"";"";""',
+  '"01.06.26";"01.06.26";"Gebucht";"Erika Mustermann";"FRAU MAX MUSTERMANN";"Sparplan";"Eingang";"DE69120300001053487276";"75";"";"";""',
+  '"13.04.26";"11.04.26";"Gebucht";"Max Mustermann";"Erika Mustermann";"Übertrag";"Ausgang";"DE15100123450587698301";"-509,59";"";"";""',
+].join("\n");
+
 describe("CSV import → confirm flow", () => {
   beforeAll(async () => {
     const kp = await generateKeyPair("ES256");
@@ -121,6 +134,74 @@ describe("CSV import → confirm flow", () => {
       payload: { transactions: drafts },
     });
     expect(again.statusCode).toBe(409);
+  });
+
+  it("imports a DKB Girokonto export: securities + cash, idempotent on re-import", async () => {
+    const t = await token("dkb-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const imp = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/csv`,
+      headers: auth(t),
+      payload: { content: DKB_GIRO_CSV, format: "dkb" },
+    });
+    expect(imp.statusCode).toBe(201);
+    const { importId, drafts } = imp.json();
+    expect(drafts).toHaveLength(4); // dividend, savings-plan buy, deposit, withdrawal
+
+    const stored = await app.inject({
+      method: "GET",
+      url: `/imports/${importId}`,
+      headers: auth(t),
+    });
+    expect(stored.json().parser).toBe("dkb");
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: drafts },
+    });
+    expect(confirm.statusCode).toBe(201);
+    const txns = confirm.json().transactions as Array<{
+      type: string;
+      source: string;
+      currency: string;
+      instrumentId: string | null;
+    }>;
+    expect(txns).toHaveLength(4);
+    expect(txns.every((x) => x.source === "csv")).toBe(true);
+    expect(txns.every((x) => x.currency === "EUR")).toBe(true);
+    // Cash rows have no instrument; securities rows do.
+    const cash = txns.filter((x) => x.type === "deposit" || x.type === "withdrawal");
+    const securities = txns.filter((x) => x.type === "savings_plan" || x.type === "dividend");
+    expect(cash).toHaveLength(2);
+    expect(cash.every((x) => x.instrumentId === null)).toBe(true);
+    expect(securities.every((x) => x.instrumentId !== null)).toBe(true);
+
+    // Re-importing the same export confirms zero new transactions (stable externalIds).
+    const reImp = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/csv`,
+      headers: auth(t),
+      payload: { content: DKB_GIRO_CSV, format: "dkb" },
+    });
+    const reConfirm = await app.inject({
+      method: "POST",
+      url: `/imports/${reImp.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: reImp.json().drafts },
+    });
+    expect(reConfirm.statusCode).toBe(201);
+    expect(reConfirm.json().confirmed).toBe(0);
   });
 
   it("rejects importing into another user's portfolio", async () => {

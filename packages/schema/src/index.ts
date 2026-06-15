@@ -109,21 +109,39 @@ export type TransactionInput = z.infer<typeof transactionInputSchema>;
 
 // --- Screenshot / CSV parse output ---------------------------------------
 
+// Actions a parser can emit. Securities trades + income (buy/sell/dividend/coupon),
+// plus the cash/savings-plan flows the DKB Girokonto import produces (a savings-plan
+// execution behaves as a buy; deposit/withdrawal are instrument-less cash movements).
+export const parsedActionSchema = z.enum([
+  "buy",
+  "sell",
+  "dividend",
+  "coupon",
+  "savings_plan",
+  "deposit",
+  "withdrawal",
+]);
+export type ParsedAction = z.infer<typeof parsedActionSchema>;
+
 // What a ScreenshotParser (or CSV row) yields — a *draft* the user confirms before
-// it becomes a transaction. Never auto-committed.
+// it becomes a transaction. Never auto-committed. `assetClass`/`unit` are nullish so
+// cash rows (deposit/withdrawal), which have no instrument, can be represented;
+// `exchangeCode`/`externalId` are optional enrichments (e.g. a broker's booking ref).
 export const parsedTransactionSchema = z.object({
-  assetClass: assetClassSchema,
-  action: z.enum(["buy", "sell", "dividend", "coupon"]),
+  assetClass: assetClassSchema.nullish(),
+  action: parsedActionSchema,
   ticker: z.string().nullish(),
   isin: z.string().nullish(),
   name: z.string().nullish(),
   quantity: decimalString,
-  unit: unitSchema,
+  unit: unitSchema.nullish(),
   price: decimalString,
   fees: decimalString.default("0"),
   total: decimalString.nullish(),
   currency: currencyCode,
   executedAt: z.coerce.date(),
+  exchangeCode: z.string().nullish(),
+  externalId: z.string().nullish(),
   confidence: z.number().min(0).max(1),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;

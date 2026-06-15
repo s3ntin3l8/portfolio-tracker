@@ -15,14 +15,33 @@ export function marketForAssetClass(assetClass: string): string {
 }
 
 /**
- * Find an instrument by its (market, symbol) identity, creating it if absent.
- * Instruments are shared reference data (not user-scoped); transactions reference
- * them by id. Used by manual entry and by confirmed screenshot/CSV imports.
+ * Default market for a security imported from a German broker (DKB depot). These trade
+ * on Xetra in EUR; we don't rely on `marketForAssetClass` (which defaults to IDX) so the
+ * Indonesian default stays untouched.
+ */
+export function marketForEuInstrument(_assetClass?: string | null): string {
+  return "XETRA";
+}
+
+/**
+ * Find an instrument by its ISIN (when given) or its (market, symbol) identity, creating
+ * it if absent. Matching ISIN first means rows that reference the same security by ISIN
+ * but a different symbol (e.g. a DKB buy resolved to a ticker and its later dividend) map
+ * to a single instrument. Instruments are shared reference data (not user-scoped).
  */
 export async function findOrCreateInstrument(
   db: DB,
   input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
 ): Promise<Instrument> {
+  if (input.isin) {
+    const [byIsin] = await db
+      .select()
+      .from(instruments)
+      .where(eq(instruments.isin, input.isin))
+      .limit(1);
+    if (byIsin) return byIsin;
+  }
+
   const [existing] = await db
     .select()
     .from(instruments)

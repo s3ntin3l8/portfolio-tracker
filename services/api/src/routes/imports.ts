@@ -2,15 +2,22 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { portfolios, screenshotImports, transactions } from "@portfolio/db";
-import { parsedTransactionSchema } from "@portfolio/schema";
+import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
+import { parseDkb } from "../services/parsers/dkb.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
+  marketForEuInstrument,
 } from "../services/instruments.js";
+import { getMarketData } from "../services/market-data.js";
 
-const csvBodySchema = z.object({ content: z.string().min(1) });
+const csvBodySchema = z.object({
+  content: z.string().min(1),
+  // `dkb` parses German DKB depot/Girokonto exports; `generic` is the simple column CSV.
+  format: z.enum(["generic", "dkb"]).default("generic"),
+});
 const screenshotBodySchema = z.object({
   image: z.string().min(1), // base64-encoded image bytes
   mimeType: z.string().default("image/png"),
@@ -39,15 +46,15 @@ export async function importsRoute(app: FastifyInstance) {
       if (!(await ownedPortfolio(id, portfolioId))) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { content } = csvBodySchema.parse(request.body);
-      const result = parseCsv(content);
+      const { content, format } = csvBodySchema.parse(request.body);
+      const result = format === "dkb" ? parseDkb(content) : parseCsv(content);
 
       const [imp] = await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
           portfolioId,
-          parser: "csv",
+          parser: format === "dkb" ? "dkb" : "csv",
           parsedJson: result,
           status: "draft",
         })
@@ -153,41 +160,99 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       const { transactions: drafts } = confirmBodySchema.parse(request.body);
-      // Anything that isn't a CSV import (claude/ollama/gemini/...) is a screenshot.
-      const source = imp.parser === "csv" ? "csv" : "screenshot";
+      const isDkb = imp.parser === "dkb";
+      // DKB exports are CSV too; anything that isn't a CSV/DKB import is a screenshot.
+      const source = imp.parser === "csv" || isDkb ? "csv" : "screenshot";
       const created = [];
+
+      // Resolve DKB ISINs to a ticker/market/currency once each (best-effort, cached).
+      // OpenFIGI is keyless; failures and unknown ISINs fall back to Xetra/ISIN/EUR.
+      const isinCache = new Map<
+        string,
+        { symbol: string; market: string; currency: string; assetClass: AssetClass } | null
+      >();
+      async function resolveDkbIsin(isin: string) {
+        if (isinCache.has(isin)) return isinCache.get(isin)!;
+        let resolved: {
+          symbol: string;
+          market: string;
+          currency: string;
+          assetClass: AssetClass;
+        } | null = null;
+        try {
+          const [hit] = await getMarketData().search(isin);
+          if (hit) {
+            resolved = {
+              symbol: hit.symbol,
+              market: hit.market,
+              currency: hit.currency,
+              assetClass: hit.assetClass,
+            };
+          }
+        } catch {
+          // best-effort; never block a confirm on discovery
+        }
+        isinCache.set(isin, resolved);
+        return resolved;
+      }
 
       for (let i = 0; i < drafts.length; i++) {
         const d = drafts[i];
-        const symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
 
-        const instrument = await findOrCreateInstrument(app.db, {
-          symbol,
-          market: marketForAssetClass(d.assetClass),
-          assetClass: d.assetClass,
-          unit: d.unit,
-          currency: d.currency,
-          name: d.name ?? symbol,
-          isin: d.isin ?? null,
-        });
+        // Cash movements (deposit/withdrawal) have no instrument.
+        const isCash = d.action === "deposit" || d.action === "withdrawal";
+        let instrumentId: string | null = null;
+
+        if (!isCash) {
+          let symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
+          let market = isDkb
+            ? marketForEuInstrument(d.assetClass)
+            : marketForAssetClass(d.assetClass ?? "equity");
+          let instrumentCurrency = d.currency;
+          let assetClass = d.assetClass ?? "equity";
+
+          if (isDkb && d.isin) {
+            const r = await resolveDkbIsin(d.isin);
+            if (r) {
+              symbol = r.symbol;
+              market = r.market;
+              instrumentCurrency = r.currency;
+              assetClass = r.assetClass;
+            }
+          }
+
+          const instrument = await findOrCreateInstrument(app.db, {
+            symbol,
+            market,
+            assetClass,
+            unit: d.unit ?? "shares",
+            currency: instrumentCurrency,
+            name: d.name ?? symbol,
+            isin: d.isin ?? null,
+          });
+          instrumentId = instrument.id;
+        }
 
         const [tx] = await app.db
           .insert(transactions)
           .values({
             portfolioId: imp.portfolioId,
-            instrumentId: instrument.id,
+            instrumentId,
             type: d.action,
             quantity: d.quantity,
             price: d.price,
             fees: d.fees,
+            // The cash leg is always in the transaction's own currency (EUR for DKB),
+            // independent of where the instrument is listed/priced.
             currency: d.currency,
             executedAt: d.executedAt,
             source,
             importId: imp.id,
-            externalId: `import:${imp.id}:${i}`,
+            externalId: d.externalId ?? `import:${imp.id}:${i}`,
           })
+          .onConflictDoNothing()
           .returning();
-        created.push(tx);
+        if (tx) created.push(tx);
       }
 
       await app.db
