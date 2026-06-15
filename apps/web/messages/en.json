@@ -102,6 +102,19 @@
       "generic": "Something went wrong. Please try again."
     }
   },
+  "ImportHistory": {
+    "title": "Recent imports",
+    "items": "{count, plural, one {# item} other {# items}}",
+    "discard": "Discard",
+    "undo": "Undo",
+    "undoWarning": "Removes {count, plural, one {# transaction} other {# transactions}}.",
+    "cancel": "Cancel",
+    "status": {
+      "draft": "Draft",
+      "confirmed": "Confirmed",
+      "discarded": "Discarded"
+    }
+  },
   "Dashboard": {
     "title": "Dashboard",
     "subtitle": "Your net worth across every portfolio.",

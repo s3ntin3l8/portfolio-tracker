@@ -12,6 +12,7 @@ import {
   type CorporateAction,
   type Transaction,
   type HoldingValuation,
+  type ImportRecord,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -256,6 +257,17 @@ export async function loadInstrument(
     return { instrument, history, corporateActions };
   } catch {
     return null;
+  }
+}
+
+/** The user's import history (newest first; empty when signed out / unreachable). */
+export async function loadImports(): Promise<ImportRecord[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.listImports();
+  } catch {
+    return [];
   }
 }
 

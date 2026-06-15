@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { portfolios, screenshotImports, transactions } from "@portfolio/db";
 import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
@@ -115,6 +115,82 @@ export async function importsRoute(app: FastifyInstance) {
 
       reply.code(201);
       return { importId: imp.id, drafts: result.drafts, errors: result.errors };
+    },
+  );
+
+  async function ownedImport(userId: string, importId: string) {
+    const [imp] = await app.db
+      .select()
+      .from(screenshotImports)
+      .where(
+        and(
+          eq(screenshotImports.id, importId),
+          eq(screenshotImports.userId, userId),
+        ),
+      )
+      .limit(1);
+    return imp ?? null;
+  }
+
+  // List the current user's imports (newest first) — id, status, parser, draft count.
+  app.get("/imports", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const rows = await app.db
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.userId, id))
+      .orderBy(desc(screenshotImports.createdAt));
+    return rows.map((r) => {
+      const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
+      return {
+        id: r.id,
+        portfolioId: r.portfolioId,
+        parser: r.parser,
+        status: r.status,
+        confidence: r.confidence,
+        count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
+        createdAt: r.createdAt,
+      };
+    });
+  });
+
+  // Discard a draft import (draft → discarded). Confirmed imports are undone via DELETE.
+  app.post<{ Params: { importId: string } }>(
+    "/imports/:importId/discard",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+      if (imp.status === "confirmed") {
+        return reply.code(409).send({ error: "already_confirmed" });
+      }
+      await app.db
+        .update(screenshotImports)
+        .set({ status: "discarded" })
+        .where(eq(screenshotImports.id, imp.id));
+      reply.code(204);
+      return null;
+    },
+  );
+
+  // Undo an import: remove any transactions it wrote, then mark it discarded.
+  app.delete<{ Params: { importId: string } }>(
+    "/imports/:importId",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+      const removed = await app.db
+        .delete(transactions)
+        .where(eq(transactions.importId, imp.id))
+        .returning();
+      await app.db
+        .update(screenshotImports)
+        .set({ status: "discarded" })
+        .where(eq(screenshotImports.id, imp.id));
+      return { removed: removed.length };
     },
   );
 

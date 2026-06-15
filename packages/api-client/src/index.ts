@@ -168,6 +168,17 @@ export interface ScreenshotImportResult {
   errors: { line: number; message: string }[];
 }
 
+/** A past import in the user's history (draft, confirmed, or discarded). */
+export interface ImportRecord {
+  id: string;
+  portfolioId: string | null;
+  parser: string;
+  status: "draft" | "confirmed" | "discarded";
+  confidence: string | null;
+  count: number;
+  createdAt: string;
+}
+
 // --- Client --------------------------------------------------------------
 
 export class ApiError extends Error {
@@ -350,5 +361,12 @@ export function createApiClient(config: ApiClientConfig) {
         `/imports/${importId}/confirm`,
         { transactions },
       ),
+    listImports: () => request<ImportRecord[]>("GET", "/imports"),
+    /** Discard a draft import (draft → discarded). */
+    discardImport: (importId: string) =>
+      request<void>("POST", `/imports/${importId}/discard`),
+    /** Undo an import: remove any transactions it wrote, then mark it discarded. */
+    deleteImport: (importId: string) =>
+      request<{ removed: number }>("DELETE", `/imports/${importId}`),
   };
 }

@@ -1,9 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Upload } from "lucide-react";
 import { ImportFlowClient } from "@/components/import-flow-client";
+import { ImportHistory } from "@/components/import-history";
 import { CreatePortfolio } from "@/components/create-portfolio";
 import { EmptyState } from "@/components/empty-state";
-import { resolveSelection } from "@/lib/server-api";
+import { resolveSelection, loadImports } from "@/lib/server-api";
 
 export default async function ImportPage({
   params,
@@ -19,6 +20,7 @@ export default async function ImportPage({
   const selection = await resolveSelection();
   const isEmpty =
     selection.status === "ok" && selection.portfolios.length === 0;
+  const imports = isEmpty ? [] : await loadImports();
 
   return (
     <div className="space-y-6">
@@ -48,6 +50,8 @@ export default async function ImportPage({
           }
         />
       )}
+
+      {imports.length > 0 && <ImportHistory items={imports} />}
     </div>
   );
 }

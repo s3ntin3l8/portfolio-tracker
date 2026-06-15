@@ -102,6 +102,19 @@
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
   },
+  "ImportHistory": {
+    "title": "Impor terakhir",
+    "items": "{count, plural, other {# item}}",
+    "discard": "Buang",
+    "undo": "Batalkan",
+    "undoWarning": "Menghapus {count, plural, other {# transaksi}}.",
+    "cancel": "Batal",
+    "status": {
+      "draft": "Draf",
+      "confirmed": "Terkonfirmasi",
+      "discarded": "Dibuang"
+    }
+  },
   "Dashboard": {
     "title": "Dasbor",
     "subtitle": "Kekayaan bersih Anda di seluruh portofolio.",

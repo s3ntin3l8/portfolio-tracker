@@ -242,6 +242,87 @@ describe("CSV import → confirm flow", () => {
     ).toBe("csv");
   });
 
+  it("lists imports, discards a draft, and undoes a confirmed import", async () => {
+    const t = await token("hist-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Hist", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // One draft we'll discard, one we'll confirm then undo.
+    const draftImp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    const confirmImp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${confirmImp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: confirmImp.drafts },
+    });
+
+    // List: newest first, with status + count.
+    const list = await app.inject({ method: "GET", url: "/imports", headers: auth(t) });
+    expect(list.statusCode).toBe(200);
+    const rows = list.json() as Array<{ id: string; status: string; count: number }>;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id)).toContain(draftImp.importId);
+    expect(rows.find((r) => r.id === confirmImp.importId)!.status).toBe("confirmed");
+    expect(rows.find((r) => r.id === draftImp.importId)!.count).toBe(1);
+
+    // Discard the draft (confirmed imports can't be discarded — 409).
+    expect(
+      (await app.inject({ method: "POST", url: `/imports/${draftImp.importId}/discard`, headers: auth(t) }))
+        .statusCode,
+    ).toBe(204);
+    expect(
+      (await app.inject({ method: "POST", url: `/imports/${confirmImp.importId}/discard`, headers: auth(t) }))
+        .statusCode,
+    ).toBe(409);
+
+    // Undo the confirmed import: its transaction is removed and it's marked discarded.
+    const undo = await app.inject({
+      method: "DELETE",
+      url: `/imports/${confirmImp.importId}`,
+      headers: auth(t),
+    });
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json().removed).toBe(1);
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(holdings.json()).toHaveLength(0);
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${confirmImp.importId}`, headers: auth(t) }))
+        .json().status,
+    ).toBe("discarded");
+
+    // Another user can't touch these imports.
+    const other = await token("hist-other");
+    expect(
+      (await app.inject({ method: "DELETE", url: `/imports/${draftImp.importId}`, headers: auth(other) }))
+        .statusCode,
+    ).toBe(404);
+  });
+
   it("rejects importing into another user's portfolio", async () => {
     const tA = await token("imp-a");
     const tB = await token("imp-b");
