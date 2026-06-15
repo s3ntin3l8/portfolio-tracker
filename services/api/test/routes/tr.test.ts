@@ -1,0 +1,248 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import crypto from "node:crypto";
+import { eq } from "drizzle-orm";
+import { generateKeyPair, SignJWT, type KeyLike } from "jose";
+import { trConnections } from "@portfolio/db";
+import { buildApp } from "../../src/app.js";
+import { getDb, closeDb } from "../../src/db/client.js";
+import { PytrError, PytrUnavailableError } from "../../src/services/pytr/runner.js";
+import type { PytrRunner } from "../../src/services/pytr/runner.js";
+
+// A fake runner so route tests never spawn Python. The route only uses these four
+// methods; behaviour is tweakable per test.
+class FakePytr {
+  pending = new Set<string>();
+  startResult: { countdown: number } | Error = { countdown: 30 };
+  submitResult: string | Error = "MOZILLA_COOKIE_JAR";
+  async startPairing(userId: string) {
+    if (this.startResult instanceof Error) throw this.startResult;
+    this.pending.add(userId);
+    return this.startResult;
+  }
+  hasPendingPairing(userId: string) {
+    return this.pending.has(userId);
+  }
+  async submitCode(userId: string, _code: string) {
+    if (this.submitResult instanceof Error) throw this.submitResult;
+    this.pending.delete(userId);
+    return this.submitResult;
+  }
+  cancelPairing(userId: string) {
+    this.pending.delete(userId);
+  }
+}
+
+const asRunner = (f: FakePytr) => f as unknown as PytrRunner;
+
+const ISSUER = "https://auth.test/o/p/";
+const AUDIENCE = "portfolio-tracker";
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+let privateKey: KeyLike;
+let publicKey: KeyLike;
+
+async function token(sub: string) {
+  return new SignJWT({ email: `${sub}@example.com` })
+    .setProtectedHeader({ alg: "ES256" })
+    .setSubject(sub)
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKey);
+}
+const auth = (t: string) => ({ authorization: `Bearer ${t}` });
+
+async function portfolioFor(app: App, t: string): Promise<string> {
+  const res = await app.inject({
+    method: "POST",
+    url: "/portfolios",
+    headers: auth(t),
+    payload: { name: "TR", baseCurrency: "EUR" },
+  });
+  return res.json().id;
+}
+
+describe("Trade Republic connection (encryption enabled)", () => {
+  let app: App;
+  let fake: FakePytr;
+
+  beforeAll(async () => {
+    const kp = await generateKeyPair("ES256");
+    privateKey = kp.privateKey;
+    publicKey = kp.publicKey;
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    process.env.DB_ENCRYPTION_KEY = crypto.randomBytes(32).toString("base64url");
+    fake = new FakePytr();
+    app = await buildApp({ authKey: kp.publicKey, pytr: asRunner(fake) });
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+    delete process.env.DB_ENCRYPTION_KEY;
+  });
+
+  it("pairs end to end: connect → awaiting_2fa → verify → connected", async () => {
+    const t = await token("tr-user");
+    const portfolioId = await portfolioFor(app, t);
+
+    const start = await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+4915112345678", pin: "1234", portfolioId },
+    });
+    expect(start.statusCode).toBe(202);
+    expect(start.json()).toEqual({ status: "awaiting_2fa", countdown: 30 });
+
+    const pending = await app.inject({
+      method: "GET",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(pending.json()).toMatchObject({ status: "awaiting_2fa", portfolioId });
+
+    const verify = await app.inject({
+      method: "POST",
+      url: "/tr/connection/verify",
+      headers: auth(t),
+      payload: { code: "9999" },
+    });
+    expect(verify.statusCode).toBe(200);
+    expect(verify.json()).toEqual({ status: "connected" });
+
+    const connected = await app.inject({
+      method: "GET",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(connected.json()).toMatchObject({ status: "connected", lastError: null });
+
+    // The session is stored encrypted at rest, never as the raw cookie jar.
+    const [row] = await getDb()
+      .select()
+      .from(trConnections)
+      .where(eq(trConnections.status, "connected"));
+    expect(row.sessionEnc).toMatch(/^enc:/);
+    expect(row.sessionEnc).not.toContain("MOZILLA_COOKIE_JAR");
+    expect(row.pinEnc).not.toBe("1234");
+  });
+
+  it("404s when pairing into a portfolio the user does not own", async () => {
+    const owner = await token("tr-owner");
+    const other = await token("tr-intruder");
+    const portfolioId = await portfolioFor(app, owner);
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(other),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("409s on verify when no pairing is in progress", async () => {
+    const t = await token("tr-nopair");
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/verify",
+      headers: auth(t),
+      payload: { code: "0000" },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("400s on a bad 2FA code and records the error", async () => {
+    const t = await token("tr-badcode");
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    fake.submitResult = new PytrError("complete_weblogin failed: bad code");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/verify",
+      headers: auth(t),
+      payload: { code: "0000" },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "invalid_code" });
+
+    const state = await app.inject({
+      method: "GET",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(state.json().status).toBe("error");
+    fake.submitResult = "MOZILLA_COOKIE_JAR"; // restore for other tests
+  });
+
+  it("503s when pytr is unavailable", async () => {
+    const t = await token("tr-unavail");
+    const portfolioId = await portfolioFor(app, t);
+    fake.startResult = new PytrUnavailableError();
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: "pytr_not_available" });
+    fake.startResult = { countdown: 30 };
+  });
+
+  it("disconnects: DELETE wipes the connection", async () => {
+    const t = await token("tr-disc");
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    const del = await app.inject({
+      method: "DELETE",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(del.statusCode).toBe(204);
+    const after = await app.inject({
+      method: "GET",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(after.json().status).toBe("disconnected");
+  });
+});
+
+describe("Trade Republic connection (encryption disabled)", () => {
+  it("503s when DB_ENCRYPTION_KEY is unset — refuses to store plaintext secrets", async () => {
+    delete process.env.DB_ENCRYPTION_KEY;
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    const app = await buildApp({ authKey: publicKey, pytr: asRunner(new FakePytr()) });
+    const t = await token("tr-noenc");
+    const portfolioId = await portfolioFor(app, t);
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: "encryption_required" });
+    await app.close();
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+  });
+});
