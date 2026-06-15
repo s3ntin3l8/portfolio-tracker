@@ -14,6 +14,9 @@ import {
   computeHoldings,
   aggregatePortfolios,
   xirr,
+  projectCoupons,
+  trailingIncomeByInstrument,
+  trailingYield,
   type CoreTransaction,
   type CorporateAction,
   type CashFlowPoint,
@@ -400,6 +403,96 @@ export async function transactionsRoute(app: FastifyInstance) {
       portfolioCount: pfs.length,
       asOf: asOf.toISOString(),
     };
+  });
+
+  // Income outlook across the user's portfolios: upcoming bond coupons (projected
+  // from schedule) + trailing-12-month yield per income-paying holding.
+  app.get("/networth/income", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const [u] = await app.db
+      .select({ displayCurrency: users.displayCurrency })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    const display = u?.displayCurrency ?? "IDR";
+
+    const pfs = await app.db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, id));
+
+    const summaries = [];
+    const allTxns: CoreTransaction[] = [];
+    for (const p of pfs) {
+      const { coreTxns, summary } = await loadValuation(p.id, display);
+      summaries.push(summary);
+      allTxns.push(...coreTxns);
+    }
+    const aggregated = aggregatePortfolios(summaries, display);
+
+    // Trailing-12-month income per instrument, FX-converted to the display currency.
+    const incomeCurrencies = [
+      ...new Set(
+        allTxns
+          .filter((t) => t.type === "dividend" || t.type === "coupon")
+          .map((t) => t.currency),
+      ),
+    ];
+    const rates = await getFxRates(app.db, incomeCurrencies, display);
+    const fx = makeFxRateFn(rates, display);
+    const since = new Date();
+    since.setUTCFullYear(since.getUTCFullYear() - 1);
+    const trailing = trailingIncomeByInstrument(allTxns, since, display, fx);
+
+    // Yields: held instruments with a market value that paid income in the last year.
+    const meta = await instrumentMeta(aggregated.holdings.map((h) => h.instrumentId));
+    const yields = aggregated.holdings
+      .filter(
+        (h) =>
+          h.marketValue !== null &&
+          Number(h.marketValue) !== 0 &&
+          Number(trailing[h.instrumentId] ?? 0) > 0,
+      )
+      .map((h) => {
+        const trailingIncome = trailing[h.instrumentId] ?? "0";
+        const im = meta.get(h.instrumentId);
+        return {
+          instrumentId: h.instrumentId,
+          symbol: im?.symbol ?? "—",
+          name: im?.name ?? null,
+          trailingIncome,
+          marketValue: h.marketValue as string,
+          yield: trailingYield(trailingIncome, h.marketValue as string),
+          currency: display,
+        };
+      })
+      .sort((a, b) => Number(b.yield ?? 0) - Number(a.yield ?? 0));
+
+    // Upcoming coupons from held bonds (next 12 months).
+    const heldIds = aggregated.holdings.map((h) => h.instrumentId);
+    const bondRows = heldIds.length
+      ? await app.db
+          .select()
+          .from(instruments)
+          .where(and(inArray(instruments.id, heldIds), eq(instruments.assetClass, "bond")))
+      : [];
+    const qtyById = new Map(aggregated.holdings.map((h) => [h.instrumentId, h.quantity]));
+    const positions = bondRows
+      .filter((b) => b.faceValue && b.couponRate && b.maturityDate)
+      .map((b) => ({
+        instrumentId: b.id,
+        symbol: b.symbol,
+        name: b.name,
+        quantity: qtyById.get(b.id) ?? "0",
+        faceValue: b.faceValue as string,
+        couponRate: b.couponRate as string,
+        couponSchedule: b.couponSchedule,
+        maturityDate: b.maturityDate as string,
+        currency: b.currency,
+      }));
+    const upcoming = projectCoupons(positions, 12);
+
+    return { displayCurrency: display, upcoming, yields };
   });
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each

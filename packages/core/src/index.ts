@@ -16,3 +16,10 @@ export {
   type HoldingValuation,
   type SummarizeInput,
 } from "./valuation.js";
+export {
+  projectCoupons,
+  trailingIncomeByInstrument,
+  trailingYield,
+  type BondPosition,
+  type ProjectedCoupon,
+} from "./income.js";

@@ -13,6 +13,7 @@ import {
   type Transaction,
   type HoldingValuation,
   type ImportRecord,
+  type IncomeOutlook,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -255,6 +256,17 @@ export async function loadInstrument(
       api.listCorporateActions(id),
     ]);
     return { instrument, history, corporateActions };
+  } catch {
+    return null;
+  }
+}
+
+/** Forward income outlook: upcoming coupons + per-holding trailing yield. */
+export async function loadIncomeOutlook(): Promise<IncomeOutlook | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    return await api.getIncomeOutlook();
   } catch {
     return null;
   }

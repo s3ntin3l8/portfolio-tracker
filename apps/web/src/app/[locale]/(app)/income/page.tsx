@@ -10,8 +10,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
-import { loadIncome, type IncomeEvent } from "@/lib/server-api";
-import { formatMoney } from "@/lib/utils";
+import {
+  loadIncome,
+  loadIncomeOutlook,
+  type IncomeEvent,
+} from "@/lib/server-api";
+import { formatMoney, formatPercent } from "@/lib/utils";
 
 /** Sum a year's events per currency (income can span currencies). */
 function totalsByCurrency(events: IncomeEvent[]): Record<string, number> {
@@ -34,7 +38,13 @@ export default async function IncomePage({
   const te = await getTranslations("Empty");
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
-  const result = await loadIncome();
+  const [result, outlook] = await Promise.all([
+    loadIncome(),
+    loadIncomeOutlook(),
+  ]);
+  const upcoming = outlook?.upcoming ?? [];
+  const yields = outlook?.yields ?? [];
+  const hasOutlook = upcoming.length > 0 || yields.length > 0;
 
   const heading = (
     <div>
@@ -43,7 +53,7 @@ export default async function IncomePage({
     </div>
   );
 
-  if (result.status === "unavailable" || result.events.length === 0) {
+  if (result.status === "unavailable" || (result.events.length === 0 && !hasOutlook)) {
     const empty = result.status === "empty";
     return (
       <div className="space-y-6">
@@ -84,6 +94,86 @@ export default async function IncomePage({
   return (
     <div className="space-y-8">
       {heading}
+
+      {yields.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">{t("yieldTitle")}</h2>
+          <div className="rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("instrument")}</TableHead>
+                  <TableHead className="text-right">{t("trailing")}</TableHead>
+                  <TableHead className="text-right">{t("value")}</TableHead>
+                  <TableHead className="text-right">{t("yieldCol")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {yields.map((y) => (
+                  <TableRow key={y.instrumentId}>
+                    <TableCell>
+                      <div className="font-medium">{y.symbol}</div>
+                      {y.name && (
+                        <div className="text-xs text-muted-foreground">
+                          {y.name}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular text-right">
+                      {formatMoney(Number(y.trailingIncome), y.currency, locale)}
+                    </TableCell>
+                    <TableCell className="tabular text-right text-muted-foreground">
+                      {formatMoney(Number(y.marketValue), y.currency, locale)}
+                    </TableCell>
+                    <TableCell className="tabular text-right font-medium">
+                      {y.yield !== null
+                        ? formatPercent(Number(y.yield), locale)
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
+
+      {upcoming.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">{t("upcomingTitle")}</h2>
+          <div className="rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("date")}</TableHead>
+                  <TableHead>{t("instrument")}</TableHead>
+                  <TableHead className="text-right">{t("amount")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {upcoming.map((c, i) => (
+                  <TableRow key={`${c.instrumentId}-${c.date}-${i}`}>
+                    <TableCell className="tabular whitespace-nowrap text-muted-foreground">
+                      {df.format(new Date(c.date))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{c.symbol}</div>
+                      {c.name && (
+                        <div className="text-xs text-muted-foreground">
+                          {c.name}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular text-right text-success">
+                      {formatMoney(Number(c.amount), c.currency, locale)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
 
       {[...byYear.entries()].map(([year, events]) => {
         const totals = totalsByCurrency(events);

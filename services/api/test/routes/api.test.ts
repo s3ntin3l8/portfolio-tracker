@@ -33,6 +33,8 @@ describe("auth + portfolios + transactions", () => {
     publicJwk = await exportJWK(kp.publicKey);
     process.env.AUTHENTIK_ISSUER = ISSUER;
     process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    // This suite shares one app across many requests in a single rate-limit window.
+    process.env.RATE_LIMIT_MAX = "10000";
     app = await buildApp({ authKey: kp.publicKey });
   });
 
@@ -41,6 +43,7 @@ describe("auth + portfolios + transactions", () => {
     await closeDb();
     delete process.env.AUTHENTIK_ISSUER;
     delete process.env.AUTHENTIK_AUDIENCE;
+    delete process.env.RATE_LIMIT_MAX;
   });
 
   it("rejects unauthenticated and invalid tokens", async () => {
@@ -872,6 +875,84 @@ describe("auth + portfolios + transactions", () => {
     const merged = nw.holdings.find((h: { instrumentId: string }) => h.instrumentId === bbca.id);
     expect(merged.quantity).toBe("150"); // 100 + 50 across portfolios
     expect(merged.instrument.symbol).toBe("BBCA");
+  });
+
+  it("reports an income outlook: upcoming coupons + trailing yield", async () => {
+    const t = await token("income-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Bonds", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // A bond maturing in ~100 days (so its maturity coupon is the only one inside
+    // the 12-month horizon), valued at par since no live quote exists.
+    const maturity = new Date(Date.now() + 100 * 86_400_000).toISOString().slice(0, 10);
+    const recentCoupon = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const [bond] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "ORI-T",
+        market: "IDX",
+        assetClass: "bond",
+        currency: "IDR",
+        name: "ORI Test",
+        faceValue: "1000000",
+        couponRate: "0.06",
+        couponSchedule: "semiannual",
+        maturityDate: maturity,
+      })
+      .returning();
+
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: bond.id,
+        quantity: "10",
+        price: "1000000",
+        currency: "IDR",
+        executedAt: "2026-01-05T00:00:00.000Z",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "coupon",
+        instrumentId: bond.id,
+        quantity: "0",
+        price: "300000",
+        currency: "IDR",
+        executedAt: recentCoupon,
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/networth/income",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // One upcoming coupon (the maturity payment), 1,000,000 × 10 × 0.06 ÷ 2.
+    expect(body.upcoming).toHaveLength(1);
+    expect(body.upcoming[0]).toMatchObject({ symbol: "ORI-T", amount: "300000" });
+
+    // Trailing yield: 300,000 income over par value 10,000,000 = 0.03.
+    const y = body.yields.find((r: { instrumentId: string }) => r.instrumentId === bond.id);
+    expect(y).toMatchObject({
+      trailingIncome: "300000",
+      marketValue: "10000000",
+      yield: "0.03",
+    });
   });
 
   it("fetches a single instrument and its price history", async () => {

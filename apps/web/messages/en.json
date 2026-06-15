@@ -29,6 +29,11 @@
     "instrument": "Instrument",
     "amount": "Amount",
     "yearTotal": "Total:",
+    "yieldTitle": "Trailing yield (12m)",
+    "trailing": "Income (12m)",
+    "value": "Value",
+    "yieldCol": "Yield",
+    "upcomingTitle": "Upcoming coupons",
     "emptyTitle": "No income yet",
     "emptyBody": "Dividends and coupons appear here once you record them as transactions."
   },

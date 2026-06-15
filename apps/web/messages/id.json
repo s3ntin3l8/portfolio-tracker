@@ -29,6 +29,11 @@
     "instrument": "Instrumen",
     "amount": "Jumlah",
     "yearTotal": "Total:",
+    "yieldTitle": "Imbal hasil 12 bulan",
+    "trailing": "Pendapatan (12bln)",
+    "value": "Nilai",
+    "yieldCol": "Imbal hasil",
+    "upcomingTitle": "Kupon mendatang",
     "emptyTitle": "Belum ada pendapatan",
     "emptyBody": "Dividen dan kupon muncul di sini setelah Anda mencatatnya sebagai transaksi."
   },

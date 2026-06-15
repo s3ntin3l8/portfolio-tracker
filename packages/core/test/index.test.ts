@@ -9,6 +9,10 @@ import {
   netWorth,
   summarizePortfolio,
   aggregatePortfolios,
+  projectCoupons,
+  trailingIncomeByInstrument,
+  trailingYield,
+  type BondPosition,
   type CoreTransaction,
   type CorporateAction,
   type PortfolioSummary,
@@ -268,6 +272,61 @@ describe("summarizePortfolio", () => {
     expect(summary.exposureByCurrency.IDR).toBe("1050000");
     // USD: holding 10×110=1,100 + cash (200 − 1,000)=−800 → ×16,000 = 4,800,000.
     expect(summary.exposureByCurrency.USD).toBe("4800000");
+  });
+});
+
+describe("projectCoupons", () => {
+  const bond = (over: Partial<BondPosition> = {}): BondPosition => ({
+    instrumentId: "ori",
+    symbol: "ORI023",
+    quantity: "10",
+    faceValue: "1000000",
+    couponRate: "0.06",
+    couponSchedule: "semiannual",
+    maturityDate: "2027-06-10",
+    currency: "IDR",
+    ...over,
+  });
+
+  const now = new Date("2026-06-15T00:00:00.000Z");
+
+  it("projects semiannual coupons anchored to maturity within the horizon", () => {
+    const coupons = projectCoupons([bond()], 12, now);
+    // Coupon dates step back from 2027-06-10 by 6 months: 2026-12-10 and 2027-06-10.
+    expect(coupons.map((c) => c.date)).toEqual(["2026-12-10", "2027-06-10"]);
+    // 1,000,000 × 10 × 0.06 ÷ 2 per period.
+    expect(coupons[0].amount).toBe("300000");
+    expect(coupons[0].symbol).toBe("ORI023");
+  });
+
+  it("skips zero-quantity positions and unparseable maturities", () => {
+    expect(projectCoupons([bond({ quantity: "0" })], 12, now)).toHaveLength(0);
+    expect(projectCoupons([bond({ maturityDate: "n/a" })], 12, now)).toHaveLength(0);
+  });
+});
+
+describe("trailingIncomeByInstrument / trailingYield", () => {
+  const since = new Date("2025-06-15T00:00:00.000Z");
+  const ev = (over: Partial<CoreTransaction>): CoreTransaction => tx(over);
+
+  it("sums dividend and coupon cash per instrument since the cutoff", () => {
+    const income = trailingIncomeByInstrument(
+      [
+        ev({ instrumentId: "a", type: "dividend", price: "100", executedAt: new Date("2026-01-10") }),
+        ev({ instrumentId: "a", type: "dividend", price: "150", executedAt: new Date("2026-03-10") }),
+        ev({ instrumentId: "b", type: "coupon", price: "300", executedAt: new Date("2026-02-10") }),
+        ev({ instrumentId: "a", type: "dividend", price: "999", executedAt: new Date("2024-01-10") }), // too old
+        ev({ instrumentId: "a", type: "buy", price: "50", executedAt: new Date("2026-04-10") }), // not income
+      ],
+      since,
+      "IDR",
+    );
+    expect(income).toEqual({ a: "250", b: "300" });
+  });
+
+  it("computes yield as income over market value, null at zero value", () => {
+    expect(trailingYield("300000", "6000000")).toBe("0.05");
+    expect(trailingYield("100", "0")).toBeNull();
   });
 });
 

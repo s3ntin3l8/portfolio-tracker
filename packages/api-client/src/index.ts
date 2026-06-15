@@ -160,6 +160,34 @@ export interface NetWorthPoint {
   netWorth: string;
 }
 
+/** A projected future coupon payment for a held bond (instrument currency). */
+export interface ProjectedCoupon {
+  instrumentId: string;
+  symbol: string;
+  name: string | null;
+  date: string; // YYYY-MM-DD
+  amount: string;
+  currency: string;
+}
+
+/** Trailing-12-month income + yield for an income-paying holding (display currency). */
+export interface InstrumentYield {
+  instrumentId: string;
+  symbol: string;
+  name: string | null;
+  trailingIncome: string;
+  marketValue: string;
+  yield: string | null;
+  currency: string;
+}
+
+/** Forward income outlook: upcoming coupons + per-holding trailing yield. */
+export interface IncomeOutlook {
+  displayCurrency: string;
+  upcoming: ProjectedCoupon[];
+  yields: InstrumentYield[];
+}
+
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
@@ -233,6 +261,7 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
+    getIncomeOutlook: () => request<IncomeOutlook>("GET", "/networth/income"),
     getNetWorthHistory: (range = "1y") =>
       request<NetWorthPoint[]>(
         "GET",
