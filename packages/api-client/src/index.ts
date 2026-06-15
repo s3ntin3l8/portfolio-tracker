@@ -310,11 +310,15 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/performance`,
       ),
 
-    importCsv: (portfolioId: string, content: string) =>
+    importCsv: (
+      portfolioId: string,
+      content: string,
+      format: "generic" | "dkb" = "generic",
+    ) =>
       request<CsvImportResult>(
         "POST",
         `/portfolios/${portfolioId}/imports/csv`,
-        { content },
+        { content, format },
       ),
     importScreenshot: (
       portfolioId: string,

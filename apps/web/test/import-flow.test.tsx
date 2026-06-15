@@ -82,7 +82,26 @@ describe("ImportFlow", () => {
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
+    expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "generic");
     expect(client.importScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("passes the DKB format when the DKB CSV source is selected", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi.fn(async () => ({ importId: "imp3", drafts: [DRAFT], errors: [] })),
+      confirmImport: vi.fn(),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.click(screen.getByRole("radio", { name: messages.Import.csvFormat.dkb }));
+    const csv = new File(["Datum der Erstellung;..."], "dkb.csv", { type: "text/csv" });
+    fireEvent.change(fileInput(container), { target: { files: [csv] } });
+
+    await waitFor(() =>
+      expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "dkb"),
+    );
   });
 
   it("surfaces the not-configured message on a 503", async () => {

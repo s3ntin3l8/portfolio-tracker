@@ -20,8 +20,8 @@ export function ImportFlowClient({ portfolioId }: { portfolioId: string }) {
   const client: ImportClient = {
     importScreenshot: (pid, image, mimeType) =>
       api.importScreenshot(pid, image, mimeType) as unknown as Promise<ImportResult>,
-    importCsv: (pid, content) =>
-      api.importCsv(pid, content) as unknown as Promise<ImportResult>,
+    importCsv: (pid, content, format) =>
+      api.importCsv(pid, content, format) as unknown as Promise<ImportResult>,
     confirmImport: async (importId, drafts) => {
       const res = await api.confirmImport(
         importId,

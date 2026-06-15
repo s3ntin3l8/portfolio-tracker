@@ -51,6 +51,11 @@
       "screenshot": "Screenshot",
       "csv": "CSV file"
     },
+    "csvFormat": {
+      "label": "Format",
+      "generic": "Generic",
+      "dkb": "DKB (Germany)"
+    },
     "dropzone": {
       "title": "Add a transaction",
       "hint": "From a broker, gold app or bank confirmation",

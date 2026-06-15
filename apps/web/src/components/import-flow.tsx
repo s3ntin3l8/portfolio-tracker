@@ -48,7 +48,11 @@ export interface ImportClient {
     image: string,
     mimeType?: string,
   ): Promise<ImportResult>;
-  importCsv(portfolioId: string, content: string): Promise<ImportResult>;
+  importCsv(
+    portfolioId: string,
+    content: string,
+    format?: CsvFormat,
+  ): Promise<ImportResult>;
   confirmImport(
     importId: string,
     drafts: ImportDraft[],
@@ -57,6 +61,7 @@ export interface ImportClient {
 
 type Step = "upload" | "parsing" | "review" | "done";
 type Mode = "screenshot" | "csv";
+type CsvFormat = "generic" | "dkb";
 
 const STEPS: Step[] = ["upload", "review", "done"];
 
@@ -116,6 +121,7 @@ export function ImportFlow({
   const t = useTranslations("Import");
   const [step, setStep] = useState<Step>("upload");
   const [mode, setMode] = useState<Mode>("screenshot");
+  const [csvFormat, setCsvFormat] = useState<CsvFormat>("generic");
   const [drafts, setDrafts] = useState<ImportDraft[]>([]);
   const [importId, setImportId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +144,7 @@ export function ImportFlow({
     try {
       const result =
         mode === "csv"
-          ? await client.importCsv(portfolioId, await fileToText(file))
+          ? await client.importCsv(portfolioId, await fileToText(file), csvFormat)
           : await client.importScreenshot(
               portfolioId,
               await fileToBase64(file),
@@ -261,6 +267,38 @@ export function ImportFlow({
               {t("tabs.csv")}
             </button>
           </div>
+
+          {/* CSV source format — generic columns or a DKB (German) export */}
+          {mode === "csv" && (
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">
+                {t("csvFormat.label")}
+              </Label>
+              <div
+                role="radiogroup"
+                aria-label={t("csvFormat.label")}
+                className="inline-flex rounded-lg border border-border p-1 text-sm"
+              >
+                {(["generic", "dkb"] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    role="radio"
+                    aria-checked={csvFormat === fmt}
+                    onClick={() => setCsvFormat(fmt)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 font-medium transition-colors",
+                      csvFormat === fmt
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {t(`csvFormat.${fmt}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button
             type="button"

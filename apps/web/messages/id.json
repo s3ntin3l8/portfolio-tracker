@@ -51,6 +51,11 @@
       "screenshot": "Tangkapan layar",
       "csv": "Berkas CSV"
     },
+    "csvFormat": {
+      "label": "Format",
+      "generic": "Umum",
+      "dkb": "DKB (Jerman)"
+    },
     "dropzone": {
       "title": "Tambah transaksi",
       "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
