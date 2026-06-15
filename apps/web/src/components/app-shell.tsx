@@ -7,6 +7,7 @@ import {
   Wallet,
   ArrowLeftRight,
   ScanLine,
+  Briefcase,
   Settings,
   Menu,
   X,
@@ -24,6 +25,7 @@ const NAV = [
   { href: "/holdings", icon: Wallet, key: "holdings" },
   { href: "/transactions", icon: ArrowLeftRight, key: "transactions" },
   { href: "/import", icon: ScanLine, key: "import" },
+  { href: "/portfolios", icon: Briefcase, key: "portfolios" },
   { href: "/settings", icon: Settings, key: "settings" },
 ] as const;
 

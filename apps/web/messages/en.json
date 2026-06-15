@@ -16,8 +16,16 @@
     "holdings": "Holdings",
     "transactions": "Transactions",
     "import": "Import",
+    "portfolios": "Portfolios",
     "settings": "Settings",
     "signOut": "Sign out"
+  },
+  "Portfolios": {
+    "title": "Portfolios",
+    "subtitle": "Create and manage your portfolios.",
+    "value": "Value",
+    "create": "Create a portfolio",
+    "empty": "No portfolios yet — create your first below."
   },
   "Import": {
     "title": "Import transactions",
