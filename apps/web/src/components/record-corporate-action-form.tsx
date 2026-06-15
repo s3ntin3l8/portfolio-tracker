@@ -7,6 +7,7 @@ import type { ApiClient, Instrument } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type RecordCorpActionClient = Pick<
@@ -16,9 +17,6 @@ export type RecordCorpActionClient = Pick<
 
 const TYPES = ["split", "bonus", "rights"] as const;
 type CaType = (typeof TYPES)[number];
-
-const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function RecordCorporateActionForm({
   client,
@@ -141,18 +139,17 @@ export function RecordCorporateActionForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="ca-type">{t("type")}</Label>
-          <select
+          <Select
             id="ca-type"
             value={type}
             onChange={(e) => setType(e.target.value as CaType)}
-            className={selectClass}
           >
             {TYPES.map((ty) => (
               <option key={ty} value={ty}>
                 {tt(ty)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ca-ratio">{t("ratio")}</Label>

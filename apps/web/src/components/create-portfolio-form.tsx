@@ -7,6 +7,7 @@ import type { ApiClient } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type CreatePortfolioClient = Pick<ApiClient, "createPortfolio">;
@@ -67,18 +68,17 @@ export function CreatePortfolioForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="portfolio-currency">{t("currency")}</Label>
-        <select
+        <Select
           id="portfolio-currency"
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {CURRENCIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <Button type="submit" disabled={busy || !name.trim()}>

@@ -7,6 +7,7 @@ import type { ApiClient } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type UpdateProfileClient = Pick<ApiClient, "updateMe">;
@@ -87,21 +88,20 @@ export function UpdateProfileForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="profile-currency">{t("displayCurrency")}</Label>
-        <select
+        <Select
           id="profile-currency"
           value={currency}
           onChange={(e) => {
             setCurrency(e.target.value);
             setSaved(false);
           }}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {CURRENCIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="text-xs text-muted-foreground">{t("displayCurrencyHint")}</p>
       </div>
 

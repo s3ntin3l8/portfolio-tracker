@@ -11,6 +11,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type AddTransactionClient = Pick<
@@ -52,9 +53,6 @@ type TxType = (typeof TX_TYPES)[number];
 const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf"] as const;
 const UNITS = ["shares", "grams", "units"] as const;
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
-
-const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Gold holdings use the Antam buyback market; everything else IDX (mirrors the API). */
 function marketForAssetClass(assetClass: string): string {
@@ -235,18 +233,17 @@ export function AddTransactionForm({
       )}
 
       <Field label={t("type")} htmlFor="tx-type">
-        <select
+        <Select
           id="tx-type"
           value={type}
           onChange={(e) => setType(e.target.value as TxType)}
-          className={selectClass}
         >
           {TX_TYPES.map((ty) => (
             <option key={ty} value={ty}>
               {tt(ty)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
 
       {!isCash && (
@@ -352,34 +349,32 @@ export function AddTransactionForm({
                   />
                 </Field>
                 <Field label={t("assetClass")} htmlFor="tx-class">
-                  <select
+                  <Select
                     id="tx-class"
                     value={assetClass}
                     onChange={(e) =>
                       setAssetClass(e.target.value as (typeof ASSET_CLASSES)[number])
                     }
-                    className={selectClass}
                   >
                     {ASSET_CLASSES.map((c) => (
                       <option key={c} value={c}>
                         {tc(c)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label={t("unit")} htmlFor="tx-unit">
-                  <select
+                  <Select
                     id="tx-unit"
                     value={unit}
                     onChange={(e) => setUnit(e.target.value as (typeof UNITS)[number])}
-                    className={selectClass}
                   >
                     {UNITS.map((u) => (
                       <option key={u} value={u}>
                         {t(`units.${u}`)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               </div>
             </>
@@ -418,18 +413,17 @@ export function AddTransactionForm({
           </Field>
         )}
         <Field label={t("currency")} htmlFor="tx-currency">
-          <select
+          <Select
             id="tx-currency"
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
-            className={selectClass}
           >
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("date")} htmlFor="tx-date">
           <Input
