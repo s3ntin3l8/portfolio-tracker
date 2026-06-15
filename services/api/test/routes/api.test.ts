@@ -547,6 +547,39 @@ describe("auth + portfolios + transactions", () => {
     expect(merged.instrument.symbol).toBe("BBCA");
   });
 
+  it("fetches a single instrument and its price history", async () => {
+    const t = await token("user-a");
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "HIST", market: "IDX", assetClass: "equity", currency: "IDR", name: "Histco" })
+      .returning();
+
+    const one = await app.inject({
+      method: "GET",
+      url: `/instruments/${inst.id}`,
+      headers: auth(t),
+    });
+    expect(one.statusCode).toBe(200);
+    expect(one.json().symbol).toBe("HIST");
+
+    // History returns an array (empty under the fixture provider, which has no history).
+    const hist = await app.inject({
+      method: "GET",
+      url: `/instruments/${inst.id}/history?range=1y`,
+      headers: auth(t),
+    });
+    expect(hist.statusCode).toBe(200);
+    expect(Array.isArray(hist.json())).toBe(true);
+
+    // Unknown instrument 404s.
+    const missing = await app.inject({
+      method: "GET",
+      url: `/instruments/${inst.id.replace(/.$/, "0")}/history`,
+      headers: auth(t),
+    });
+    expect([404, 400]).toContain(missing.statusCode);
+  });
+
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");

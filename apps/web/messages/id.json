@@ -103,6 +103,16 @@
     "asOf": "per {time}",
     "live": "Langsung"
   },
+  "Instrument": {
+    "priceHistory": "Riwayat harga",
+    "noHistory": "Belum ada riwayat harga — muncul dengan sumber data pasar yang dikonfigurasi.",
+    "corporateActions": "Aksi korporasi",
+    "noCorporateActions": "Belum ada.",
+    "ratio": "Rasio",
+    "exDate": "Tanggal ex",
+    "notFound": "Instrumen tidak ditemukan",
+    "notFoundBody": "Mungkin telah dihapus, atau API tidak tersedia."
+  },
   "CorpAction": {
     "title": "Catat aksi korporasi",
     "subtitle": "Terapkan pemecahan, bonus, atau rights pada instrumen.",

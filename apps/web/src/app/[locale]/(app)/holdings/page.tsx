@@ -112,7 +112,12 @@ export default async function HoldingsPage({
             return (
               <TableRow key={h.instrumentId}>
                 <TableCell>
-                  <div className="font-medium">{h.instrument?.symbol ?? "—"}</div>
+                  <Link
+                    href={`/instruments/${h.instrumentId}`}
+                    className="font-medium hover:underline"
+                  >
+                    {h.instrument?.symbol ?? "—"}
+                  </Link>
                   <div className="text-xs text-muted-foreground">
                     {h.instrument?.name ?? h.instrumentId}
                   </div>
