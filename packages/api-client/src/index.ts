@@ -304,6 +304,10 @@ export function createApiClient(config: ApiClientConfig) {
 
     createCorporateAction: (input: CorporateActionInput) =>
       request<CorporateAction>("POST", "/corporate-actions", input),
+    updateCorporateAction: (id: string, input: Partial<CorporateActionInput>) =>
+      request<CorporateAction>("PATCH", `/corporate-actions/${id}`, input),
+    deleteCorporateAction: (id: string) =>
+      request<void>("DELETE", `/corporate-actions/${id}`),
     listCorporateActions: (instrumentId: string) =>
       request<CorporateAction[]>(
         "GET",

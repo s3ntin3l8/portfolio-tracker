@@ -743,6 +743,93 @@ describe("auth + portfolios + transactions", () => {
     expect(list.json()[0].type).toBe("split");
   });
 
+  it("edits and deletes a corporate action, recomputing holdings", async () => {
+    const t = await token("ca-edit-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Edits", baseCurrency: "IDR" },
+      })
+    ).json().id;
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "EDIT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Editco" })
+      .returning();
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: inst.id,
+        quantity: "100",
+        price: "1000",
+        currency: "IDR",
+        executedAt: "2026-01-05T00:00:00.000Z",
+      },
+    });
+    const ca = (
+      await app.inject({
+        method: "POST",
+        url: "/corporate-actions",
+        headers: auth(t),
+        payload: { instrumentId: inst.id, type: "split", ratio: "2", exDate: "2026-02-01" },
+      })
+    ).json();
+
+    // PATCH the ratio 2:1 → 3:1; holdings recompute to 300 shares.
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/corporate-actions/${ca.id}`,
+      headers: auth(t),
+      payload: { ratio: "3" },
+    });
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().ratio).toBe("3");
+    const afterEdit = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(
+      afterEdit.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+    ).toBe("300");
+
+    // DELETE removes it; holdings fall back to the raw 100 shares.
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/corporate-actions/${ca.id}`,
+      headers: auth(t),
+    });
+    expect(del.statusCode).toBe(204);
+    const afterDelete = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(
+      afterDelete.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+    ).toBe("100");
+
+    // Unknown ids 404.
+    expect(
+      (
+        await app.inject({
+          method: "PATCH",
+          url: `/corporate-actions/${ca.id}`,
+          headers: auth(t),
+          payload: { ratio: "5" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ method: "DELETE", url: `/corporate-actions/${ca.id}`, headers: auth(t) }))
+        .statusCode,
+    ).toBe(404);
+  });
+
   it("aggregates net worth across a user's portfolios", async () => {
     const t = await token("nw-user");
     const mkPortfolio = async (name: string) =>
