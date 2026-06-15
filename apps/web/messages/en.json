@@ -16,6 +16,7 @@
     "holdings": "Holdings",
     "transactions": "Transactions",
     "income": "Income",
+    "savings": "Savings",
     "import": "Import",
     "portfolios": "Portfolios",
     "settings": "Settings",
@@ -36,6 +37,19 @@
     "upcomingTitle": "Upcoming coupons",
     "emptyTitle": "No income yet",
     "emptyBody": "Dividends and coupons appear here once you record them as transactions."
+  },
+  "Savings": {
+    "title": "Savings",
+    "subtitle": "How much you put in over time, and where it's headed.",
+    "totalContributed": "Total contributed",
+    "monthlyAverage": "Average per month",
+    "monthsActive": "{count, plural, one {# month} other {# months}}",
+    "currentValue": "Current value",
+    "simpleGain": "gain",
+    "xirr": "Annualised return",
+    "contributionsOverTime": "Contributions over time",
+    "emptyTitle": "No contributions yet",
+    "emptyBody": "Record deposits or savings-plan purchases and your saving progress appears here."
   },
   "Portfolios": {
     "title": "Portfolios",
