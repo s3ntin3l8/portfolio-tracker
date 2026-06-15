@@ -206,6 +206,19 @@ describe("summarizePortfolio", () => {
     expect(summary.totalRealizedPnL).toBe("50000");
     expect(summary.netWorth).toBe("5199000"); // 1,650,000 + 3,549,000
   });
+
+  it("sums dividend and coupon cash as total income", () => {
+    const summary = summarizePortfolio({
+      transactions: [
+        mk({ type: "dividend", quantity: "0", price: "25000" }),
+        mk({ type: "coupon", instrumentId: I2, price: "37500" }),
+        mk({ type: "buy", quantity: "10", price: "9500" }), // not income
+      ],
+      prices: {},
+      displayCurrency: "IDR",
+    });
+    expect(summary.totalIncome).toBe("62500"); // 25,000 + 37,500
+  });
 });
 
 describe("netWorth", () => {
@@ -248,6 +261,7 @@ describe("aggregatePortfolios", () => {
     totalMarketValue: "0",
     totalUnrealizedPnL: "0",
     totalRealizedPnL: "0",
+    totalIncome: "0",
     ...over,
   });
 

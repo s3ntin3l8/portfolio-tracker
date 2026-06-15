@@ -1,6 +1,6 @@
 import { Decimal } from "decimal.js";
 import { computeHoldings, marketValue } from "./holdings.js";
-import { cashBalances } from "./cash.js";
+import { cashBalances, cashFlow } from "./cash.js";
 import { netWorth, convert, type FxRateFn } from "./networth.js";
 import type { CoreTransaction, CorporateAction, Holding } from "./types.js";
 
@@ -20,6 +20,8 @@ export interface PortfolioSummary {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  /** Cash income received — dividends + bond coupons — in the display currency. */
+  totalIncome: string;
 }
 
 export interface SummarizeInput {
@@ -89,6 +91,20 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     fx,
   });
 
+  let totalIncome = new Decimal(0);
+  for (const tx of input.transactions) {
+    if (tx.type === "dividend" || tx.type === "coupon") {
+      totalIncome = totalIncome.add(
+        convert(
+          cashFlow(tx).toString(),
+          tx.currency,
+          input.displayCurrency,
+          fx,
+        ),
+      );
+    }
+  }
+
   return {
     displayCurrency: input.displayCurrency,
     holdings: valuations,
@@ -98,6 +114,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     totalMarketValue: totalMarketValue.toString(),
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
+    totalIncome: totalIncome.toString(),
   };
 }
 
@@ -115,6 +132,7 @@ export function aggregatePortfolios(
   let totalCost = new Decimal(0);
   let totalMarketValue = new Decimal(0);
   let totalRealized = new Decimal(0);
+  let totalIncome = new Decimal(0);
   let netWorth = new Decimal(0);
 
   const addNullable = (a: string | null, b: string | null): string | null => {
@@ -128,6 +146,7 @@ export function aggregatePortfolios(
     totalCost = totalCost.add(s.totalCost);
     totalMarketValue = totalMarketValue.add(s.totalMarketValue);
     totalRealized = totalRealized.add(s.totalRealizedPnL);
+    totalIncome = totalIncome.add(s.totalIncome);
 
     for (const [currency, amount] of Object.entries(s.cash)) {
       cash[currency] = new Decimal(cash[currency] ?? "0").add(amount).toString();
@@ -164,5 +183,6 @@ export function aggregatePortfolios(
     totalMarketValue: totalMarketValue.toString(),
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
+    totalIncome: totalIncome.toString(),
   };
 }
