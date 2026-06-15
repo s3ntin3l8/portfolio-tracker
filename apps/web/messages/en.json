@@ -15,10 +15,22 @@
     "dashboard": "Dashboard",
     "holdings": "Holdings",
     "transactions": "Transactions",
+    "income": "Income",
     "import": "Import",
     "portfolios": "Portfolios",
     "settings": "Settings",
     "signOut": "Sign out"
+  },
+  "Income": {
+    "title": "Income",
+    "subtitle": "Dividends and bond coupons across your portfolios.",
+    "date": "Date",
+    "type": "Type",
+    "instrument": "Instrument",
+    "amount": "Amount",
+    "yearTotal": "Total:",
+    "emptyTitle": "No income yet",
+    "emptyBody": "Dividends and coupons appear here once you record them as transactions."
   },
   "Portfolios": {
     "title": "Portfolios",

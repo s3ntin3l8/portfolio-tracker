@@ -15,10 +15,22 @@
     "dashboard": "Dasbor",
     "holdings": "Kepemilikan",
     "transactions": "Transaksi",
+    "income": "Pendapatan",
     "import": "Impor",
     "portfolios": "Portofolio",
     "settings": "Pengaturan",
     "signOut": "Keluar"
+  },
+  "Income": {
+    "title": "Pendapatan",
+    "subtitle": "Dividen dan kupon obligasi di seluruh portofolio Anda.",
+    "date": "Tanggal",
+    "type": "Jenis",
+    "instrument": "Instrumen",
+    "amount": "Jumlah",
+    "yearTotal": "Total:",
+    "emptyTitle": "Belum ada pendapatan",
+    "emptyBody": "Dividen dan kupon muncul di sini setelah Anda mencatatnya sebagai transaksi."
   },
   "Portfolios": {
     "title": "Portofolio",

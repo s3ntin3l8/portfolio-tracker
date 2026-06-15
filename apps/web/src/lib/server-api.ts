@@ -62,6 +62,52 @@ export async function loadNetWorthHistory(
   }
 }
 
+export interface IncomeEvent {
+  id: string;
+  date: string;
+  type: string; // "dividend" | "coupon"
+  symbol: string | null;
+  name: string | null;
+  amount: string;
+  currency: string;
+}
+
+/**
+ * Every dividend/coupon cash event across all of the user's portfolios (newest
+ * first), derived from transactions — no dedicated API needed. `empty` = no
+ * portfolio yet; `ok` may still carry zero events (no income recorded).
+ */
+export async function loadIncome(): Promise<{
+  status: "ok" | "empty" | "unavailable";
+  events: IncomeEvent[];
+}> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", events: [] };
+  try {
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty", events: [] };
+    const lists = await Promise.all(
+      portfolios.map((p) => api.listTransactions(p.id)),
+    );
+    const events = lists
+      .flat()
+      .filter((t) => t.type === "dividend" || t.type === "coupon")
+      .map((t) => ({
+        id: t.id,
+        date: t.executedAt,
+        type: t.type,
+        symbol: t.instrument?.symbol ?? null,
+        name: t.instrument?.name ?? null,
+        amount: t.price,
+        currency: t.currency,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    return { status: "ok", events };
+  } catch {
+    return { status: "unavailable", events: [] };
+  }
+}
+
 export interface PortfolioWithValue {
   portfolio: Portfolio;
   netWorth: string;
