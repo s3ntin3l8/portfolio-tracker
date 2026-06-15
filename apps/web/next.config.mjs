@@ -15,6 +15,9 @@ const withSerwist = withSerwistInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Allow the LAN host used for dev (matches the IP in .env.local) to fetch /_next/*
+  // cross-origin without the Next.js dev warning. Hostname only — no protocol/port.
+  allowedDevOrigins: ["192.168.2.152"],
   // Allow importing workspace TS packages directly.
   transpilePackages: [
     "@portfolio/schema",
