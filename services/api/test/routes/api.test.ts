@@ -571,13 +571,13 @@ describe("auth + portfolios + transactions", () => {
     expect(hist.statusCode).toBe(200);
     expect(Array.isArray(hist.json())).toBe(true);
 
-    // Unknown instrument 404s.
+    // Unknown instrument 404s (a fixed, non-existent UUID — deterministic).
     const missing = await app.inject({
       method: "GET",
-      url: `/instruments/${inst.id.replace(/.$/, "0")}/history`,
+      url: "/instruments/00000000-0000-0000-0000-000000000000/history",
       headers: auth(t),
     });
-    expect([404, 400]).toContain(missing.statusCode);
+    expect(missing.statusCode).toBe(404);
   });
 
   it("isolates portfolios between users", async () => {
