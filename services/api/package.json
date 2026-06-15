@@ -32,14 +32,14 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.3.3",
     "fastify-plugin": "^6.0.0",
-    "jose": "^5.9.0",
+    "jose": "^6.2.3",
     "pg-boss": "^12.19.1",
     "pino": "^10.3.1",
     "postgres": "^3.4.5",
-    "zod": "^3.23.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.2.17",
+    "@electric-sql/pglite": "^0.5.2",
     "@types/node": "^25.9.2",
     "@vitest/coverage-v8": "^4.1.8",
     "tsx": "^4.19.4",
