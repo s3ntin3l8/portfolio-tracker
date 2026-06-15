@@ -1,0 +1,7 @@
+# Trade Republic sync runs the vendored tr_login.py / tr_export.py via pytr.
+# Pinned exactly — pytr drives Trade Republic's private API and an uncontrolled bump
+# can break sync. Bump deliberately and re-run the live pairing validation.
+#
+# We rely on pytr's no-browser AWS-WAF solver (PYTR_WAF_STRATEGY=awswaf); the Dockerfile
+# deliberately does NOT run `playwright install`, so no Chromium is downloaded.
+pytr==0.4.10
