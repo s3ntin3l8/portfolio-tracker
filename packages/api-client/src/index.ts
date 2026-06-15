@@ -107,6 +107,7 @@ export interface PortfolioSummary {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  totalIncome: string;
 }
 
 export interface PortfolioPerformance {
@@ -126,6 +127,7 @@ export interface NetWorth {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  totalIncome: string;
   xirr: number | null;
   portfolioCount: number;
   asOf: string;

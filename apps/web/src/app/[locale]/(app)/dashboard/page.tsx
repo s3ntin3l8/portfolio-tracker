@@ -125,7 +125,7 @@ export default async function DashboardPage({
 
       <GoldTicker />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />
         <StatCard
           label={t("totalPnL")}
@@ -142,6 +142,8 @@ export default async function DashboardPage({
           }
         />
         <StatCard label={t("positions")} value={String(openHoldings.length)} />
+        <StatCard label={t("cash")} value={m(cashTotal)} />
+        <StatCard label={t("income")} value={m(Number(summary.totalIncome))} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
