@@ -56,6 +56,38 @@ describe("auth + portfolios + transactions", () => {
     expect(res.json()).toMatchObject({ authSub: "user-a", email: "user-a@example.com" });
   });
 
+  it("updates the user's editable profile via PATCH /me", async () => {
+    // A dedicated user so the currency change can't perturb other users' valuations.
+    const t = await token("profile-user");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/me",
+      headers: auth(t),
+      payload: { name: "Björn", displayCurrency: "usd" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      name: "Björn",
+      displayCurrency: "USD", // normalised
+    });
+
+    // The change persists on the next read.
+    const me = await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    expect(me.json()).toMatchObject({ name: "Björn", displayCurrency: "USD" });
+
+    // An invalid currency is rejected.
+    const bad = await app.inject({
+      method: "PATCH",
+      url: "/me",
+      headers: auth(t),
+      payload: { displayCurrency: "RUPIAH" },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error).toBe("validation_error");
+  });
+
   it("creates and lists portfolios for the owner", async () => {
     const t = await token("user-a");
     const created = await app.inject({

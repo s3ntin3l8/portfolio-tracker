@@ -141,6 +141,10 @@
     "language": "Language",
     "displayCurrency": "Display currency",
     "displayCurrencyHint": "Net worth and totals are shown in this currency.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "updateError": "Couldn't save changes. Please try again.",
     "signOut": "Sign out"
   },
   "Holdings": {

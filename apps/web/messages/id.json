@@ -141,6 +141,10 @@
     "language": "Bahasa",
     "displayCurrency": "Mata uang tampilan",
     "displayCurrencyHint": "Kekayaan bersih dan total ditampilkan dalam mata uang ini.",
+    "save": "Simpan perubahan",
+    "saving": "Menyimpan…",
+    "saved": "Tersimpan",
+    "updateError": "Gagal menyimpan perubahan. Silakan coba lagi.",
     "signOut": "Keluar"
   },
   "Holdings": {

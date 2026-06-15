@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
+import { UpdateProfile } from "@/components/update-profile";
 import { loadMe } from "@/lib/server-api";
 
 export default async function SettingsPage({
@@ -16,13 +17,6 @@ export default async function SettingsPage({
   const t = await getTranslations("Settings");
 
   const me = await loadMe();
-
-  const row = (label: string, value: string) => (
-    <div className="flex items-center justify-between py-2 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
 
   return (
     <div className="space-y-6">
@@ -37,13 +31,19 @@ export default async function SettingsPage({
         </CardHeader>
         <CardContent>
           {me ? (
-            <div className="divide-y divide-border">
-              {row(t("name"), me.name ?? "—")}
-              {row(t("email"), me.email)}
-              {row(t("displayCurrency"), me.displayCurrency)}
-            </div>
+            <>
+              <div className="flex items-center justify-between py-2 text-sm">
+                <span className="text-muted-foreground">{t("email")}</span>
+                <span className="font-medium">{me.email}</span>
+              </div>
+              <Separator className="my-4" />
+              <UpdateProfile
+                initialName={me.name ?? ""}
+                initialCurrency={me.displayCurrency}
+              />
+            </>
           ) : null}
-          <p className="mt-3 text-xs text-muted-foreground">{t("authVia")}</p>
+          <p className="mt-4 text-xs text-muted-foreground">{t("authVia")}</p>
           <Separator className="my-4" />
           <SignOutButton />
         </CardContent>
@@ -62,9 +62,6 @@ export default async function SettingsPage({
             <span className="text-sm font-medium">{t("language")}</span>
             <LocaleSwitcher />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("displayCurrencyHint")}
-          </p>
         </CardContent>
       </Card>
     </div>
