@@ -103,6 +103,21 @@
     "asOf": "per {time}",
     "live": "Langsung"
   },
+  "CorpAction": {
+    "title": "Catat aksi korporasi",
+    "subtitle": "Terapkan pemecahan, bonus, atau rights pada instrumen.",
+    "link": "Aksi korporasi",
+    "instrument": "Instrumen",
+    "search": "Cari berdasarkan simbol atau nama",
+    "type": "Jenis",
+    "ratio": "Rasio",
+    "ratioHint": "mis. 2 untuk pemecahan 2:1, 0.1 untuk bonus 1:10",
+    "exDate": "Tanggal ex",
+    "submit": "Catat aksi",
+    "submitting": "Mencatat…",
+    "needInstrument": "Cari dan pilih instrumen dulu.",
+    "error": "Tidak dapat mencatat aksi. Periksa kolom dan coba lagi."
+  },
   "Settings": {
     "title": "Pengaturan",
     "subtitle": "Akun dan preferensi Anda.",

@@ -103,6 +103,21 @@
     "asOf": "as of {time}",
     "live": "Live"
   },
+  "CorpAction": {
+    "title": "Record a corporate action",
+    "subtitle": "Apply a split, bonus or rights issue to an instrument.",
+    "link": "Corporate action",
+    "instrument": "Instrument",
+    "search": "Search by symbol or name",
+    "type": "Type",
+    "ratio": "Ratio",
+    "ratioHint": "e.g. 2 for a 2:1 split, 0.1 for a 1:10 bonus",
+    "exDate": "Ex-date",
+    "submit": "Record action",
+    "submitting": "Recording…",
+    "needInstrument": "Search for and select an instrument first.",
+    "error": "Couldn't record the action. Check the fields and try again."
+  },
   "Settings": {
     "title": "Settings",
     "subtitle": "Your account and preferences.",

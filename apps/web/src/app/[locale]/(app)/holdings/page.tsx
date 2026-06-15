@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Layers } from "lucide-react";
+import { Layers, GitBranch } from "lucide-react";
 import type { HoldingValuation } from "@portfolio/api-client";
 import {
   Table,
@@ -10,7 +10,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { Link } from "@/i18n/navigation";
 import { loadPortfolio } from "@/lib/server-api";
 import { formatMoney, cn } from "@/lib/utils";
 
@@ -26,15 +28,26 @@ export default async function HoldingsPage({
   const t = await getTranslations("Holdings");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
+  const tca = await getTranslations("CorpAction");
 
   const result = await loadPortfolio((api, portfolio) =>
     api.getSummary(portfolio.id),
   );
 
   const Heading = (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+      </div>
+      {result.status === "ok" && (
+        <Button variant="outline" asChild>
+          <Link href="/corporate-actions/new">
+            <GitBranch className="size-4" />
+            {tca("link")}
+          </Link>
+        </Button>
+      )}
     </div>
   );
 
