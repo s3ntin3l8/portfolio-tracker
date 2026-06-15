@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { SessionErrorGuard } from "@/components/session-error-guard";
+import { resolveSelection } from "@/lib/server-api";
 import { auth } from "@/auth";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
@@ -25,10 +26,17 @@ export default async function AppLayout({
     if (!session) redirect(`/${locale}`);
   }
 
+  const selection = await resolveSelection();
+
   return (
     <>
       <SessionErrorGuard />
-      <AppShell>{children}</AppShell>
+      <AppShell
+        portfolios={selection.portfolios.map((p) => ({ id: p.id, name: p.name }))}
+        selectedId={selection.selectedId}
+      >
+        {children}
+      </AppShell>
     </>
   );
 }

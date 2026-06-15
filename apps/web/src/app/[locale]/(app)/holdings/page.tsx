@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { Link } from "@/i18n/navigation";
-import { loadPortfolio } from "@/lib/server-api";
+import { loadHoldings } from "@/lib/server-api";
 import { formatMoney, cn } from "@/lib/utils";
 
 const CLASS_TABS = ["all", "equity", "gold", "bond", "mutual_fund"] as const;
@@ -30,9 +30,7 @@ export default async function HoldingsPage({
   const te = await getTranslations("Empty");
   const tca = await getTranslations("CorpAction");
 
-  const result = await loadPortfolio((api, portfolio) =>
-    api.getSummary(portfolio.id),
-  );
+  const result = await loadHoldings();
 
   const Heading = (
     <div className="flex items-start justify-between gap-4">
@@ -67,9 +65,9 @@ export default async function HoldingsPage({
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =
     result.status === "ok"
-      ? result.data.holdings.filter((h) => Number(h.quantity) !== 0)
+      ? result.holdings.filter((h) => Number(h.quantity) !== 0)
       : [];
-  const currency = result.status === "ok" ? result.data.displayCurrency : "IDR";
+  const currency = result.status === "ok" ? result.displayCurrency : "IDR";
   const m = (n: number) => formatMoney(n, currency, locale);
 
   if (holdings.length === 0) {

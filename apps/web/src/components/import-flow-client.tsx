@@ -4,6 +4,7 @@ import {
   ImportFlow,
   type ImportClient,
   type ImportResult,
+  type ImportTargetPortfolio,
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
@@ -13,7 +14,13 @@ import { useRouter } from "@/i18n/navigation";
  * drafts (executedAt typed as Date) while ImportFlow works with string dates; they
  * are the same JSON over the wire, so the boundary is bridged with casts here.
  */
-export function ImportFlowClient({ portfolioId }: { portfolioId: string }) {
+export function ImportFlowClient({
+  portfolios,
+  defaultPortfolioId,
+}: {
+  portfolios: ImportTargetPortfolio[];
+  defaultPortfolioId: string;
+}) {
   const api = useApiClient();
   const router = useRouter();
 
@@ -32,5 +39,11 @@ export function ImportFlowClient({ portfolioId }: { portfolioId: string }) {
     },
   };
 
-  return <ImportFlow client={client} portfolioId={portfolioId} />;
+  return (
+    <ImportFlow
+      client={client}
+      portfolios={portfolios}
+      defaultPortfolioId={defaultPortfolioId}
+    />
+  );
 }

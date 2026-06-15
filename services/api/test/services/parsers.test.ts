@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { parseCsv } from "../../src/services/parsers/csv.js";
+import { detectCsvFormat } from "../../src/services/parsers/detect.js";
 import { ClaudeVisionParser } from "../../src/services/parsers/claude.js";
 import { GeminiVisionParser } from "../../src/services/parsers/gemini.js";
 import { OpenRouterVisionParser } from "../../src/services/parsers/openrouter.js";
@@ -104,6 +105,24 @@ describe("parseCsv", () => {
   it("returns empty for empty/headerless input", () => {
     expect(parseCsv("").drafts).toHaveLength(0);
     expect(parseCsv("just a header line").drafts).toHaveLength(0);
+  });
+});
+
+describe("detectCsvFormat", () => {
+  it("detects a DKB depot snapshot header", () => {
+    expect(detectCsvFormat('"Datum der Erstellung";"08.06.2026"\n')).toBe("dkb");
+    // BOM-prefixed exports are still recognised.
+    expect(detectCsvFormat('﻿"Datum der Erstellung";x')).toBe("dkb");
+  });
+
+  it("detects a DKB Girokonto Umsatzliste by its column headers", () => {
+    const giro = '"Girokonto";"DE.."\n"Buchungsdatum";"Wertstellung";"Verwendungszweck";"Betrag (€)"';
+    expect(detectCsvFormat(giro)).toBe("dkb");
+  });
+
+  it("treats the generic column CSV (and anything else) as generic", () => {
+    expect(detectCsvFormat(CSV)).toBe("generic");
+    expect(detectCsvFormat("")).toBe("generic");
   });
 });
 

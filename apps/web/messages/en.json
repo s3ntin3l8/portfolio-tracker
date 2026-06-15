@@ -39,6 +39,18 @@
     "create": "Create a portfolio",
     "empty": "No portfolios yet — create your first below."
   },
+  "PortfolioSwitcher": {
+    "label": "Portfolio",
+    "all": "All portfolios"
+  },
+  "PortfolioActions": {
+    "rename": "Rename portfolio",
+    "delete": "Delete portfolio",
+    "save": "Save",
+    "cancel": "Cancel",
+    "deleteWarning": "This permanently deletes the portfolio and all its transactions.",
+    "confirmDelete": "Delete"
+  },
   "Import": {
     "title": "Import transactions",
     "subtitle": "Upload a screenshot or CSV — review the draft, then confirm.",
@@ -51,8 +63,10 @@
       "screenshot": "Screenshot",
       "csv": "CSV file"
     },
+    "targetPortfolio": "Import into",
     "csvFormat": {
       "label": "Format",
+      "auto": "Auto-detect",
       "generic": "Generic",
       "dkb": "DKB (Germany)"
     },
@@ -184,14 +198,25 @@
     "date": "Date",
     "type": "Type",
     "instrument": "Instrument",
+    "portfolio": "Portfolio",
     "quantity": "Quantity",
     "amount": "Amount",
     "source": "Source",
+    "empty": "No transactions.",
     "sources": {
       "screenshot": "Screenshot",
       "csv": "CSV",
       "manual": "Manual",
       "pytr": "Trade Republic"
+    },
+    "batch": {
+      "selected": "{count, plural, one {# selected} other {# selected}}",
+      "delete": "Delete selected",
+      "confirmPrompt": "Delete these transactions?",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "selectAll": "Select all transactions",
+      "selectRow": "Select transaction"
     }
   },
   "Manage": {

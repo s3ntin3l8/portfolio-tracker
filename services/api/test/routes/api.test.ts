@@ -396,6 +396,164 @@ describe("auth + portfolios + transactions", () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it("batch-deletes transactions, ignoring foreign ids (owner only)", async () => {
+    // A dedicated user/portfolio so the count isn't perturbed by other tests.
+    const t = await token("bulk-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Bulk", baseCurrency: "idr" },
+      })
+    ).json().id;
+
+    const [ins] = await app.db
+      .insert(instruments)
+      .values({ symbol: "ANTM", market: "IDX", assetClass: "equity", currency: "IDR", name: "Aneka Tambang" })
+      .returning();
+    async function makeTx() {
+      return (
+        await app.inject({
+          method: "POST",
+          url: `/portfolios/${portfolioId}/transactions`,
+          headers: auth(t),
+          payload: {
+            type: "buy",
+            instrumentId: ins.id,
+            quantity: "1",
+            price: "1000",
+            currency: "IDR",
+            executedAt: "2026-01-20T00:00:00.000Z",
+          },
+        })
+      ).json().id as string;
+    }
+    const id1 = await makeTx();
+    const id2 = await makeTx();
+    const id3 = await makeTx();
+
+    // A non-owner can't batch-delete in this portfolio.
+    const cross = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/bulk-delete`,
+      headers: auth(await token("user-b")),
+      payload: { ids: [id1] },
+    });
+    expect(cross.statusCode).toBe(404);
+
+    // The owner deletes two of the three; a foreign id is silently ignored.
+    const foreign = "00000000-0000-0000-0000-000000000000";
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/bulk-delete`,
+      headers: auth(t),
+      payload: { ids: [id1, id2, foreign] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ deleted: 2 });
+
+    // Only id3 remains.
+    const remaining = (
+      await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) })
+    ).json();
+    expect(remaining.map((x: { id: string }) => x.id)).toEqual([id3]);
+
+    // An empty id list is rejected.
+    const empty = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/bulk-delete`,
+      headers: auth(t),
+      payload: { ids: [] },
+    });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  it("renames and deletes a portfolio (owner only, cascades transactions)", async () => {
+    const t = await token("rename-user");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Temp", baseCurrency: "idr" },
+      })
+    ).json().id as string;
+
+    // A non-owner can neither rename nor delete it.
+    const tB = await token("rename-other");
+    await app.inject({ method: "GET", url: "/me", headers: auth(tB) });
+    const crossPatch = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}`,
+      headers: auth(tB),
+      payload: { name: "Hijack" },
+    });
+    expect(crossPatch.statusCode).toBe(404);
+    const crossDelete = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}`,
+      headers: auth(tB),
+    });
+    expect(crossDelete.statusCode).toBe(404);
+
+    // The owner renames it.
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}`,
+      headers: auth(t),
+      payload: { name: "Renamed" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ id: portfolioId, name: "Renamed" });
+
+    // Give it a transaction, then delete the portfolio — the transaction cascades.
+    const [ins] = await app.db
+      .insert(instruments)
+      .values({ symbol: "UNVR", market: "IDX", assetClass: "equity", currency: "IDR", name: "Unilever" })
+      .returning();
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: ins.id,
+        quantity: "1",
+        price: "5000",
+        currency: "IDR",
+        executedAt: "2026-01-25T00:00:00.000Z",
+      },
+    });
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}`,
+      headers: auth(t),
+    });
+    expect(del.statusCode).toBe(204);
+
+    // The portfolio is gone, and its transactions went with it (404 on read).
+    expect(
+      (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json(),
+    ).toHaveLength(0);
+    const txAfter = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
+    expect(txAfter.statusCode).toBe(404);
+
+    // Deleting again 404s.
+    const again = await app.inject({
+      method: "DELETE",
+      url: `/portfolios/${portfolioId}`,
+      headers: auth(t),
+    });
+    expect(again.statusCode).toBe(404);
+  });
+
   it("returns a live quote for the gold ticker", async () => {
     const t = await token("user-a");
     const res = await app.inject({

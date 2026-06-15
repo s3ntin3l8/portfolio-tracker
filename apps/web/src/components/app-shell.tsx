@@ -15,11 +15,13 @@ import {
   LogOut,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
+import type { Portfolio } from "@portfolio/api-client";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { PortfolioSwitcher } from "@/components/portfolio-switcher";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -31,10 +33,22 @@ const NAV = [
   { href: "/settings", icon: Settings, key: "settings" },
 ] as const;
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  portfolios = [],
+  selectedId = null,
+}: {
+  children: React.ReactNode;
+  portfolios?: Pick<Portfolio, "id" | "name">[];
+  selectedId?: string | null;
+}) {
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  const switcher = (
+    <PortfolioSwitcher portfolios={portfolios} selectedId={selectedId} />
+  );
 
   const signOutButton = (
     <button
@@ -77,6 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 md:flex">
         <Brand />
+        <div className="mt-4">{switcher}</div>
         <div className="mt-6">{navLinks}</div>
         <div className="mt-auto pt-4">{signOutButton}</div>
       </aside>
@@ -95,6 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <X />
               </Button>
             </div>
+            <div className="mt-4">{switcher}</div>
             <div className="mt-6">{navLinks}</div>
             <div className="mt-auto pt-4">{signOutButton}</div>
           </aside>

@@ -204,6 +204,44 @@ describe("CSV import → confirm flow", () => {
     expect(reConfirm.json().confirmed).toBe(0);
   });
 
+  it("auto-detects the parser when format is omitted (DKB vs generic)", async () => {
+    const t = await token("auto-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Auto", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    // No format → the DKB Girokonto export is recognised and parsed as DKB.
+    const dkb = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/csv`,
+      headers: auth(t),
+      payload: { content: DKB_GIRO_CSV },
+    });
+    expect(dkb.statusCode).toBe(201);
+    expect(dkb.json().drafts).toHaveLength(4);
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${dkb.json().importId}`, headers: auth(t) })).json().parser,
+    ).toBe("dkb");
+
+    // No format → the generic column CSV falls through to the generic parser.
+    const generic = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/csv`,
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    expect(generic.statusCode).toBe(201);
+    expect(generic.json().drafts).toHaveLength(1);
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${generic.json().importId}`, headers: auth(t) })).json().parser,
+    ).toBe("csv");
+  });
+
   it("rejects importing into another user's portfolio", async () => {
     const tA = await token("imp-a");
     const tB = await token("imp-b");

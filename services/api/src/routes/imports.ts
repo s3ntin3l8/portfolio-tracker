@@ -6,6 +6,7 @@ import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
 import { parseDkb } from "../services/parsers/dkb.js";
+import { detectCsvFormat } from "../services/parsers/detect.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -15,8 +16,9 @@ import { getMarketData } from "../services/market-data.js";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
-  // `dkb` parses German DKB depot/Girokonto exports; `generic` is the simple column CSV.
-  format: z.enum(["generic", "dkb"]).default("generic"),
+  // `auto` sniffs the content (default); `dkb` forces the German DKB depot/Girokonto
+  // parser; `generic` forces the simple column CSV.
+  format: z.enum(["auto", "generic", "dkb"]).default("auto"),
 });
 const screenshotBodySchema = z.object({
   image: z.string().min(1), // base64-encoded image bytes
@@ -47,14 +49,15 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const { content, format } = csvBodySchema.parse(request.body);
-      const result = format === "dkb" ? parseDkb(content) : parseCsv(content);
+      const resolved = format === "auto" ? detectCsvFormat(content) : format;
+      const result = resolved === "dkb" ? parseDkb(content) : parseCsv(content);
 
       const [imp] = await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
           portfolioId,
-          parser: format === "dkb" ? "dkb" : "csv",
+          parser: resolved === "dkb" ? "dkb" : "csv",
           parsedJson: result,
           status: "draft",
         })

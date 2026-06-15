@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import {
   corporateActions,
@@ -26,6 +27,10 @@ import { requireUser } from "../plugins/auth.js";
 interface PortfolioParams {
   portfolioId: string;
 }
+
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+});
 
 export async function transactionsRoute(app: FastifyInstance) {
   // Confirm the portfolio exists and belongs to the user.
@@ -164,6 +169,31 @@ export async function transactionsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "transaction_not_found" });
       }
       return reply.code(204).send();
+    },
+  );
+
+  // Batch-delete transactions from a portfolio (owner only). Ignores ids that
+  // don't belong to the portfolio; returns how many rows were actually removed.
+  app.post<{ Params: PortfolioParams; Body: { ids?: unknown } }>(
+    "/portfolios/:portfolioId/transactions/bulk-delete",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { ids } = bulkDeleteSchema.parse(request.body);
+      const deleted = await app.db
+        .delete(transactions)
+        .where(
+          and(
+            eq(transactions.portfolioId, portfolioId),
+            inArray(transactions.id, ids),
+          ),
+        )
+        .returning({ id: transactions.id });
+      return { deleted: deleted.length };
     },
   );
 

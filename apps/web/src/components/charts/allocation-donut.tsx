@@ -18,7 +18,7 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
   const total = data.reduce((s, d) => s + d.value, 0);
 
   return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row">
+    <div className="flex flex-col items-center gap-4">
       <div className="h-[180px] w-full max-w-[200px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -48,7 +48,7 @@ export function AllocationDonut({ data }: { data: AllocationSlice[] }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="grid flex-1 grid-cols-1 gap-2 text-sm">
+      <ul className="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm">
         {data.map((d, i) => (
           <li key={d.key} className="flex items-center justify-between gap-3">
             <span className="flex items-center gap-2">
