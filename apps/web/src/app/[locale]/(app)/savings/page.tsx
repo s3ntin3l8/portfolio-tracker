@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
+import { ForecastPanel } from "@/components/savings/forecast-panel";
 import { EmptyState } from "@/components/empty-state";
 import { loadContributions } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
@@ -87,6 +88,13 @@ export default async function SavingsPage({
           <ContributionsChart series={c.series} currency={currency} />
         </CardContent>
       </Card>
+
+      <ForecastPanel
+        currentValue={c.currentValue}
+        monthlyAverage={c.monthlyAverage}
+        seedAnnualReturn={c.seedAnnualReturn}
+        currency={currency}
+      />
     </div>
   );
 }

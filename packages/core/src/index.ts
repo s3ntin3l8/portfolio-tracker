@@ -28,3 +28,9 @@ export {
   type ContributionInput,
   type ContributionStats,
 } from "./contributions.js";
+export {
+  forecastSeries,
+  forecastValue,
+  type ForecastInput,
+  type ForecastPoint,
+} from "./forecast.js";
