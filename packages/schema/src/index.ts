@@ -62,6 +62,14 @@ export const portfolioInputSchema = z.object({
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
+// Editable user profile fields. Both optional so the settings screen can PATCH a
+// subset; identity fields (email, authSub) come from the IdP and are never updated here.
+export const userUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  displayCurrency: currencyCode.optional(),
+});
+export type UserUpdate = z.infer<typeof userUpdateSchema>;
+
 export const corporateActionTypeSchema = z.enum(["split", "bonus", "rights"]);
 export type CorporateActionType = z.infer<typeof corporateActionTypeSchema>;
 

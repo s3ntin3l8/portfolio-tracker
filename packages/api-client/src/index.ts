@@ -4,6 +4,7 @@ import type {
   InstrumentInput,
   CorporateActionInput,
   ParsedTransaction,
+  UserUpdate,
 } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
@@ -192,6 +193,7 @@ export function createApiClient(config: ApiClientConfig) {
 
   return {
     me: () => request<User>("GET", "/me"),
+    updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
 
