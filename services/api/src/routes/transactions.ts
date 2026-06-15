@@ -1,40 +1,30 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import {
   corporateActions,
   instruments,
   portfolios,
+  portfolioSnapshots,
   transactions,
   users,
 } from "@portfolio/db";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
-  summarizePortfolio,
   aggregatePortfolios,
   xirr,
   type CoreTransaction,
   type CorporateAction,
   type CashFlowPoint,
 } from "@portfolio/core";
-import type { InstrumentRef } from "@portfolio/market-data";
 import { getMarketData } from "../services/market-data.js";
-import { getCachedQuotes } from "../services/price-cache.js";
+import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
 import { getFxRates, makeFxRateFn } from "../services/fx.js";
+import { rangeStart, aggregateByDate } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 
 interface PortfolioParams {
   portfolioId: string;
-}
-
-// Presentation metadata for an instrument, attached to holdings/transactions so
-// the web app can render names without a second round-trip. Cash (instrument-less)
-// rows carry `null`.
-interface InstrumentMeta {
-  symbol: string;
-  name: string;
-  assetClass: string;
-  unit: string;
 }
 
 export async function transactionsRoute(app: FastifyInstance) {
@@ -84,83 +74,16 @@ export async function transactionsRoute(app: FastifyInstance) {
     );
   }
 
-  // Load a portfolio's transactions, price its instruments via market data, and
-  // value it. Shared by /summary and /performance.
-  async function loadValuation(portfolioId: string, baseCurrency: string) {
-    const rows = await app.db
-      .select()
-      .from(transactions)
-      .where(eq(transactions.portfolioId, portfolioId));
-
-    const instrumentIds = [
-      ...new Set(
-        rows.map((r) => r.instrumentId).filter((x): x is string => x !== null),
-      ),
-    ];
-    const instrumentRows = instrumentIds.length
-      ? await app.db
-          .select()
-          .from(instruments)
-          .where(inArray(instruments.id, instrumentIds))
-      : [];
-
-    const metaById = new Map(
-      instrumentRows.map((i) => [
-        i.id,
-        { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit },
-      ]),
-    );
-
-    const refs = instrumentRows.map((i) => ({
-      id: i.id,
-      ref: {
-        symbol: i.symbol,
-        market: i.market,
-        assetClass: i.assetClass,
-        currency: i.currency,
-      } satisfies InstrumentRef,
-    }));
-    const prices = await getCachedQuotes(
+  // Value a portfolio (holdings priced + cash + net worth) in `displayCurrency`.
+  // Shared by /summary, /performance and /networth via the valuation service.
+  async function loadValuation(portfolioId: string, displayCurrency: string) {
+    return valuePortfolio(
       app.db,
       getMarketData(),
-      refs,
       app.config.MARKET_DATA_TTL_MS,
+      portfolioId,
+      displayCurrency,
     );
-
-    // Bonds without a live market price are valued at par (face value) — the v1
-    // default; tradable ORI/SR market prices can override via a provider later.
-    for (const i of instrumentRows) {
-      if (i.assetClass === "bond" && i.faceValue && !prices[i.id]) {
-        prices[i.id] = { price: i.faceValue, currency: i.currency };
-      }
-    }
-
-    const coreTxns: CoreTransaction[] = rows.map((r) => ({
-      instrumentId: r.instrumentId,
-      type: r.type,
-      quantity: r.quantity,
-      price: r.price,
-      fees: r.fees,
-      currency: r.currency,
-      executedAt: r.executedAt,
-    }));
-
-    // Resolve FX so holdings/cash in other currencies convert to the display
-    // currency (no-op when everything is already in baseCurrency).
-    const currencies = new Set<string>();
-    for (const p of Object.values(prices)) currencies.add(p.currency);
-    for (const r of rows) currencies.add(r.currency);
-    const rates = await getFxRates(app.db, [...currencies], baseCurrency);
-    const fx = makeFxRateFn(rates, baseCurrency);
-
-    const summary = summarizePortfolio({
-      transactions: coreTxns,
-      corporateActions: await corporateActionsFor(instrumentIds),
-      prices,
-      displayCurrency: baseCurrency,
-      fx,
-    });
-    return { coreTxns, summary, metaById };
   }
 
   // List a portfolio's transactions, each enriched with instrument metadata.
@@ -338,6 +261,28 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Net-worth-over-time for one portfolio, from the daily snapshots (base currency).
+  app.get<{ Params: PortfolioParams; Querystring: { range?: string } }>(
+    "/portfolios/:portfolioId/history",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const start = rangeStart(request.query.range ?? "1y");
+      const conds = [eq(portfolioSnapshots.portfolioId, portfolioId)];
+      if (start) conds.push(gte(portfolioSnapshots.date, start));
+      const rows = await app.db
+        .select()
+        .from(portfolioSnapshots)
+        .where(and(...conds))
+        .orderBy(asc(portfolioSnapshots.date));
+      return rows.map((r) => ({ date: r.date, netWorth: r.netWorth }));
+    },
+  );
+
   // Money-weighted return (XIRR) from external cash flows + current net worth.
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/performance",
@@ -426,4 +371,48 @@ export async function transactionsRoute(app: FastifyInstance) {
       asOf: asOf.toISOString(),
     };
   });
+
+  // Aggregate net-worth-over-time across all of the user's portfolios, summing each
+  // day's snapshots converted to the display currency.
+  app.get<{ Querystring: { range?: string } }>(
+    "/networth/history",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+
+      const pfs = await app.db
+        .select({ id: portfolios.id })
+        .from(portfolios)
+        .where(eq(portfolios.userId, id));
+      const pfIds = pfs.map((p) => p.id);
+      if (pfIds.length === 0) return [];
+
+      const start = rangeStart(request.query.range ?? "1y");
+      const conds = [inArray(portfolioSnapshots.portfolioId, pfIds)];
+      if (start) conds.push(gte(portfolioSnapshots.date, start));
+      const rows = await app.db
+        .select()
+        .from(portfolioSnapshots)
+        .where(and(...conds));
+
+      const currencies = [...new Set(rows.map((r) => r.currency))];
+      const rates = await getFxRates(app.db, currencies, display);
+      const fx = makeFxRateFn(rates, display);
+      return aggregateByDate(
+        rows.map((r) => ({
+          date: r.date,
+          netWorth: r.netWorth,
+          currency: r.currency,
+        })),
+        fx,
+        display,
+      );
+    },
+  );
 }

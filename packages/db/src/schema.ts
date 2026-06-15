@@ -210,6 +210,32 @@ export const lastPrices = pgTable("last_prices", {
   asOf: timestamp("as_of", { withTimezone: true }).notNull(),
 });
 
+// Daily net-worth snapshots per portfolio — one row per (portfolio, date), in the
+// portfolio's base currency. Powers the dashboard's value-over-time chart; written
+// by the daily scheduler job and derived from transactions, so it's a cache, not
+// primary state.
+export const portfolioSnapshots = pgTable(
+  "portfolio_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    portfolioId: uuid("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    netWorth: numeric("net_worth").notNull(),
+    currency: text("currency").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("portfolio_snapshots_portfolio_date_idx").on(
+      t.portfolioId,
+      t.date,
+    ),
+  ],
+);
+
 // FX rates for converting to a portfolio/display currency.
 export const fxRates = pgTable(
   "fx_rates",

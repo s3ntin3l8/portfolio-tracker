@@ -139,6 +139,12 @@ export interface NetWorth {
   asOf: string;
 }
 
+/** A point on a net-worth-over-time series (display/base currency). */
+export interface NetWorthPoint {
+  date: string; // YYYY-MM-DD
+  netWorth: string;
+}
+
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
@@ -201,6 +207,16 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
+    getNetWorthHistory: (range = "1y") =>
+      request<NetWorthPoint[]>(
+        "GET",
+        `/networth/history?range=${encodeURIComponent(range)}`,
+      ),
+    getPortfolioHistory: (portfolioId: string, range = "1y") =>
+      request<NetWorthPoint[]>(
+        "GET",
+        `/portfolios/${portfolioId}/history?range=${encodeURIComponent(range)}`,
+      ),
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
     createPortfolio: (input: PortfolioInput) =>

@@ -5,6 +5,7 @@ import {
   type Portfolio,
   type User,
   type NetWorth,
+  type NetWorthPoint,
   type Instrument,
   type Candle,
   type CorporateAction,
@@ -45,6 +46,19 @@ export async function loadNetWorth(): Promise<NetWorthResult> {
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
+  }
+}
+
+/** Net-worth-over-time across all portfolios (empty when not signed in / no data). */
+export async function loadNetWorthHistory(
+  range = "1y",
+): Promise<NetWorthPoint[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.getNetWorthHistory(range);
+  } catch {
+    return [];
   }
 }
 

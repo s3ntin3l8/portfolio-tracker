@@ -9,11 +9,12 @@ import {
 } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { PriceChart } from "@/components/charts/price-chart";
 import { EmptyState } from "@/components/empty-state";
 import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadNetWorth } from "@/lib/server-api";
+import { loadNetWorth, loadNetWorthHistory } from "@/lib/server-api";
 import { cn, formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function DashboardPage({
@@ -28,7 +29,10 @@ export default async function DashboardPage({
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
 
-  const result = await loadNetWorth();
+  const [result, history] = await Promise.all([
+    loadNetWorth(),
+    loadNetWorthHistory(),
+  ]);
 
   const Heading = (
     <div>
@@ -176,11 +180,18 @@ export default async function DashboardPage({
             <CardTitle>{t("valueOverTime")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmptyState
-              icon={LineChart}
-              title={te("historyTitle")}
-              description={te("historyBody")}
-            />
+            {history.length > 1 ? (
+              <PriceChart
+                data={history.map((p) => ({ date: p.date, close: p.netWorth }))}
+                currency={currency}
+              />
+            ) : (
+              <EmptyState
+                icon={LineChart}
+                title={te("historyTitle")}
+                description={te("historyBody")}
+              />
+            )}
           </CardContent>
         </Card>
         <Card>

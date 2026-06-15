@@ -3,9 +3,13 @@ import type { FastifyInstance } from "fastify";
 import { getDb } from "../db/client.js";
 import { getMarketData } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
+import { recordDailySnapshots } from "./snapshots.js";
 
 const QUEUE = "refresh-prices";
 const SCHEDULE_CRON = "*/5 * * * *"; // every 5 minutes; the job self-gates on market hours
+
+const SNAPSHOT_QUEUE = "daily-snapshot";
+const SNAPSHOT_CRON = "0 16 * * *"; // daily 16:00 UTC (~23:00 WIB, after the IDX close)
 
 function usesPglite(url: string): boolean {
   return !url || url.startsWith("pglite://");
@@ -38,7 +42,28 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
     }
   });
   await boss.schedule(QUEUE, SCHEDULE_CRON);
-  app.log.info({ cron: SCHEDULE_CRON }, "Price-refresh scheduler started");
+
+  // Daily net-worth snapshots feed the dashboard's value-over-time chart.
+  await boss.createQueue(SNAPSHOT_QUEUE);
+  await boss.work(SNAPSHOT_QUEUE, async () => {
+    try {
+      const count = await recordDailySnapshots(
+        getDb(),
+        getMarketData(),
+        app.config.MARKET_DATA_TTL_MS,
+        new Date(),
+      );
+      app.log.info({ count }, "daily snapshot complete");
+    } catch (err) {
+      app.log.error({ err }, "daily snapshot failed");
+    }
+  });
+  await boss.schedule(SNAPSHOT_QUEUE, SNAPSHOT_CRON);
+
+  app.log.info(
+    { priceCron: SCHEDULE_CRON, snapshotCron: SNAPSHOT_CRON },
+    "Schedulers started",
+  );
 
   app.addHook("onClose", async () => {
     await boss.stop();

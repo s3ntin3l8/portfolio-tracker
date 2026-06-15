@@ -634,6 +634,60 @@ describe("auth + portfolios + transactions", () => {
     expect(cross.statusCode).toBe(404);
   });
 
+  it("serves net-worth history from snapshots (per portfolio + aggregate)", async () => {
+    const { portfolioSnapshots } = await import("@portfolio/db");
+    const t = await token("hist-user");
+    const mk = async (name: string) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: "/portfolios",
+          headers: auth(t),
+          payload: { name, baseCurrency: "IDR" },
+        })
+      ).json().id;
+    const p1 = await mk("H1");
+    const p2 = await mk("H2");
+
+    await app.db.insert(portfolioSnapshots).values([
+      { portfolioId: p1, date: "2026-02-01", netWorth: "1000000", currency: "IDR" },
+      { portfolioId: p1, date: "2026-02-02", netWorth: "1100000", currency: "IDR" },
+      { portfolioId: p2, date: "2026-02-02", netWorth: "500000", currency: "IDR" },
+    ]);
+
+    // Per-portfolio history, ordered by date.
+    const h1 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${p1}/history?range=all`,
+      headers: auth(t),
+    });
+    expect(h1.statusCode).toBe(200);
+    expect(h1.json()).toEqual([
+      { date: "2026-02-01", netWorth: "1000000" },
+      { date: "2026-02-02", netWorth: "1100000" },
+    ]);
+
+    // Aggregate sums same-date snapshots across the user's portfolios.
+    const agg = await app.inject({
+      method: "GET",
+      url: "/networth/history?range=all",
+      headers: auth(t),
+    });
+    expect(agg.statusCode).toBe(200);
+    expect(agg.json()).toEqual([
+      { date: "2026-02-01", netWorth: "1000000" },
+      { date: "2026-02-02", netWorth: "1600000" }, // 1,100,000 + 500,000
+    ]);
+
+    // A non-owner can't read the portfolio's history.
+    const cross = await app.inject({
+      method: "GET",
+      url: `/portfolios/${p1}/history`,
+      headers: auth(await token("user-b")),
+    });
+    expect(cross.statusCode).toBe(404);
+  });
+
   it("computes XIRR performance from external cash flows", async () => {
     const t = await token("perf-user");
     const portfolioId = (
