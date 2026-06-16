@@ -12,8 +12,15 @@ import { Label } from "@/components/ui/label";
 /** The slice of the API client this flow needs (injectable for tests). */
 export type TrConnectClient = Pick<
   ApiClient,
-  "connectTr" | "verifyTr" | "syncTr" | "disconnectTr"
+  "connectTr" | "verifyTr" | "syncTr" | "disconnectTr" | "getTrConnection"
 >;
+
+// How long the awaiting phase waits for the approval to resolve before giving up, and
+// how often it re-checks the authoritative connection status. The window matches the
+// runner's pairing timeout (pairingTimeoutMs, 210s) so the UI doesn't give up first.
+const APPROVAL_WINDOW_MS = 210_000;
+const STATUS_POLL_INTERVAL_MS = 2500;
+const STATUS_POLL_INITIAL_DELAY_MS = 1500;
 
 type Phase = "form" | "awaiting" | "connected";
 
@@ -83,37 +90,67 @@ export function TrConnectFlow({
         ...(showAdvanced && wafToken ? { wafToken } : {}),
       });
       setPin("");
+      // Re-arm the awaiting effect so this fresh pairing fires its own verify.
+      verifyFiredRef.current = false;
       setPhase("awaiting");
     });
   };
 
-  // Once awaiting, long-poll the verify endpoint until the user approves the push in the
-  // TR app (resolves → connected) or it is declined / expires (→ back to the form). An
-  // effect (not the connect handler) drives this so a page refresh mid-pairing resumes it.
-  const pollingRef = useRef(false);
+  // Drives the `awaiting` phase. verifyTr() is the request that completes the pairing
+  // server-side (it runs awaitApproval and persists the session); we fire it exactly once
+  // per pairing and do NOT trust its client-side promise. Under React StrictMode (dev
+  // double-mount), an access-token rotation re-creating the client mid-flight, HMR, or a
+  // transient network drop, the client request can fail even though Fastify finished the
+  // pairing — so we treat GET /tr/connection as the source of truth and poll it until the
+  // status leaves `awaiting_2fa`. This is robust to those hiccups and resumes correctly
+  // after a page refresh mid-pairing (the fresh mount re-fires verify; the server resumes
+  // via hasPendingPairing).
+  const verifyFiredRef = useRef(false);
+  const windowStartRef = useRef(0);
   useEffect(() => {
-    if (phase !== "awaiting" || pollingRef.current) return;
-    pollingRef.current = true;
-    let cancelled = false;
-    void (async () => {
+    if (phase !== "awaiting") return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    if (!verifyFiredRef.current) {
+      verifyFiredRef.current = true;
+      windowStartRef.current = Date.now();
+      // Fire-and-forget: this kicks off server-side completion; the poll observes it.
+      void client.verifyTr().catch(() => undefined);
+    }
+
+    const poll = async () => {
+      if (!active) return;
       try {
-        await client.verifyTr();
-        if (!cancelled) {
+        const conn = await client.getTrConnection();
+        if (!active) return;
+        if (conn.status === "connected") {
           setError(null);
           setPhase("connected");
           onChanged?.();
+          return;
         }
-      } catch {
-        if (!cancelled) {
+        if (conn.status !== "awaiting_2fa") {
+          // error / expired / disconnected — the pairing did not complete.
           setError(t("approvalError"));
           setPhase("form");
+          return;
         }
-      } finally {
-        pollingRef.current = false;
+      } catch {
+        // Transient status read (e.g. token mid-rotation) — keep waiting.
       }
-    })();
+      if (Date.now() - windowStartRef.current > APPROVAL_WINDOW_MS) {
+        setError(t("approvalError"));
+        setPhase("form");
+        return;
+      }
+      timer = setTimeout(() => void poll(), STATUS_POLL_INTERVAL_MS);
+    };
+    timer = setTimeout(() => void poll(), STATUS_POLL_INITIAL_DELAY_MS);
+
     return () => {
-      cancelled = true;
+      active = false;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
