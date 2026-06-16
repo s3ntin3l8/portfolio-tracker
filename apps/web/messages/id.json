@@ -492,6 +492,14 @@
     "syncNow": "Sinkronkan sekarang",
     "disconnect": "Putuskan",
     "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
-    "error": "Terjadi kesalahan. Silakan coba lagi."
+    "error": "Terjadi kesalahan. Silakan coba lagi.",
+    "errors": {
+      "pytr_not_available": "Sinkronisasi Trade Republic belum disiapkan di server.",
+      "encryption_required": "Server belum dapat menyimpan kredensial dengan aman (kunci enkripsi belum ada).",
+      "tr_pairing_failed": "Tidak dapat memulai login Trade Republic. Silakan coba lagi.",
+      "portfolio_not_found": "Portofolio tersebut tidak ditemukan lagi.",
+      "not_connected": "Belum terhubung. Hubungkan kembali lalu coba lagi.",
+      "tr_sync_failed": "Sinkronisasi gagal. Silakan coba lagi."
+    }
   }
 }

@@ -12,8 +12,9 @@ const eslintConfig = [
     settings: { react: { version: "19" } },
   },
   {
-    // public/ holds static assets + serwist's generated service worker (public/sw.js).
-    ignores: [".next/**", "node_modules/**", "next-env.d.ts", "public/**"],
+    // public/ holds static assets + serwist's generated service worker (public/sw.js);
+    // coverage/ is a generated (gitignored) Vitest artifact, not source.
+    ignores: [".next/**", "node_modules/**", "next-env.d.ts", "public/**", "coverage/**"],
   },
 ];
 

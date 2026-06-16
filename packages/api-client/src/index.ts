@@ -379,6 +379,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Extract the machine-readable `error` code from a thrown error. The API reports
+ * failures as `{ error: "<code>" }` (e.g. `pytr_not_available`, `encryption_required`);
+ * this returns that code so callers can show a specific message instead of a generic
+ * one. Returns null for non-ApiErrors or bodies without a string `error` field.
+ */
+export function apiErrorCode(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  try {
+    const parsed: unknown = JSON.parse(err.body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "error" in parsed &&
+      typeof (parsed as { error: unknown }).error === "string"
+    ) {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return null;
+}
+
 export interface ApiClientConfig {
   baseUrl: string;
   getToken?: () => string | undefined | Promise<string | undefined>;
