@@ -318,18 +318,21 @@ export async function importsRoute(app: FastifyInstance) {
 
         if (!isCash) {
           let symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
-          let market = isEu
+          const market = isEu
             ? marketForEuInstrument(d.assetClass)
             : marketForAssetClass(d.assetClass ?? "equity");
-          let instrumentCurrency = d.currency;
+          const instrumentCurrency = d.currency;
           let assetClass = d.assetClass ?? "equity";
 
           if (isEu && d.isin) {
             const r = await resolveEuIsin(d.isin);
             if (r) {
+              // Adopt the resolved ticker and asset class, but keep the broker's venue:
+              // DKB/Trade Republic execute on Xetra in EUR, whereas OpenFIGI's first
+              // listing for a fund is often another venue (e.g. Euronext Paris) and
+              // falls back to USD when the exchange is unmapped — which mis-routes
+              // pricing (no provider covers that venue) and stores the wrong currency.
               symbol = r.symbol;
-              market = r.market;
-              instrumentCurrency = r.currency;
               assetClass = r.assetClass;
             }
           }

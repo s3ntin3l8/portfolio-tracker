@@ -67,7 +67,13 @@ export class OpenFigiProvider implements MarketDataProvider {
       symbol: match.ticker,
       exchange: match.exchCode ?? "",
       name: match.name,
-      type: match.securityType2 ?? match.securityType ?? match.marketSector,
+      // Surface every type signal, not just securityType2: OpenFIGI labels UCITS ETFs
+      // as securityType "ETP" but securityType2 "Mutual Fund", so preferring the latter
+      // misclassifies them. assetClassFromType checks etf/etp first, so the combined
+      // string resolves ETPs to `etf` while genuine open-end funds stay `mutual_fund`.
+      type: [match.securityType, match.securityType2, match.marketSector]
+        .filter(Boolean)
+        .join(" "),
     };
   }
 }

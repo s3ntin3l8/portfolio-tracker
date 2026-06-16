@@ -17,7 +17,7 @@ import { Link } from "@/i18n/navigation";
 import { loadHoldings } from "@/lib/server-api";
 import { formatMoney, cn } from "@/lib/utils";
 
-const CLASS_TABS = ["all", "equity", "gold", "bond", "mutual_fund"] as const;
+const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
 
 export default async function HoldingsPage({
   params,

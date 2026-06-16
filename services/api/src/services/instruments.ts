@@ -1,9 +1,50 @@
 import { and, eq } from "drizzle-orm";
 import { instruments } from "@portfolio/db";
+import { isIsin } from "@portfolio/market-data";
 import type { InstrumentInput } from "@portfolio/schema";
 import type { DB } from "../db/client.js";
 
 type Instrument = typeof instruments.$inferSelect;
+
+/**
+ * Fields an existing instrument should adopt from a fresh `input` when the input is
+ * strictly better — so a row created before ISIN/asset-class resolution worked (e.g. an
+ * ISIN stored as the symbol, or a UCITS ETF mislabelled `mutual_fund`) self-heals on the
+ * next import instead of staying stuck. Only upgrades; never downgrades.
+ */
+function instrumentUpgrade(
+  existing: Instrument,
+  input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
+): Partial<Pick<Instrument, "symbol" | "assetClass">> {
+  const set: Partial<Pick<Instrument, "symbol" | "assetClass">> = {};
+  // Replace an ISIN-as-symbol with a real ticker (but never the reverse).
+  if (isIsin(existing.symbol) && !isIsin(input.symbol)) set.symbol = input.symbol;
+  // Refine the generic defaults (`equity`, `mutual_fund`) to a more specific class —
+  // notably `mutual_fund` → `etf` — but don't clobber a specific class with the default.
+  if (
+    input.assetClass !== existing.assetClass &&
+    input.assetClass !== "equity" &&
+    (existing.assetClass === "equity" || existing.assetClass === "mutual_fund")
+  )
+    set.assetClass = input.assetClass;
+  return set;
+}
+
+/** Apply an upgrade if non-empty, returning the (possibly updated) row. */
+async function healInstrument(
+  db: DB,
+  existing: Instrument,
+  input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
+): Promise<Instrument> {
+  const set = instrumentUpgrade(existing, input);
+  if (Object.keys(set).length === 0) return existing;
+  const [updated] = await db
+    .update(instruments)
+    .set(set)
+    .where(eq(instruments.id, existing.id))
+    .returning();
+  return updated ?? existing;
+}
 
 /**
  * Default market for an asset class when the caller doesn't specify one. Gold
@@ -39,7 +80,7 @@ export async function findOrCreateInstrument(
       .from(instruments)
       .where(eq(instruments.isin, input.isin))
       .limit(1);
-    if (byIsin) return byIsin;
+    if (byIsin) return healInstrument(db, byIsin, input);
   }
 
   const [existing] = await db
@@ -49,7 +90,7 @@ export async function findOrCreateInstrument(
       and(eq(instruments.symbol, input.symbol), eq(instruments.market, input.market)),
     )
     .limit(1);
-  if (existing) return existing;
+  if (existing) return healInstrument(db, existing, input);
 
   const [created] = await db
     .insert(instruments)

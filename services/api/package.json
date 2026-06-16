@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx --env-file=../../.env src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
-    "scrape": "tsx --env-file=../../.env src/db/scrape.ts"
+    "scrape": "tsx --env-file=../../.env src/db/scrape.ts",
+    "repair:instruments": "tsx --env-file=../../.env src/db/repair-eu-instruments.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

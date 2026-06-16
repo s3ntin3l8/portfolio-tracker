@@ -12,6 +12,7 @@ import {
   YahooFinanceProvider,
   OpenFigiProvider,
   EodhdProvider,
+  assetClassFromType,
   type InstrumentRef,
   type InstrumentSearchResult,
   type MarketDataProvider,
@@ -838,6 +839,53 @@ describe("OpenFigiProvider", () => {
       fetch: mockFetch(() => ({ ok: false, body: {} })),
     });
     expect(await down.resolveISIN("US0378331005")).toBeNull();
+  });
+
+  it("surfaces the ETP type for a UCITS ETF so it classifies as etf, not mutual_fund", async () => {
+    // OpenFIGI labels UCITS ETFs securityType "ETP" but securityType2 "Mutual Fund";
+    // the resolved type must keep the ETP signal (regression for #112/#111).
+    const p = new OpenFigiProvider({
+      fetch: mockFetch(() => ({
+        body: [
+          {
+            data: [
+              {
+                ticker: "AEMD",
+                name: "AM CR MSCI EMS ETF EUR DIST",
+                exchCode: "GR",
+                securityType: "ETP",
+                securityType2: "Mutual Fund",
+                marketSector: "Equity",
+              },
+            ],
+          },
+        ],
+      })),
+    });
+    const resolved = await p.resolveISIN("LU1737652583");
+    expect(resolved?.type?.toLowerCase()).toContain("etp");
+    expect(assetClassFromType(resolved?.type)).toBe("etf");
+  });
+});
+
+describe("assetClassFromType", () => {
+  it("classifies an OpenFIGI ETP (UCITS ETF) as etf even when tagged 'Mutual Fund'", () => {
+    expect(assetClassFromType("ETP Mutual Fund Equity")).toBe("etf");
+  });
+
+  it("classifies an exchange-traded reksa dana as etf", () => {
+    expect(assetClassFromType("Exchange Traded Reksa Dana")).toBe("etf");
+    expect(assetClassFromType("Exchange-Traded Fund")).toBe("etf");
+  });
+
+  it("still classifies a genuine open-end fund as mutual_fund", () => {
+    expect(assetClassFromType("Open-End Fund Mutual Fund Equity")).toBe("mutual_fund");
+    expect(assetClassFromType("Reksa Dana")).toBe("mutual_fund");
+  });
+
+  it("defaults unknown/empty types to equity", () => {
+    expect(assetClassFromType("Common Stock")).toBe("equity");
+    expect(assetClassFromType(null)).toBe("equity");
   });
 });
 

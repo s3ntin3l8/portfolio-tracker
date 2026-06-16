@@ -1,6 +1,6 @@
 // Mock data for the design-system screens. Replaced by the typed api-client later.
 
-export type AssetClass = "equity" | "gold" | "bond" | "mutual_fund" | "cash";
+export type AssetClass = "equity" | "etf" | "gold" | "bond" | "mutual_fund" | "cash";
 
 export interface Holding {
   id: string;
@@ -42,6 +42,7 @@ export function getAllocation(): AllocationSlice[] {
   byClass.set("cash", (byClass.get("cash") ?? 0) + cashBalance.amount);
   const labels: Record<AssetClass, string> = {
     equity: "Equities",
+    etf: "ETFs",
     gold: "Gold",
     bond: "Bonds",
     mutual_fund: "Mutual funds",

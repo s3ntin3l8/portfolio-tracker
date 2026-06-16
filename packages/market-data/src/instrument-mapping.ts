@@ -87,7 +87,17 @@ export function eodhdExchangeForMarket(market: string): string | undefined {
  */
 export function assetClassFromType(type: string | undefined | null): AssetClass {
   const t = (type ?? "").toLowerCase();
-  if (t.includes("etf") || t.includes("etp") || t.includes("fund of")) return "etf";
+  // "etf"/"etp"/"exchange traded" must be checked before "mutual"/"reksa": a UCITS ETF
+  // reports OpenFIGI securityType "ETP" (with securityType2 "Mutual Fund"), and an
+  // Indonesian exchange-traded reksa dana reads "exchange traded" — both are ETFs.
+  if (
+    t.includes("etf") ||
+    t.includes("etp") ||
+    t.includes("fund of") ||
+    t.includes("exchange traded") ||
+    t.includes("exchange-traded")
+  )
+    return "etf";
   if (t.includes("mutual") || t.includes("reksa")) return "mutual_fund";
   if (t.includes("bond") || t.includes("note") || t.includes("govt") || t.includes("corp"))
     return "bond";
