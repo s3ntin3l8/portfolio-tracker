@@ -18,6 +18,7 @@ import {
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
+  convert,
   contributionStats,
   type CoreTransaction,
   type CorporateAction,
@@ -168,7 +169,15 @@ export async function transactionsRoute(app: FastifyInstance) {
       (t) => t.type === "dividend" || t.type === "coupon",
     );
 
-    const ccys = [...new Set(incomeTxns.map((t) => t.currency))];
+    // FX rates for every currency that appears in income events *or* in the
+    // valuation of a held instrument — the latter so per-holding market value and
+    // cost basis (native currency) can be normalized to `display` for the yields.
+    const ccys = [
+      ...new Set([
+        ...incomeTxns.map((t) => t.currency),
+        ...summary.holdings.map((h) => h.currency).filter((c): c is string => !!c),
+      ]),
+    ];
     const rates = await getFxRates(app.db, ccys, display);
     const fx = makeFxRateFn(rates, display);
 
@@ -209,16 +218,22 @@ export async function transactionsRoute(app: FastifyInstance) {
       .map((h) => {
         const trailingIncome = trailing[h.instrumentId] ?? "0";
         const im = meta.get(h.instrumentId);
-        const marketValue = h.marketValue as string;
+        // Income is already in `display`; normalize value/cost (native currency) too,
+        // so the ratios divide like-for-like (#93). `h.currency` is the quote currency
+        // and — like valuation's own `marketValue − costBasis` — also stands in for the
+        // cost-basis currency.
+        const ccy = h.currency ?? display;
+        const marketValue = convert(h.marketValue as string, ccy, display, fx);
+        const costBasis = convert(h.costBasis, ccy, display, fx);
         return {
           instrumentId: h.instrumentId,
           symbol: im?.symbol ?? "—",
           name: im?.name ?? null,
           trailingIncome,
           marketValue,
-          costBasis: h.costBasis,
+          costBasis,
           yield: trailingYield(trailingIncome, marketValue),
-          yieldOnCost: trailingYield(trailingIncome, h.costBasis),
+          yieldOnCost: trailingYield(trailingIncome, costBasis),
           currency: display,
         };
       })
