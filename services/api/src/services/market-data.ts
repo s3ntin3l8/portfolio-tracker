@@ -1,5 +1,6 @@
 import {
   AntamProvider,
+  EodhdProvider,
   FixtureProvider,
   GoldApiProvider,
   MarketDataService,
@@ -14,10 +15,10 @@ let service: MarketDataService | null = null;
 
 /**
  * The app's market-data service. Live providers are registered from env keys
- * (Twelve Data for IDX + gold, GoldAPI for gold), with a keyless Yahoo Finance
- * fallback for IDX equities/ETFs, all routed ahead of the always-available
- * FixtureProvider. The service tries supporting providers in order until one
- * returns a result, so Yahoo covers IDX if Twelve Data is absent or rate-limited.
+ * (Twelve Data for IDX/US + gold, GoldAPI for gold, EODHD for EU/Xetra), with a
+ * keyless Yahoo Finance fallback for IDX + EU equities/ETFs, all routed ahead of
+ * the always-available FixtureProvider. The service tries supporting providers in
+ * order until one returns a result, so Yahoo covers Xetra if EODHD is absent.
  * Tests use the fixture only (deterministic, no network).
  */
 export function getMarketData(): MarketDataService {
@@ -38,7 +39,12 @@ export function getMarketData(): MarketDataService {
       if (process.env.NAV_BASE_URL) {
         providers.push(new NavProvider({ baseUrl: process.env.NAV_BASE_URL }));
       }
-      // Keyless IDX equity/ETF fallback — no signup, unofficial endpoint.
+      // Keyed EU/Xetra equity/ETF primary (Trade Republic instruments) — ahead of the
+      // keyless Yahoo fallback, which also covers Xetra if EODHD is absent.
+      if (process.env.EODHD_API_KEY) {
+        providers.push(new EodhdProvider({ apiKey: process.env.EODHD_API_KEY }));
+      }
+      // Keyless equity/ETF fallback (IDX + EU) — no signup, unofficial endpoint.
       providers.push(new YahooFinanceProvider());
       // ISIN → instrument discovery (keyless; OPENFIGI_API_KEY raises the rate limit).
       providers.push(new OpenFigiProvider({ apiKey: process.env.OPENFIGI_API_KEY }));

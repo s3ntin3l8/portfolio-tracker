@@ -69,6 +69,7 @@ export async function valuePortfolio(
       market: i.market,
       assetClass: i.assetClass,
       currency: i.currency,
+      isin: i.isin ?? undefined,
     } satisfies InstrumentRef,
   }));
   const prices = await getCachedQuotes(db, marketData, refs, ttlMs);

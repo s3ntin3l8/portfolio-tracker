@@ -56,6 +56,32 @@ export function mapExchange(exchange: string | undefined | null): MarketInfo | u
 }
 
 /**
+ * Yahoo Finance ticker suffix per internal market (e.g. `BBCA` → `BBCA.JK` on IDX,
+ * `AEMD` → `AEMD.DE` on Xetra). Markets absent here use the bare symbol.
+ */
+const MARKET_YAHOO_SUFFIX: Record<string, string> = {
+  IDX: ".JK",
+  XETRA: ".DE",
+};
+
+export function yahooSuffixForMarket(market: string): string | undefined {
+  return MARKET_YAHOO_SUFFIX[market];
+}
+
+/**
+ * EODHD exchange code per internal market — EODHD tickers are `<code>.<exchange>`
+ * (e.g. `AEMD.XETRA`, `AAPL.US`). Markets absent here aren't priced by EODHD.
+ */
+const MARKET_EODHD_EXCHANGE: Record<string, string> = {
+  XETRA: "XETRA",
+  US: "US",
+};
+
+export function eodhdExchangeForMarket(market: string): string | undefined {
+  return MARKET_EODHD_EXCHANGE[market];
+}
+
+/**
  * Normalise a provider's instrument-type/security-type string to our `AssetClass`.
  * Falls back to `equity` (the dominant case) when the type is missing or unknown.
  */

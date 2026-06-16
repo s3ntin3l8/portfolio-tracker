@@ -7,8 +7,11 @@ export { AntamProvider } from "./antam.js";
 export { NavProvider } from "./nav.js";
 export { YahooFinanceProvider, type YahooProviderOptions } from "./yahoo-finance.js";
 export { OpenFigiProvider, type OpenFigiOptions } from "./open-figi.js";
+export { EodhdProvider, type EodhdOptions } from "./eodhd.js";
 export {
   mapExchange,
   assetClassFromType,
+  yahooSuffixForMarket,
+  eodhdExchangeForMarket,
   type MarketInfo,
 } from "./instrument-mapping.js";

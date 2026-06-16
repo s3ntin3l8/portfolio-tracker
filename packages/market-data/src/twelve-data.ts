@@ -33,7 +33,10 @@ export class TwelveDataProvider implements MarketDataProvider {
   }
 
   supports(assetClass: AssetClass, market: string): boolean {
-    if (assetClass === "equity" || assetClass === "etf") return true;
+    // Only the markets the IDX-shaped `exchange=` query actually resolves; EU venues
+    // (e.g. XETRA) are left to EODHD/Yahoo rather than burning a credit on a miss.
+    if (assetClass === "equity" || assetClass === "etf")
+      return market === "IDX" || market === "US";
     // Gold spot only (XAU); buyback valuation is the Antam provider's job.
     return assetClass === "gold" && market === "XAU";
   }

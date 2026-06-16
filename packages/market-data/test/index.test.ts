@@ -11,6 +11,7 @@ import {
   NavProvider,
   YahooFinanceProvider,
   OpenFigiProvider,
+  EodhdProvider,
   type InstrumentRef,
   type InstrumentSearchResult,
   type MarketDataProvider,
@@ -275,6 +276,29 @@ describe("YahooFinanceProvider", () => {
     expect(provider.supports("gold", "XAU")).toBe(false);
   });
 
+  it("quotes a Xetra ETF via the .DE suffix, without double-suffixing", async () => {
+    let calledUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return { body: chartBody(50) };
+      }),
+    });
+    const xetra: InstrumentRef = {
+      symbol: "AEMD",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
+    expect((await provider.getQuote(xetra))?.price).toBe("50");
+    expect(calledUrl).toContain("/v8/finance/chart/AEMD.DE");
+
+    // already-qualified symbol passes through unchanged (no .DE.DE)
+    await provider.getQuote({ ...xetra, symbol: "AEMD.DE" });
+    expect(calledUrl).toContain("/v8/finance/chart/AEMD.DE");
+    expect(calledUrl).not.toContain("AEMD.DE.DE");
+  });
+
   it("returns history candles, skipping null closes", async () => {
     const provider = new YahooFinanceProvider({
       fetch: mockFetch(() => ({ body: chartBody(9500) })),
@@ -293,7 +317,107 @@ describe("YahooFinanceProvider", () => {
   });
 });
 
+describe("YahooFinanceProvider ISIN fallback", () => {
+  const chartBody = (price: number | null) => ({
+    chart: {
+      result: [
+        {
+          meta:
+            price === null
+              ? {}
+              : { regularMarketPrice: price, currency: "EUR", regularMarketTime: 1738972800 },
+        },
+      ],
+    },
+  });
+  // A stale/unresolvable stored ticker → the direct `.DE` lookup misses, forcing the
+  // ISIN search to find the real Yahoo symbol.
+  const isinRef: InstrumentRef = {
+    symbol: "OLDTICKER",
+    market: "XETRA",
+    assetClass: "etf",
+    currency: "EUR",
+    isin: "IE00B4L5Y983",
+  };
+  // Two cross-listings of the same ISIN: a GBP London line and the EUR Xetra (GER) line.
+  const searchBody = {
+    quotes: [
+      { symbol: "AEMD.L", exchange: "LSE" }, // unknown venue → not market/currency match
+      { symbol: "AEMD.DE", exchange: "GER" }, // GER → XETRA / EUR
+    ],
+  };
+
+  it("resolves the ISIN to the market-matching listing when the direct symbol misses", async () => {
+    const urls: string[] = [];
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        if (url.includes("/v1/finance/search")) return { body: searchBody };
+        // The first (direct) chart call has no price; the resolved one does.
+        return { body: url.includes("AEMD.DE") ? chartBody(50) : chartBody(null) };
+      }),
+    });
+    const quote = await provider.getQuote(isinRef);
+    expect(quote).toMatchObject({ price: "50", currency: "EUR" });
+    expect(urls.some((u) => u.includes("/v1/finance/search?q=IE00B4L5Y983"))).toBe(true);
+    expect(urls.at(-1)).toContain("/v8/finance/chart/AEMD.DE");
+  });
+
+  it("memoises the ISIN resolution across calls", async () => {
+    let searchCalls = 0;
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/v1/finance/search")) {
+          searchCalls++;
+          return { body: searchBody };
+        }
+        return { body: url.includes("AEMD.DE") ? chartBody(50) : chartBody(null) };
+      }),
+    });
+    await provider.getQuote(isinRef);
+    await provider.getQuote(isinRef);
+    expect(searchCalls).toBe(1);
+  });
+
+  it("does not search when no ISIN is known", async () => {
+    let searched = false;
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/v1/finance/search")) searched = true;
+        return { body: chartBody(null) };
+      }),
+    });
+    const { isin: _omit, ...noIsin } = isinRef;
+    expect(await provider.getQuote(noIsin)).toBeNull();
+    expect(searched).toBe(false);
+  });
+
+  it("resolves an ISIN-as-symbol without suffixing it", async () => {
+    const urls: string[] = [];
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        if (url.includes("/v1/finance/search")) return { body: searchBody };
+        return { body: url.includes("AEMD.DE") ? chartBody(50) : chartBody(null) };
+      }),
+    });
+    const quote = await provider.getQuote({ ...isinRef, symbol: "IE00B4L5Y983" });
+    expect(quote?.price).toBe("50");
+    // the direct attempt is the bare ISIN, never IE00....DE
+    expect(urls.some((u) => u.includes("/v8/finance/chart/IE00B4L5Y983?"))).toBe(true);
+    expect(urls.some((u) => u.includes("IE00B4L5Y983.DE"))).toBe(false);
+  });
+});
+
 describe("TwelveDataProvider", () => {
+  it("supports IDX/US equities & gold spot, but not EU venues", () => {
+    const provider = new TwelveDataProvider("key");
+    expect(provider.supports("equity", "IDX")).toBe(true);
+    expect(provider.supports("etf", "US")).toBe(true);
+    expect(provider.supports("gold", "XAU")).toBe(true);
+    expect(provider.supports("etf", "XETRA")).toBe(false);
+  });
+
   it("quotes an IDX equity with the exchange param + previous close", async () => {
     let seenUrl = "";
     const provider = new TwelveDataProvider("key", {
@@ -581,6 +705,93 @@ describe("YahooFinanceProvider.search", () => {
       fetch: mockFetch(() => ({ ok: false, body: {} })),
     });
     expect(await provider.search("x")).toEqual([]);
+  });
+});
+
+describe("EodhdProvider", () => {
+  const xetra: InstrumentRef = {
+    symbol: "AEMD",
+    market: "XETRA",
+    assetClass: "etf",
+    currency: "EUR",
+    isin: "IE00B4L5Y983",
+  };
+
+  it("supports EU/US equities & ETFs, not gold or unknown venues", () => {
+    const p = new EodhdProvider({ apiKey: "k" });
+    expect(p.supports("etf", "XETRA")).toBe(true);
+    expect(p.supports("equity", "US")).toBe(true);
+    expect(p.supports("etf", "IDX")).toBe(false); // not in the EODHD exchange map
+    expect(p.supports("gold", "XAU")).toBe(false);
+  });
+
+  it("quotes a Xetra ETF via <code>.XETRA real-time and maps the payload", async () => {
+    let seenUrl = "";
+    let token: string | undefined;
+    const p = new EodhdProvider({
+      apiKey: "eodhd-key",
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        token = new URL(url).searchParams.get("api_token") ?? undefined;
+        return { body: { close: 50.5, previousClose: 49, timestamp: 1738972800 } };
+      }),
+    });
+    const quote = await p.getQuote(xetra);
+    expect(seenUrl).toContain("/real-time/AEMD.XETRA");
+    expect(token).toBe("eodhd-key");
+    expect(quote).toMatchObject({
+      price: "50.5",
+      currency: "EUR",
+      previousClose: "49",
+    });
+    expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
+  });
+
+  it("resolves an ISIN-as-symbol to a ticker via search, preferring the Xetra listing", async () => {
+    const urls: string[] = [];
+    const p = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        if (url.includes("/search/")) {
+          return {
+            body: [
+              { Code: "AEMD", Exchange: "LSE", Currency: "GBP" },
+              { Code: "AEMD", Exchange: "XETRA", Currency: "EUR" },
+            ],
+          };
+        }
+        return { body: { close: 51 } };
+      }),
+    });
+    const quote = await p.getQuote({ ...xetra, symbol: "IE00B4L5Y983" });
+    expect(quote?.price).toBe("51");
+    expect(urls.some((u) => u.includes("/search/IE00B4L5Y983"))).toBe(true);
+    expect(urls.at(-1)).toContain("/real-time/AEMD.XETRA");
+  });
+
+  it("memoises ISIN resolution and returns null on a missing/NA close", async () => {
+    let searchCalls = 0;
+    const p = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch((url) => {
+        if (url.includes("/search/")) {
+          searchCalls++;
+          return { body: [{ Code: "AEMD", Exchange: "XETRA", Currency: "EUR" }] };
+        }
+        return { body: { close: "NA" } };
+      }),
+    });
+    const ref = { ...xetra, symbol: "IE00B4L5Y983" };
+    expect(await p.getQuote(ref)).toBeNull(); // close "NA" → null
+    await p.getQuote(ref);
+    expect(searchCalls).toBe(1); // resolution memoised
+
+    const down = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await down.getQuote(xetra)).toBeNull();
   });
 });
 

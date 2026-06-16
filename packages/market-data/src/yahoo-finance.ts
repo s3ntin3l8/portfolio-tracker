@@ -6,7 +6,12 @@ import type {
   MarketDataProvider,
   Quote,
 } from "./types.js";
-import { assetClassFromType, mapExchange } from "./instrument-mapping.js";
+import {
+  assetClassFromType,
+  mapExchange,
+  yahooSuffixForMarket,
+} from "./instrument-mapping.js";
+import { isIsin } from "./types.js";
 
 export interface YahooProviderOptions {
   baseUrl?: string;
@@ -28,13 +33,18 @@ interface ChartResult {
 /**
  * Yahoo Finance provider — a **keyless** IDX equity/ETF fallback. Uses the auth-free
  * chart endpoint (`/v8/finance/chart/<symbol>`) for both quotes and history. IDX
- * tickers map to Yahoo's `.JK` suffix (e.g. BBCA → BBCA.JK). Unofficial endpoint, so
- * it's a resilience layer behind a keyed primary (Twelve Data), not the sole source.
+ * tickers map to Yahoo's `.JK` suffix (e.g. BBCA → BBCA.JK); EU/Xetra tickers take
+ * `.DE`. When the symbol-based lookup misses and an ISIN is known, the search endpoint
+ * resolves the ISIN to a Yahoo symbol (preferring the listing matching the instrument's
+ * market/currency). Unofficial endpoint, so it's a resilience layer behind a keyed
+ * primary (Twelve Data / EODHD), not the sole source.
  */
 export class YahooFinanceProvider implements MarketDataProvider {
   readonly name = "yahoo";
   private readonly baseUrl: string;
   private readonly doFetch: typeof fetch;
+  /** Memoised ISIN → Yahoo symbol resolution (caches misses as `null`). */
+  private readonly isinSymbolCache = new Map<string, string | null>();
 
   constructor(opts: YahooProviderOptions = {}) {
     this.baseUrl = opts.baseUrl ?? "https://query1.finance.yahoo.com";
@@ -45,17 +55,21 @@ export class YahooFinanceProvider implements MarketDataProvider {
     return assetClass === "equity" || assetClass === "etf";
   }
 
-  /** Map an instrument to a Yahoo symbol: IDX tickers take the `.JK` suffix. */
+  /**
+   * Map an instrument to a Yahoo symbol via its market's suffix (IDX → `.JK`,
+   * XETRA → `.DE`). Already-qualified symbols pass through; an ISIN stored as the
+   * symbol gets no suffix (the ISIN-search fallback resolves it instead).
+   */
   private yahooSymbol(ref: InstrumentRef): string {
     if (ref.symbol.includes(".")) return ref.symbol;
-    if (ref.market === "IDX") return `${ref.symbol}.JK`;
-    return ref.symbol;
+    if (isIsin(ref.symbol)) return ref.symbol;
+    const suffix = yahooSuffixForMarket(ref.market);
+    return suffix ? `${ref.symbol}${suffix}` : ref.symbol;
   }
 
-  private async chart(ref: InstrumentRef, range: string): Promise<ChartResult | null> {
-    const symbol = encodeURIComponent(this.yahooSymbol(ref));
+  private async chartBySymbol(symbol: string, range: string): Promise<ChartResult | null> {
     const res = await this.doFetch(
-      `${this.baseUrl}/v8/finance/chart/${symbol}?range=${range}&interval=1d`,
+      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`,
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -64,8 +78,47 @@ export class YahooFinanceProvider implements MarketDataProvider {
     return data.chart?.result?.[0] ?? null;
   }
 
+  private chart(ref: InstrumentRef, range: string): Promise<ChartResult | null> {
+    return this.chartBySymbol(this.yahooSymbol(ref), range);
+  }
+
+  /**
+   * Resolve an instrument's ISIN to a Yahoo symbol via the search endpoint, preferring
+   * the listing whose venue matches the instrument's market, then its currency, then the
+   * first quote. Result (incl. a miss) is memoised per ISIN.
+   */
+  private async resolveIsinSymbol(ref: InstrumentRef): Promise<string | null> {
+    if (!ref.isin) return null;
+    const cached = this.isinSymbolCache.get(ref.isin);
+    if (cached !== undefined) return cached;
+
+    const res = await this.doFetch(
+      `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(ref.isin)}&quotesCount=10&newsCount=0`,
+    );
+    let symbol: string | null = null;
+    if (res.ok) {
+      const data = (await res.json()) as {
+        quotes?: { symbol?: string; exchange?: string }[];
+      };
+      const quotes = (data.quotes ?? []).filter(
+        (q): q is { symbol: string; exchange?: string } => Boolean(q.symbol),
+      );
+      const byMarket = quotes.find((q) => mapExchange(q.exchange)?.market === ref.market);
+      const byCurrency = quotes.find(
+        (q) => mapExchange(q.exchange)?.currency === ref.currency,
+      );
+      symbol = (byMarket ?? byCurrency ?? quotes[0])?.symbol ?? null;
+    }
+    this.isinSymbolCache.set(ref.isin, symbol);
+    return symbol;
+  }
+
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
-    const result = await this.chart(ref, "1d");
+    let result = await this.chart(ref, "1d");
+    if ((result?.meta?.regularMarketPrice ?? null) === null && ref.isin) {
+      const resolved = await this.resolveIsinSymbol(ref);
+      if (resolved) result = await this.chartBySymbol(resolved, "1d");
+    }
     const price = result?.meta?.regularMarketPrice;
     if (price === undefined || price === null) return null;
     const asOf = result?.meta?.regularMarketTime
