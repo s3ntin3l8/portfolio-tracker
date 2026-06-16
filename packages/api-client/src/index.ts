@@ -181,15 +181,75 @@ export interface InstrumentYield {
   name: string | null;
   trailingIncome: string;
   marketValue: string;
+  costBasis: string;
+  /** Trailing income ÷ market value (current yield), or null when value is zero. */
   yield: string | null;
+  /** Trailing income ÷ cost basis (yield on cost), or null when cost is zero. */
+  yieldOnCost: string | null;
   currency: string;
 }
 
-/** Forward income outlook: upcoming coupons + per-holding trailing yield. */
-export interface IncomeOutlook {
+/** A single dividend/coupon cash event (native currency), for the event log. */
+export interface IncomeEvent {
+  instrumentId: string | null;
+  symbol: string | null;
+  name: string | null;
+  type: string; // "dividend" | "coupon"
+  date: string; // YYYY-MM-DD
+  amount: string;
+  currency: string;
+}
+
+export interface YearIncome {
+  year: string;
+  total: string;
+  paymentCount: number;
+}
+export interface MonthIncome {
+  month: string; // YYYY-MM
+  total: string;
+}
+export interface InstrumentIncome {
+  instrumentId: string | null;
+  symbol: string | null;
+  name: string | null;
+  total: string;
+  pct: number;
+}
+export interface AssetClassIncome {
+  assetClass: string;
+  total: string;
+  pct: number;
+}
+export interface CurrencyIncome {
+  currency: string;
+  totalNative: string;
+  totalNormalized: string;
+}
+
+/**
+ * Dividend/coupon analytics + forward outlook for the active scope. All monetary
+ * fields are in `displayCurrency` unless noted; `byCurrency` keeps the native sums.
+ */
+export interface IncomeStats {
   displayCurrency: string;
-  upcoming: ProjectedCoupon[];
+  byYear: YearIncome[];
+  monthly: MonthIncome[];
+  ttm: string;
+  thisYear: string;
+  lastYear: string;
+  deltaAbs: string;
+  deltaPct: number | null;
+  forecastNextYear: string;
+  lifetimeTotal: string;
+  byInstrument: InstrumentIncome[];
+  byAssetClass: AssetClassIncome[];
+  byCurrency: CurrencyIncome[];
+  paymentCount: number;
+  averagePerPayment: string;
   yields: InstrumentYield[];
+  upcoming: ProjectedCoupon[];
+  events: IncomeEvent[];
 }
 
 /** Contribution analytics + forecast seed for a savings/Sparplan account. */
@@ -323,7 +383,9 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
-    getIncomeOutlook: () => request<IncomeOutlook>("GET", "/networth/income"),
+    getIncome: () => request<IncomeStats>("GET", "/networth/income"),
+    getPortfolioIncome: (portfolioId: string) =>
+      request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
     getContributions: () =>
       request<ContributionStats>("GET", "/networth/contributions"),
     getPortfolioContributions: (portfolioId: string) =>

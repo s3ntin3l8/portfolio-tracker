@@ -8,14 +8,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/empty-state";
 import {
-  loadIncome,
-  loadIncomeOutlook,
-  type IncomeEvent,
-} from "@/lib/server-api";
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/stat-card";
+import { EmptyState } from "@/components/empty-state";
+import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { IncomeBarChart } from "@/components/charts/income-bar-chart";
+import { IncomeHeatmap } from "@/components/charts/income-heatmap";
+import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
+import type { IncomeEvent } from "@portfolio/api-client";
 
 /** Sum a year's events per currency (income can span currencies). */
 function totalsByCurrency(events: IncomeEvent[]): Record<string, number> {
@@ -35,16 +42,11 @@ export default async function IncomePage({
   setRequestLocale(locale);
   const t = await getTranslations("Income");
   const tt = await getTranslations("TxType");
+  const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
-  const [result, outlook] = await Promise.all([
-    loadIncome(),
-    loadIncomeOutlook(),
-  ]);
-  const upcoming = outlook?.upcoming ?? [];
-  const yields = outlook?.yields ?? [];
-  const hasOutlook = upcoming.length > 0 || yields.length > 0;
+  const result = await loadIncomeStats();
 
   const heading = (
     <div>
@@ -53,8 +55,7 @@ export default async function IncomePage({
     </div>
   );
 
-  if (result.status === "unavailable" || (result.events.length === 0 && !hasOutlook)) {
-    const empty = result.status === "empty";
+  if (result.status !== "ok") {
     return (
       <div className="space-y-6">
         {heading}
@@ -63,39 +64,157 @@ export default async function IncomePage({
           title={
             result.status === "unavailable"
               ? te("unavailableTitle")
-              : empty
-                ? te("noPortfolioTitle")
-                : t("emptyTitle")
+              : te("noPortfolioTitle")
           }
           description={
             result.status === "unavailable"
               ? te("unavailableBody")
-              : empty
-                ? te("noPortfolioBody")
-                : t("emptyBody")
+              : te("noPortfolioBody")
           }
         />
       </div>
     );
   }
 
-  // Group newest-first events by year (events are already sorted desc by date).
+  const s = result.data;
+  const currency = s.displayCurrency;
+  const m = (n: number) => formatMoney(n, currency, locale);
+  const hasIncome =
+    s.events.length > 0 || s.yields.length > 0 || s.upcoming.length > 0;
+
+  if (!hasIncome) {
+    return (
+      <div className="space-y-6">
+        {heading}
+        <EmptyState
+          icon={Coins}
+          title={t("emptyTitle")}
+          description={t("emptyBody")}
+        />
+      </div>
+    );
+  }
+
+  const lastYearLabel = String(new Date().getUTCFullYear() - 1);
+  const deltaAbs = Number(s.deltaAbs);
+
+  // Yearly bars + the next-year forecast appended as a muted projection bar.
+  const yearBars = [
+    ...s.byYear.map((y) => ({ label: y.year, value: Number(y.total) })),
+    { label: t("nextYear"), value: Number(s.forecastNextYear), forecast: true },
+  ];
+
+  const classSlices = s.byAssetClass.map((c) => ({
+    key: c.assetClass,
+    label: tc(c.assetClass),
+    value: Number(c.total),
+  }));
+
+  // Group events newest-first by year (events are already sorted desc by date).
   const byYear = new Map<string, IncomeEvent[]>();
-  for (const e of result.events) {
+  for (const e of s.events) {
     const year = e.date.slice(0, 4);
-    let bucket = byYear.get(year);
-    if (!bucket) {
-      bucket = [];
-      byYear.set(year, bucket);
-    }
+    const bucket = byYear.get(year) ?? [];
     bucket.push(e);
+    byYear.set(year, bucket);
   }
 
   return (
     <div className="space-y-8">
       {heading}
 
-      {yields.length > 0 && (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard
+          label={t("thisYear")}
+          value={m(Number(s.thisYear))}
+          delta={
+            s.deltaPct !== null
+              ? `${formatPercent(s.deltaPct, locale)} ${t("vsLastYear", { year: lastYearLabel })}`
+              : undefined
+          }
+          deltaTone={deltaAbs > 0 ? "up" : deltaAbs < 0 ? "down" : "neutral"}
+        />
+        <StatCard label={t("ttm")} value={m(Number(s.ttm))} />
+        <StatCard label={t("forecast")} value={m(Number(s.forecastNextYear))} />
+        <StatCard label={t("lifetime")} value={m(Number(s.lifetimeTotal))} />
+        <StatCard
+          label={t("payments")}
+          value={String(s.paymentCount)}
+          delta={t("avgPerPayment", { avg: m(Number(s.averagePerPayment)) })}
+        />
+      </div>
+
+      {s.byYear.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("perYearTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <IncomeBarChart data={yearBars} currency={currency} />
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {s.monthly.length > 0 && (
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>{t("seasonalityTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <IncomeHeatmap monthly={s.monthly} currency={currency} />
+            </CardContent>
+          </Card>
+        )}
+        {classSlices.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("byClassTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AllocationDonut data={classSlices} currency={currency} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {s.byInstrument.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("topContributorsTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {s.byInstrument.slice(0, 8).map((c) => (
+              <div key={c.instrumentId ?? c.symbol ?? "—"} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-medium">{c.symbol ?? "—"}</span>
+                    {c.name && (
+                      <span className="ml-2 truncate text-xs text-muted-foreground">
+                        {c.name}
+                      </span>
+                    )}
+                  </div>
+                  <span className="tabular shrink-0 text-sm">
+                    {m(Number(c.total))}{" "}
+                    <span className="text-muted-foreground">
+                      ({formatPercent(c.pct, locale)})
+                    </span>
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${Math.max(2, c.pct * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {s.yields.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">{t("yieldTitle")}</h2>
           <div className="rounded-xl border border-border">
@@ -105,11 +224,12 @@ export default async function IncomePage({
                   <TableHead>{t("instrument")}</TableHead>
                   <TableHead className="text-right">{t("trailing")}</TableHead>
                   <TableHead className="text-right">{t("value")}</TableHead>
-                  <TableHead className="text-right">{t("yieldCol")}</TableHead>
+                  <TableHead className="text-right">{t("currentYield")}</TableHead>
+                  <TableHead className="text-right">{t("yieldOnCost")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {yields.map((y) => (
+                {s.yields.map((y) => (
                   <TableRow key={y.instrumentId}>
                     <TableCell>
                       <div className="font-medium">{y.symbol}</div>
@@ -130,6 +250,11 @@ export default async function IncomePage({
                         ? formatPercent(Number(y.yield), locale)
                         : "—"}
                     </TableCell>
+                    <TableCell className="tabular text-right text-muted-foreground">
+                      {y.yieldOnCost !== null
+                        ? formatPercent(Number(y.yieldOnCost), locale)
+                        : "—"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -138,7 +263,37 @@ export default async function IncomePage({
         </section>
       )}
 
-      {upcoming.length > 0 && (
+      {s.byCurrency.length > 1 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">{t("currencyTitle")}</h2>
+          <div className="rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("type")}</TableHead>
+                  <TableHead className="text-right">{t("native")}</TableHead>
+                  <TableHead className="text-right">{t("normalized")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {s.byCurrency.map((c) => (
+                  <TableRow key={c.currency}>
+                    <TableCell className="font-medium">{c.currency}</TableCell>
+                    <TableCell className="tabular text-right">
+                      {formatMoney(Number(c.totalNative), c.currency, locale)}
+                    </TableCell>
+                    <TableCell className="tabular text-right text-muted-foreground">
+                      {m(Number(c.totalNormalized))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
+
+      {s.upcoming.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">{t("upcomingTitle")}</h2>
           <div className="rounded-xl border border-border">
@@ -151,7 +306,7 @@ export default async function IncomePage({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {upcoming.map((c, i) => (
+                {s.upcoming.map((c, i) => (
                   <TableRow key={`${c.instrumentId}-${c.date}-${i}`}>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                       {df.format(new Date(c.date))}
@@ -185,9 +340,7 @@ export default async function IncomePage({
                 {t("yearTotal")}{" "}
                 <span className="font-medium text-foreground">
                   {Object.entries(totals)
-                    .map(([currency, amount]) =>
-                      formatMoney(amount, currency, locale),
-                    )
+                    .map(([cur, amount]) => formatMoney(amount, cur, locale))
                     .join(" · ")}
                 </span>
               </p>
@@ -204,8 +357,8 @@ export default async function IncomePage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {events.map((e) => (
-                    <TableRow key={e.id}>
+                  {events.map((e, i) => (
+                    <TableRow key={`${e.instrumentId}-${e.date}-${i}`}>
                       <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                         {df.format(new Date(e.date))}
                       </TableCell>

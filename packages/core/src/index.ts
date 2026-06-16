@@ -20,8 +20,17 @@ export {
   projectCoupons,
   trailingIncomeByInstrument,
   trailingYield,
+  aggregateIncome,
   type BondPosition,
   type ProjectedCoupon,
+  type IncomeEntry,
+  type IncomeStats,
+  type YearIncome,
+  type MonthIncome,
+  type InstrumentIncome,
+  type AssetClassIncome,
+  type CurrencyIncome,
+  type AggregateIncomeInput,
 } from "./income.js";
 export {
   contributionStats,
