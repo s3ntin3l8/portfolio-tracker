@@ -1,100 +1,102 @@
-# Node Backend Template
+# Portfolio Tracker
 
-A production-ready [Fastify](https://fastify.dev/) backend template with
-TypeScript, SQLite/[Drizzle](https://orm.drizzle.team/), encryption-at-rest,
-security middleware, and full CI/CD.
+An Indonesian-first personal portfolio tracker. Import transactions from
+**screenshots** (LLM vision) and **CSV**, then track **equities, gold, bonds, mutual
+funds (reksa dana), and cash** with live IDX prices and a real-time gold ticker. Built to
+expand to **Trade Republic / international** holdings.
 
-## 🚀 Quick Start
+Transactions are the single source of truth — holdings, P&L, cash balance, XIRR and net
+worth are all derived, never stored.
 
-```bash
-make install          # install dependencies
-cp .env.example .env  # configure environment (optional; defaults work)
-make dev              # start the dev server on :3000
-```
+## Architecture
 
-Then:
+A npm-workspaces + Turborepo monorepo (Node ≥26, ESM, TypeScript).
 
-```bash
-curl localhost:3000/health
-curl localhost:3000/ready
-curl -X POST localhost:3000/users -H 'content-type: application/json' \
-  -d '{"name":"Ada","email":"ada@example.com","notes":"secret"}'
-curl localhost:3000/users
-```
+| Workspace              | What it is                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `services/api`         | **Fastify 5 + Drizzle (Postgres)** — the only thing that touches the DB. Auth, market-data jobs, screenshot parsing, REST API. |
+| `apps/web`             | **Next.js (App Router) PWA** — Tailwind + shadcn/ui, next-intl (EN/ID). Talks to the API over HTTP.                            |
+| `packages/schema`      | Zod schemas + shared types.                                                                                                    |
+| `packages/core`        | Derivations: holdings, cost basis, XIRR, corporate actions, FX.                                                                |
+| `packages/db`          | Drizzle schema + migrations.                                                                                                   |
+| `packages/market-data` | Provider abstraction for live prices (see [docs/data_providers.md](docs/data_providers.md)).                                   |
+| `packages/api-client`  | Typed HTTP client for the PWA.                                                                                                 |
 
-## 📁 Structure
+**Auth** is Authentik OIDC: the API verifies Bearer JWTs and scopes every query to the
+authenticated user; the web app logs in via Auth.js v5. **Infra** is Supabase Cloud
+(Postgres + Storage) to start, with self-hosting on Proxmox as the exit path.
 
-- `src/app.ts` — the app factory (`buildApp()`); registers plugins then routes.
-- `src/plugins/` — `env` (validated config), `logging`, `security` (helmet,
-  rate-limit, CORS), `db` (migrations + `app.db` / `app.encryption` decorators).
-- `src/routes/` — `root`, `health` (`/health` liveness, `/ready` readiness),
-  `users` (example CRUD using the DB + encryption).
-- `src/services/` — `encryption` (AES-256-GCM), `date-utils`.
-- `src/db/` — Drizzle schema, client, and seed. Migrations live in `drizzle/`.
+See [`CLAUDE.md`](CLAUDE.md) for the full architecture and the phased plan in
+`.claude/plans/`.
 
-## 🔧 Configuration
-
-All config is validated at startup by `@fastify/env` (see `src/plugins/env.ts`).
-
-| Variable            | Default            | Description                                              |
-| ------------------- | ------------------ | ------------------------------------------------------- |
-| `NODE_ENV`          | `development`      | `development` \| `production` \| `test`                 |
-| `PORT`              | `3000`             | HTTP listen port                                        |
-| `LOG_LEVEL`         | `info`             | pino log level                                          |
-| `DATABASE_URL`      | `file:./data/app.db` | SQLite `file:` URL                                    |
-| `DB_ENCRYPTION_KEY` | _(empty)_          | base64url 32-byte key; enables encryption-at-rest       |
-| `CORS_ORIGIN`       | _(empty)_          | comma-separated allowlist; empty disables CORS          |
-| `RATE_LIMIT_MAX`    | `100`              | max requests per window                                 |
-| `RATE_LIMIT_WINDOW` | `1 minute`         | rate-limit window                                       |
-
-Generate an encryption key:
+## Quick start
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+npm install                 # install all workspace deps (single root lockfile)
+cp .env.example .env        # configure environment
+docker compose up -d postgres minio   # local Postgres + object storage
+npm run dev                 # API watch (:3000) + Next dev (:3005)
 ```
 
-## 🛠️ Commands
+The web app serves on `:3005` and the API on `:3000`. For tests and driverless local
+runs, an embedded PGlite Postgres is used automatically (no external DB needed).
 
-- `make dev` — dev server with reload
-- `make test` / `make test-coverage` — Vitest suite
-- `make lint` / `make typecheck` — ESLint / `tsc`
-- `make build` — production build to `dist/`
-- `npm run db:generate` — generate a migration from schema changes
-- `npm run db:migrate` — apply migrations (also run automatically at startup)
-- `npm run db:seed` — seed initial data
+## Commands
 
-## 🛡️ Security
+Run from the repo root — Turborepo fans tasks out across workspaces.
 
-- `@fastify/helmet` (security headers), `@fastify/rate-limit`, and
-  `@fastify/cors` are wired into every app via `src/plugins/security.ts`.
-- Optional AES-256-GCM encryption-at-rest via `DB_ENCRYPTION_KEY` (see the
-  `users.notes` column for an example).
-- CodeQL scanning and dependency review run in CI; `detect-secrets` runs
-  pre-commit. Follows the
-  [s3ntin3l8 Global Security Policy](https://github.com/s3ntin3l8/.github/blob/main/SECURITY.md).
+| Command             | Does                                        |
+| ------------------- | ------------------------------------------- |
+| `npm run dev`       | Run all `dev` tasks (API watch + Next dev). |
+| `npm run build`     | Build every workspace.                      |
+| `npm run lint`      | ESLint across workspaces.                   |
+| `npm run typecheck` | `tsc --noEmit` across workspaces.           |
+| `npm test`          | Vitest across workspaces.                   |
+| `npm run format`    | Prettier write.                             |
 
-## 🐳 Docker
+Target one workspace with `--workspace @portfolio/<name>` (e.g.
+`npm run dev --workspace @portfolio/api`). After editing
+`services/api/src/db/schema.ts`, run `npm run db:generate` and commit the migration.
 
-```bash
-docker build -t my-service .
-docker run -p 3000:3000 \
-  -e DB_ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")" \
-  my-service
-```
+**Before committing:** `npm run lint && npm run typecheck && npm test`.
 
-The image is multi-stage, runs as a non-root user, and ships a `HEALTHCHECK`.
+## Configuration
 
-## 📦 Releases
+All config is read from `app.config` (typed in `services/api/src/plugins/env.ts`) — see
+[`.env.example`](.env.example) for the full annotated list. Highlights:
 
-Automated via [Release Please](https://github.com/googleapis/release-please).
-Use [Conventional Commits](https://www.conventionalcommits.org/) to trigger
-version bumps.
+- **Database** — `DATABASE_URL` (Postgres; `pglite://` for embedded local/test).
+- **Auth** — `AUTHENTIK_ISSUER`, `AUTHENTIK_CLIENT_ID/SECRET`, `AUTH_SECRET`, `AUTH_URL`,
+  `NEXT_PUBLIC_API_URL`; `AUTHENTIK_ADMIN_GROUP` gates the provider-admin UI.
+- **Storage** — `STORAGE_*` (Supabase Storage or local MinIO) for screenshots.
+- **Screenshot parsing** — `SCREENSHOT_PARSER` + per-provider keys (Claude / Gemini /
+  OpenRouter / Ollama).
+- **Market data** — provider keys (`TWELVEDATA_API_KEY`, `GOLDAPI_KEY`, `EODHD_API_KEY`,
+  …) and source URLs; see [docs/data_providers.md](docs/data_providers.md).
 
-## ✅ Using this template
+## Conventions
 
-1. Set `name` in `package.json` and update this README's title/description.
-2. Update `image-name` in `.github/workflows/ci-cd.yml` and
-   `release-please.yml` to your repo.
-3. Replace `release-please-config.json` / manifest package name if needed.
-4. Generate and set a real `DB_ENCRYPTION_KEY` for any non-local environment.
-5. Replace the example `users` schema/route with your domain model.
+- **ESM throughout** (`"type": "module"`); `.ts` sources import with `.js` specifiers
+  (NodeNext). Prefer `import type`.
+- **Money is never a float** — Postgres `numeric`/decimal; every amount carries a currency.
+- **Transactions are the source of truth.** Everything else is derived in `packages/core`.
+- **Imports never auto-commit.** Screenshot/CSV parses become _draft_ records the user
+  confirms before a transaction is written; imports are idempotent. Raw screenshots are
+  deleted after a confirmed parse (parsed JSON is kept).
+- **Conventional Commits** (Release Please cuts versions). `detect-secrets` runs in
+  pre-commit/CI.
+
+## Testing
+
+Vitest, with a 70% coverage gate (lines/functions/branches/statements) enforced locally
+and in CI. The API uses embedded **PGlite** so tests need no external Postgres; routes use
+`app.inject()`. The web app tests with jsdom + React Testing Library. `npm test` runs every
+workspace; `npm run test:coverage` merges coverage into `./coverage`.
+
+## CI/CD
+
+GitHub Actions in `.github/workflows/` are thin callers of the reusable workflows in
+[`s3ntin3l8/.github`](https://github.com/s3ntin3l8/.github): lint, typecheck,
+test:coverage and build fan out via Turbo, then a Docker image is built from the root
+`Dockerfile`. Releases are automated via
+[Release Please](https://github.com/googleapis/release-please).
