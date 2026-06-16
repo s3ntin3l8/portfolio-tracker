@@ -239,6 +239,10 @@
   "ImportHistory": {
     "title": "Impor terakhir",
     "items": "{count, plural, other {# item}}",
+    "review": "Tinjau",
+    "reviewTitle": "Tinjau impor",
+    "reviewSubtitle": "Periksa transaksinya, lalu konfirmasi untuk menambahkannya — atau buang impor ini.",
+    "reviewError": "Terjadi kesalahan. Silakan coba lagi.",
     "discard": "Buang",
     "undo": "Batalkan",
     "undoWarning": "Menghapus {count, plural, other {# transaksi}}.",

@@ -224,9 +224,13 @@ describe("CSV import → confirm flow", () => {
     });
     expect(dkb.statusCode).toBe(201);
     expect(dkb.json().drafts).toHaveLength(4);
-    expect(
-      (await app.inject({ method: "GET", url: `/imports/${dkb.json().importId}`, headers: auth(t) })).json().parser,
-    ).toBe("dkb");
+    const dkbDetail = (
+      await app.inject({ method: "GET", url: `/imports/${dkb.json().importId}`, headers: auth(t) })
+    ).json();
+    expect(dkbDetail.parser).toBe("dkb");
+    // The single-import endpoint returns the parsed drafts (powers the review screen).
+    expect(dkbDetail.drafts).toHaveLength(4);
+    expect(dkbDetail.status).toBe("draft");
 
     // No format → the generic column CSV falls through to the generic parser.
     const generic = await app.inject({

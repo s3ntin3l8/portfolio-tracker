@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -8,7 +9,12 @@ const refresh = vi.fn();
 const discardImport = vi.fn(async () => undefined);
 const deleteImport = vi.fn(async () => ({ removed: 1 }));
 
-vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("@/i18n/navigation", () => ({
+  useRouter: () => ({ refresh }),
+  Link: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 vi.mock("@/lib/api", () => ({
   useApiClient: () => ({ discardImport, deleteImport }),
 }));
@@ -58,6 +64,12 @@ describe("ImportHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: m.discard }));
     await waitFor(() => expect(discardImport).toHaveBeenCalledWith("draft1"));
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("links a draft import to its review page", () => {
+    renderHistory();
+    const link = screen.getByRole("link", { name: m.review });
+    expect(link).toHaveAttribute("href", "/import/draft1");
   });
 
   it("undoes a confirmed import only after the two-step confirm", async () => {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Loader2, Trash2, Undo2 } from "lucide-react";
+import { Eye, Loader2, Trash2, Undo2 } from "lucide-react";
 import type { ImportRecord } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useApiClient } from "@/lib/api";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 
 const STATUS_VARIANT: Record<
   ImportRecord["status"],
@@ -88,19 +88,27 @@ export function ImportHistory({ items }: { items: ImportRecord[] }) {
                 </span>
                 <span className="ml-auto flex items-center gap-1">
                   {imp.status === "draft" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => discard(imp.id)}
-                    >
-                      {busy ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3.5" />
-                      )}
-                      {t("discard")}
-                    </Button>
+                    <>
+                      <Button size="sm" variant="secondary" asChild>
+                        <Link href={`/import/${imp.id}`}>
+                          <Eye className="size-3.5" />
+                          {t("review")}
+                        </Link>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => discard(imp.id)}
+                      >
+                        {busy ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3.5" />
+                        )}
+                        {t("discard")}
+                      </Button>
+                    </>
                   )}
                   {imp.status === "confirmed" &&
                     (confirmId === imp.id ? (

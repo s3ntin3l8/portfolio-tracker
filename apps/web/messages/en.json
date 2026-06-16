@@ -239,6 +239,10 @@
   "ImportHistory": {
     "title": "Recent imports",
     "items": "{count, plural, one {# item} other {# items}}",
+    "review": "Review",
+    "reviewTitle": "Review import",
+    "reviewSubtitle": "Check the transactions, then confirm to add them — or discard the import.",
+    "reviewError": "Something went wrong. Please try again.",
     "discard": "Discard",
     "undo": "Undo",
     "undoWarning": "Removes {count, plural, one {# transaction} other {# transactions}}.",

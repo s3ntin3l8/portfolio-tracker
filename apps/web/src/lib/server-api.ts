@@ -13,6 +13,7 @@ import {
   type Transaction,
   type HoldingValuation,
   type ImportRecord,
+  type ImportDetail,
   type IncomeStats,
   type ContributionStats,
   type TrConnection,
@@ -289,6 +290,17 @@ export async function loadImports(): Promise<ImportRecord[]> {
     return await api.listImports();
   } catch {
     return [];
+  }
+}
+
+/** A single import with its parsed drafts (or null when missing / signed out / down). */
+export async function loadImport(importId: string): Promise<ImportDetail | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    return await api.getImport(importId);
+  } catch {
+    return null;
   }
 }
 
