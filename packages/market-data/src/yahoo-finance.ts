@@ -85,9 +85,12 @@ export class YahooFinanceProvider implements MarketDataProvider {
   }
 
   /**
-   * Resolve an instrument's ISIN to a Yahoo symbol via the search endpoint, preferring
-   * the listing whose venue matches the instrument's market, then its currency, then the
-   * first quote. Result (incl. a miss) is memoised per ISIN.
+   * Resolve an instrument's ISIN to a Yahoo symbol via the search endpoint, preferring the
+   * listing whose venue matches the instrument's market, then its currency. A listing we
+   * can't tie to the market or currency is rejected (no blind "first quote" fallback): the
+   * quote stamps the result with `ref.currency`, so pricing an unrelated cross-listing — e.g.
+   * a USD London line for a EUR holding — would silently store a wrong-currency value. Result
+   * (incl. a miss) is memoised per ISIN.
    */
   private async resolveIsinSymbol(ref: InstrumentRef): Promise<string | null> {
     if (!ref.isin) return null;
@@ -109,7 +112,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const byCurrency = quotes.find(
         (q) => mapExchange(q.exchange)?.currency === ref.currency,
       );
-      symbol = (byMarket ?? byCurrency ?? quotes[0])?.symbol ?? null;
+      symbol = (byMarket ?? byCurrency)?.symbol ?? null;
     }
     this.isinSymbolCache.set(ref.isin, symbol);
     return symbol;

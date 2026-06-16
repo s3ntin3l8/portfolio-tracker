@@ -14,6 +14,7 @@ import {
   EodhdProvider,
   CoinGeckoProvider,
   assetClassFromType,
+  mapExchange,
   type InstrumentRef,
   type InstrumentSearchResult,
   type MarketDataProvider,
@@ -88,6 +89,23 @@ describe("isIsin", () => {
     expect(isIsin("id1000109507")).toBe(true); // case-insensitive
     expect(isIsin("BBCA")).toBe(false);
     expect(isIsin("US037833100")).toBe(false); // too short
+  });
+});
+
+describe("mapExchange", () => {
+  it("maps EU/EEA venues to their trading currency (case-insensitive)", () => {
+    expect(mapExchange("AMS")).toMatchObject({ currency: "EUR" }); // Euronext Amsterdam
+    expect(mapExchange("par")).toMatchObject({ currency: "EUR" }); // Euronext Paris
+    expect(mapExchange("MIL")).toMatchObject({ currency: "EUR" }); // Borsa Italiana
+    expect(mapExchange("MCE")).toMatchObject({ currency: "EUR" }); // BME Madrid
+    expect(mapExchange("STU")).toMatchObject({ currency: "EUR" }); // Börse Stuttgart
+    expect(mapExchange("EBS")).toMatchObject({ currency: "CHF" }); // SIX Swiss
+    expect(mapExchange("GER")).toMatchObject({ market: "XETRA", currency: "EUR" });
+  });
+
+  it("leaves London (LSE) unmapped — its listings mix currencies", () => {
+    expect(mapExchange("LSE")).toBeUndefined();
+    expect(mapExchange(undefined)).toBeUndefined();
   });
 });
 
@@ -389,6 +407,44 @@ describe("YahooFinanceProvider ISIN fallback", () => {
     const { isin: _omit, ...noIsin } = isinRef;
     expect(await provider.getQuote(noIsin)).toBeNull();
     expect(searched).toBe(false);
+  });
+
+  // A EUR holding whose only same-currency line is a Börse Stuttgart (STU) cross-listing,
+  // alongside a USD London (LSE) line. Resolution must pick the EUR line by currency, not
+  // the wrong-currency London one.
+  it("prefers the currency-matching EU listing over a USD London cross-listing", async () => {
+    const searchEuVsLondon = {
+      quotes: [
+        { symbol: "VWRA.L", exchange: "LSE" }, // USD London line (unmapped) — must be skipped
+        { symbol: "IE00BK5BQT80.SG", exchange: "STU" }, // STU → EUR — the match
+      ],
+    };
+    const urls: string[] = [];
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        if (url.includes("/v1/finance/search")) return { body: searchEuVsLondon };
+        return { body: url.includes("IE00BK5BQT80.SG") ? chartBody(110) : chartBody(null) };
+      }),
+    });
+    const quote = await provider.getQuote(isinRef);
+    expect(quote).toMatchObject({ price: "110", currency: "EUR" });
+    expect(urls.at(-1)).toContain("/v8/finance/chart/IE00BK5BQT80.SG");
+  });
+
+  // When the only cross-listing is one we can't tie to the holding's market or currency
+  // (e.g. a lone USD London line for a EUR holding), resolution returns no symbol rather
+  // than pricing it and stamping the wrong currency — so getQuote yields null.
+  it("returns null instead of pricing a wrong-currency-only cross-listing", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/v1/finance/search")) {
+          return { body: { quotes: [{ symbol: "VWRA.L", exchange: "LSE" }] } };
+        }
+        return { body: chartBody(null) }; // direct symbol misses
+      }),
+    });
+    expect(await provider.getQuote(isinRef)).toBeNull();
   });
 
   it("resolves an ISIN-as-symbol without suffixing it", async () => {

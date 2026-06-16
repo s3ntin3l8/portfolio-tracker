@@ -43,6 +43,18 @@ const EXCHANGE_MAP: Record<string, MarketInfo> = {
   GR: { market: "XETRA", currency: "EUR" },
   GY: { market: "XETRA", currency: "EUR" },
   FRA: { market: "XETRA", currency: "EUR" },
+  // Other EU/EEA venues. Yahoo prices these in their local currency, and a UCITS ETF or
+  // EU equity ISIN frequently cross-lists here (e.g. a fund's Stuttgart or Euronext line).
+  // Mapping the currency lets ISIN resolution prefer the listing that matches the holding's
+  // currency and reject wrong-currency cross-listings — notably a USD London (LSE) line for
+  // a EUR holding. LSE is deliberately left unmapped: its listings mix USD/GBP/GBp, so we
+  // can't pin a reliable currency, and leaving it unmapped keeps it out of EUR resolution.
+  AMS: { market: "AMS", currency: "EUR" }, // Euronext Amsterdam
+  PAR: { market: "PAR", currency: "EUR" }, // Euronext Paris
+  MIL: { market: "MIL", currency: "EUR" }, // Borsa Italiana (Milan)
+  MCE: { market: "MCE", currency: "EUR" }, // BME (Madrid)
+  STU: { market: "STU", currency: "EUR" }, // Börse Stuttgart
+  EBS: { market: "SWX", currency: "CHF" }, // SIX Swiss Exchange
   // Singapore (SGD).
   SGX: { market: "SGX", currency: "SGD" },
   XSES: { market: "SGX", currency: "SGD" },
