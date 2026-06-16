@@ -4,6 +4,7 @@ import type {
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
+  ProviderUsage,
   Quote,
 } from "./types.js";
 
@@ -137,6 +138,33 @@ export class CoinGeckoProvider implements MarketDataProvider {
         date: new Date(ms).toISOString().slice(0, 10),
         close: String(close),
       }));
+  }
+
+  async getUsage(): Promise<ProviderUsage | null> {
+    // `/key` reports the Demo plan's monthly credit consumption. It requires the key, so
+    // keyless mode has no live usage — fall back to the local call counter (returns null).
+    if (!this.apiKey) return null;
+    try {
+      const res = await this.fetchJson("/key");
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        monthly_call_credit?: number;
+        current_total_monthly_calls?: number;
+      };
+      if (
+        data.current_total_monthly_calls === undefined &&
+        data.monthly_call_credit === undefined
+      ) {
+        return null;
+      }
+      return {
+        window: "month",
+        used: data.current_total_monthly_calls ?? null,
+        limit: data.monthly_call_credit ?? null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async search(query: string): Promise<InstrumentSearchResult[]> {

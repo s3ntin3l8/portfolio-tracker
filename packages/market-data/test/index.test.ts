@@ -1020,6 +1020,36 @@ describe("provider usage (getUsage)", () => {
     expect(token).toBe("gold-key");
   });
 
+  it("CoinGecko reports the month's credit usage via the /key endpoint, keyed by the demo header", async () => {
+    let seenUrl = "";
+    let header: string | undefined;
+    const p = new CoinGeckoProvider({
+      apiKey: "demo-key",
+      fetch: mockFetch((url, init) => {
+        seenUrl = url;
+        header = (init?.headers as Record<string, string> | undefined)?.["x-cg-demo-api-key"];
+        return {
+          body: { monthly_call_credit: 10000, current_total_monthly_calls: 104 },
+        };
+      }),
+    });
+    expect(await p.getUsage()).toEqual({ window: "month", used: 104, limit: 10000 });
+    expect(seenUrl).toContain("/key");
+    expect(header).toBe("demo-key");
+  });
+
+  it("CoinGecko has no live usage when keyless (falls back to the local counter)", async () => {
+    let called = false;
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch(() => {
+        called = true;
+        return { body: {} };
+      }),
+    });
+    expect(await p.getUsage()).toBeNull();
+    expect(called).toBe(false); // no key → no /key request at all
+  });
+
   it("returns null on an HTTP error or a shape with no usage fields", async () => {
     const down = new TwelveDataProvider("key", {
       fetch: mockFetch(() => ({ ok: false, body: {} })),

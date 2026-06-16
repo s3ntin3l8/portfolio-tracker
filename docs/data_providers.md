@@ -16,18 +16,26 @@ Both are appended unconditionally after the configurable chain.
 Priority is the default tried-first order (lower = earlier). Cells reflect each provider's
 `supports()` logic — ✓ = priced, — = not served.
 
-| Provider       | Priority | Equity | ETF | Gold (spot) | Gold (buyback) | Mutual fund | Markets         | Env gate             | Keyed? |
-| -------------- | -------- | ------ | --- | ----------- | -------------- | ----------- | --------------- | -------------------- | ------ |
-| Twelve Data    | 1        | ✓      | ✓   | ✓           | —              | —           | IDX, US, XAU    | `TWELVEDATA_API_KEY` | Yes    |
-| GoldAPI        | 2        | —      | —   | ✓           | —              | —           | XAU             | `GOLDAPI_KEY`        | Yes    |
-| Antam          | 3        | —      | —   | —           | ✓              | —           | ANTAM           | `ANTAM_BUYBACK_URL`  | Scraper|
-| Galeri24       | 4        | —      | —   | —           | ✓              | —           | GALERI24        | `GALERI24_BUYBACK_URL` | Scraper|
-| Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | (any)           | `NAV_BASE_URL`       | Scraper|
-| EODHD          | 6        | ✓      | ✓   | —           | —              | —           | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
-| Yahoo Finance  | 7        | ✓      | ✓   | —           | —              | —           | (any, suffixed) | — (keyless)          | No     |
+| Provider       | Priority | Equity | ETF | Gold (spot) | Gold (buyback) | Mutual fund | Crypto | Markets         | Env gate             | Keyed? |
+| -------------- | -------- | ------ | --- | ----------- | -------------- | ----------- | ------ | --------------- | -------------------- | ------ |
+| Twelve Data    | 1        | ✓      | ✓   | ✓           | —              | —           | —      | IDX, US, XAU    | `TWELVEDATA_API_KEY` | Yes    |
+| GoldAPI        | 2        | —      | —   | ✓           | —              | —           | —      | XAU             | `GOLDAPI_KEY`        | Yes    |
+| Antam          | 3        | —      | —   | —           | ✓              | —           | —      | ANTAM           | `ANTAM_BUYBACK_URL`  | Scraper|
+| Galeri24       | 4        | —      | —   | —           | ✓              | —           | —      | GALERI24        | `GALERI24_BUYBACK_URL` | Scraper|
+| Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | —      | (any)           | `NAV_BASE_URL`       | Scraper|
+| EODHD          | 6        | ✓      | ✓   | —           | —              | —           | —      | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
+| CoinGecko      | 7        | —      | —   | —           | —              | —           | ✓      | CRYPTO          | — (optional `COINGECKO_API_KEY`) | Optional |
+| Yahoo Finance  | 8        | ✓      | ✓   | —           | —              | —           | ✓      | (any, suffixed) | — (keyless)          | No     |
 
 Antam and Galeri24 are both **gold buyback** sources backed by one shared `BuybackProvider`
 (`packages/market-data/src/buyback.ts`), one instance per brand/market.
+
+CoinGecko is the **crypto** primary, with Yahoo (`<TICKER>-<CURRENCY>` pairs, e.g. `BTC-USD`)
+as a keyless fallback. CoinGecko works keyless; a free Demo `COINGECKO_API_KEY` raises the
+rate limit and unlocks live quota reporting (see [Configuration](#configuration)). It prices
+in the instrument's own currency via `vs_currency`, so an IDR-denominated coin needs no FX
+hop. Crypto instruments store the **ticker** (`BTC`) as their symbol; CoinGecko resolves it
+to a coin id (`bitcoin`) via `/search` (memoised) since its price/history endpoints key on id.
 
 Always-on, outside the configurable registry:
 
@@ -40,10 +48,10 @@ Always-on, outside the configurable registry:
 
 ## Coverage gaps
 
-`ASSET_CLASSES` (`packages/market-data/src/types.ts`) also defines `bond`, `crypto`, and
-`derivative`, but **no live provider serves them today** — only the Fixture catch-all
-answers, so outside tests they have no real price source. Adding live coverage for these
-means adding a provider (see [Adding a provider](#adding-a-provider)).
+`ASSET_CLASSES` (`packages/market-data/src/types.ts`) also defines `bond` and `derivative`,
+but **no live provider serves them today** — only the Fixture catch-all answers, so outside
+tests they have no real price source. Adding live coverage for these means adding a provider
+(see [Adding a provider](#adding-a-provider)). `crypto` is now served by CoinGecko + Yahoo.
 
 ## Priority & fallback
 
@@ -59,6 +67,7 @@ so the effective chain per asset is:
 - **Gold buyback (ANTAM):** Antam → Fixture
 - **Gold buyback (GALERI24):** Galeri24 → Fixture
 - **Mutual fund (reksa dana):** Reksa Dana NAV → Fixture
+- **Crypto (CRYPTO):** CoinGecko → Yahoo → Fixture
 
 Gold is sourced multiple ways on purpose: **spot** (market `XAU`, via Twelve Data / GoldAPI)
 prices paper/abstract gold, while each **buyback** market (`ANTAM`, `GALERI24`) values
@@ -69,8 +78,8 @@ source per holding.
 ## Configuration
 
 Each routable provider is gated by an environment variable. If the gate is unset the
-provider is **silently skipped** — it simply drops out of the chain. Yahoo and Fixture need
-no configuration.
+provider is **silently skipped** — it simply drops out of the chain. Yahoo, CoinGecko and
+Fixture need no configuration (CoinGecko's key is optional — it works keyless).
 
 | Env var              | Provider       | Required | Notes                                                       |
 | -------------------- | -------------- | -------- | ----------------------------------------------------------- |
@@ -81,11 +90,12 @@ no configuration.
 | `NAV_BASE_URL`       | Reksa Dana NAV | No       | Override the built-in scraper with an external `<base>/<fund-symbol>` endpoint. Blank ⇒ internal scraper route. |
 | `MARKET_DATA_SELF_URL` | Antam / Galeri24 / NAV | No | Base URL the providers use to reach this API's internal scraper routes. Default `http://127.0.0.1:$PORT`. |
 | `EODHD_API_KEY`      | EODHD          | No       | US/XETRA equities & ETFs (EU / Trade Republic instruments). |
+| `COINGECKO_API_KEY`  | CoinGecko      | No       | Crypto. Keyless works at a low rate limit; a free Demo key raises it and enables live quota reporting (`/key`). |
 | `OPENFIGI_API_KEY`   | OpenFIGI       | No       | Optional; only raises the discovery rate limit.             |
 
-Unlike the other providers, **Antam, Galeri24 and Reksa Dana NAV are always on**: with their
-env var blank they fetch the built-in scrapers' internal routes (next section) instead of
-dropping out of the chain.
+Unlike the keyed providers, **Antam, Galeri24, Reksa Dana NAV and CoinGecko are always on**:
+the gold/NAV scrapers fetch their built-in internal routes (next section) when their env var
+is blank, and CoinGecko falls back to keyless access — none of them drop out of the chain.
 
 ## Built-in scrapers
 
