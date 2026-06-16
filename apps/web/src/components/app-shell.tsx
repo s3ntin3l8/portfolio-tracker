@@ -102,7 +102,6 @@ export function AppShell({
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
         <Brand />
-        <div className="mt-4">{switcher}</div>
         <div className="mt-6">{navLinks}</div>
         <div className="mt-auto pt-4">{signOutButton}</div>
       </aside>
@@ -121,7 +120,6 @@ export function AppShell({
                 <X />
               </Button>
             </div>
-            <div className="mt-4">{switcher}</div>
             <div className="mt-6">{navLinks}</div>
             <div className="mt-auto pt-4">{signOutButton}</div>
           </aside>
@@ -139,6 +137,7 @@ export function AppShell({
           >
             <Menu />
           </Button>
+          <div className="min-w-0">{switcher}</div>
           <div className="ml-auto flex items-center gap-1">
             <LocaleSwitcher />
             <ThemeToggle />
