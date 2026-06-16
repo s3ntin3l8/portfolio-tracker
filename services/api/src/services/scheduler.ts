@@ -22,7 +22,10 @@ const ANTAM_QUEUE = "scrape-antam";
 const ANTAM_CRON = "0 */4 * * *"; // every 4h — the Antam buyback moves intraday but slowly
 
 const NAV_QUEUE = "scrape-nav";
-const NAV_CRON = "0 13 * * *"; // daily 13:00 UTC (~20:00 WIB), after NAB is published
+// Twice daily: 16:00 UTC (~23:00 WIB), after the evening NAB publish, plus 01:00 UTC
+// (~08:00 WIB) to backfill funds whose NAB posted late overnight. NAB is once-per-day, so
+// more frequent runs would only re-fetch the same value.
+const NAV_CRON = "0 1,16 * * *";
 
 function usesPglite(url: string): boolean {
   return !url || url.startsWith("pglite://");

@@ -89,7 +89,7 @@ degrade gracefully: a missing/stale value just makes the provider fall through t
 | Source        | Scrapes                                         | Cache key          | Internal route                  | Schedule            |
 | ------------- | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------- |
 | harga-emas.org | Antam LM buyback (`Harga pembelian kembali`)   | `gold:antam-buyback` | `GET /internal/gold/antam-buyback` | every 4h (`0 */4 * * *`) |
-| api.bibit.id  | Reksa-dana NAV catalogue (`symbol` → `nav.value`) | `nav:<symbol>`     | `GET /internal/nav/:symbol`     | daily 13:00 UTC (`0 13 * * *`) |
+| api.bibit.id  | Reksa-dana NAV catalogue (`symbol` → `nav.value`) | `nav:<symbol>`     | `GET /internal/nav/:symbol`     | 16:00 & 01:00 UTC (`0 1,16 * * *`) |
 
 - **Gold source:** the canonical Antam page (`logammulia.com/id/sell/gold`) sits behind
   anti-bot protection that 403s non-browser clients, so it is unusable server-side. We read
