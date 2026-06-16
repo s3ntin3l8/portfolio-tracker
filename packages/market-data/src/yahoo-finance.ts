@@ -31,10 +31,10 @@ interface ChartResult {
 }
 
 /**
- * Yahoo Finance provider — a **keyless** IDX equity/ETF fallback. Uses the auth-free
- * chart endpoint (`/v8/finance/chart/<symbol>`) for both quotes and history. IDX
- * tickers map to Yahoo's `.JK` suffix (e.g. BBCA → BBCA.JK); EU/Xetra tickers take
- * `.DE`. When the symbol-based lookup misses and an ISIN is known, the search endpoint
+ * Yahoo Finance provider — a **keyless** IDX equity/ETF fallback (and crypto fallback
+ * behind CoinGecko). Uses the auth-free chart endpoint (`/v8/finance/chart/<symbol>`)
+ * for both quotes and history. IDX tickers map to Yahoo's `.JK` suffix (e.g. BBCA →
+ * BBCA.JK); EU/Xetra tickers take `.DE`; crypto trades as `<TICKER>-<CURRENCY>` (BTC-USD). When the symbol-based lookup misses and an ISIN is known, the search endpoint
  * resolves the ISIN to a Yahoo symbol (preferring the listing matching the instrument's
  * market/currency). Unofficial endpoint, so it's a resilience layer behind a keyed
  * primary (Twelve Data / EODHD), not the sole source.
@@ -52,7 +52,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
   }
 
   supports(assetClass: AssetClass): boolean {
-    return assetClass === "equity" || assetClass === "etf";
+    return assetClass === "equity" || assetClass === "etf" || assetClass === "crypto";
   }
 
   /**
@@ -61,6 +61,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
    * symbol gets no suffix (the ISIN-search fallback resolves it instead).
    */
   private yahooSymbol(ref: InstrumentRef): string {
+    // Crypto trades as a `<TICKER>-<CURRENCY>` pair on Yahoo (e.g. BTC-USD, BTC-IDR).
+    if (ref.assetClass === "crypto") return `${ref.symbol}-${ref.currency}`;
     if (ref.symbol.includes(".")) return ref.symbol;
     if (isIsin(ref.symbol)) return ref.symbol;
     const suffix = yahooSuffixForMarket(ref.market);

@@ -12,6 +12,7 @@ import {
   YahooFinanceProvider,
   OpenFigiProvider,
   EodhdProvider,
+  CoinGeckoProvider,
   assetClassFromType,
   type InstrumentRef,
   type InstrumentSearchResult,
@@ -973,6 +974,186 @@ describe("provider usage (getUsage)", () => {
       fetch: mockFetch(() => ({ body: { name: "x" } })),
     });
     expect(await empty.getUsage()).toBeNull();
+  });
+});
+
+describe("YahooFinanceProvider crypto", () => {
+  it("supports crypto and quotes via the <TICKER>-<CURRENCY> pair", async () => {
+    let calledUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return {
+          body: {
+            chart: {
+              result: [
+                {
+                  meta: {
+                    regularMarketPrice: 65000,
+                    currency: "USD",
+                    regularMarketTime: 1738972800,
+                    previousClose: 64000,
+                  },
+                },
+              ],
+            },
+          },
+        };
+      }),
+    });
+    expect(provider.supports("crypto", "CRYPTO")).toBe(true);
+    const btc: InstrumentRef = {
+      symbol: "BTC",
+      market: "CRYPTO",
+      assetClass: "crypto",
+      currency: "USD",
+    };
+    const quote = await provider.getQuote(btc);
+    expect(calledUrl).toContain("/v8/finance/chart/BTC-USD");
+    expect(quote).toMatchObject({ price: "65000", currency: "USD", previousClose: "64000" });
+  });
+});
+
+describe("CoinGeckoProvider", () => {
+  const btc: InstrumentRef = {
+    symbol: "BTC",
+    market: "CRYPTO",
+    assetClass: "crypto",
+    currency: "USD",
+  };
+  const searchBody = {
+    coins: [
+      { id: "binance-peg-bitcoin", symbol: "BTCB", name: "Binance-Peg BTC" },
+      { id: "bitcoin", symbol: "BTC", name: "Bitcoin" },
+    ],
+  };
+
+  it("supports only crypto", () => {
+    const p = new CoinGeckoProvider();
+    expect(p.supports("crypto")).toBe(true);
+    expect(p.supports("equity")).toBe(false);
+    expect(p.supports("gold")).toBe(false);
+  });
+
+  it("resolves the ticker to a coin id and quotes with a previous close", async () => {
+    const urls: string[] = [];
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        if (url.includes("/search")) return { body: searchBody };
+        return {
+          body: {
+            bitcoin: { usd: 65000, usd_24h_change: 4, last_updated_at: 1738972800 },
+          },
+        };
+      }),
+    });
+    const quote = await p.getQuote(btc);
+    // picks the exact-symbol match (bitcoin), not the peg coin listed first
+    expect(urls.some((u) => u.includes("ids=bitcoin&vs_currencies=usd"))).toBe(true);
+    expect(quote?.price).toBe("65000");
+    expect(quote?.currency).toBe("USD");
+    // previousClose = 65000 / (1 + 4/100) = 62500
+    expect(quote?.previousClose).toBe("62500");
+    expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
+  });
+
+  it("honours the instrument currency via vs_currency", async () => {
+    let priceUrl = "";
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/search")) return { body: searchBody };
+        priceUrl = url;
+        return { body: { bitcoin: { idr: 1_000_000_000 } } };
+      }),
+    });
+    const quote = await p.getQuote({ ...btc, currency: "IDR" });
+    expect(priceUrl).toContain("vs_currencies=idr");
+    expect(quote?.price).toBe("1000000000");
+    expect(quote?.previousClose).toBeNull(); // no 24h change in the payload
+  });
+
+  it("memoises the ticker→id resolution across calls", async () => {
+    let searchCalls = 0;
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/search")) {
+          searchCalls++;
+          return { body: searchBody };
+        }
+        return { body: { bitcoin: { usd: 65000 } } };
+      }),
+    });
+    await p.getQuote(btc);
+    await p.getQuote(btc);
+    expect(searchCalls).toBe(1);
+  });
+
+  it("maps market_chart prices to candles, translating the range to days", async () => {
+    let historyUrl = "";
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        if (url.includes("/search")) return { body: searchBody };
+        historyUrl = url;
+        return {
+          body: {
+            prices: [
+              [1738972800000, 64000],
+              [1739059200000, 65000],
+            ],
+          },
+        };
+      }),
+    });
+    const candles = await p.getHistory(btc, "1y");
+    expect(historyUrl).toContain("/coins/bitcoin/market_chart");
+    expect(historyUrl).toContain("days=365");
+    expect(candles).toHaveLength(2);
+    expect(candles[0]).toMatchObject({
+      date: new Date(1738972800000).toISOString().slice(0, 10),
+      close: "64000",
+    });
+  });
+
+  it("discovers crypto by ticker/name as CRYPTO/USD results", async () => {
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch(() => ({ body: searchBody })),
+    });
+    const results = await p.search("btc");
+    expect(results).toContainEqual({
+      symbol: "BTC",
+      name: "Bitcoin",
+      market: "CRYPTO",
+      assetClass: "crypto",
+      currency: "USD",
+      source: "coingecko",
+    });
+  });
+
+  it("returns null/empty when the coin can't be resolved or the API errors", async () => {
+    const unknown = new CoinGeckoProvider({
+      fetch: mockFetch(() => ({ body: { coins: [] } })),
+    });
+    expect(await unknown.getQuote(btc)).toBeNull();
+    expect(await unknown.getHistory(btc, "1y")).toEqual([]);
+
+    const down = new CoinGeckoProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await down.search("btc")).toEqual([]);
+  });
+
+  it("sends the demo api-key header when configured", async () => {
+    let header: string | undefined;
+    const p = new CoinGeckoProvider({
+      apiKey: "demo-key",
+      fetch: mockFetch((_url, init) => {
+        header = (init?.headers as Record<string, string> | undefined)?.["x-cg-demo-api-key"];
+        return { body: { coins: [] } };
+      }),
+    });
+    await p.search("btc");
+    expect(header).toBe("demo-key");
   });
 });
 
