@@ -104,6 +104,13 @@ degrade gracefully: a missing/stale value just makes the provider fall through t
   `services/api/src/services/scheduler.ts`. The internal routes are unauthenticated (they
   expose only already-public prices and are the providers' own data source).
 
+**Run the scrapers on demand** (e.g. right after a deploy, so you don't wait for the cron):
+
+- Admin API: `POST /admin/market-data/scrape` (Authentik admin group) → runs both scrapers
+  and returns `{ antamBuyback, navFunds }`.
+- CLI: `npm run scrape` (in `services/api`, loads `../../.env`), or in a container
+  `node dist/db/scrape.js` with `DATABASE_URL` set.
+
 ## Admin overrides
 
 The `provider_settings` table (`packages/db/src/schema.ts`) overlays the registry defaults

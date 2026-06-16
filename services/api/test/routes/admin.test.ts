@@ -1,7 +1,24 @@
+import crypto from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
+import { getScrapedQuote, ANTAM_BUYBACK_KEY, navKey } from "../../src/services/scrapers/store.js";
+
+const HARGA_EMAS_HTML =
+  `<html><body><span>Harga pembelian kembali: <!-- -->Rp2.591.100<!-- --> /grm</span></body></html>`;
+
+// Build the same self-describing envelope Bibit returns (iv hex + cipher hex + key utf8).
+function encryptBibitEnvelope(payload: unknown): string {
+  const key = "0123456789abcdef0123456789abcdef";
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(key, "utf8"), iv);
+  const ct = Buffer.concat([
+    cipher.update(Buffer.from(JSON.stringify(payload), "utf8")),
+    cipher.final(),
+  ]);
+  return iv.toString("hex") + ct.toString("hex") + key;
+}
 
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const AUDIENCE = "portfolio-tracker";
@@ -132,6 +149,45 @@ describe("admin provider config", () => {
       url: "/admin/providers",
       headers: auth(await token("intruder")),
       payload: [{ id: "yahoo", enabled: true, priority: 1 }],
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("POST /admin/market-data/scrape runs the scrapers and caches results (admin only)", async () => {
+    // Stub the network so the scrape is hermetic: harga-emas HTML + a Bibit envelope.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => {
+      const u = String(url);
+      if (u.includes("harga-emas")) {
+        return { ok: true, status: 200, text: async () => HARGA_EMAS_HTML } as Response;
+      }
+      if (u.includes("bibit")) {
+        const data = encryptBibitEnvelope([{ symbol: "RDPU", nav: { value: 1234.56 } }]);
+        return { ok: true, status: 200, json: async () => ({ data }) } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    }) as typeof fetch;
+
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/market-data/scrape",
+        headers: auth(await token("admin-scrape", [ADMIN_GROUP])),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ antamBuyback: 2591100, navFunds: 1 });
+      expect(await getScrapedQuote(app.db, ANTAM_BUYBACK_KEY)).toBe(2591100);
+      expect(await getScrapedQuote(app.db, navKey("RDPU"))).toBe(1234.56);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("POST /admin/market-data/scrape is forbidden for non-admins", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/market-data/scrape",
+      headers: auth(await token("intruder-2")),
     });
     expect(res.statusCode).toBe(403);
   });

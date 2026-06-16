@@ -27,6 +27,7 @@ export default defineConfig({
         "services/api/src/server.ts",
         "services/api/src/db/seed.ts",
         "services/api/src/db/migrate.ts",
+        "services/api/src/db/scrape.ts",
         // Provider wiring depends on env keys + network; covered by live use.
         "services/api/src/services/market-data.ts",
         // pg-boss glue needs external Postgres; the refresh logic it runs

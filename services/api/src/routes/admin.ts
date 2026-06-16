@@ -8,6 +8,7 @@ import {
   flushUsage,
   getProviderUsage,
 } from "../services/market-data.js";
+import { refreshAntamBuyback, refreshNav } from "../services/scrapers/store.js";
 
 /**
  * Admin-only server configuration. Today: the market-data provider chain (enable/disable
@@ -71,4 +72,13 @@ export async function adminRoute(app: FastifyInstance) {
       return listProviders();
     },
   );
+
+  // Run the built-in scrapers now and cache the results, instead of waiting for the
+  // scheduler's cron. Handy right after a deploy to populate scraped_quotes immediately.
+  // Each scraper handles its own failures, so a dead source just yields null / 0 here.
+  app.post("/admin/market-data/scrape", { preHandler: app.requireAdmin }, async () => {
+    const antamBuyback = await refreshAntamBuyback(app.db);
+    const navFunds = await refreshNav(app.db);
+    return { antamBuyback, navFunds };
+  });
 }
