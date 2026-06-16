@@ -1,9 +1,15 @@
 {
+  "id": "/",
   "name": "Portfolio Tracker",
   "short_name": "Portfolio",
   "description": "Indonesian-first personal portfolio tracker with screenshot import.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["finance", "productivity"],
   "background_color": "#0a0a0a",
   "theme_color": "#0a0a0a",
   "icons": [
@@ -31,5 +37,26 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Import screenshot",
+      "short_name": "Import",
+      "url": "/import",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [{ "name": "image", "accept": ["image/*"] }]
+    }
+  }
 }
