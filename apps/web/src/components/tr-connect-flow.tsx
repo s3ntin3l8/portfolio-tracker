@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, RefreshCw, Plug, Smartphone, Unplug } from "lucide-react";
+import { apiErrorCode } from "@portfolio/api-client";
 import type { ApiClient, TrConnection, TrSyncResult } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,13 +52,21 @@ export function TrConnectFlow({
 
   const expired = initial.status === "expired";
 
+  // Map the API's machine-readable error code (e.g. `pytr_not_available`) to a specific
+  // translated message, falling back to the generic one for unknown / non-API errors.
+  function messageForError(err: unknown): string {
+    const code = apiErrorCode(err);
+    if (code && t.has(`errors.${code}`)) return t(`errors.${code}`);
+    return t("error");
+  }
+
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);
     try {
       await fn();
-    } catch {
-      setError(t("error"));
+    } catch (err) {
+      setError(messageForError(err));
     } finally {
       setBusy(false);
     }

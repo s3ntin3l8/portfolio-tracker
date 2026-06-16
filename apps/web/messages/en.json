@@ -492,6 +492,14 @@
     "syncNow": "Sync now",
     "disconnect": "Disconnect",
     "expiredHint": "Your session expired. Reconnect to resume syncing.",
-    "error": "Something went wrong. Please try again."
+    "error": "Something went wrong. Please try again.",
+    "errors": {
+      "pytr_not_available": "Trade Republic sync isn't set up on the server.",
+      "encryption_required": "The server can't store credentials securely yet (encryption key missing).",
+      "tr_pairing_failed": "Couldn't start the Trade Republic login. Please try again.",
+      "portfolio_not_found": "That portfolio could no longer be found.",
+      "not_connected": "Not connected. Reconnect and try again.",
+      "tr_sync_failed": "Sync failed. Please try again."
+    }
   }
 }

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-hooks web-env services services-down dev dev-web test test-coverage lint typecheck format build clean
+.PHONY: help install install-hooks web-env pytr-venv services services-down dev dev-web test test-coverage lint typecheck format build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -14,6 +14,12 @@ install-hooks: ## Install pre-commit hooks (requires pre-commit installed)
 
 web-env: ## Link root .env into apps/web so Next.js (cwd=apps/web) can read it
 	ln -sf ../../.env apps/web/.env.local
+
+pytr-venv: ## Create local pytr venv for Trade Republic sync (then set PYTR_PYTHON_BIN in .env)
+	python3 -m venv .venv-pytr
+	.venv-pytr/bin/pip install --upgrade pip
+	.venv-pytr/bin/pip install -r services/api/python/requirements.txt
+	@echo "Add to .env:  PYTR_PYTHON_BIN=$(CURDIR)/.venv-pytr/bin/python"
 
 services: ## Start local backing services (Postgres + MinIO)
 	docker compose up -d postgres minio

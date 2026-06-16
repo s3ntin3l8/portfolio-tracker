@@ -5,6 +5,7 @@ import {
   TrConnectFlow,
   type TrConnectClient,
 } from "../src/components/tr-connect-flow";
+import { ApiError } from "@portfolio/api-client";
 import type { TrConnection } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
@@ -140,5 +141,22 @@ describe("TrConnectFlow", () => {
     fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
     expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("shows a specific message for a known API error code", async () => {
+    const client = makeClient({
+      connectTr: vi.fn(async () => {
+        throw new ApiError(503, JSON.stringify({ error: "pytr_not_available" }));
+      }),
+    });
+    renderFlow(client);
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: "+49150" },
+    });
+    fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+    expect(
+      await screen.findByText(/Trade Republic sync isn't set up on the server/),
+    ).toBeTruthy();
   });
 });

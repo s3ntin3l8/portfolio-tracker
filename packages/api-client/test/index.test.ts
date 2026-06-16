@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createApiClient, ApiError } from "../src/index.js";
+import { createApiClient, ApiError, apiErrorCode } from "../src/index.js";
 
 function mockFetch(
   responder: (url: string, init: RequestInit) => { status: number; body: unknown },
@@ -129,6 +129,24 @@ describe("createApiClient", () => {
     });
 
     await expect(client.getHoldings("nope")).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("apiErrorCode", () => {
+  it("extracts the error code from an ApiError body", () => {
+    expect(
+      apiErrorCode(new ApiError(503, JSON.stringify({ error: "pytr_not_available" }))),
+    ).toBe("pytr_not_available");
+  });
+
+  it("returns null for non-ApiErrors", () => {
+    expect(apiErrorCode(new Error("boom"))).toBeNull();
+    expect(apiErrorCode(undefined)).toBeNull();
+  });
+
+  it("returns null when the body is not JSON or has no string error field", () => {
+    expect(apiErrorCode(new ApiError(500, "Internal Server Error"))).toBeNull();
+    expect(apiErrorCode(new ApiError(400, JSON.stringify({ error: 42 })))).toBeNull();
   });
 });
 
