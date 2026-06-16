@@ -1083,6 +1083,47 @@ describe("auth + portfolios + transactions", () => {
     expect(Number(y.yieldOnCost)).toBeCloseTo(100 / 95000, 8);
   });
 
+  it("FX-converts XIRR cash flows to the display currency (#A)", async () => {
+    const { fxRates } = await import("@portfolio/db");
+    const t = await token("xirr-fx-user"); // display currency defaults to IDR
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "USD cash", baseCurrency: "USD" },
+      })
+    ).json().id;
+    await app.db
+      .insert(fxRates)
+      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) })
+      .onConflictDoNothing();
+
+    // A single foreign-currency deposit, no holdings → net worth is just the cash.
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "deposit",
+        price: "1000",
+        currency: "USD",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    const nw = (
+      await app.inject({ method: "GET", url: "/networth", headers: auth(t) })
+    ).json();
+
+    // Cash 1000 USD → 16,000,000 IDR.
+    expect(nw.netWorth).toBe("16000000");
+    // The deposit flow is converted to IDR (−16,000,000) to match the IDR terminal
+    // value, so the money-weighted return is ~0. Pre-fix the flow stayed −1000 (raw
+    // USD) against a +16,000,000 terminal, yielding a wildly large bogus rate.
+    expect(Math.abs(nw.xirr)).toBeLessThan(0.01);
+  });
+
   it("fetches a single instrument and its price history", async () => {
     const t = await token("user-a");
     const [inst] = await app.db

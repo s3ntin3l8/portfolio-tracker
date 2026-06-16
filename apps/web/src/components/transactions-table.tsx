@@ -46,6 +46,7 @@ export interface TxRow {
   type: string;
   quantity: string;
   price: string;
+  currency: string;
   executedAt: string;
   source: string;
   instrument: { symbol?: string | null; name?: string | null } | null;
@@ -75,7 +76,7 @@ export function TransactionsTable({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const m = (n: number) => formatMoney(n, "IDR", locale);
+  const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
     () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
     [locale],
@@ -228,7 +229,9 @@ export function TransactionsTable({
                     </TableCell>
                   )}
                   <TableCell className="tabular text-right">{qty || "—"}</TableCell>
-                  <TableCell className="tabular text-right">{m(amount)}</TableCell>
+                  <TableCell className="tabular text-right">
+                    {m(amount, tx.currency)}
+                  </TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Icon className="size-3.5" />

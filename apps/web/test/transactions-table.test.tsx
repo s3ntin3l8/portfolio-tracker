@@ -28,6 +28,7 @@ const ROWS: TxRow[] = [
     type: "buy",
     quantity: "10",
     price: "100",
+    currency: "IDR",
     executedAt: "2026-02-01T00:00:00.000Z",
     source: "manual",
     instrument: { symbol: "BBCA", name: "Bank Central Asia" },
@@ -39,6 +40,7 @@ const ROWS: TxRow[] = [
     type: "sell",
     quantity: "5",
     price: "200",
+    currency: "USD",
     executedAt: "2026-01-01T00:00:00.000Z",
     source: "csv",
     instrument: { symbol: "AAPL", name: "Apple" },
@@ -89,5 +91,12 @@ describe("TransactionsTable", () => {
   it("hides the batch toolbar when nothing is selected", () => {
     renderTable();
     expect(screen.queryByRole("button", { name: new RegExp(tb.delete) })).toBeNull();
+  });
+
+  it("formats each row's amount in its own currency, not a hardcoded one", () => {
+    renderTable();
+    // t1 amount is IDR, t2 amount is USD — pre-fix both rendered as IDR.
+    expect(screen.getByText(/IDR/)).toBeInTheDocument();
+    expect(screen.getByText(/\$/)).toBeInTheDocument();
   });
 });

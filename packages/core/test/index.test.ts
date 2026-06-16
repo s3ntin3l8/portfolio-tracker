@@ -74,6 +74,14 @@ describe("computeHoldings", () => {
     expect(h.quantity).toBe("110");
     expect(h.costBasis).toBe("100000");
   });
+
+  it("throws when one instrument has transactions in multiple currencies", () => {
+    const txs: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "10", price: "100", currency: "USD" }),
+      tx({ type: "buy", quantity: "10", price: "950", currency: "EUR", executedAt: new Date("2026-01-02") }),
+    ];
+    expect(() => computeHoldings(txs)).toThrow(/multiple currencies/);
+  });
 });
 
 describe("marketValue / unrealizedPnL", () => {

@@ -18,6 +18,7 @@ import {
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
+  convert,
   contributionStats,
   type CoreTransaction,
   type CorporateAction,
@@ -95,6 +96,30 @@ export async function transactionsRoute(app: FastifyInstance) {
       portfolioId,
       displayCurrency,
     );
+  }
+
+  // External capital flows (deposits in (−), withdrawals out (+)) for XIRR, each
+  // FX-converted to `target` so flows in different currencies are comparable with
+  // the (target-currency) terminal net-worth point the caller appends.
+  async function externalFlows(
+    txns: CoreTransaction[],
+    target: string,
+  ): Promise<CashFlowPoint[]> {
+    const relevant = txns.filter(
+      (t) => t.type === "deposit" || t.type === "withdrawal",
+    );
+    const rates = await getFxRates(
+      app.db,
+      [...new Set(relevant.map((t) => t.currency))],
+      target,
+    );
+    const fx = makeFxRateFn(rates, target);
+    return relevant.map((t) => ({
+      amount:
+        Number(convert(t.price, t.currency, target, fx)) *
+        (t.type === "deposit" ? -1 : 1),
+      date: t.executedAt,
+    }));
   }
 
   // Contribution analytics (total/average money saved + per-month series) plus a
@@ -514,15 +539,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolio.baseCurrency,
       );
 
-      // External capital flows: deposits in (−), withdrawals out (+).
-      const flows: CashFlowPoint[] = [];
-      for (const tx of coreTxns) {
-        if (tx.type === "deposit") {
-          flows.push({ amount: -Number(tx.price), date: tx.executedAt });
-        } else if (tx.type === "withdrawal") {
-          flows.push({ amount: Number(tx.price), date: tx.executedAt });
-        }
-      }
+      const flows = await externalFlows(coreTxns, portfolio.baseCurrency);
       const asOf = new Date();
       flows.push({ amount: Number(summary.netWorth), date: asOf });
 
@@ -577,18 +594,12 @@ export async function transactionsRoute(app: FastifyInstance) {
       .where(eq(portfolios.userId, id));
 
     const summaries = [];
-    const flows: CashFlowPoint[] = [];
+    const flowTxns: CoreTransaction[] = [];
     const instrumentIds = new Set<string>();
     for (const p of pfs) {
       const { coreTxns, summary } = await loadValuation(p.id, display);
       summaries.push(summary);
-      for (const tx of coreTxns) {
-        if (tx.type === "deposit") {
-          flows.push({ amount: -Number(tx.price), date: tx.executedAt });
-        } else if (tx.type === "withdrawal") {
-          flows.push({ amount: Number(tx.price), date: tx.executedAt });
-        }
-      }
+      flowTxns.push(...coreTxns);
       for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
     }
 
@@ -599,6 +610,8 @@ export async function transactionsRoute(app: FastifyInstance) {
       instrument: meta.get(h.instrumentId) ?? null,
     }));
 
+    // Flows across all portfolios, each FX-converted to the display currency.
+    const flows = await externalFlows(flowTxns, display);
     const asOf = new Date();
     flows.push({ amount: Number(aggregated.netWorth), date: asOf });
     const rate = xirr(flows);

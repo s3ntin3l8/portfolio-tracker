@@ -54,6 +54,7 @@ export default async function TransactionsPage({
     "Name",
     "Quantity",
     "Price",
+    "Currency",
     "Source",
     ...(aggregate ? ["Portfolio"] : []),
   ];
@@ -64,6 +65,7 @@ export default async function TransactionsPage({
     r.instrument?.name ?? "",
     r.quantity,
     r.price,
+    r.currency,
     r.source,
     ...(aggregate ? [r.portfolioName ?? ""] : []),
   ]);

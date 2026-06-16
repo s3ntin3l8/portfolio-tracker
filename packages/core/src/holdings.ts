@@ -39,6 +39,10 @@ export function computeHoldings(
     let qty = ZERO;
     let costBasis = ZERO;
     let realized = ZERO;
+    // Cost basis is currency-blind, so every price-bearing transaction for one
+    // instrument must share a currency — otherwise the accumulated basis is
+    // meaningless. Fail loud rather than produce silently-wrong P&L.
+    let costCurrency: string | null = null;
 
     for (const ev of events) {
       if (ev.kind === "ca") {
@@ -58,6 +62,17 @@ export function computeHoldings(
       const q = D(quantity);
       const p = D(price);
       const f = D(fees);
+
+      if (type === "buy" || type === "savings_plan" || type === "sell") {
+        if (costCurrency === null) {
+          costCurrency = ev.tx.currency;
+        } else if (ev.tx.currency !== costCurrency) {
+          throw new Error(
+            `Instrument ${instrumentId} has transactions in multiple currencies ` +
+              `(${costCurrency} and ${ev.tx.currency}); cost basis can't be computed.`,
+          );
+        }
+      }
 
       if (type === "buy" || type === "savings_plan") {
         qty = qty.add(q);
