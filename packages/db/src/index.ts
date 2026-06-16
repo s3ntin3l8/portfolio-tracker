@@ -29,3 +29,5 @@ export type FxRate = typeof schema.fxRates.$inferSelect;
 export type NewFxRate = typeof schema.fxRates.$inferInsert;
 export type ProviderSetting = typeof schema.providerSettings.$inferSelect;
 export type NewProviderSetting = typeof schema.providerSettings.$inferInsert;
+export type ProviderUsageRow = typeof schema.providerUsage.$inferSelect;
+export type NewProviderUsageRow = typeof schema.providerUsage.$inferInsert;

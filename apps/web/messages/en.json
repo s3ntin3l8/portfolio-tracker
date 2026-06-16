@@ -47,7 +47,13 @@
     "saving": "Saving…",
     "saved": "Saved",
     "updateError": "Couldn't save changes. Please try again.",
-    "unavailable": "Provider settings are unavailable right now."
+    "unavailable": "Provider settings are unavailable right now.",
+    "usageMinute": "this minute",
+    "usageDay": "today",
+    "usageMonth": "this month",
+    "usageUsedOfLimit": "{used} / {limit} {window}",
+    "usageUsed": "{used} {window}",
+    "usageLocalHint": "local count"
   },
   "Income": {
     "title": "Income",

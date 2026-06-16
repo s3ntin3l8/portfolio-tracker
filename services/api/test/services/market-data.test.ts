@@ -1,10 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
+import { providerUsage } from "@portfolio/db";
 import {
   resolveProviderConfig,
   getMarketData,
   invalidateMarketData,
+  flushUsage,
+  getProviderUsage,
   type ProviderDescriptor,
 } from "../../src/services/market-data.js";
+import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 
 // A deterministic registry so the merge can be tested without touching env/network.
 const REGISTRY: ProviderDescriptor[] = [
@@ -65,5 +70,79 @@ describe("getMarketData / invalidateMarketData", () => {
     invalidateMarketData();
     const c = await getMarketData();
     expect(c).not.toBe(a);
+  });
+});
+
+describe("usage tracking", () => {
+  beforeAll(async () => {
+    await ensureDb();
+  });
+
+  afterAll(async () => {
+    await closeDb();
+  });
+
+  it("flushUsage counts the service's provider calls, rolling stale windows over", async () => {
+    const db = getDb();
+    // A stale row from a prior day/month should reset before this flush's counts are added.
+    await db
+      .insert(providerUsage)
+      .values({
+        provider: "fixture",
+        day: "2000-01-01",
+        callsDay: 999,
+        month: "2000-01",
+        callsMonth: 999,
+      })
+      .onConflictDoNothing();
+
+    const svc = await getMarketData(); // fixture-only in tests, with the onCall hook wired
+    const ref = {
+      symbol: "BBCA",
+      market: "IDX",
+      assetClass: "equity" as const,
+      currency: "IDR",
+    };
+    await svc.getQuote(ref);
+    await svc.getQuote(ref);
+    await flushUsage();
+
+    const [row] = await db
+      .select()
+      .from(providerUsage)
+      .where(eq(providerUsage.provider, "fixture"));
+    const today = new Date().toISOString().slice(0, 10);
+    expect(row?.day).toBe(today);
+    expect(row?.callsDay).toBe(2); // reset from the stale 999, then +2
+    expect(row?.callsMonth).toBe(2);
+  });
+
+  it("getProviderUsage falls back to the local counter for providers without a usage endpoint", async () => {
+    process.env.ANTAM_BUYBACK_URL = "https://example.test/antam";
+    try {
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
+      const month = now.toISOString().slice(0, 7);
+      await getDb()
+        .insert(providerUsage)
+        .values({ provider: "antam", day, callsDay: 5, month, callsMonth: 5 })
+        .onConflictDoUpdate({
+          target: providerUsage.provider,
+          set: { day, callsDay: 5, month, callsMonth: 5 },
+        });
+
+      invalidateMarketData(); // drop the 60s usage cache so this read recomputes
+      const usage = await getProviderUsage();
+      // Antam has no getUsage(), so it surfaces the local month counter (no plan limit).
+      expect(usage.antam).toEqual({
+        source: "local",
+        window: "month",
+        used: 5,
+        limit: null,
+      });
+    } finally {
+      delete process.env.ANTAM_BUYBACK_URL;
+      invalidateMarketData();
+    }
   });
 });

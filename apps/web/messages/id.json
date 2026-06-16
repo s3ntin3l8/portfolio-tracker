@@ -47,7 +47,13 @@
     "saving": "Menyimpan…",
     "saved": "Tersimpan",
     "updateError": "Tidak dapat menyimpan perubahan. Silakan coba lagi.",
-    "unavailable": "Pengaturan penyedia tidak tersedia saat ini."
+    "unavailable": "Pengaturan penyedia tidak tersedia saat ini.",
+    "usageMinute": "menit ini",
+    "usageDay": "hari ini",
+    "usageMonth": "bulan ini",
+    "usageUsedOfLimit": "{used} / {limit} {window}",
+    "usageUsed": "{used} {window}",
+    "usageLocalHint": "hitungan lokal"
   },
   "Income": {
     "title": "Pendapatan",

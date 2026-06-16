@@ -2,6 +2,7 @@ import type {
   AssetClass,
   InstrumentRef,
   MarketDataProvider,
+  ProviderUsage,
   Quote,
 } from "./types.js";
 import type { ProviderOptions } from "./twelve-data.js";
@@ -48,5 +49,21 @@ export class GoldApiProvider implements MarketDataProvider {
       currency: ref.currency,
       asOf: new Date().toISOString(),
     };
+  }
+
+  async getUsage(): Promise<ProviderUsage | null> {
+    // `/stat` reports the month's request count. GoldAPI doesn't return the plan cap, so
+    // we surface the used count only (limit: null).
+    try {
+      const res = await this.doFetch(`${this.baseUrl}/stat`, {
+        headers: { "x-access-token": this.apiKey },
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { requests_month?: number };
+      if (data.requests_month === undefined) return null;
+      return { window: "month", used: data.requests_month, limit: null };
+    } catch {
+      return null;
+    }
   }
 }

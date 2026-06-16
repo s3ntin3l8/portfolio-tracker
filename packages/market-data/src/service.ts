@@ -11,6 +11,12 @@ import { isIsin } from "./types.js";
 
 const MAX_SEARCH_RESULTS = 10;
 
+/** Optional instrumentation, e.g. to count API calls per provider for usage tracking. */
+export interface MarketDataServiceOptions {
+  /** Fired with the provider name immediately before each provider method invocation. */
+  onCall?: (providerName: string) => void;
+}
+
 /**
  * Routes quote/history requests to the providers that support the instrument's asset
  * class + market, trying them in registration order until one returns a result. This
@@ -18,7 +24,10 @@ const MAX_SEARCH_RESULTS = 10;
  * resilient: if the primary is rate-limited or 404s, the next supporter is tried.
  */
 export class MarketDataService {
-  constructor(private readonly providers: MarketDataProvider[]) {}
+  constructor(
+    private readonly providers: MarketDataProvider[],
+    private readonly opts: MarketDataServiceOptions = {},
+  ) {}
 
   /** First provider supporting the asset class/market (registration order). */
   providerFor(assetClass: AssetClass, market: string): MarketDataProvider | null {
@@ -32,6 +41,7 @@ export class MarketDataService {
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
     for (const provider of this.providersFor(ref.assetClass, ref.market)) {
+      this.opts.onCall?.(provider.name);
       const quote = await provider.getQuote(ref);
       if (quote) return quote;
     }
@@ -40,7 +50,9 @@ export class MarketDataService {
 
   async getHistory(ref: InstrumentRef, range: string): Promise<Candle[]> {
     for (const provider of this.providersFor(ref.assetClass, ref.market)) {
-      const candles = (await provider.getHistory?.(ref, range)) ?? [];
+      if (!provider.getHistory) continue;
+      this.opts.onCall?.(provider.name);
+      const candles = (await provider.getHistory(ref, range)) ?? [];
       if (candles.length > 0) return candles;
     }
     return [];
@@ -61,12 +73,16 @@ export class MarketDataService {
     for (const provider of this.providers) {
       try {
         if (isIsin(q)) {
-          const resolved = await provider.resolveISIN?.(q);
+          if (!provider.resolveISIN) continue;
+          this.opts.onCall?.(provider.name);
+          const resolved = await provider.resolveISIN(q);
           if (resolved) {
             collected.push(this.fromResolvedIsin(provider, q, resolved));
           }
         } else {
-          const results = (await provider.search?.(q)) ?? [];
+          if (!provider.search) continue;
+          this.opts.onCall?.(provider.name);
+          const results = (await provider.search(q)) ?? [];
           collected.push(...results);
         }
       } catch {

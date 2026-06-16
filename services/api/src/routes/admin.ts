@@ -5,6 +5,8 @@ import {
   PROVIDER_REGISTRY,
   resolveProviderConfig,
   invalidateMarketData,
+  flushUsage,
+  getProviderUsage,
 } from "../services/market-data.js";
 
 /**
@@ -23,7 +25,14 @@ export async function adminRoute(app: FastifyInstance) {
         priority: providerSettings.priority,
       })
       .from(providerSettings);
-    return resolveProviderConfig(rows);
+    // Persist any pending call tally, then attach per-provider usage (live quota where the
+    // provider exposes one, else our local counter; memoised ~60s server-side).
+    await flushUsage();
+    const usage = await getProviderUsage();
+    return resolveProviderConfig(rows).map((p) => ({
+      ...p,
+      usage: usage[p.id] ?? null,
+    }));
   }
 
   // The merged provider config (registry defaults overlaid with DB overrides), ordered.

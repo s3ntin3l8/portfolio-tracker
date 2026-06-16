@@ -4,6 +4,7 @@ import type {
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
+  ProviderUsage,
   Quote,
 } from "./types.js";
 import { assetClassFromType, mapExchange } from "./instrument-mapping.js";
@@ -106,6 +107,40 @@ export class TwelveDataProvider implements MarketDataProvider {
       });
     }
     return out;
+  }
+
+  async getUsage(): Promise<ProviderUsage | null> {
+    // `/api_usage` reports credit consumption; it doesn't itself cost credits. Prefer the
+    // daily window when the plan exposes it, else fall back to the per-minute counters.
+    try {
+      const res = await this.doFetch(
+        `${this.baseUrl}/api_usage?apikey=${this.apiKey}`,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        current_usage?: number;
+        plan_limit?: number;
+        daily_usage?: number;
+        plan_daily_limit?: number;
+      };
+      if (data.daily_usage !== undefined || data.plan_daily_limit !== undefined) {
+        return {
+          window: "day",
+          used: data.daily_usage ?? null,
+          limit: data.plan_daily_limit ?? null,
+        };
+      }
+      if (data.current_usage === undefined && data.plan_limit === undefined) {
+        return null;
+      }
+      return {
+        window: "minute",
+        used: data.current_usage ?? null,
+        limit: data.plan_limit ?? null,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async getHistory(ref: InstrumentRef, range = "30"): Promise<Candle[]> {

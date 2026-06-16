@@ -75,4 +75,39 @@ describe("AdminProvidersForm", () => {
     // EODHD is unconfigured → its enable toggle is disabled and the hint shows.
     expect(screen.getByText(messages.Admin.notConfigured)).toBeInTheDocument();
   });
+
+  it("renders a usage badge: live quota with a limit, and a local-count fallback", () => {
+    const withUsage: AdminProvider[] = [
+      {
+        id: "twelvedata",
+        label: "Twelve Data",
+        configured: true,
+        enabled: true,
+        priority: 1,
+        usage: { source: "provider", window: "day", used: 120, limit: 800 },
+      },
+      {
+        id: "antam",
+        label: "Antam buyback",
+        configured: true,
+        enabled: true,
+        priority: 2,
+        usage: { source: "local", window: "month", used: 5, limit: null },
+      },
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AdminProvidersForm
+          client={{ updateAdminProviders: vi.fn() }}
+          initialProviders={withUsage}
+        />
+      </NextIntlClientProvider>,
+    );
+    // Live: "120 / 800 today"
+    expect(screen.getByText("120 / 800 today")).toBeInTheDocument();
+    // Local: "5 this month (local count)"
+    expect(
+      screen.getByText(`5 this month (${messages.Admin.usageLocalHint})`),
+    ).toBeInTheDocument();
+  });
 });

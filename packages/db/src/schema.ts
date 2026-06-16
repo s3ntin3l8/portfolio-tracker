@@ -187,6 +187,18 @@ export const providerSettings = pgTable("provider_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Local count of API calls we've made per provider, used as the usage fallback for
+// providers without a live usage endpoint (e.g. OpenFIGI) and as a cross-check for the
+// rest. Windows roll over lazily on write (when `day`/`month` no longer match now).
+export const providerUsage = pgTable("provider_usage", {
+  provider: text("provider").primaryKey(),
+  day: date("day"),
+  callsDay: integer("calls_day").notNull().default(0),
+  month: text("month"), // 'YYYY-MM'
+  callsMonth: integer("calls_month").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // The source of truth. Holdings, P&L, cash balance, XIRR and net worth are derived
 // from these rows (in @portfolio/core), never stored.
 export const transactions = pgTable(

@@ -840,3 +840,106 @@ describe("OpenFigiProvider", () => {
     expect(await down.resolveISIN("US0378331005")).toBeNull();
   });
 });
+
+describe("provider usage (getUsage)", () => {
+  it("Twelve Data reports the daily window, falling back to per-minute", async () => {
+    let seenUrl = "";
+    const daily = new TwelveDataProvider("key", {
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return {
+          body: {
+            current_usage: 3,
+            plan_limit: 8,
+            daily_usage: 120,
+            plan_daily_limit: 800,
+          },
+        };
+      }),
+    });
+    expect(await daily.getUsage()).toEqual({ window: "day", used: 120, limit: 800 });
+    expect(seenUrl).toContain("/api_usage?apikey=key");
+
+    const minute = new TwelveDataProvider("key", {
+      fetch: mockFetch(() => ({ body: { current_usage: 3, plan_limit: 8 } })),
+    });
+    expect(await minute.getUsage()).toEqual({ window: "minute", used: 3, limit: 8 });
+  });
+
+  it("EODHD reports the daily window and folds in extraLimit", async () => {
+    let seenUrl = "";
+    const p = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return { body: { apiRequests: 42, dailyRateLimit: 100000, extraLimit: 500 } };
+      }),
+    });
+    expect(await p.getUsage()).toEqual({ window: "day", used: 42, limit: 100500 });
+    expect(seenUrl).toContain("/user?api_token=k");
+  });
+
+  it("GoldAPI reports the month's used count with no limit, via the access-token header", async () => {
+    let token: string | undefined;
+    const p = new GoldApiProvider("gold-key", {
+      fetch: mockFetch((_url, init) => {
+        token = (init?.headers as Record<string, string>)["x-access-token"];
+        return { body: { requests_month: 73 } };
+      }),
+    });
+    expect(await p.getUsage()).toEqual({ window: "month", used: 73, limit: null });
+    expect(token).toBe("gold-key");
+  });
+
+  it("returns null on an HTTP error or a shape with no usage fields", async () => {
+    const down = new TwelveDataProvider("key", {
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await down.getUsage()).toBeNull();
+    const empty = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch(() => ({ body: { name: "x" } })),
+    });
+    expect(await empty.getUsage()).toBeNull();
+  });
+});
+
+describe("MarketDataService onCall hook", () => {
+  it("fires with the provider name for each provider it invokes", async () => {
+    const calls: string[] = [];
+    const primary: MarketDataProvider = {
+      name: "primary",
+      supports: (ac) => ac === "equity",
+      getQuote: async () => null, // miss → service tries the next supporter
+    };
+    const fallback: MarketDataProvider = {
+      name: "fallback",
+      supports: (ac) => ac === "equity",
+      getQuote: async (ref) => ({
+        price: "1",
+        currency: ref.currency,
+        asOf: "2026-02-08T00:00:00.000Z",
+      }),
+    };
+    const svc = new MarketDataService([primary, fallback], {
+      onCall: (name) => calls.push(name),
+    });
+    await svc.getQuote(bbca);
+    expect(calls).toEqual(["primary", "fallback"]);
+  });
+
+  it("fires during search for providers that can search/resolve", async () => {
+    const calls: string[] = [];
+    const searcher: MarketDataProvider = {
+      name: "searcher",
+      supports: () => false,
+      getQuote: async () => null,
+      search: async () => [],
+    };
+    const svc = new MarketDataService([searcher], {
+      onCall: (name) => calls.push(name),
+    });
+    await svc.search("BBCA");
+    expect(calls).toEqual(["searcher"]);
+  });
+});

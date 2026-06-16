@@ -20,6 +20,20 @@ export interface User {
   isAdmin: boolean;
 }
 
+/** A provider's API consumption against its plan (GET /admin/providers). */
+export interface AdminProviderUsage {
+  /** `provider` = live from the provider's API; `local` = our own call counter. */
+  source: "provider" | "local";
+  /** The window the counts cover. */
+  window: "minute" | "day" | "month";
+  /** Calls/credits used in the window, or null when unknown. */
+  used: number | null;
+  /** The plan cap for the window, or null when the API doesn't report it. */
+  limit: number | null;
+  /** When the window resets, ISO timestamp, when known. */
+  resetAt?: string;
+}
+
 /** A market-data provider's effective config (GET/PATCH /admin/providers). No secrets. */
 export interface AdminProvider {
   id: string;
@@ -29,6 +43,8 @@ export interface AdminProvider {
   enabled: boolean;
   /** Fallback order; lower is tried first. */
   priority: number;
+  /** API usage/quota, when available for this provider. */
+  usage?: AdminProviderUsage | null;
 }
 
 export interface Portfolio {

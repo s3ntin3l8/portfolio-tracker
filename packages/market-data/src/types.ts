@@ -47,6 +47,18 @@ export interface InstrumentSearchResult {
   source: string; // the provider that surfaced it (display/debug)
 }
 
+/** A keyed provider's reported API consumption against its plan, for one time window. */
+export interface ProviderUsage {
+  /** The window the counts cover: per-minute, per-day, or per-month. */
+  window: "minute" | "day" | "month";
+  /** Calls/credits consumed in the window, or null when the API doesn't report it. */
+  used: number | null;
+  /** The plan cap for the window, or null when the API doesn't report it (e.g. GoldAPI). */
+  limit: number | null;
+  /** When the window resets, ISO timestamp, when the API reports it. */
+  resetAt?: string;
+}
+
 export interface MarketDataProvider {
   readonly name: string;
   supports(assetClass: AssetClass, market: string): boolean;
@@ -58,6 +70,8 @@ export interface MarketDataProvider {
   resolveISIN?(
     isin: string,
   ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
+  /** Live API quota/usage from the provider, when it exposes a usage endpoint. */
+  getUsage?(): Promise<ProviderUsage | null>;
 }
 
 /** A 12-char ISIN: 2-letter country, 9 alphanumerics, 1 check digit. */

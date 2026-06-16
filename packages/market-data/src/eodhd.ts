@@ -1,4 +1,10 @@
-import type { AssetClass, InstrumentRef, MarketDataProvider, Quote } from "./types.js";
+import type {
+  AssetClass,
+  InstrumentRef,
+  MarketDataProvider,
+  ProviderUsage,
+  Quote,
+} from "./types.js";
 import { isIsin } from "./types.js";
 import { eodhdExchangeForMarket, mapExchange } from "./instrument-mapping.js";
 
@@ -76,6 +82,32 @@ export class EodhdProvider implements MarketDataProvider {
     }
     this.isinTickerCache.set(ref.isin, ticker);
     return ticker;
+  }
+
+  async getUsage(): Promise<ProviderUsage | null> {
+    // The `/user` endpoint reports the day's request count + the daily cap (resets
+    // midnight GMT). `extraLimit` is purchased headroom on top of the plan limit.
+    try {
+      const res = await this.doFetch(
+        `${this.baseUrl}/user?api_token=${this.apiKey}&fmt=json`,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        apiRequests?: number;
+        dailyRateLimit?: number;
+        extraLimit?: number;
+      };
+      if (data.apiRequests === undefined && data.dailyRateLimit === undefined) {
+        return null;
+      }
+      const limit =
+        data.dailyRateLimit !== undefined
+          ? data.dailyRateLimit + (data.extraLimit ?? 0)
+          : null;
+      return { window: "day", used: data.apiRequests ?? null, limit };
+    } catch {
+      return null;
+    }
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {

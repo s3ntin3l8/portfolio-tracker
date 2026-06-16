@@ -9,8 +9,10 @@ import {
   TwelveDataProvider,
   YahooFinanceProvider,
   type MarketDataProvider,
+  type ProviderUsage,
 } from "@portfolio/market-data";
-import { providerSettings, type ProviderSetting } from "@portfolio/db";
+import { providerSettings, providerUsage, type ProviderSetting } from "@portfolio/db";
+import { eq } from "drizzle-orm";
 import { getDb } from "../db/client.js";
 
 /**
@@ -111,6 +113,15 @@ export function resolveProviderConfig(
     .sort((a, b) => a.priority - b.priority);
 }
 
+// In-process tally of API calls per provider since the last flush. Incremented by the
+// MarketDataService `onCall` hook (cheap, no DB), drained into `provider_usage` by
+// `flushUsage()`. Avoids a DB write on every quote.
+const callCounts = new Map<string, number>();
+
+function recordCall(name: string): void {
+  callCounts.set(name, (callCounts.get(name) ?? 0) + 1);
+}
+
 let service: MarketDataService | null = null;
 
 /**
@@ -142,11 +153,114 @@ export async function getMarketData(): Promise<MarketDataService> {
     providers.push(new OpenFigiProvider({ apiKey: process.env.OPENFIGI_API_KEY }));
   }
   providers.push(new FixtureProvider());
-  service = new MarketDataService(providers);
+  service = new MarketDataService(providers, { onCall: recordCall });
   return service;
 }
 
 /** Drop the cached service so the next `getMarketData()` rebuilds from current settings. */
 export function invalidateMarketData(): void {
   service = null;
+  usageCache = null;
+}
+
+// --- Usage / quota --------------------------------------------------------
+
+/** The merged usage view for one provider, surfaced to the admin UI. */
+export interface ProviderUsageView extends ProviderUsage {
+  /** `provider` = live from the provider's API; `local` = our own call counter. */
+  source: "provider" | "local";
+}
+
+function todayKey(now: Date): string {
+  return now.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function monthKey(now: Date): string {
+  return now.toISOString().slice(0, 7); // YYYY-MM
+}
+
+/**
+ * Drain the in-process call tally into `provider_usage`, rolling the day/month windows
+ * over lazily (a stored window that no longer matches now resets before we add). Called
+ * from the admin read and the scheduler tick so counts persist without a per-call write.
+ */
+export async function flushUsage(): Promise<void> {
+  if (callCounts.size === 0) return;
+  const drained = [...callCounts.entries()];
+  callCounts.clear();
+  const now = new Date();
+  const day = todayKey(now);
+  const month = monthKey(now);
+  const db = getDb();
+  for (const [provider, count] of drained) {
+    const [existing] = await db
+      .select()
+      .from(providerUsage)
+      .where(eq(providerUsage.provider, provider));
+    if (!existing) {
+      await db.insert(providerUsage).values({
+        provider,
+        day,
+        callsDay: count,
+        month,
+        callsMonth: count,
+      });
+      continue;
+    }
+    const callsDay = (existing.day === day ? existing.callsDay : 0) + count;
+    const callsMonth = (existing.month === month ? existing.callsMonth : 0) + count;
+    await db
+      .update(providerUsage)
+      .set({ day, callsDay, month, callsMonth, updatedAt: now })
+      .where(eq(providerUsage.provider, provider));
+  }
+}
+
+const USAGE_TTL_MS = 60_000;
+let usageCache: { at: number; data: Record<string, ProviderUsageView> } | null = null;
+
+/**
+ * Per-provider usage for the admin UI: live quota from the provider's API where it exposes
+ * one, else our local call counter. Memoised for {@link USAGE_TTL_MS} so repeated admin
+ * loads don't re-hit the providers' usage endpoints; the cache is cleared by
+ * `invalidateMarketData()`.
+ */
+export async function getProviderUsage(): Promise<Record<string, ProviderUsageView>> {
+  if (usageCache && Date.now() - usageCache.at < USAGE_TTL_MS) {
+    return usageCache.data;
+  }
+  const out: Record<string, ProviderUsageView> = {};
+  const now = new Date();
+  const month = monthKey(now);
+
+  const localRows = await getDb().select().from(providerUsage);
+  const localById = new Map(localRows.map((r) => [r.provider, r]));
+
+  for (const d of PROVIDER_REGISTRY) {
+    if (!d.configured()) continue;
+    let view: ProviderUsageView | null = null;
+
+    const provider = d.create();
+    if (provider.getUsage) {
+      const live = await provider.getUsage();
+      if (live) view = { source: "provider", ...live };
+    }
+
+    if (!view) {
+      const local = localById.get(d.id);
+      if (local) {
+        view = {
+          source: "local",
+          window: "month",
+          used: local.month === month ? local.callsMonth : 0,
+          limit: null,
+        };
+      }
+    }
+
+    if (view) out[d.id] = view;
+  }
+
+  usageCache = { at: Date.now(), data: out };
+  return out;
 }

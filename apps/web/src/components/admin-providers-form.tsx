@@ -9,6 +9,28 @@ import { Button } from "@/components/ui/button";
 /** The slice of the API client this form needs (injectable for tests). */
 export type AdminProvidersClient = Pick<ApiClient, "updateAdminProviders">;
 
+/** A read-only "X / Y today" (or "X this month") badge from a provider's usage figures. */
+function UsageBadge({ usage }: { usage: AdminProvider["usage"] }) {
+  const t = useTranslations("Admin");
+  if (!usage || usage.used === null) return null;
+  const window = {
+    minute: t("usageMinute"),
+    day: t("usageDay"),
+    month: t("usageMonth"),
+  }[usage.window];
+  const used = usage.used.toLocaleString();
+  const text =
+    usage.limit !== null
+      ? t("usageUsedOfLimit", { used, limit: usage.limit.toLocaleString(), window })
+      : t("usageUsed", { used, window });
+  return (
+    <span className="text-xs tabular-nums text-muted-foreground">
+      {text}
+      {usage.source === "local" && ` (${t("usageLocalHint")})`}
+    </span>
+  );
+}
+
 // Order + enabled flags only — id/label/configured are immutable here.
 const signature = (rows: AdminProvider[]) =>
   rows.map((r) => `${r.id}:${r.enabled ? 1 : 0}`).join(",");
@@ -95,10 +117,12 @@ export function AdminProvidersForm({
             </span>
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="font-medium">{p.label}</span>
-              {!p.configured && (
+              {!p.configured ? (
                 <span className="text-xs text-muted-foreground">
                   {t("notConfigured")}
                 </span>
+              ) : (
+                <UsageBadge usage={p.usage} />
               )}
             </div>
 

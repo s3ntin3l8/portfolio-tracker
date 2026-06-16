@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { trConnections } from "@portfolio/db";
 import { getDb } from "../db/client.js";
-import { getMarketData } from "./market-data.js";
+import { getMarketData, flushUsage } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
 import { recordDailySnapshots } from "./snapshots.js";
 import { syncTrConnection } from "./pytr/sync.js";
@@ -46,6 +46,8 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         await getMarketData(),
         new Date(),
       );
+      // Persist the provider calls this refresh made, so usage survives without an admin visit.
+      await flushUsage();
       app.log.info({ refreshed }, "price refresh complete");
     } catch (err) {
       app.log.error({ err }, "price refresh failed");
