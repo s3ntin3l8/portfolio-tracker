@@ -305,8 +305,9 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(res.statusCode).toBe(200);
-    // Antam is always configured; with no DB override it appears as a gold source.
+    // Antam + Galeri24 are always configured; with no DB override both appear as gold sources.
     expect(res.json()).toContainEqual({ market: "ANTAM", label: "Antam buyback" });
+    expect(res.json()).toContainEqual({ market: "GALERI24", label: "Galeri24 buyback" });
   });
 
   it("looks up instrument metadata from market data (auto-discovery)", async () => {
@@ -792,14 +793,12 @@ describe("auth + portfolios + transactions", () => {
         name: "BCA (USD)",
       })
       .returning();
-    await app.db
-      .insert(fxRates)
-      .values({
-        base: "USD",
-        quote: "IDR",
-        rate: "16000",
-        date: new Date().toISOString().slice(0, 10),
-      });
+    await app.db.insert(fxRates).values({
+      base: "USD",
+      quote: "IDR",
+      rate: "16000",
+      date: new Date().toISOString().slice(0, 10),
+    });
 
     await app.inject({
       method: "POST",

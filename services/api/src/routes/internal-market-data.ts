@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   getScrapedQuote,
   ANTAM_BUYBACK_KEY,
+  GALERI24_BUYBACK_KEY,
   navKey,
 } from "../services/scrapers/store.js";
 
@@ -18,6 +19,12 @@ import {
 export async function internalMarketDataRoute(app: FastifyInstance) {
   app.get("/internal/gold/antam-buyback", async (_request, reply) => {
     const buyback = await getScrapedQuote(app.db, ANTAM_BUYBACK_KEY);
+    if (buyback === null) return reply.code(404).send({ error: "no_quote" });
+    return { buyback };
+  });
+
+  app.get("/internal/gold/galeri24-buyback", async (_request, reply) => {
+    const buyback = await getScrapedQuote(app.db, GALERI24_BUYBACK_KEY);
     if (buyback === null) return reply.code(404).send({ error: "no_quote" });
     return { buyback };
   });

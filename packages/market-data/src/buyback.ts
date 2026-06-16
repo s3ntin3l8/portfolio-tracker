@@ -1,30 +1,29 @@
-import type {
-  AssetClass,
-  InstrumentRef,
-  MarketDataProvider,
-  Quote,
-} from "./types.js";
+import type { AssetClass, InstrumentRef, MarketDataProvider, Quote } from "./types.js";
 import type { ProviderOptions } from "./twelve-data.js";
 
 /**
- * Antam / Pegadaian gold **buyback** price (IDR per gram) — values physical and
- * savings gold (Pegadaian Tabungan Emas), distinct from XAU spot which drives the
- * ticker. No official API: reads a configurable JSON endpoint and parses a
- * buyback-per-gram field, returning `null` on any failure so the provider chain
- * falls through (to spot or a manual reconciliation backstop). Market: `ANTAM`.
+ * A gold **buyback** price provider (IDR per gram) — values physical / savings gold
+ * holdings, distinct from XAU spot which drives the ticker. Each buyback brand (Antam,
+ * Galeri24, …) has its own rate and its own `market` constant, but they're otherwise
+ * identical: read a configurable JSON endpoint and parse a buyback-per-gram field,
+ * returning `null` on any failure so the provider chain falls through (to spot or a manual
+ * reconciliation backstop). One instance is registered per brand (see PROVIDER_REGISTRY).
  */
-export class AntamProvider implements MarketDataProvider {
-  readonly name = "antam";
+export class BuybackProvider implements MarketDataProvider {
+  readonly name: string;
+  private readonly market: string;
   private readonly baseUrl: string;
   private readonly doFetch: typeof fetch;
 
-  constructor(opts: ProviderOptions & { baseUrl: string }) {
+  constructor(opts: ProviderOptions & { name: string; market: string; baseUrl: string }) {
+    this.name = opts.name;
+    this.market = opts.market;
     this.baseUrl = opts.baseUrl;
     this.doFetch = opts.fetch ?? globalThis.fetch;
   }
 
   supports(assetClass: AssetClass, market: string): boolean {
-    return assetClass === "gold" && market === "ANTAM";
+    return assetClass === "gold" && market === this.market;
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {

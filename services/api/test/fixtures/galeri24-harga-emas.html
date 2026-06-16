@@ -1,0 +1,61 @@
+<!--
+  Trimmed real-structure snapshot of https://galeri24.co.id/harga-emas (2026-06-16).
+  Mirrors the server-rendered Nuxt CSS-grid: one `<div id="…">` section per brand, each
+  with `div.grid-cols-5` rows of `Berat | Harga Jual | Harga Buyback`. Includes a decoy
+  "BABY GALERI 24" brand (different 1g buyback) so the test proves extraction scopes to the
+  exact "GALERI 24" section. The 1g GALERI 24 buyback here is Rp2.549.000.
+-->
+<html>
+  <body>
+    <div class="w-full flex flex-col gap-4">
+      <div id="GALERI 24">
+        <div class="grid divide-neutral-200 border-neutral-200">
+          <div class="text-lg font-semibold mb-4"> Diperbarui Selasa, 16 Juni 2026</div>
+          <div class="bg-primary-100 font-medium text-center text-xl p-2 border-t border-x"> Harga GALERI 24 </div>
+          <div class="overflow-x-scroll hide-scroll lg:overflow-visible border">
+            <div class="min-w-[400px] flex flex-col divide-y">
+              <div class="grid grid-cols-5 divide-x text-lg font-semibold">
+                <div class="p-3 col-span-1 whitespace-nowrap bg-neutral-50"> Berat </div>
+                <div class="p-3 col-span-2 whitespace-nowrap bg-neutral-50"> Harga Jual </div>
+                <div class="p-3 col-span-2 whitespace-nowrap bg-neutral-50"> Harga Buyback </div>
+              </div>
+              <div class="grid grid-cols-5 divide-x lg:hover:bg-neutral-50 transition-all">
+                <div class="p-3 col-span-1 whitespace-nowrap w-fit">0.5</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp1.425.000</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp1.274.000</div>
+              </div>
+              <div class="grid grid-cols-5 divide-x lg:hover:bg-neutral-50 transition-all">
+                <div class="p-3 col-span-1 whitespace-nowrap w-fit">1</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp2.718.000</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp2.549.000</div>
+              </div>
+              <div class="grid grid-cols-5 divide-x lg:hover:bg-neutral-50 transition-all">
+                <div class="p-3 col-span-1 whitespace-nowrap w-fit">5</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp13.325.000</div>
+                <div class="p-3 col-span-2 whitespace-nowrap w-fit">Rp12.745.000</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="BABY GALERI 24">
+        <div class="grid divide-neutral-200 border-neutral-200">
+          <div class="bg-primary-100 font-medium text-center text-xl p-2 border-t border-x"> Harga BABY GALERI 24 </div>
+          <div class="min-w-[400px] flex flex-col divide-y">
+            <div class="grid grid-cols-5 divide-x text-lg font-semibold">
+              <div class="p-3 col-span-1 bg-neutral-50"> Berat </div>
+              <div class="p-3 col-span-2 bg-neutral-50"> Harga Jual </div>
+              <div class="p-3 col-span-2 bg-neutral-50"> Harga Buyback </div>
+            </div>
+            <div class="grid grid-cols-5 divide-x">
+              <div class="p-3 col-span-1 w-fit">1</div>
+              <div class="p-3 col-span-2 w-fit">Rp3.100.000</div>
+              <div class="p-3 col-span-2 w-fit">Rp9.999.999</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

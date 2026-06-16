@@ -3,10 +3,21 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
-import { getScrapedQuote, ANTAM_BUYBACK_KEY, navKey } from "../../src/services/scrapers/store.js";
+import {
+  getScrapedQuote,
+  ANTAM_BUYBACK_KEY,
+  GALERI24_BUYBACK_KEY,
+  navKey,
+} from "../../src/services/scrapers/store.js";
 
-const HARGA_EMAS_HTML =
-  `<html><body><span>Harga pembelian kembali: <!-- -->Rp2.591.100<!-- --> /grm</span></body></html>`;
+const HARGA_EMAS_HTML = `<html><body><span>Harga pembelian kembali: <!-- -->Rp2.591.100<!-- --> /grm</span></body></html>`;
+
+// Minimal GALERI 24 section: a 1g row whose last cell is the buyback.
+const GALERI24_HTML =
+  `<html><body><div id="GALERI 24"><div class="grid grid-cols-5">` +
+  `<div>Berat</div><div>Harga Jual</div><div>Harga Buyback</div></div>` +
+  `<div class="grid grid-cols-5"><div>1</div><div>Rp2.718.000</div><div>Rp2.549.000</div></div>` +
+  `</div></body></html>`;
 
 // Build the same self-describing envelope Bibit returns (iv hex + cipher hex + key utf8).
 function encryptBibitEnvelope(payload: unknown): string {
@@ -127,8 +138,7 @@ describe("admin provider config", () => {
       headers: auth(t),
     });
     expect(
-      (get.json() as { id: string; enabled: boolean }[]).find((p) => p.id === "yahoo")
-        ?.enabled,
+      (get.json() as { id: string; enabled: boolean }[]).find((p) => p.id === "yahoo")?.enabled,
     ).toBe(false);
   });
 
@@ -158,6 +168,10 @@ describe("admin provider config", () => {
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string) => {
       const u = String(url);
+      // Check galeri24 first: its URL (galeri24.co.id/harga-emas) also contains "harga-emas".
+      if (u.includes("galeri24")) {
+        return { ok: true, status: 200, text: async () => GALERI24_HTML } as Response;
+      }
       if (u.includes("harga-emas")) {
         return { ok: true, status: 200, text: async () => HARGA_EMAS_HTML } as Response;
       }
@@ -175,8 +189,13 @@ describe("admin provider config", () => {
         headers: auth(await token("admin-scrape", [ADMIN_GROUP])),
       });
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ antamBuyback: 2591100, navFunds: 1 });
+      expect(res.json()).toEqual({
+        antamBuyback: 2591100,
+        galeri24Buyback: 2549000,
+        navFunds: 1,
+      });
       expect(await getScrapedQuote(app.db, ANTAM_BUYBACK_KEY)).toBe(2591100);
+      expect(await getScrapedQuote(app.db, GALERI24_BUYBACK_KEY)).toBe(2549000);
       expect(await getScrapedQuote(app.db, navKey("RDPU"))).toBe(1234.56);
     } finally {
       globalThis.fetch = realFetch;

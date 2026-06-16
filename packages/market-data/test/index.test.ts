@@ -7,7 +7,7 @@ import {
   MarketDataService,
   TwelveDataProvider,
   GoldApiProvider,
-  AntamProvider,
+  BuybackProvider,
   NavProvider,
   YahooFinanceProvider,
   OpenFigiProvider,
@@ -51,9 +51,7 @@ describe("FixtureProvider", () => {
       currency: "IDR",
       previousClose: "9000",
     });
-    expect(
-      await provider.getQuote({ ...bbca, symbol: "UNKNOWN" }),
-    ).toBeNull();
+    expect(await provider.getQuote({ ...bbca, symbol: "UNKNOWN" })).toBeNull();
   });
 
   it("supports any asset class / market", () => {
@@ -225,8 +223,7 @@ describe("MarketDataService", () => {
       name: "many",
       supports: () => false,
       getQuote: async () => null,
-      search: async () =>
-        Array.from({ length: 25 }, (_, i) => result({ symbol: `SYM${i}` })),
+      search: async () => Array.from({ length: 25 }, (_, i) => result({ symbol: `SYM${i}` })),
     };
     const svc = new MarketDataService([many]);
     expect(await svc.search("  ")).toEqual([]);
@@ -464,9 +461,7 @@ describe("TwelveDataProvider", () => {
         body: { values: [{ datetime: "2026-02-08", close: "9500" }] },
       })),
     });
-    expect(await eqProvider.getHistory(bbca)).toEqual([
-      { date: "2026-02-08", close: "9500" },
-    ]);
+    expect(await eqProvider.getHistory(bbca)).toEqual([{ date: "2026-02-08", close: "9500" }]);
 
     const goldProvider = new TwelveDataProvider("key", {
       fetch: mockFetch(() => ({
@@ -534,43 +529,72 @@ describe("GoldApiProvider", () => {
   });
 });
 
-describe("AntamProvider", () => {
+describe("BuybackProvider", () => {
   const antamRef: InstrumentRef = {
     symbol: "GOLD",
     market: "ANTAM",
     assetClass: "gold",
     currency: "IDR",
   };
+  const galeri24Ref: InstrumentRef = {
+    symbol: "GOLD",
+    market: "GALERI24",
+    assetClass: "gold",
+    currency: "IDR",
+  };
 
-  it("supports gold buyback (ANTAM market) but not spot", () => {
-    const p = new AntamProvider({ baseUrl: "https://x", fetch: mockFetch(() => ({ body: {} })) });
-    expect(p.supports("gold", "ANTAM")).toBe(true);
-    expect(p.supports("gold", "XAU")).toBe(false);
-    expect(p.supports("equity", "IDX")).toBe(false);
+  it("supports only its own gold buyback market, not spot or other brands", () => {
+    const antam = new BuybackProvider({
+      name: "antam",
+      market: "ANTAM",
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: {} })),
+    });
+    expect(antam.supports("gold", "ANTAM")).toBe(true);
+    expect(antam.supports("gold", "GALERI24")).toBe(false); // a different brand
+    expect(antam.supports("gold", "XAU")).toBe(false); // buyback ≠ spot
+    expect(antam.supports("equity", "IDX")).toBe(false);
+
+    const galeri24 = new BuybackProvider({
+      name: "galeri24",
+      market: "GALERI24",
+      baseUrl: "https://x",
+      fetch: mockFetch(() => ({ body: {} })),
+    });
+    expect(galeri24.supports("gold", "GALERI24")).toBe(true);
+    expect(galeri24.supports("gold", "ANTAM")).toBe(false);
   });
 
   it("reads the per-gram buyback price (incl. nested under data)", async () => {
-    const top = new AntamProvider({
+    const top = new BuybackProvider({
+      name: "antam",
+      market: "ANTAM",
       baseUrl: "https://x",
       fetch: mockFetch(() => ({ body: { buyback: 1120000 } })),
     });
     expect((await top.getQuote(antamRef))?.price).toBe("1120000");
 
-    const nested = new AntamProvider({
+    const nested = new BuybackProvider({
+      name: "galeri24",
+      market: "GALERI24",
       baseUrl: "https://x",
-      fetch: mockFetch(() => ({ body: { data: { harga_buyback: 1115000 } } })),
+      fetch: mockFetch(() => ({ body: { data: { harga_buyback: 2549000 } } })),
     });
-    expect((await nested.getQuote(antamRef))?.price).toBe("1115000");
+    expect((await nested.getQuote(galeri24Ref))?.price).toBe("2549000");
   });
 
   it("returns null on an unrecognised shape or a failed request", async () => {
-    const bad = new AntamProvider({
+    const bad = new BuybackProvider({
+      name: "antam",
+      market: "ANTAM",
       baseUrl: "https://x",
       fetch: mockFetch(() => ({ body: { something: "else" } })),
     });
     expect(await bad.getQuote(antamRef)).toBeNull();
 
-    const down = new AntamProvider({
+    const down = new BuybackProvider({
+      name: "antam",
+      market: "ANTAM",
       baseUrl: "https://x",
       fetch: mockFetch(() => ({ ok: false, body: {} })),
     });

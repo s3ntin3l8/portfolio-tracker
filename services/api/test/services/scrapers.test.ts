@@ -1,19 +1,26 @@
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { extractBuybackFromHtml } from "../../src/services/scrapers/antam-buyback.js";
-import {
-  decryptBibitEnvelope,
-  refreshBibitNav,
-} from "../../src/services/scrapers/bibit-nav.js";
+import { extractBuybackFromHtml as extractGaleri24Buyback } from "../../src/services/scrapers/galeri24-buyback.js";
+import { decryptBibitEnvelope, refreshBibitNav } from "../../src/services/scrapers/bibit-nav.js";
 import {
   upsertScrapedQuote,
   getScrapedQuote,
   refreshAntamBuyback,
+  refreshGaleri24Buyback,
   refreshNav,
   ANTAM_BUYBACK_KEY,
+  GALERI24_BUYBACK_KEY,
   navKey,
 } from "../../src/services/scrapers/store.js";
+
+// A trimmed real-structure snapshot of galeri24.co.id/harga-emas (Nuxt CSS-grid, no tables).
+const GALERI24_HTML = readFileSync(
+  new URL("../fixtures/galeri24-harga-emas.html", import.meta.url),
+  "utf-8",
+);
 
 // Minimal fetch stub: a responder maps a URL to { ok?, body } (text or json).
 function mockFetch(
@@ -56,6 +63,25 @@ describe("extractBuybackFromHtml", () => {
 
   it("returns null when the label/number is absent", () => {
     expect(extractBuybackFromHtml("<html><body>no price here</body></html>")).toBeNull();
+  });
+});
+
+describe("galeri24 extractBuybackFromHtml", () => {
+  it("reads the 1g buyback from the GALERI 24 section, not other brands", () => {
+    // The fixture's decoy BABY GALERI 24 section has a 1g buyback of 9999999.
+    expect(extractGaleri24Buyback(GALERI24_HTML)).toBe(2549000);
+  });
+
+  it("returns null when the GALERI 24 section is missing", () => {
+    expect(extractGaleri24Buyback('<html><body><div id="ANTAM">…</div></body></html>')).toBeNull();
+  });
+
+  it("returns null when the section has no 1g row (layout change)", () => {
+    const noOneGram = GALERI24_HTML.replace(
+      /<div class="p-3 col-span-1 whitespace-nowrap w-fit">1<\/div>/,
+      '<div class="p-3 col-span-1 whitespace-nowrap w-fit">1.5</div>',
+    );
+    expect(extractGaleri24Buyback(noOneGram)).toBeNull();
   });
 });
 
@@ -115,7 +141,29 @@ describe("scraped_quotes store", () => {
 
   it("refreshAntamBuyback caches nothing on failure", async () => {
     const db = getDb();
-    const value = await refreshAntamBuyback(db, mockFetch(() => ({ ok: false })));
+    const value = await refreshAntamBuyback(
+      db,
+      mockFetch(() => ({ ok: false })),
+    );
+    expect(value).toBeNull();
+  });
+
+  it("refreshGaleri24Buyback scrapes and caches the buyback", async () => {
+    const db = getDb();
+    const value = await refreshGaleri24Buyback(
+      db,
+      mockFetch(() => ({ text: GALERI24_HTML })),
+    );
+    expect(value).toBe(2549000);
+    expect(await getScrapedQuote(db, GALERI24_BUYBACK_KEY)).toBe(2549000);
+  });
+
+  it("refreshGaleri24Buyback caches nothing on failure", async () => {
+    const db = getDb();
+    const value = await refreshGaleri24Buyback(
+      db,
+      mockFetch(() => ({ ok: false })),
+    );
     expect(value).toBeNull();
   });
 

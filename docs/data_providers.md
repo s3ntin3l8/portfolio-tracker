@@ -21,9 +21,13 @@ Priority is the default tried-first order (lower = earlier). Cells reflect each 
 | Twelve Data    | 1        | ✓      | ✓   | ✓           | —              | —           | IDX, US, XAU    | `TWELVEDATA_API_KEY` | Yes    |
 | GoldAPI        | 2        | —      | —   | ✓           | —              | —           | XAU             | `GOLDAPI_KEY`        | Yes    |
 | Antam          | 3        | —      | —   | —           | ✓              | —           | ANTAM           | `ANTAM_BUYBACK_URL`  | Scraper|
-| Reksa Dana NAV | 4        | —      | —   | —           | —              | ✓           | (any)           | `NAV_BASE_URL`       | Scraper|
-| EODHD          | 5        | ✓      | ✓   | —           | —              | —           | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
-| Yahoo Finance  | 6        | ✓      | ✓   | —           | —              | —           | (any, suffixed) | — (keyless)          | No     |
+| Galeri24       | 4        | —      | —   | —           | ✓              | —           | GALERI24        | `GALERI24_BUYBACK_URL` | Scraper|
+| Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | (any)           | `NAV_BASE_URL`       | Scraper|
+| EODHD          | 6        | ✓      | ✓   | —           | —              | —           | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
+| Yahoo Finance  | 7        | ✓      | ✓   | —           | —              | —           | (any, suffixed) | — (keyless)          | No     |
+
+Antam and Galeri24 are both **gold buyback** sources backed by one shared `BuybackProvider`
+(`packages/market-data/src/buyback.ts`), one instance per brand/market.
 
 Always-on, outside the configurable registry:
 
@@ -53,12 +57,14 @@ so the effective chain per asset is:
 - **XETRA (and other EODHD-mapped) equity / ETF:** EODHD → Yahoo → Fixture
 - **Gold spot (XAU):** Twelve Data → GoldAPI → Fixture
 - **Gold buyback (ANTAM):** Antam → Fixture
+- **Gold buyback (GALERI24):** Galeri24 → Fixture
 - **Mutual fund (reksa dana):** Reksa Dana NAV → Fixture
 
-Gold is sourced two different ways on purpose: **spot** (market `XAU`, via Twelve Data /
-GoldAPI) prices paper/abstract gold, while **buyback** (market `ANTAM`, via the Antam
-provider) values physical Antam/Pegadaian holdings at the dealer buyback rate. They are
-distinct markets and never substitute for one another.
+Gold is sourced multiple ways on purpose: **spot** (market `XAU`, via Twelve Data / GoldAPI)
+prices paper/abstract gold, while each **buyback** market (`ANTAM`, `GALERI24`) values
+physical holdings at that dealer's own buyback rate — the rates differ, so the markets never
+substitute for one another. The add-transaction gold flow lets the user pick the buyback
+source per holding.
 
 ## Configuration
 
@@ -71,30 +77,37 @@ no configuration.
 | `TWELVEDATA_API_KEY` | Twelve Data    | No       | IDX/US equities & ETFs, gold spot.                          |
 | `GOLDAPI_KEY`        | GoldAPI        | No       | Gold spot (XAU).                                            |
 | `ANTAM_BUYBACK_URL`  | Antam          | No       | Override the built-in scraper with an external JSON endpoint. Blank ⇒ internal scraper route (see below). |
+| `GALERI24_BUYBACK_URL` | Galeri24     | No       | Override the built-in scraper with an external JSON endpoint. Blank ⇒ internal scraper route (see below). |
 | `NAV_BASE_URL`       | Reksa Dana NAV | No       | Override the built-in scraper with an external `<base>/<fund-symbol>` endpoint. Blank ⇒ internal scraper route. |
-| `MARKET_DATA_SELF_URL` | Antam / NAV  | No       | Base URL the providers use to reach this API's internal scraper routes. Default `http://127.0.0.1:$PORT`. |
+| `MARKET_DATA_SELF_URL` | Antam / Galeri24 / NAV | No | Base URL the providers use to reach this API's internal scraper routes. Default `http://127.0.0.1:$PORT`. |
 | `EODHD_API_KEY`      | EODHD          | No       | US/XETRA equities & ETFs (EU / Trade Republic instruments). |
 | `OPENFIGI_API_KEY`   | OpenFIGI       | No       | Optional; only raises the discovery rate limit.             |
 
-Unlike the other providers, **Antam and Reksa Dana NAV are always on**: with their env var
-blank they fetch the built-in scrapers' internal routes (next section) instead of dropping
-out of the chain.
+Unlike the other providers, **Antam, Galeri24 and Reksa Dana NAV are always on**: with their
+env var blank they fetch the built-in scrapers' internal routes (next section) instead of
+dropping out of the chain.
 
 ## Built-in scrapers
 
-Antam buyback and reksa-dana NAV have no official free API, so the API scrapes them itself
-(scheduler jobs → `scraped_quotes` cache → internal routes the providers fetch). Failures
-degrade gracefully: a missing/stale value just makes the provider fall through to Fixture.
+Gold buyback (Antam, Galeri24) and reksa-dana NAV have no official free API, so the API
+scrapes them itself (scheduler jobs → `scraped_quotes` cache → internal routes the providers
+fetch). Failures degrade gracefully: a missing/stale value just makes the provider fall
+through to Fixture.
 
 | Source        | Scrapes                                         | Cache key          | Internal route                  | Schedule            |
 | ------------- | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------- |
 | harga-emas.org | Antam LM buyback (`Harga pembelian kembali`)   | `gold:antam-buyback` | `GET /internal/gold/antam-buyback` | every 4h (`0 */4 * * *`) |
+| galeri24.co.id | Galeri24 buyback (1 g `Harga Buyback`)          | `gold:galeri24-buyback` | `GET /internal/gold/galeri24-buyback` | every 4h (`0 */4 * * *`) |
 | api.bibit.id  | Reksa-dana NAV catalogue (`symbol` → `nav.value`) | `nav:<symbol>`     | `GET /internal/nav/:symbol`     | 16:00 & 01:00 UTC (`0 1,16 * * *`) |
 
-- **Gold source:** the canonical Antam page (`logammulia.com/id/sell/gold`) sits behind
-  anti-bot protection that 403s non-browser clients, so it is unusable server-side. We read
-  the same official Antam LM buyback from harga-emas.org instead. The source URL + extraction
-  are isolated in `services/api/src/services/scrapers/antam-buyback.ts` for easy swapping.
+- **Gold source (Antam):** the canonical Antam page (`logammulia.com/id/sell/gold`) sits
+  behind anti-bot protection that 403s non-browser clients, so it is unusable server-side. We
+  read the same official Antam LM buyback from harga-emas.org instead. The source URL +
+  extraction are isolated in `services/api/src/services/scrapers/antam-buyback.ts`.
+- **Gold source (Galeri24):** `galeri24.co.id/harga-emas` is directly scrapeable server-side
+  (static Nuxt HTML). The page lists several brands; extraction scopes to the `GALERI 24`
+  section and reads the 1 g `Harga Buyback`, isolated in
+  `services/api/src/services/scrapers/galeri24-buyback.ts`.
 - **NAV source & symbol scheme:** Bibit's `products/list` returns an AES-encrypted catalogue
   (decrypted in `bibit-nav.ts`). The **canonical fund symbol is Bibit's `symbol` field**
   (e.g. `RD4196`) — store that on the `mutual_fund` instrument so `/internal/nav/<symbol>`
@@ -106,8 +119,8 @@ degrade gracefully: a missing/stale value just makes the provider fall through t
 
 **Run the scrapers on demand** (e.g. right after a deploy, so you don't wait for the cron):
 
-- Admin API: `POST /admin/market-data/scrape` (Authentik admin group) → runs both scrapers
-  and returns `{ antamBuyback, navFunds }`.
+- Admin API: `POST /admin/market-data/scrape` (Authentik admin group) → runs all scrapers
+  and returns `{ antamBuyback, galeri24Buyback, navFunds }`.
 - CLI: `npm run scrape` (in `services/api`, loads `../../.env`), or in a container
   `node dist/db/scrape.js` with `DATABASE_URL` set.
 

@@ -6,7 +6,7 @@ import { getDb } from "../db/client.js";
 import { getMarketData, flushUsage } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
 import { recordDailySnapshots } from "./snapshots.js";
-import { refreshAntamBuyback, refreshNav } from "./scrapers/store.js";
+import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
 
 const QUEUE = "refresh-prices";
@@ -51,11 +51,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
 
   await boss.work(QUEUE, async () => {
     try {
-      const refreshed = await refreshHeldPrices(
-        getDb(),
-        await getMarketData(),
-        new Date(),
-      );
+      const refreshed = await refreshHeldPrices(getDb(), await getMarketData(), new Date());
       // Persist the provider calls this refresh made, so usage survives without an admin visit.
       await flushUsage();
       app.log.info({ refreshed }, "price refresh complete");
@@ -93,12 +89,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         .from(trConnections)
         .where(eq(trConnections.status, "connected"));
       for (const conn of conns) {
-        const result = await syncTrConnection(
-          getDb(),
-          app.encryption,
-          app.pytr,
-          conn,
-        );
+        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn);
         app.log.info({ connectionId: conn.id, result }, "tr sync complete");
       }
     } catch (err) {
@@ -107,15 +98,17 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(TR_SYNC_QUEUE, TR_SYNC_CRON);
 
-  // Scrape the Antam gold buyback into scraped_quotes; served back to the AntamProvider
-  // via /internal/gold/antam-buyback. The scraper self-handles failures (returns null).
+  // Scrape the gold buyback rates (Antam + Galeri24) into scraped_quotes; served back to the
+  // BuybackProviders via /internal/gold/<brand>-buyback. Each scraper self-handles failures
+  // (returns null), so one dead source doesn't block the other.
   await boss.createQueue(ANTAM_QUEUE);
   await boss.work(ANTAM_QUEUE, async () => {
     try {
-      const value = await refreshAntamBuyback(getDb());
-      app.log.info({ value }, "antam buyback scrape complete");
+      const antam = await refreshAntamBuyback(getDb());
+      const galeri24 = await refreshGaleri24Buyback(getDb());
+      app.log.info({ antam, galeri24 }, "gold buyback scrape complete");
     } catch (err) {
-      app.log.error({ err }, "antam buyback scrape failed");
+      app.log.error({ err }, "gold buyback scrape failed");
     }
   });
   await boss.schedule(ANTAM_QUEUE, ANTAM_CRON);

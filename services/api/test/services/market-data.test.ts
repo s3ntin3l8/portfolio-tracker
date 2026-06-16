@@ -106,6 +106,12 @@ describe("goldSources", () => {
     const rows = [{ provider: "gamma", enabled: true, priority: 0 }];
     expect(goldSources(rows, configuredGamma).map((s) => s.market)).toEqual(["GAMMA", "ALPHA"]);
   });
+
+  it("exposes the real Antam and Galeri24 buyback sources (default registry)", () => {
+    const sources = goldSources([]);
+    expect(sources).toContainEqual({ market: "ANTAM", label: "Antam buyback" });
+    expect(sources).toContainEqual({ market: "GALERI24", label: "Galeri24 buyback" });
+  });
 });
 
 describe("getMarketData / invalidateMarketData", () => {
