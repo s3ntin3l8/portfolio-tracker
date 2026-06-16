@@ -21,6 +21,15 @@ function renderSwitcher(props: {
   );
 }
 
+const trigger = () =>
+  screen.getByRole("button", { name: messages.PortfolioSwitcher.label });
+
+// Radix opens its dropdown on pointer/keyboard events, not a synthetic click; Enter on
+// the focused trigger is the most reliable opener under jsdom.
+function openMenu() {
+  fireEvent.keyDown(trigger(), { key: "Enter" });
+}
+
 describe("PortfolioSwitcher", () => {
   beforeEach(() => {
     refresh.mockClear();
@@ -32,27 +41,34 @@ describe("PortfolioSwitcher", () => {
       portfolios: [{ id: "p1", name: "Main", brokerage: null }],
       selectedId: null,
     });
-    expect(container.querySelector("select")).toBeNull();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("offers an All option plus each portfolio, reflecting the selection", () => {
-    renderSwitcher({
+  it("shows the selected portfolio on the trigger, falling back to All", () => {
+    const { rerender } = renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null },
         { id: "p2", name: "DKB", brokerage: null },
       ],
-      selectedId: "p2",
+      selectedId: null,
     });
-    const select = screen.getByLabelText(
-      messages.PortfolioSwitcher.label,
-    ) as HTMLSelectElement;
-    expect(select.value).toBe("p2");
-    expect(
-      screen.getByRole("option", { name: messages.PortfolioSwitcher.all }),
-    ).toBeInTheDocument();
+    expect(trigger()).toHaveTextContent(messages.PortfolioSwitcher.all);
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <PortfolioSwitcher
+          portfolios={[
+            { id: "p1", name: "Main", brokerage: null },
+            { id: "p2", name: "DKB", brokerage: null },
+          ]}
+          selectedId="p2"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(trigger()).toHaveTextContent("DKB");
   });
 
-  it("appends the brokerage to the option label when set", () => {
+  it("lists an All option plus each portfolio, appending the brokerage", () => {
     renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null },
@@ -60,8 +76,12 @@ describe("PortfolioSwitcher", () => {
       ],
       selectedId: "p2",
     });
+    openMenu();
     expect(
-      screen.getByRole("option", { name: "Euro · Trade Republic" }),
+      screen.getByRole("menuitem", { name: messages.PortfolioSwitcher.all }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Euro · Trade Republic/ }),
     ).toBeInTheDocument();
   });
 
@@ -73,9 +93,8 @@ describe("PortfolioSwitcher", () => {
       ],
       selectedId: null,
     });
-    fireEvent.change(screen.getByLabelText(messages.PortfolioSwitcher.label), {
-      target: { value: "p2" },
-    });
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
     expect(document.cookie).toContain("pf=p2");
     expect(refresh).toHaveBeenCalled();
   });
