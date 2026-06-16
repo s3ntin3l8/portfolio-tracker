@@ -252,6 +252,33 @@ describe("summarizePortfolio", () => {
     expect(summary.totalDayChange).toBe("1650000");
   });
 
+  it("exposes per-holding value/cost in the display currency (#94)", () => {
+    const summary = summarizePortfolio({
+      transactions: [
+        mk({ type: "buy", instrumentId: I2, quantity: "10", price: "100", currency: "USD" }), // USD, priced
+        mk({ type: "buy", instrumentId: I1, quantity: "5", price: "300", currency: "IDR" }), // unpriced
+      ],
+      prices: { [I2]: { price: "110", currency: "USD" } },
+      displayCurrency: "IDR",
+      fx: (from, to) => (from === "USD" && to === "IDR" ? "16000" : "1"),
+    });
+
+    const h2 = summary.holdings.find((h) => h.instrumentId === I2)!;
+    // Native (unchanged): value/cost in USD.
+    expect(h2.marketValue).toBe("1100"); // 10 × 110
+    expect(h2.costBasis).toBe("1000"); // 10 × 100
+    // Display (× 16,000 IDR/USD).
+    expect(h2.marketValueDisplay).toBe("17600000");
+    expect(h2.costBasisDisplay).toBe("16000000");
+    expect(h2.unrealizedPnLDisplay).toBe("1600000"); // 17.6M − 16M
+
+    // Unpriced: value/P&L unknown; cost basis falls back to native (best effort).
+    const h1 = summary.holdings.find((h) => h.instrumentId === I1)!;
+    expect(h1.marketValueDisplay).toBeNull();
+    expect(h1.unrealizedPnLDisplay).toBeNull();
+    expect(h1.costBasisDisplay).toBe(h1.costBasis); // "1500"
+  });
+
   it("breaks exposure down by currency (holdings + cash) in display currency", () => {
     const summary = summarizePortfolio({
       transactions: [
@@ -389,6 +416,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "950000",
           unrealizedPnL: "50000",
+          marketValueDisplay: "950000",
+          costBasisDisplay: "900000",
+          unrealizedPnLDisplay: "50000",
           previousClose: "9000",
           dayChange: "50000",
           dayChangePct: "5",
@@ -415,6 +445,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "950000",
           unrealizedPnL: "0",
+          marketValueDisplay: "950000",
+          costBasisDisplay: "950000",
+          unrealizedPnLDisplay: "0",
           previousClose: "9000",
           dayChange: "50000",
           dayChangePct: "5",
@@ -429,6 +462,9 @@ describe("aggregatePortfolios", () => {
           currency: "IDR",
           marketValue: "5750000",
           unrealizedPnL: "750000",
+          marketValueDisplay: "5750000",
+          costBasisDisplay: "5000000",
+          unrealizedPnLDisplay: "750000",
           previousClose: "1100000",
           dayChange: "250000",
           dayChangePct: "4.5",
@@ -451,6 +487,9 @@ describe("aggregatePortfolios", () => {
     expect(i1.costBasis).toBe("1850000"); // 900k + 950k
     expect(i1.avgCost).toBe("9250"); // 1,850,000 / 200
     expect(i1.marketValue).toBe("1900000"); // 950k + 950k
+    expect(i1.costBasisDisplay).toBe("1850000"); // display fields sum too
+    expect(i1.marketValueDisplay).toBe("1900000");
+    expect(i1.unrealizedPnLDisplay).toBe("50000"); // 50k + 0
     expect(i1.realizedPnL).toBe("10000");
     expect(i1.dayChange).toBe("100000"); // 50k + 50k (same instrument, summed)
     expect(i1.dayChangePct).toBe("5"); // per-share pct carried, not summed

@@ -9,6 +9,12 @@ export interface HoldingValuation extends Holding {
   currency: string | null;
   marketValue: string | null;
   unrealizedPnL: string | null;
+  /** Market value FX-converted to the display currency (null when unpriced). */
+  marketValueDisplay: string | null;
+  /** Cost basis FX-converted to the display currency. */
+  costBasisDisplay: string;
+  /** Unrealized P&L in the display currency (null when unpriced). */
+  unrealizedPnLDisplay: string | null;
   /** Prior session's close (instrument currency), when known. */
   previousClose: string | null;
   /** Today's value change for the position (instrument currency), when known. */
@@ -83,6 +89,11 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
         currency: null,
         marketValue: null,
         unrealizedPnL: null,
+        // Currency unknown without a quote — keep cost basis as-is (it isn't summed
+        // into totalCost either), and leave value/P&L unknown.
+        marketValueDisplay: null,
+        costBasisDisplay: h.costBasis,
+        unrealizedPnLDisplay: null,
         previousClose: null,
         dayChange: null,
         dayChangePct: null,
@@ -91,6 +102,11 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
 
     const mv = marketValue(h.quantity, quote.price);
     const unrealized = new Decimal(mv).sub(new Decimal(h.costBasis)).toString();
+    const marketValueDisplay = convert(mv, currency, input.displayCurrency, fx);
+    const costBasisDisplay = convert(h.costBasis, currency, input.displayCurrency, fx);
+    const unrealizedPnLDisplay = new Decimal(marketValueDisplay)
+      .sub(new Decimal(costBasisDisplay))
+      .toString();
     totalCost = totalCost.add(
       new Decimal(convert(h.costBasis, currency, input.displayCurrency, fx)),
     );
@@ -121,6 +137,9 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
       currency: quote.currency,
       marketValue: mv,
       unrealizedPnL: unrealized,
+      marketValueDisplay,
+      costBasisDisplay,
+      unrealizedPnLDisplay,
       previousClose: quote.previousClose ?? null,
       dayChange,
       dayChangePct,
@@ -231,6 +250,16 @@ export function aggregatePortfolios(
         currency: h.currency ?? ex.currency,
         marketValue: addNullable(ex.marketValue, h.marketValue),
         unrealizedPnL: addNullable(ex.unrealizedPnL, h.unrealizedPnL),
+        // Display fields are all in `displayCurrency`, so summing is valid here
+        // (unlike the native marketValue/costBasis above).
+        marketValueDisplay: addNullable(ex.marketValueDisplay, h.marketValueDisplay),
+        costBasisDisplay: new Decimal(ex.costBasisDisplay)
+          .add(h.costBasisDisplay)
+          .toString(),
+        unrealizedPnLDisplay: addNullable(
+          ex.unrealizedPnLDisplay,
+          h.unrealizedPnLDisplay,
+        ),
         // Same instrument → same per-share price/prev-close, so the percentage is
         // shared; quantities sum, so the absolute day change adds.
         previousClose: h.previousClose ?? ex.previousClose,

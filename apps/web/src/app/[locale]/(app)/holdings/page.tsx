@@ -41,6 +41,8 @@ export default async function HoldingsPage({
   const currency = result.status === "ok" ? result.displayCurrency : "IDR";
   const m = (n: number) => formatMoney(n, currency, locale);
 
+  // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
+  // value/P&L are in the display currency (the trailing Currency column).
   const exportRows: (string | number)[][] = holdings.map((h) => [
     h.instrument?.symbol ?? "",
     h.instrument?.name ?? "",
@@ -49,8 +51,9 @@ export default async function HoldingsPage({
     h.instrument?.unit ?? "",
     h.avgCost,
     h.price ?? "",
-    h.marketValue ?? "",
-    h.unrealizedPnL ?? "",
+    h.currency ?? currency,
+    h.marketValueDisplay ?? "",
+    h.unrealizedPnLDisplay ?? "",
     currency,
   ]);
 
@@ -73,6 +76,7 @@ export default async function HoldingsPage({
                 "Unit",
                 "AvgCost",
                 "Price",
+                "PriceCurrency",
                 "MarketValue",
                 "UnrealizedPnL",
                 "Currency",
@@ -141,7 +145,14 @@ export default async function HoldingsPage({
         </TableHeader>
         <TableBody>
           {rows.map((h) => {
-            const pnl = h.unrealizedPnL !== null ? Number(h.unrealizedPnL) : null;
+            const pnl =
+              h.unrealizedPnLDisplay !== null
+                ? Number(h.unrealizedPnLDisplay)
+                : null;
+            // Per-unit quotes stay in the instrument's own currency; position values
+            // are shown in the display currency.
+            const native = (n: number) =>
+              formatMoney(n, h.currency ?? currency, locale);
             return (
               <TableRow key={h.instrumentId}>
                 <TableCell>
@@ -159,13 +170,15 @@ export default async function HoldingsPage({
                   {Number(h.quantity)} {h.instrument?.unit ?? ""}
                 </TableCell>
                 <TableCell className="tabular text-right">
-                  {m(Number(h.avgCost))}
+                  {native(Number(h.avgCost))}
                 </TableCell>
                 <TableCell className="tabular text-right">
-                  {h.price !== null ? m(Number(h.price)) : "—"}
+                  {h.price !== null ? native(Number(h.price)) : "—"}
                 </TableCell>
                 <TableCell className="tabular text-right">
-                  {h.marketValue !== null ? m(Number(h.marketValue)) : "—"}
+                  {h.marketValueDisplay !== null
+                    ? m(Number(h.marketValueDisplay))
+                    : "—"}
                 </TableCell>
                 <TableCell
                   className={cn(
