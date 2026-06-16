@@ -1,5 +1,6 @@
 import {
   BuybackProvider,
+  CoinGeckoProvider,
   EodhdProvider,
   FixtureProvider,
   GoldApiProvider,
@@ -120,9 +121,19 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     create: () => new EodhdProvider({ apiKey: process.env.EODHD_API_KEY! }),
   },
   {
+    id: "coingecko",
+    label: "CoinGecko",
+    defaultPriority: 7,
+    // Always available: the public API works keyless; an optional Demo COINGECKO_API_KEY
+    // raises the rate limit. The crypto specialist, so it sorts ahead of Yahoo's crypto
+    // fallback (order only matters among crypto supporters).
+    configured: () => true,
+    create: () => new CoinGeckoProvider({ apiKey: process.env.COINGECKO_API_KEY }),
+  },
+  {
     id: "yahoo",
     label: "Yahoo Finance",
-    defaultPriority: 7,
+    defaultPriority: 8,
     configured: () => true, // keyless fallback
     create: () => new YahooFinanceProvider(),
   },

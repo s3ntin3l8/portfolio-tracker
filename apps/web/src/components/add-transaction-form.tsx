@@ -44,13 +44,15 @@ export interface AddTransactionInitial {
 
 const TX_TYPES = ["buy", "sell", "dividend", "coupon", "deposit", "withdrawal", "fee"] as const;
 type TxType = (typeof TX_TYPES)[number];
-const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf"] as const;
+const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf", "crypto"] as const;
 const UNITS = ["shares", "grams", "units"] as const;
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 
-/** Gold holdings use the Antam buyback market; everything else IDX (mirrors the API). */
+/** Gold → buyback market, crypto → CRYPTO, everything else IDX (mirrors the API). */
 function marketForAssetClass(assetClass: string): string {
-  return assetClass === "gold" ? "ANTAM" : "IDX";
+  if (assetClass === "gold") return "ANTAM";
+  if (assetClass === "crypto") return "CRYPTO";
+  return "IDX";
 }
 
 /** Narrow a discovered asset class to one the form's picker offers (else equity). */
@@ -60,10 +62,10 @@ function clampAssetClass(value: string): (typeof ASSET_CLASSES)[number] {
     : "equity";
 }
 
-/** Default the unit from the asset class (gold by the gram, funds by the unit). */
+/** Default the unit from the asset class (gold by the gram, funds/crypto by the unit). */
 function unitForClass(assetClass: string): (typeof UNITS)[number] {
   if (assetClass === "gold") return "grams";
-  if (assetClass === "mutual_fund") return "units";
+  if (assetClass === "mutual_fund" || assetClass === "crypto") return "units";
   return "shares";
 }
 

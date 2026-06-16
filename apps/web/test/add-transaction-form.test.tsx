@@ -313,6 +313,36 @@ describe("AddTransactionForm", () => {
     );
   });
 
+  it("records a crypto buy, stamping the CRYPTO market and units", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "crypto" } });
+    fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "btc" } });
+    fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Bitcoin" } });
+    fireEvent.change(screen.getByLabelText(m.currency), { target: { value: "USD" } });
+    fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "0.5" } });
+    fireEvent.change(screen.getByLabelText(m.price), { target: { value: "65000" } });
+    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-02-03" } });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
+    expect(client.createInstrument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "BTC", // upper-cased
+        market: "CRYPTO",
+        assetClass: "crypto",
+        unit: "units",
+        currency: "USD",
+        name: "Bitcoin",
+      }),
+    );
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ type: "buy", quantity: "0.5", price: "65000" }),
+    );
+  });
+
   it("records a bond coupon against a new instrument (no quantity/fees)", async () => {
     const client = makeClient();
     renderForm(client);
