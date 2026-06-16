@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { BROWSER_HEADERS } from "./http.js";
 
 /**
  * Scraper for the Antam (Logam Mulia) gold **buyback** price — IDR per gram, the value
@@ -16,15 +17,6 @@ import * as cheerio from "cheerio";
  */
 export const ANTAM_BUYBACK_SOURCE_URL = "https://harga-emas.org/";
 export const ANTAM_BUYBACK_SOURCE = "harga-emas";
-
-// A desktop browser UA + language headers: aggregators (and the original Antam page) reject
-// obvious bots, so present like a real browser.
-const BROWSER_HEADERS: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "Accept-Language": "id,en;q=0.8",
-};
 
 export async function scrapeAntamBuyback(
   doFetch: typeof fetch = globalThis.fetch,

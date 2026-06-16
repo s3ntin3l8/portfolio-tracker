@@ -8,7 +8,11 @@ import {
   flushUsage,
   getProviderUsage,
 } from "../services/market-data.js";
-import { refreshAntamBuyback, refreshNav } from "../services/scrapers/store.js";
+import {
+  refreshAntamBuyback,
+  refreshGaleri24Buyback,
+  refreshNav,
+} from "../services/scrapers/store.js";
 
 /**
  * Admin-only server configuration. Today: the market-data provider chain (enable/disable
@@ -37,48 +41,41 @@ export async function adminRoute(app: FastifyInstance) {
   }
 
   // The merged provider config (registry defaults overlaid with DB overrides), ordered.
-  app.get("/admin/providers", { preHandler: app.requireAdmin }, () =>
-    listProviders(),
-  );
+  app.get("/admin/providers", { preHandler: app.requireAdmin }, () => listProviders());
 
   // Upsert enable/priority for one or more providers, then hot-reload the service.
-  app.patch(
-    "/admin/providers",
-    { preHandler: app.requireAdmin },
-    async (request, reply) => {
-      const updates = providerSettingsUpdateSchema.parse(request.body);
-      const knownIds = new Set(PROVIDER_REGISTRY.map((d) => d.id));
-      const unknown = updates.filter((u) => !knownIds.has(u.id));
-      if (unknown.length > 0) {
-        return reply
-          .code(400)
-          .send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
-      }
-      for (const u of updates) {
-        await app.db
-          .insert(providerSettings)
-          .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
-          .onConflictDoUpdate({
-            target: providerSettings.provider,
-            set: {
-              enabled: u.enabled,
-              priority: u.priority,
-              updatedAt: new Date(),
-            },
-          });
-      }
-      // Drop the cached MarketDataService so the next request/job rebuilds the chain.
-      invalidateMarketData();
-      return listProviders();
-    },
-  );
+  app.patch("/admin/providers", { preHandler: app.requireAdmin }, async (request, reply) => {
+    const updates = providerSettingsUpdateSchema.parse(request.body);
+    const knownIds = new Set(PROVIDER_REGISTRY.map((d) => d.id));
+    const unknown = updates.filter((u) => !knownIds.has(u.id));
+    if (unknown.length > 0) {
+      return reply.code(400).send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
+    }
+    for (const u of updates) {
+      await app.db
+        .insert(providerSettings)
+        .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
+        .onConflictDoUpdate({
+          target: providerSettings.provider,
+          set: {
+            enabled: u.enabled,
+            priority: u.priority,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    // Drop the cached MarketDataService so the next request/job rebuilds the chain.
+    invalidateMarketData();
+    return listProviders();
+  });
 
   // Run the built-in scrapers now and cache the results, instead of waiting for the
   // scheduler's cron. Handy right after a deploy to populate scraped_quotes immediately.
   // Each scraper handles its own failures, so a dead source just yields null / 0 here.
   app.post("/admin/market-data/scrape", { preHandler: app.requireAdmin }, async () => {
     const antamBuyback = await refreshAntamBuyback(app.db);
+    const galeri24Buyback = await refreshGaleri24Buyback(app.db);
     const navFunds = await refreshNav(app.db);
-    return { antamBuyback, navFunds };
+    return { antamBuyback, galeri24Buyback, navFunds };
   });
 }

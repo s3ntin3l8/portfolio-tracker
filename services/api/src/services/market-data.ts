@@ -1,5 +1,5 @@
 import {
-  AntamProvider,
+  BuybackProvider,
   EodhdProvider,
   FixtureProvider,
   GoldApiProvider,
@@ -79,14 +79,32 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     // as "no quote" (falls through to spot / fixture).
     configured: () => true,
     create: () =>
-      new AntamProvider({
+      new BuybackProvider({
+        name: "antam",
+        market: "ANTAM",
         baseUrl: process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
+      }),
+  },
+  {
+    id: "galeri24",
+    label: "Galeri24 buyback",
+    defaultPriority: 4,
+    goldMarket: "GALERI24",
+    // Always available: defaults to the internal route fed by the Galeri24 buyback scraper.
+    // Serves a disjoint market from Antam, so its priority only affects display order.
+    configured: () => true,
+    create: () =>
+      new BuybackProvider({
+        name: "galeri24",
+        market: "GALERI24",
+        baseUrl:
+          process.env.GALERI24_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/galeri24-buyback`,
       }),
   },
   {
     id: "nav",
     label: "Reksa Dana NAV",
-    defaultPriority: 4,
+    defaultPriority: 5,
     // Always available: defaults to the internal route fed by the Bibit NAV scraper.
     configured: () => true,
     create: () =>
@@ -97,14 +115,14 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
   {
     id: "eodhd",
     label: "EODHD",
-    defaultPriority: 5,
+    defaultPriority: 6,
     configured: () => Boolean(process.env.EODHD_API_KEY),
     create: () => new EodhdProvider({ apiKey: process.env.EODHD_API_KEY! }),
   },
   {
     id: "yahoo",
     label: "Yahoo Finance",
-    defaultPriority: 6,
+    defaultPriority: 7,
     configured: () => true, // keyless fallback
     create: () => new YahooFinanceProvider(),
   },

@@ -1,5 +1,9 @@
 import { ensureDb, closeDb } from "./client.js";
-import { refreshAntamBuyback, refreshNav } from "../services/scrapers/store.js";
+import {
+  refreshAntamBuyback,
+  refreshGaleri24Buyback,
+  refreshNav,
+} from "../services/scrapers/store.js";
 
 /**
  * One-off CLI to run the market-data scrapers and populate the `scraped_quotes` cache
@@ -11,6 +15,8 @@ async function main() {
   const db = await ensureDb();
   const buyback = await refreshAntamBuyback(db);
   console.log(`Antam buyback: ${buyback ?? "unavailable"}`);
+  const galeri24 = await refreshGaleri24Buyback(db);
+  console.log(`Galeri24 buyback: ${galeri24 ?? "unavailable"}`);
   const navFunds = await refreshNav(db);
   console.log(`Reksa-dana NAV funds cached: ${navFunds}`);
   await closeDb();
