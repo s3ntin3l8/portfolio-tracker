@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { PortfolioSwitcher } from "@/components/portfolio-switcher";
+import { InstallPrompt } from "@/components/install-prompt";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
@@ -91,7 +92,7 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
         <Brand />
         <div className="mt-4">{switcher}</div>
         <div className="mt-6">{navLinks}</div>
@@ -105,7 +106,7 @@ export function AppShell({
             className="absolute inset-0 bg-black/60"
             onClick={() => setOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-border bg-card p-4">
+          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-border bg-card p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
             <div className="flex items-center justify-between">
               <Brand />
               <Button variant="ghost" size="icon" aria-label="Close menu" onClick={() => setOpen(false)}>
@@ -120,7 +121,7 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border bg-background/80 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] backdrop-blur">
           <Button
             variant="ghost"
             size="icon"
@@ -135,7 +136,8 @@ export function AppShell({
             <ThemeToggle />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+          <InstallPrompt />
           {children}
         </main>
       </div>

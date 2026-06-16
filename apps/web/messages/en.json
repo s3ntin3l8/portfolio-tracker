@@ -1,4 +1,14 @@
 {
+  "Install": {
+    "title": "Add Portfolio to your home screen",
+    "cta": "Install app",
+    "dismiss": "Dismiss",
+    "iosHint": "To install: tap Share, then “Add to Home Screen”."
+  },
+  "Offline": {
+    "title": "You’re offline",
+    "body": "Check your connection and try again. Pages you’ve already opened stay available; live prices and data resume once you’re back online."
+  },
   "Landing": {
     "title": "Portfolio Tracker",
     "tagline": "Track Indonesian stocks, gold, bonds, mutual funds and cash — import transactions straight from a screenshot.",

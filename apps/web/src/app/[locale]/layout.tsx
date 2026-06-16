@@ -14,11 +14,13 @@ export const metadata: Metadata = {
   description:
     "Indonesian-first personal portfolio tracker with screenshot import.",
   manifest: "/manifest.webmanifest",
-  // iOS: enable standalone "Add to Home Screen" with the right name + status bar.
+  // iOS: enable standalone "Add to Home Screen". `black-translucent` lets the web
+  // content extend under the status bar for an edge-to-edge look (paired with
+  // `viewportFit: "cover"` below and the safe-area padding in <AppShell>).
   appleWebApp: {
     capable: true,
     title: "Portfolio",
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
   },
   icons: {
     icon: "/icon.svg",
@@ -27,7 +29,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  // Follow the OS scheme so the browser/status-bar chrome matches the rendered
+  // background (`--background`: light `#ffffff`, dark `#0a0a0a`). This tracks the
+  // system preference, not the in-app theme toggle.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+  // Draw into the display cutout / safe areas; insets are reclaimed in the shell.
+  viewportFit: "cover",
 };
 
 export function generateStaticParams() {

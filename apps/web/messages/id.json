@@ -1,4 +1,14 @@
 {
+  "Install": {
+    "title": "Tambahkan Portfolio ke layar utama",
+    "cta": "Instal aplikasi",
+    "dismiss": "Tutup",
+    "iosHint": "Untuk memasang: ketuk Bagikan, lalu “Add to Home Screen”."
+  },
+  "Offline": {
+    "title": "Anda sedang offline",
+    "body": "Periksa koneksi Anda dan coba lagi. Halaman yang sudah dibuka tetap tersedia; harga dan data langsung akan kembali saat Anda online."
+  },
   "Landing": {
     "title": "Pelacak Portofolio",
     "tagline": "Lacak saham Indonesia, emas, obligasi, reksa dana, dan kas — impor transaksi langsung dari tangkapan layar.",

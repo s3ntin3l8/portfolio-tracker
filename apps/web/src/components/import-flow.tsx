@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ScanLine,
@@ -142,10 +142,14 @@ export function ImportFlow({
   client = demoClient,
   portfolios = [{ id: "demo", name: "Demo" }],
   defaultPortfolioId,
+  initialFile,
 }: {
   client?: ImportClient;
   portfolios?: ImportTargetPortfolio[];
   defaultPortfolioId?: string;
+  // A screenshot handed in from the Web Share Target — parsed automatically on mount,
+  // reusing the same path as the file picker.
+  initialFile?: File | null;
 } = {}) {
   const t = useTranslations("Import");
   const [step, setStep] = useState<Step>("upload");
@@ -201,6 +205,17 @@ export function ImportFlow({
     e.target.value = ""; // allow re-selecting the same file
     if (file) void handleFile(file);
   }
+
+  // Auto-parse a screenshot shared into the app (Web Share Target). The guard ref keeps
+  // it to a single run even though `handleFile` is recreated each render.
+  const sharedHandled = useRef(false);
+  useEffect(() => {
+    if (initialFile && !sharedHandled.current) {
+      sharedHandled.current = true;
+      void handleFile(initialFile);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));

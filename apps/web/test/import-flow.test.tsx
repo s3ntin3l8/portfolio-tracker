@@ -179,6 +179,39 @@ describe("ImportFlow", () => {
     );
   });
 
+  it("auto-parses a screenshot handed in via initialFile (share target)", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp5",
+        drafts: [DRAFT],
+        errors: [],
+      })),
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(),
+    };
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportFlow
+          client={client}
+          portfolios={[{ id: "p1", name: "Main" }]}
+          defaultPortfolioId="p1"
+          initialFile={pngFile()}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
+    );
+    expect(client.importScreenshot).toHaveBeenCalledTimes(1);
+    expect(client.importScreenshot).toHaveBeenCalledWith(
+      "p1",
+      expect.any(String),
+      "image/png",
+    );
+    expect(client.importCsv).not.toHaveBeenCalled();
+  });
+
   it("surfaces the not-configured message on a 503", async () => {
     const client: ImportClient = {
       importScreenshot: vi.fn(async () => {
