@@ -1,11 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { portfolios } from "@portfolio/db";
-import { portfolioInputSchema } from "@portfolio/schema";
+import { portfolioInputSchema, portfolioPatchSchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
-
-// Partial of the create schema: the rename/settings PATCH may touch a subset.
-const portfolioPatchSchema = portfolioInputSchema.partial();
 
 export async function portfoliosRoute(app: FastifyInstance) {
   // List the authenticated user's portfolios.
@@ -24,7 +21,9 @@ export async function portfoliosRoute(app: FastifyInstance) {
         userId: id,
         name: input.name,
         baseCurrency: input.baseCurrency,
-        birthYear: input.birthYear ?? null,
+        portfolioType: input.portfolioType,
+        // Birth year only applies to child portfolios.
+        birthYear: input.portfolioType === "child" ? (input.birthYear ?? null) : null,
       })
       .returning();
     reply.code(201);
@@ -39,9 +38,13 @@ export async function portfoliosRoute(app: FastifyInstance) {
       const { id } = requireUser(request);
       const { portfolioId } = request.params;
       const input = portfolioPatchSchema.parse(request.body);
+      // Flipping a portfolio back to "standard" clears any stored birth year so it
+      // can't leak into the forecast.
+      const patch =
+        input.portfolioType === "standard" ? { ...input, birthYear: null } : input;
       const [updated] = await app.db
         .update(portfolios)
-        .set(input)
+        .set(patch)
         .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, id)))
         .returning();
       if (!updated) {

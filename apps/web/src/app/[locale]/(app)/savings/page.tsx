@@ -95,6 +95,7 @@ export default async function SavingsPage({
         seedAnnualReturn={c.seedAnnualReturn}
         currency={currency}
         birthYear={c.birthYear}
+        portfolioType={c.portfolioType}
       />
     </div>
   );

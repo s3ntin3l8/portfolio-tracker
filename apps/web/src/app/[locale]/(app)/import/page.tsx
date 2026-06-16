@@ -1,8 +1,9 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ImportFlowClient } from "@/components/import-flow-client";
 import { ImportHistory } from "@/components/import-history";
-import { CreatePortfolio } from "@/components/create-portfolio";
+import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { resolveSelection, loadImports } from "@/lib/server-api";
 
@@ -16,6 +17,7 @@ export default async function ImportPage({
   const t = await getTranslations("Import");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
+  const tf = await getTranslations("PortfolioForm");
 
   const selection = await resolveSelection();
   const isEmpty =
@@ -38,7 +40,15 @@ export default async function ImportPage({
           description={te("unavailableBody")}
         />
       ) : isEmpty ? (
-        <CreatePortfolio />
+        <PortfolioFormDialog
+          mode="create"
+          trigger={
+            <Button>
+              <Plus className="size-4" />
+              {tf("new")}
+            </Button>
+          }
+        />
       ) : (
         <ImportFlowClient
           portfolios={selection.portfolios.map((p) => ({

@@ -43,6 +43,13 @@
       "when": 1781558535156,
       "tag": "0005_noisy_masked_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781591943271,
+      "tag": "0006_freezing_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

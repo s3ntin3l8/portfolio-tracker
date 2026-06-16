@@ -170,6 +170,52 @@ describe("contribution analytics", () => {
     expect(cleared.json().birthYear).toBeNull();
   });
 
+  it("classifies child portfolios and gates the birth year on the type", async () => {
+    const t = await token("classifier");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    // Create a child portfolio with a birth year in one shot.
+    const created = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Kid", baseCurrency: "idr", portfolioType: "child", birthYear: 2017 },
+    });
+    expect(created.statusCode).toBe(201);
+    const pf = created.json().id as string;
+    expect(created.json().portfolioType).toBe("child");
+    expect(created.json().birthYear).toBe(2017);
+
+    // A POST without a type defaults to "standard".
+    const standard = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Mine", baseCurrency: "idr" },
+    });
+    expect(standard.json().portfolioType).toBe("standard");
+
+    // The type rides the list and contributions payloads.
+    const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
+    expect(list.json().find((p: { id: string }) => p.id === pf).portfolioType).toBe("child");
+    const contrib = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pf}/contributions`,
+      headers: auth(t),
+    });
+    expect(contrib.json().portfolioType).toBe("child");
+
+    // Flipping back to "standard" clears the birth year so it can't leak into the forecast.
+    const reverted = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${pf}`,
+      headers: auth(t),
+      payload: { portfolioType: "standard" },
+    });
+    expect(reverted.json().portfolioType).toBe("standard");
+    expect(reverted.json().birthYear).toBeNull();
+  });
+
   it("404s a portfolio the user does not own; 401s without a token", async () => {
     const t = await token("saver");
     const stranger = await token("intruder");

@@ -22,6 +22,8 @@ export interface Portfolio {
   userId: string;
   name: string;
   baseCurrency: string;
+  /** "standard" | "child". Child portfolios expose the birth year + age-18 target. */
+  portfolioType: "standard" | "child";
   /** Beneficiary birth year (e.g. a child's account), or null. */
   birthYear: number | null;
 }
@@ -208,6 +210,8 @@ export interface ContributionStats {
   seedAnnualReturn: string;
   /** Beneficiary birth year for the "to age 18" target (single portfolio only). */
   birthYear: number | null;
+  /** "standard" | "child"; gates the "to age 18" forecast target. */
+  portfolioType: "standard" | "child";
   asOf: string;
 }
 

@@ -104,6 +104,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     summary: PortfolioSummary,
     display: string,
     birthYear: number | null = null,
+    portfolioType: "standard" | "child" = "standard",
   ) {
     const ccys = [
       ...new Set(
@@ -147,6 +148,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       xirr: xirrVal,
       seedAnnualReturn,
       birthYear,
+      portfolioType,
       asOf: asOf.toISOString(),
     };
   }
@@ -430,6 +432,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         summary,
         portfolio.baseCurrency,
         portfolio.birthYear,
+        portfolio.portfolioType === "child" ? "child" : "standard",
       );
     },
   );

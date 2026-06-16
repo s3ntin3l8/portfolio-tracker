@@ -1,0 +1,1 @@
+ALTER TABLE "portfolios" ADD COLUMN "portfolio_type" text DEFAULT 'standard' NOT NULL;

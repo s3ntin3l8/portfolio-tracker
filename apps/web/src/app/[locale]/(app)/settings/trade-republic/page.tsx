@@ -1,9 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Landmark } from "lucide-react";
+import { Landmark, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
-import { CreatePortfolio } from "@/components/create-portfolio";
+import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { TrConnect } from "@/components/tr-connect";
 import { loadPortfolios, loadTrConnection } from "@/lib/server-api";
 
@@ -16,6 +17,7 @@ export default async function TradeRepublicSettingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("TradeRepublic");
   const te = await getTranslations("Empty");
+  const tf = await getTranslations("PortfolioForm");
 
   const [connection, portfolios] = await Promise.all([
     loadTrConnection(),
@@ -45,7 +47,15 @@ export default async function TradeRepublicSettingsPage({
               description={te("unavailableBody")}
             />
           ) : portfolios.portfolios.length === 0 ? (
-            <CreatePortfolio />
+            <PortfolioFormDialog
+              mode="create"
+              trigger={
+                <Button>
+                  <Plus className="size-4" />
+                  {tf("new")}
+                </Button>
+              }
+            />
           ) : (
             <TrConnect
               initial={connection}

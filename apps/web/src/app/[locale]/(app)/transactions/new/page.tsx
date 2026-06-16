@@ -1,10 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowLeft, Wallet } from "lucide-react";
+import { ArrowLeft, Plus, Wallet } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { AddTransaction } from "@/components/add-transaction";
-import { CreatePortfolio } from "@/components/create-portfolio";
+import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { loadPortfolio } from "@/lib/server-api";
 
 export default async function NewTransactionPage({
@@ -15,6 +15,7 @@ export default async function NewTransactionPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const tm = await getTranslations("Manage");
+  const tf = await getTranslations("PortfolioForm");
   const te = await getTranslations("Empty");
 
   const result = await loadPortfolio(async (_api, portfolio) => portfolio);
@@ -46,7 +47,15 @@ export default async function NewTransactionPage({
           description={te("unavailableBody")}
         />
       ) : result.status === "empty" ? (
-        <CreatePortfolio />
+        <PortfolioFormDialog
+          mode="create"
+          trigger={
+            <Button>
+              <Plus className="size-4" />
+              {tf("new")}
+            </Button>
+          }
+        />
       ) : (
         <AddTransaction portfolioId={result.portfolio.id} />
       )}

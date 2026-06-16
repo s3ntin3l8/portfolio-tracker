@@ -4,6 +4,7 @@ import {
   currencyCode,
   transactionInputSchema,
   parsedTransactionSchema,
+  portfolioInputSchema,
 } from "../src/index.js";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
@@ -28,6 +29,28 @@ describe("currencyCode", () => {
   });
   it("requires exactly 3 letters", () => {
     expect(() => currencyCode.parse("RUPIAH")).toThrow();
+  });
+});
+
+describe("portfolioInputSchema", () => {
+  it("defaults the type to standard and the currency to IDR", () => {
+    const parsed = portfolioInputSchema.parse({ name: "Main" });
+    expect(parsed.portfolioType).toBe("standard");
+    expect(parsed.baseCurrency).toBe("IDR");
+  });
+  it("accepts a child portfolio with a birth year", () => {
+    const parsed = portfolioInputSchema.parse({
+      name: "Kid",
+      portfolioType: "child",
+      birthYear: 2017,
+    });
+    expect(parsed.portfolioType).toBe("child");
+    expect(parsed.birthYear).toBe(2017);
+  });
+  it("rejects an unknown portfolio type", () => {
+    expect(() =>
+      portfolioInputSchema.parse({ name: "X", portfolioType: "grandparent" }),
+    ).toThrow();
   });
 });
 

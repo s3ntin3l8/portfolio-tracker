@@ -28,20 +28,24 @@ export function ForecastPanel({
   seedAnnualReturn,
   currency,
   birthYear = null,
+  portfolioType = "standard",
 }: {
   currentValue: string;
   monthlyAverage: string;
   seedAnnualReturn: string;
   currency: string;
   birthYear?: number | null;
+  portfolioType?: "standard" | "child";
 }) {
   const t = useTranslations("Savings");
   const locale = useLocale();
 
   // Years from now until the beneficiary turns 18 (clamped to the slider range).
-  const yearsToEighteen = birthYear
-    ? Math.min(25, Math.max(1, 18 - (new Date().getFullYear() - birthYear)))
-    : null;
+  // Only child portfolios carry an age-18 target.
+  const yearsToEighteen =
+    portfolioType === "child" && birthYear
+      ? Math.min(25, Math.max(1, 18 - (new Date().getFullYear() - birthYear)))
+      : null;
 
   const [monthly, setMonthly] = useState(Math.round(Number(monthlyAverage)));
   const [returnPct, setReturnPct] = useState(

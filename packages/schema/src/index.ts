@@ -59,11 +59,25 @@ export const currencyCode = z
 export const portfolioInputSchema = z.object({
   name: z.string().min(1),
   baseCurrency: currencyCode.default("IDR"),
+  // "standard" | "child". Only child portfolios carry a beneficiary birth year
+  // and the "to age 18" forecast target.
+  portfolioType: z.enum(["standard", "child"]).default("standard"),
   // Optional beneficiary birth year (e.g. a child's account). Nullable so a PATCH
   // can clear it.
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
+
+// PATCH variant: every field optional and, crucially, WITHOUT the create-time
+// defaults — a partial update must never reset an omitted field (e.g. silently
+// flipping the currency back to IDR or the type back to "standard").
+export const portfolioPatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  baseCurrency: currencyCode.optional(),
+  portfolioType: z.enum(["standard", "child"]).optional(),
+  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+});
+export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 
 // Editable user profile fields. Both optional so the settings screen can PATCH a
 // subset; identity fields (email, authSub) come from the IdP and are never updated here.

@@ -54,13 +54,18 @@ describe("ForecastPanel", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
     // Born 2017 → age 9 in 2026 → 9 years to 18 → 100 * 108 = 10,800.
-    renderPanel({ birthYear: 2017 });
+    renderPanel({ birthYear: 2017, portfolioType: "child" });
     fireEvent.click(screen.getByRole("button", { name: "To age 18" }));
     expect(screen.getByTestId("projected-value")).toHaveTextContent("€10,800");
   });
 
   it("hides the 'To age 18' preset when no birth year is known", () => {
-    renderPanel();
+    renderPanel({ portfolioType: "child" });
+    expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
+  });
+
+  it("hides the 'To age 18' preset for non-child portfolios even with a birth year", () => {
+    renderPanel({ birthYear: 2017, portfolioType: "standard" });
     expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
   });
 });

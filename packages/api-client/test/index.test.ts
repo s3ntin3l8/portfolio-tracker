@@ -47,7 +47,11 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await client.createPortfolio({ name: "Stockbit", baseCurrency: "IDR" });
+    await client.createPortfolio({
+      name: "Stockbit",
+      baseCurrency: "IDR",
+      portfolioType: "standard",
+    });
     expect(JSON.parse(sentBody!)).toMatchObject({ name: "Stockbit" });
   });
 
@@ -130,7 +134,7 @@ describe("createApiClient request methods", () => {
     { name: "getNetWorthHistory range", call: (c) => c.getNetWorthHistory("3m"), method: "GET", url: "/networth/history?range=3m" },
     { name: "getPortfolioHistory", call: (c) => c.getPortfolioHistory("p1", "6m"), method: "GET", url: "/portfolios/p1/history?range=6m" },
     { name: "listPortfolios", call: (c) => c.listPortfolios(), method: "GET", url: "/portfolios" },
-    { name: "createPortfolio", call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR" }), method: "POST", url: "/portfolios", body: { name: "X", baseCurrency: "IDR" } },
+    { name: "createPortfolio", call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR", portfolioType: "standard" }), method: "POST", url: "/portfolios", body: { name: "X", baseCurrency: "IDR", portfolioType: "standard" } },
     { name: "updatePortfolio", call: (c) => c.updatePortfolio("p1", { name: "Y" }), method: "PATCH", url: "/portfolios/p1", body: { name: "Y" } },
     { name: "listTransactions", call: (c) => c.listTransactions("p1"), method: "GET", url: "/portfolios/p1/transactions" },
     { name: "createTransaction", call: (c) => c.createTransaction("p1", txInput), method: "POST", url: "/portfolios/p1/transactions", body: txInput },
