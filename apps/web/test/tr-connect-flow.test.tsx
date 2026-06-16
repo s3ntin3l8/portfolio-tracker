@@ -15,6 +15,13 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
     verifyTr: vi.fn(async () => ({ status: "connected" as const })),
     syncTr: vi.fn(async () => ({ status: "connected" as const, drafts: 3 })),
     disconnectTr: vi.fn(async () => undefined),
+    // The awaiting phase polls this for the authoritative status; default = approved.
+    getTrConnection: vi.fn(async () => ({
+      status: "connected" as const,
+      portfolioId: "p1",
+      lastSyncAt: null,
+      lastError: null,
+    })),
     ...over,
   };
 }
@@ -61,16 +68,22 @@ describe("TrConnectFlow", () => {
       }),
     );
 
-    // The awaiting step long-polls verify automatically — no confirmation code is entered.
+    // The awaiting step fires verify once (no confirmation code), then the status poll
+    // observes the authoritative connection state.
     await waitFor(() => expect(client.verifyTr).toHaveBeenCalledWith());
-    expect(await screen.findByRole("button", { name: /Sync now/ })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 }),
+    ).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it("returns to the form with an error when the approval is not granted", async () => {
+  it("reflects a connected status even when the verify request fails on the client", async () => {
+    // The regression: the client-side verify can reject (StrictMode remount, token
+    // rotation, HMR, a transient drop) while Fastify still completes the pairing. The
+    // status poll is the source of truth, so the UI must still land on connected.
     const client = makeClient({
       verifyTr: vi.fn(async () => {
-        throw new Error("not approved");
+        throw new Error("client request aborted");
       }),
     });
     renderFlow(client);
@@ -80,7 +93,28 @@ describe("TrConnectFlow", () => {
     fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
 
-    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 }),
+    ).toBeTruthy();
+  });
+
+  it("returns to the form with an error when the status poll reports a failed pairing", async () => {
+    const client = makeClient({
+      getTrConnection: vi.fn(async () => ({
+        status: "error" as const,
+        portfolioId: "p1",
+        lastSyncAt: null,
+        lastError: "login was not approved",
+      })),
+    });
+    renderFlow(client);
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: "+49150" },
+    });
+    fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+
+    expect(await screen.findByRole("alert", {}, { timeout: 4000 })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect/ })).toBeTruthy();
   });
 
