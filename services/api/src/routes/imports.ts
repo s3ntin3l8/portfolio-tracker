@@ -216,24 +216,27 @@ export async function importsRoute(app: FastifyInstance) {
     },
   );
 
-  // Fetch a draft import (owner only).
+  // Fetch a single import with its parsed drafts (owner only) — powers reviewing an
+  // already-staged draft (e.g. a Trade Republic sync) from the import history.
   app.get<{ Params: { importId: string } }>(
     "/imports/:importId",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
-      const [imp] = await app.db
-        .select()
-        .from(screenshotImports)
-        .where(
-          and(
-            eq(screenshotImports.id, request.params.importId),
-            eq(screenshotImports.userId, id),
-          ),
-        )
-        .limit(1);
+      const imp = await ownedImport(id, request.params.importId);
       if (!imp) return reply.code(404).send({ error: "import_not_found" });
-      return imp;
+      const parsed = (imp.parsedJson ?? {}) as {
+        drafts?: unknown[];
+        errors?: { line: number; message: string }[];
+      };
+      return {
+        id: imp.id,
+        portfolioId: imp.portfolioId,
+        parser: imp.parser,
+        status: imp.status,
+        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+        errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+      };
     },
   );
 

@@ -49,7 +49,7 @@ export interface ImportResult {
 export type ReviewDraft = ImportDraft & { uid: string };
 
 let uidCounter = 0;
-function withUid(draft: ImportDraft): ReviewDraft {
+export function withUid(draft: ImportDraft): ReviewDraft {
   const uid =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
@@ -57,7 +57,7 @@ function withUid(draft: ImportDraft): ReviewDraft {
   return { ...draft, uid };
 }
 
-function stripUid(draft: ReviewDraft): ImportDraft {
+export function stripUid(draft: ReviewDraft): ImportDraft {
   const copy: ImportDraft & { uid?: string } = { ...draft };
   delete copy.uid;
   return copy;

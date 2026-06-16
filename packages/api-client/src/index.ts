@@ -336,6 +336,16 @@ export interface ImportRecord {
   createdAt: string;
 }
 
+/** A single import with its parsed drafts — used to review a staged draft. */
+export interface ImportDetail {
+  id: string;
+  portfolioId: string | null;
+  parser: string;
+  status: "draft" | "confirmed" | "discarded";
+  drafts: ParsedTransaction[];
+  errors: { line: number; message: string }[];
+}
+
 export type TrStatus =
   | "disconnected"
   // Push sent — awaiting the user's approval in the Trade Republic mobile app.
@@ -594,6 +604,9 @@ export function createApiClient(config: ApiClientConfig) {
         { transactions },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
+    /** Fetch a single import with its parsed drafts (to review a staged draft). */
+    getImport: (importId: string) =>
+      request<ImportDetail>("GET", `/imports/${importId}`),
     /** Discard a draft import (draft → discarded). */
     discardImport: (importId: string) =>
       request<void>("POST", `/imports/${importId}/discard`),
