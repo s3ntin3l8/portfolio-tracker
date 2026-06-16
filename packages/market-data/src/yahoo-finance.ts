@@ -13,6 +13,8 @@ import {
 } from "./instrument-mapping.js";
 import { isIsin } from "./types.js";
 
+const TROY_OUNCE_GRAMS = 31.1034768;
+
 export interface YahooProviderOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -34,7 +36,9 @@ interface ChartResult {
  * Yahoo Finance provider — a **keyless** IDX equity/ETF fallback (and crypto fallback
  * behind CoinGecko). Uses the auth-free chart endpoint (`/v8/finance/chart/<symbol>`)
  * for both quotes and history. IDX tickers map to Yahoo's `.JK` suffix (e.g. BBCA →
- * BBCA.JK); EU/Xetra tickers take `.DE`; crypto trades as `<TICKER>-<CURRENCY>` (BTC-USD). When the symbol-based lookup misses and an ISIN is known, the search endpoint
+ * BBCA.JK); EU/Xetra tickers take `.DE`; crypto trades as `<TICKER>-<CURRENCY>` (BTC-USD);
+ * gold spot trades as the currency pair `XAU<CURRENCY>=X` (per troy ounce, converted to a
+ * per-gram price). When the symbol-based lookup misses and an ISIN is known, the search endpoint
  * resolves the ISIN to a Yahoo symbol (preferring the listing matching the instrument's
  * market/currency). Unofficial endpoint, so it's a resilience layer behind a keyed
  * primary (Twelve Data / EODHD), not the sole source.
@@ -51,7 +55,10 @@ export class YahooFinanceProvider implements MarketDataProvider {
     this.doFetch = opts.fetch ?? globalThis.fetch;
   }
 
-  supports(assetClass: AssetClass): boolean {
+  supports(assetClass: AssetClass, market: string): boolean {
+    // Gold spot only (XAU); physical-gold holdings are valued at the Antam/Galeri24
+    // buyback markets by their own providers, never here.
+    if (assetClass === "gold") return market === "XAU";
     return assetClass === "equity" || assetClass === "etf" || assetClass === "crypto";
   }
 
@@ -61,6 +68,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
    * symbol gets no suffix (the ISIN-search fallback resolves it instead).
    */
   private yahooSymbol(ref: InstrumentRef): string {
+    // Gold spot trades as the currency pair `XAU<CURRENCY>=X` (e.g. XAUUSD=X, XAUIDR=X),
+    // priced per troy ounce in that currency — converted to per-gram in getQuote/getHistory.
+    if (ref.assetClass === "gold") return `XAU${ref.currency}=X`;
     // Crypto trades as a `<TICKER>-<CURRENCY>` pair on Yahoo (e.g. BTC-USD, BTC-IDR).
     if (ref.assetClass === "crypto") return `${ref.symbol}-${ref.currency}`;
     if (ref.symbol.includes(".")) return ref.symbol;
@@ -130,11 +140,14 @@ export class YahooFinanceProvider implements MarketDataProvider {
       ? new Date(result.meta.regularMarketTime * 1000).toISOString()
       : new Date().toISOString();
     const prev = result?.meta?.previousClose ?? result?.meta?.chartPreviousClose;
+    // Gold pairs quote per troy ounce; the rest of the app values gold per gram.
+    const toGram = (v: number) =>
+      ref.assetClass === "gold" ? v / TROY_OUNCE_GRAMS : v;
     return {
-      price: String(price),
+      price: String(toGram(price)),
       currency: ref.currency,
       asOf,
-      previousClose: prev === undefined ? null : String(prev),
+      previousClose: prev === undefined ? null : String(toGram(prev)),
     };
   }
 
@@ -178,13 +191,15 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const result = await this.chart(ref, range);
     const timestamps = result?.timestamp ?? [];
     const closes = result?.indicators?.quote?.[0]?.close ?? [];
+    // Gold pairs quote per troy ounce; convert each close to per-gram like the quote path.
+    const factor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];
       if (close === null || close === undefined) continue;
       candles.push({
         date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
-        close: String(close),
+        close: factor === 1 ? String(close) : String(close / factor),
       });
     }
     return candles;

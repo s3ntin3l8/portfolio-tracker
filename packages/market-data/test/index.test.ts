@@ -286,11 +286,14 @@ describe("YahooFinanceProvider", () => {
     expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
   });
 
-  it("supports equities/ETFs but not gold", () => {
+  it("supports equities/ETFs and gold spot, but not buyback gold", () => {
     const provider = new YahooFinanceProvider();
     expect(provider.supports("equity", "IDX")).toBe(true);
     expect(provider.supports("etf", "IDX")).toBe(true);
-    expect(provider.supports("gold", "XAU")).toBe(false);
+    expect(provider.supports("gold", "XAU")).toBe(true);
+    // Spot only — the Antam/Galeri24 buyback markets belong to their own providers.
+    expect(provider.supports("gold", "ANTAM")).toBe(false);
+    expect(provider.supports("gold", "GALERI24")).toBe(false);
   });
 
   it("quotes a Xetra ETF via the .DE suffix, without double-suffixing", async () => {
@@ -1097,6 +1100,89 @@ describe("YahooFinanceProvider crypto", () => {
     const quote = await provider.getQuote(btc);
     expect(calledUrl).toContain("/v8/finance/chart/BTC-USD");
     expect(quote).toMatchObject({ price: "65000", currency: "USD", previousClose: "64000" });
+  });
+});
+
+describe("YahooFinanceProvider gold spot", () => {
+  const TROY_OUNCE_GRAMS = 31.1034768;
+  const xauIdr: InstrumentRef = {
+    symbol: "XAU",
+    market: "XAU",
+    assetClass: "gold",
+    currency: "IDR",
+  };
+
+  it("quotes the XAU<CCY>=X pair, converting per-ounce to per-gram", async () => {
+    let calledUrl = "";
+    // Per-troy-ounce price/baseline in IDR; the provider returns per-gram.
+    const perOunce = 40_000_000;
+    const prevOunce = 39_000_000;
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return {
+          body: {
+            chart: {
+              result: [
+                {
+                  meta: {
+                    regularMarketPrice: perOunce,
+                    currency: "IDR",
+                    regularMarketTime: 1738972800,
+                    previousClose: prevOunce,
+                  },
+                },
+              ],
+            },
+          },
+        };
+      }),
+    });
+    const quote = await provider.getQuote(xauIdr);
+    expect(calledUrl).toContain(`/v8/finance/chart/${encodeURIComponent("XAUIDR=X")}`);
+    expect(quote?.currency).toBe("IDR");
+    expect(quote?.price).toBe(String(perOunce / TROY_OUNCE_GRAMS));
+    expect(quote?.previousClose).toBe(String(prevOunce / TROY_OUNCE_GRAMS));
+  });
+
+  it("maps a USD gold ref to the XAUUSD=X pair", async () => {
+    let calledUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        calledUrl = url;
+        return { body: { chart: { result: [{ meta: { regularMarketPrice: 2600 } }] } } };
+      }),
+    });
+    await provider.getQuote({ ...xauIdr, currency: "USD" });
+    expect(calledUrl).toContain(`/v8/finance/chart/${encodeURIComponent("XAUUSD=X")}`);
+  });
+
+  it("converts history closes to per-gram", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          chart: {
+            result: [
+              {
+                timestamp: [1738972800, 1739059200],
+                indicators: { quote: [{ close: [40_000_000, 41_000_000] }] },
+              },
+            ],
+          },
+        },
+      })),
+    });
+    const candles = await provider.getHistory(xauIdr, "1mo");
+    expect(candles).toEqual([
+      {
+        date: new Date(1738972800 * 1000).toISOString().slice(0, 10),
+        close: String(40_000_000 / TROY_OUNCE_GRAMS),
+      },
+      {
+        date: new Date(1739059200 * 1000).toISOString().slice(0, 10),
+        close: String(41_000_000 / TROY_OUNCE_GRAMS),
+      },
+    ]);
   });
 });
 

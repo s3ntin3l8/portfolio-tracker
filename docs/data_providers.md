@@ -25,7 +25,7 @@ Priority is the default tried-first order (lower = earlier). Cells reflect each 
 | Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | —      | (any)           | `NAV_BASE_URL`       | Scraper|
 | EODHD          | 6        | ✓      | ✓   | —           | —              | —           | —      | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
 | CoinGecko      | 7        | —      | —   | —           | —              | —           | ✓      | CRYPTO          | — (optional `COINGECKO_API_KEY`) | Optional |
-| Yahoo Finance  | 8        | ✓      | ✓   | —           | —              | —           | ✓      | (any, suffixed) | — (keyless)          | No     |
+| Yahoo Finance  | 8        | ✓      | ✓   | ✓           | —              | —           | ✓      | (any, suffixed), XAU | — (keyless)     | No     |
 
 Antam and Galeri24 are both **gold buyback** sources backed by one shared `BuybackProvider`
 (`packages/market-data/src/buyback.ts`), one instance per brand/market.
@@ -36,6 +36,12 @@ rate limit and unlocks live quota reporting (see [Configuration](#configuration)
 in the instrument's own currency via `vs_currency`, so an IDR-denominated coin needs no FX
 hop. Crypto instruments store the **ticker** (`BTC`) as their symbol; CoinGecko resolves it
 to a coin id (`bitcoin`) via `/search` (memoised) since its price/history endpoints key on id.
+
+Yahoo also backs **gold spot** as the keyless fallback behind Twelve Data and GoldAPI. It quotes
+the `XAU<CCY>=X` currency pair (e.g. `XAUIDR=X`, `XAUUSD=X`) — priced per troy ounce in that
+currency, so no FX hop — and divides by the troy-ounce gram factor to match the per-gram
+convention the keyed providers use. It is restricted to the `XAU` market; the `ANTAM`/`GALERI24`
+buyback markets stay with their own providers.
 
 Always-on, outside the configurable registry:
 
@@ -51,7 +57,8 @@ Always-on, outside the configurable registry:
 `ASSET_CLASSES` (`packages/market-data/src/types.ts`) also defines `bond` and `derivative`,
 but **no live provider serves them today** — only the Fixture catch-all answers, so outside
 tests they have no real price source. Adding live coverage for these means adding a provider
-(see [Adding a provider](#adding-a-provider)). `crypto` is now served by CoinGecko + Yahoo.
+(see [Adding a provider](#adding-a-provider)). `crypto` is now served by CoinGecko + Yahoo, and
+gold **spot** by Twelve Data + GoldAPI + Yahoo.
 
 ## Priority & fallback
 
@@ -63,14 +70,15 @@ so the effective chain per asset is:
 - **IDX equity / ETF:** Twelve Data → Yahoo → Fixture
 - **US equity / ETF:** Twelve Data → EODHD → Yahoo → Fixture
 - **XETRA (and other EODHD-mapped) equity / ETF:** EODHD → Yahoo → Fixture
-- **Gold spot (XAU):** Twelve Data → GoldAPI → Fixture
+- **Gold spot (XAU):** Twelve Data → GoldAPI → Yahoo → Fixture
 - **Gold buyback (ANTAM):** Antam → Fixture
 - **Gold buyback (GALERI24):** Galeri24 → Fixture
 - **Mutual fund (reksa dana):** Reksa Dana NAV → Fixture
 - **Crypto (CRYPTO):** CoinGecko → Yahoo → Fixture
 
-Gold is sourced multiple ways on purpose: **spot** (market `XAU`, via Twelve Data / GoldAPI)
-prices paper/abstract gold, while each **buyback** market (`ANTAM`, `GALERI24`) values
+Gold is sourced multiple ways on purpose: **spot** (market `XAU`, via Twelve Data / GoldAPI,
+with a keyless Yahoo fallback on the `XAU<CCY>=X` pair) prices paper/abstract gold, while each
+**buyback** market (`ANTAM`, `GALERI24`) values
 physical holdings at that dealer's own buyback rate — the rates differ, so the markets never
 substitute for one another. The add-transaction gold flow lets the user pick the buyback
 source per holding.
