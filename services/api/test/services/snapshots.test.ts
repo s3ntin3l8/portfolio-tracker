@@ -102,7 +102,7 @@ describe("rangeStart", () => {
 
 describe("aggregateByDate", () => {
   it("sums same-date snapshots, FX-converting to the display currency", () => {
-    const fx = (from: string, to: string) =>
+    const fxFor = () => (from: string, to: string) =>
       from === "USD" && to === "IDR" ? "16000" : "1";
     const out = aggregateByDate(
       [
@@ -110,12 +110,34 @@ describe("aggregateByDate", () => {
         { date: "2026-02-01", netWorth: "100", currency: "USD" },
         { date: "2026-02-02", netWorth: "1200000", currency: "IDR" },
       ],
-      fx,
+      fxFor,
       "IDR",
     );
     expect(out).toEqual([
       { date: "2026-02-01", netWorth: "2600000" }, // 1,000,000 + 100×16,000
       { date: "2026-02-02", netWorth: "1200000" },
+    ]);
+  });
+
+  it("converts each date at its own day's rate", () => {
+    // USD→IDR weakens 16,000 → 16,500 between the two days.
+    const rates: Record<string, string> = {
+      "2026-02-01": "16000",
+      "2026-02-02": "16500",
+    };
+    const fxFor = (date: string) => (from: string, to: string) =>
+      from === "USD" && to === "IDR" ? rates[date] : "1";
+    const out = aggregateByDate(
+      [
+        { date: "2026-02-01", netWorth: "100", currency: "USD" },
+        { date: "2026-02-02", netWorth: "100", currency: "USD" },
+      ],
+      fxFor,
+      "IDR",
+    );
+    expect(out).toEqual([
+      { date: "2026-02-01", netWorth: "1600000" }, // 100 × 16,000
+      { date: "2026-02-02", netWorth: "1650000" }, // 100 × 16,500
     ]);
   });
 });

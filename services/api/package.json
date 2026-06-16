@@ -29,6 +29,7 @@
     "@portfolio/db": "*",
     "@portfolio/market-data": "*",
     "@portfolio/schema": "*",
+    "decimal.js": "^10.4.3",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.3.3",
     "fastify-plugin": "^6.0.0",

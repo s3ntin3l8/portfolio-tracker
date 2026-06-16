@@ -27,7 +27,7 @@ import {
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
-import { getFxRates, makeFxRateFn } from "../services/fx.js";
+import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
 import { rangeStart, aggregateByDate } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 
@@ -733,15 +733,20 @@ export async function transactionsRoute(app: FastifyInstance) {
         .where(and(...conds));
 
       const currencies = [...new Set(rows.map((r) => r.currency))];
-      const rates = await getFxRates(app.db, currencies, display);
-      const fx = makeFxRateFn(rates, display);
+      const dates = [...new Set(rows.map((r) => r.date))];
+      const ratesByDate = await getFxRatesForDates(
+        app.db,
+        currencies,
+        display,
+        dates,
+      );
       return aggregateByDate(
         rows.map((r) => ({
           date: r.date,
           netWorth: r.netWorth,
           currency: r.currency,
         })),
-        fx,
+        (date) => makeFxRateFn(ratesByDate.get(date) ?? {}, display),
         display,
       );
     },
