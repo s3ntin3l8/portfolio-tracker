@@ -84,8 +84,11 @@ export default async function DashboardPage({
   const m = (n: number) => formatMoney(n, currency, locale);
 
   const openHoldings = summary.holdings.filter((h) => Number(h.quantity) !== 0);
+  // Display-currency magnitude, so ranking/allocation are comparable across currencies.
   const holdingValue = (h: (typeof openHoldings)[number]) =>
-    h.marketValue !== null ? Number(h.marketValue) : Number(h.costBasis);
+    h.marketValueDisplay !== null
+      ? Number(h.marketValueDisplay)
+      : Number(h.costBasisDisplay);
 
   if (openHoldings.length === 0 && Number(summary.netWorth) === 0) {
     return fullState(
