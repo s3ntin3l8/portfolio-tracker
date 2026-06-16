@@ -30,7 +30,24 @@
     "import": "Impor",
     "portfolios": "Portofolio",
     "settings": "Pengaturan",
+    "admin": "Admin",
     "signOut": "Keluar"
+  },
+  "Admin": {
+    "title": "Admin",
+    "subtitle": "Konfigurasi server. Hanya terlihat oleh admin.",
+    "providers": "Penyedia data",
+    "providersHint": "Aktifkan atau nonaktifkan penyedia data pasar dan atur urutan pemakaiannya (atas lebih dulu). Kunci API diatur melalui variabel lingkungan.",
+    "notConfigured": "Kunci API/URL belum dikonfigurasi",
+    "enabled": "Aktif",
+    "disabled": "Nonaktif",
+    "moveUp": "Naikkan",
+    "moveDown": "Turunkan",
+    "save": "Simpan perubahan",
+    "saving": "Menyimpan…",
+    "saved": "Tersimpan",
+    "updateError": "Tidak dapat menyimpan perubahan. Silakan coba lagi.",
+    "unavailable": "Pengaturan penyedia tidak tersedia saat ini."
   },
   "Income": {
     "title": "Pendapatan",

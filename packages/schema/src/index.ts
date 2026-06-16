@@ -90,6 +90,17 @@ export const userUpdateSchema = z.object({
 });
 export type UserUpdate = z.infer<typeof userUpdateSchema>;
 
+// Admin-editable market-data provider config (PATCH /admin/providers). The id must match
+// a known registry provider (validated server-side); `enabled` toggles it and `priority`
+// orders the fallback chain (lower = tried first). API keys are NOT set here (see #106).
+export const providerSettingUpdateSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
+  priority: z.number().int().min(0),
+});
+export type ProviderSettingUpdate = z.infer<typeof providerSettingUpdateSchema>;
+export const providerSettingsUpdateSchema = z.array(providerSettingUpdateSchema);
+
 export const corporateActionTypeSchema = z.enum(["split", "bonus", "rights"]);
 export type CorporateActionType = z.infer<typeof corporateActionTypeSchema>;
 

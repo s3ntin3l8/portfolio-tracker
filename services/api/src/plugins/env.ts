@@ -39,6 +39,12 @@ const schema = {
       type: "string",
       default: "",
     },
+    // Authentik group whose members are admins (may configure data providers from the
+    // UI). Empty ⇒ no admins. The group must be emitted in the token's `groups` claim.
+    AUTHENTIK_ADMIN_GROUP: {
+      type: "string",
+      default: "",
+    },
     CORS_ORIGIN: {
       type: "string",
       default: "",
@@ -96,6 +102,7 @@ declare module "fastify" {
       AUTHENTIK_ISSUER: string;
       AUTHENTIK_AUDIENCE: string;
       AUTHENTIK_JWKS_URL: string;
+      AUTHENTIK_ADMIN_GROUP: string;
       CORS_ORIGIN: string;
       RATE_LIMIT_MAX: number;
       RATE_LIMIT_WINDOW: string;

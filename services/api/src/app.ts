@@ -16,6 +16,7 @@ import { quotesRoute } from "./routes/quotes.js";
 import { corporateActionsRoute } from "./routes/corporate-actions.js";
 import { importsRoute } from "./routes/imports.js";
 import { trRoute } from "./routes/tr.js";
+import { adminRoute } from "./routes/admin.js";
 import type { ScreenshotParser } from "./services/parsers/types.js";
 import { getScreenshotParser } from "./services/screenshot-parser.js";
 import { getPytrRunner } from "./services/pytr/runner.js";
@@ -87,6 +88,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(corporateActionsRoute);
   await app.register(importsRoute);
   await app.register(trRoute);
+  await app.register(adminRoute);
 
   return app;
 }

@@ -6,6 +6,7 @@ import {
   text,
   numeric,
   integer,
+  boolean,
   timestamp,
   date,
   jsonb,
@@ -170,6 +171,19 @@ export const trConnections = pgTable("tr_connections", {
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Server-wide market-data provider config, editable by admins from the UI. Global (not
+// user-scoped) — this is a single-operator self-host setting. Rows OVERRIDE the env-derived
+// defaults: a missing row means "use the registry default" (enabled if its key/url is set,
+// default registration priority). Lower `priority` is tried first. API keys stay in env for
+// now (see #106); only enable/disable + ordering live here.
+export const providerSettings = pgTable("provider_settings", {
+  // Registry id, e.g. "twelvedata" | "goldapi" | "antam" | "nav" | "eodhd" | "yahoo".
+  provider: text("provider").primaryKey(),
+  enabled: boolean("enabled").notNull().default(true),
+  priority: integer("priority").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

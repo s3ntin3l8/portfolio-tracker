@@ -91,7 +91,7 @@ export async function transactionsRoute(app: FastifyInstance) {
   async function loadValuation(portfolioId: string, displayCurrency: string) {
     return valuePortfolio(
       app.db,
-      getMarketData(),
+      await getMarketData(),
       app.config.MARKET_DATA_TTL_MS,
       portfolioId,
       displayCurrency,

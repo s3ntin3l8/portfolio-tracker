@@ -289,7 +289,8 @@ export async function importsRoute(app: FastifyInstance) {
           assetClass: AssetClass;
         } | null = null;
         try {
-          const [hit] = await getMarketData().search(isin);
+          const md = await getMarketData();
+          const [hit] = await md.search(isin);
           if (hit) {
             resolved = {
               symbol: hit.symbol,

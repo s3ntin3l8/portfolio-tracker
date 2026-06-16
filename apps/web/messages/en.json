@@ -30,7 +30,24 @@
     "import": "Import",
     "portfolios": "Portfolios",
     "settings": "Settings",
+    "admin": "Admin",
     "signOut": "Sign out"
+  },
+  "Admin": {
+    "title": "Admin",
+    "subtitle": "Server configuration. Visible to admins only.",
+    "providers": "Data providers",
+    "providersHint": "Enable or disable market-data providers and set the order they're tried in (top first). API keys are configured via environment variables.",
+    "notConfigured": "No API key/URL configured",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "updateError": "Couldn't save changes. Please try again.",
+    "unavailable": "Provider settings are unavailable right now."
   },
   "Income": {
     "title": "Income",

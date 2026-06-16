@@ -44,6 +44,8 @@ export interface AuthPluginOptions {
 export interface AuthedUser {
   id: string;
   authSub: string;
+  // Derived from the Authentik `groups` claim each request — not stored on the row.
+  isAdmin: boolean;
 }
 
 /** Returns the authenticated user or throws — use inside `authenticate`d handlers. */
@@ -82,6 +84,7 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
 
       let sub: string;
       let email: string;
+      let isAdmin: boolean;
       try {
         const token = header.slice(7);
         const verifyOpts: JWTVerifyOptions = {
@@ -99,6 +102,10 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
           typeof payload.email === "string"
             ? payload.email
             : `${sub}@users.noreply`;
+        // Admin = membership in the configured Authentik group (empty config ⇒ no admins).
+        const groups = Array.isArray(payload.groups) ? payload.groups : [];
+        const adminGroup = app.config.AUTHENTIK_ADMIN_GROUP;
+        isAdmin = adminGroup !== "" && groups.includes(adminGroup);
       } catch {
         return reply.code(401).send({ error: "invalid_token" });
       }
@@ -116,7 +123,21 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
           .returning();
         user = created;
       }
-      request.user = { id: user.id, authSub: user.authSub };
+      request.user = { id: user.id, authSub: user.authSub, isAdmin };
+    },
+  );
+
+  // Admin-only guard: authenticate, then require the Authentik admin group. Used by
+  // /admin routes that mutate server-wide config (data-provider settings).
+  app.decorate(
+    "requireAdmin",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      await app.authenticate(request, reply);
+      // authenticate already sent an error response (401/503) — don't continue.
+      if (reply.sent) return reply;
+      if (!request.user?.isAdmin) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
     },
   );
 });
@@ -124,6 +145,10 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
 declare module "fastify" {
   interface FastifyInstance {
     authenticate: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<unknown>;
+    requireAdmin: (
       request: FastifyRequest,
       reply: FastifyReply,
     ) => Promise<unknown>;

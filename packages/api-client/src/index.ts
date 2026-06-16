@@ -5,6 +5,7 @@ import type {
   CorporateActionInput,
   ParsedTransaction,
   UserUpdate,
+  ProviderSettingUpdate,
 } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
@@ -15,6 +16,19 @@ export interface User {
   email: string;
   name: string | null;
   displayCurrency: string;
+  /** Derived from the Authentik admin group each request; gates the admin UI. */
+  isAdmin: boolean;
+}
+
+/** A market-data provider's effective config (GET/PATCH /admin/providers). No secrets. */
+export interface AdminProvider {
+  id: string;
+  label: string;
+  /** Whether the provider's env key/url is present (it can't be used without it). */
+  configured: boolean;
+  enabled: boolean;
+  /** Fallback order; lower is tried first. */
+  priority: number;
 }
 
 export interface Portfolio {
@@ -389,6 +403,12 @@ export function createApiClient(config: ApiClientConfig) {
   return {
     me: () => request<User>("GET", "/me"),
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
+
+    // Admin: market-data provider config (enable/disable + fallback priority).
+    getAdminProviders: () =>
+      request<AdminProvider[]>("GET", "/admin/providers"),
+    updateAdminProviders: (input: ProviderSettingUpdate[]) =>
+      request<AdminProvider[]>("PATCH", "/admin/providers", input),
 
     getNetWorth: () => request<NetWorth>("GET", "/networth"),
     getIncome: () => request<IncomeStats>("GET", "/networth/income"),

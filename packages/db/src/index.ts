@@ -27,3 +27,5 @@ export type LastPrice = typeof schema.lastPrices.$inferSelect;
 export type NewLastPrice = typeof schema.lastPrices.$inferInsert;
 export type FxRate = typeof schema.fxRates.$inferSelect;
 export type NewFxRate = typeof schema.fxRates.$inferInsert;
+export type ProviderSetting = typeof schema.providerSettings.$inferSelect;
+export type NewProviderSetting = typeof schema.providerSettings.$inferInsert;

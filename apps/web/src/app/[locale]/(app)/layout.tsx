@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { SessionErrorGuard } from "@/components/session-error-guard";
-import { resolveSelection } from "@/lib/server-api";
+import { resolveSelection, loadMe } from "@/lib/server-api";
 import { auth } from "@/auth";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
@@ -26,7 +26,7 @@ export default async function AppLayout({
     if (!session) redirect(`/${locale}`);
   }
 
-  const selection = await resolveSelection();
+  const [selection, me] = await Promise.all([resolveSelection(), loadMe()]);
 
   return (
     <>
@@ -38,6 +38,7 @@ export default async function AppLayout({
           brokerage: p.brokerage,
         }))}
         selectedId={selection.selectedId}
+        isAdmin={Boolean(me?.isAdmin)}
       >
         {children}
       </AppShell>

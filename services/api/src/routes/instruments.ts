@@ -50,7 +50,8 @@ export async function instrumentsRoute(app: FastifyInstance) {
     async (request) => {
       const { q } = lookupQuerySchema.parse(request.query);
       try {
-        return await getMarketData().search(q);
+        const md = await getMarketData();
+        return await md.search(q);
       } catch (err) {
         request.log.warn({ err }, "instrument lookup failed");
         return [];
@@ -85,7 +86,8 @@ export async function instrumentsRoute(app: FastifyInstance) {
         .where(eq(instruments.id, request.params.id))
         .limit(1);
       if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
-      return getMarketData().getHistory(
+      const md = await getMarketData();
+      return md.getHistory(
         {
           symbol: inst.symbol,
           market: inst.market,

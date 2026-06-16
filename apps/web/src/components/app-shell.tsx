@@ -11,6 +11,7 @@ import {
   ScanLine,
   Briefcase,
   Settings,
+  ShieldCheck,
   Menu,
   X,
   LogOut,
@@ -40,14 +41,21 @@ export function AppShell({
   children,
   portfolios = [],
   selectedId = null,
+  isAdmin = false,
 }: {
   children: React.ReactNode;
   portfolios?: Pick<Portfolio, "id" | "name" | "brokerage">[];
   selectedId?: string | null;
+  isAdmin?: boolean;
 }) {
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // The admin entry is only shown to members of the Authentik admin group.
+  const navItems = isAdmin
+    ? [...NAV, { href: "/admin", icon: ShieldCheck, key: "admin" } as const]
+    : NAV;
 
   const switcher = (
     <PortfolioSwitcher portfolios={portfolios} selectedId={selectedId} />
@@ -66,7 +74,7 @@ export function AppShell({
 
   const navLinks = (
     <nav className="flex flex-col gap-1">
-      {NAV.map(({ href, icon: Icon, key }) => {
+      {navItems.map(({ href, icon: Icon, key }) => {
         const active = pathname === href;
         return (
           <Link

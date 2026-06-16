@@ -41,7 +41,11 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
 
   await boss.work(QUEUE, async () => {
     try {
-      const refreshed = await refreshHeldPrices(getDb(), getMarketData(), new Date());
+      const refreshed = await refreshHeldPrices(
+        getDb(),
+        await getMarketData(),
+        new Date(),
+      );
       app.log.info({ refreshed }, "price refresh complete");
     } catch (err) {
       app.log.error({ err }, "price refresh failed");
@@ -55,7 +59,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
     try {
       const count = await recordDailySnapshots(
         getDb(),
-        getMarketData(),
+        await getMarketData(),
         app.config.MARKET_DATA_TTL_MS,
         new Date(),
       );

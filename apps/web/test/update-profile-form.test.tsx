@@ -34,6 +34,7 @@ describe("UpdateProfileForm", () => {
         email: "a@b.c",
         name: "Björn",
         displayCurrency: "USD",
+        isAdmin: false,
       })),
     };
     const onSuccess = renderForm(client);
@@ -56,6 +57,7 @@ describe("UpdateProfileForm", () => {
         email: "a@b.c",
         name: "Anya",
         displayCurrency: "IDR",
+        isAdmin: false,
       })),
     };
     renderForm(client);

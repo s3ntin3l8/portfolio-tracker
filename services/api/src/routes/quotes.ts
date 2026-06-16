@@ -18,7 +18,8 @@ export async function quotesRoute(app: FastifyInstance) {
     { preHandler: app.authenticate },
     async (request, reply) => {
       const q = quoteQuerySchema.parse(request.query);
-      const quote = await getMarketData().getQuote({
+      const md = await getMarketData();
+      const quote = await md.getQuote({
         symbol: q.symbol,
         market: q.market,
         assetClass: q.assetClass,

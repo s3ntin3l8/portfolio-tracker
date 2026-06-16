@@ -57,6 +57,13 @@
       "when": 1781622356934,
       "tag": "0007_blushing_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781623958712,
+      "tag": "0008_salty_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,7 @@ import {
   type IncomeStats,
   type ContributionStats,
   type TrConnection,
+  type AdminProvider,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -299,6 +300,19 @@ export async function loadMe(): Promise<User | null> {
     return await api.me();
   } catch {
     return null;
+  }
+}
+
+/** Admin: the market-data provider config, or "unavailable" (signed out / non-admin / down). */
+export async function loadAdminProviders(): Promise<
+  { status: "ok"; providers: AdminProvider[] } | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    return { status: "ok", providers: await api.getAdminProviders() };
+  } catch {
+    return { status: "unavailable" };
   }
 }
 
