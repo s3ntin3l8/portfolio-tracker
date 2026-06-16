@@ -71,19 +71,18 @@ export function rangeStart(range: string, now: Date = new Date()): string | null
 
 /**
  * Collapse per-portfolio snapshots into one net-worth series in `displayCurrency`,
- * summing same-date values and converting each via the supplied FX function. (FX is
- * applied with current rates — exact for single-currency users, a close approximation
- * across currencies until per-day historical FX lands.)
+ * summing same-date values and converting each via the FX function for that row's own
+ * date (`fxFor(date)`), so historical points use the rate that applied on the day.
  */
 export function aggregateByDate(
   rows: { date: string; netWorth: string; currency: string }[],
-  fx: FxRateFn,
+  fxFor: (date: string) => FxRateFn,
   displayCurrency: string,
 ): NetWorthPoint[] {
   const byDate = new Map<string, number>();
   for (const r of rows) {
     const converted = Number(
-      convert(r.netWorth, r.currency, displayCurrency, fx),
+      convert(r.netWorth, r.currency, displayCurrency, fxFor(r.date)),
     );
     byDate.set(r.date, (byDate.get(r.date) ?? 0) + converted);
   }
