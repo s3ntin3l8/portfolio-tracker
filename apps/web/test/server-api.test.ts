@@ -214,23 +214,35 @@ describe("aggregate + misc loaders", () => {
     expect(await api.loadPortfolios()).toMatchObject({ status: "unavailable" });
   });
 
-  it("loadIncome keeps only dividend/coupon events, newest first", async () => {
-    h.client.listPortfolios = async () => [PF[0]];
-    h.client.listTransactions = async () => [
-      { id: "d1", executedAt: "2026-01-01", type: "dividend", price: "5", currency: "IDR", instrument: { symbol: "BBCA", name: "BCA" } },
-      { id: "d2", executedAt: "2026-03-01", type: "coupon", price: "7", currency: "IDR", instrument: null },
-      { id: "b1", executedAt: "2026-02-01", type: "buy", price: "9", currency: "IDR", instrument: null },
-    ];
-    const res = await api.loadIncome();
-    expect(res.status).toBe("ok");
-    expect(res.events.map((e) => e.id)).toEqual(["d2", "d1"]); // newest first, buy dropped
+  it("loadIncomeStats uses the aggregate, or the per-portfolio twin when selected", async () => {
+    h.client.listPortfolios = async () => PF;
+    const getIncome = vi.fn(async () => ({ displayCurrency: "IDR", ttm: "12" }));
+    const getPortfolioIncome = vi.fn(async (id: string) => ({
+      displayCurrency: "EUR",
+      ttm: "3",
+      _id: id,
+    }));
+    h.client.getIncome = getIncome;
+    h.client.getPortfolioIncome = getPortfolioIncome;
+
+    // No selection → aggregate.
+    let res = await api.loadIncomeStats();
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getIncome).toHaveBeenCalled();
+    expect(getPortfolioIncome).not.toHaveBeenCalled();
+
+    // A selected portfolio → the scoped endpoint.
+    h.cookies = { pf: "p2" };
+    res = await api.loadIncomeStats();
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getPortfolioIncome).toHaveBeenCalledWith("p2");
 
     h.client.listPortfolios = async () => [];
-    expect(await api.loadIncome()).toMatchObject({ status: "empty" });
+    expect(await api.loadIncomeStats()).toMatchObject({ status: "empty" });
     h.client.listPortfolios = async () => {
       throw new Error("x");
     };
-    expect(await api.loadIncome()).toMatchObject({ status: "unavailable" });
+    expect(await api.loadIncomeStats()).toMatchObject({ status: "unavailable" });
   });
 
   it("loadInstrument returns the detail bundle or null on error", async () => {

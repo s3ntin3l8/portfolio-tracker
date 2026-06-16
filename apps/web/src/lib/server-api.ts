@@ -13,7 +13,7 @@ import {
   type Transaction,
   type HoldingValuation,
   type ImportRecord,
-  type IncomeOutlook,
+  type IncomeStats,
   type ContributionStats,
   type TrConnection,
 } from "@portfolio/api-client";
@@ -73,52 +73,6 @@ export async function loadNetWorthHistory(
     return await api.getNetWorthHistory(range);
   } catch {
     return [];
-  }
-}
-
-export interface IncomeEvent {
-  id: string;
-  date: string;
-  type: string; // "dividend" | "coupon"
-  symbol: string | null;
-  name: string | null;
-  amount: string;
-  currency: string;
-}
-
-/**
- * Every dividend/coupon cash event across all of the user's portfolios (newest
- * first), derived from transactions — no dedicated API needed. `empty` = no
- * portfolio yet; `ok` may still carry zero events (no income recorded).
- */
-export async function loadIncome(): Promise<{
-  status: "ok" | "empty" | "unavailable";
-  events: IncomeEvent[];
-}> {
-  const api = await getServerApi();
-  if (!api) return { status: "unavailable", events: [] };
-  try {
-    const portfolios = await api.listPortfolios();
-    if (portfolios.length === 0) return { status: "empty", events: [] };
-    const lists = await Promise.all(
-      portfolios.map((p) => api.listTransactions(p.id)),
-    );
-    const events = lists
-      .flat()
-      .filter((t) => t.type === "dividend" || t.type === "coupon")
-      .map((t) => ({
-        id: t.id,
-        date: t.executedAt,
-        type: t.type,
-        symbol: t.instrument?.symbol ?? null,
-        name: t.instrument?.name ?? null,
-        amount: t.price,
-        currency: t.currency,
-      }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-    return { status: "ok", events };
-  } catch {
-    return { status: "unavailable", events: [] };
   }
 }
 
@@ -300,14 +254,29 @@ export async function loadInstrument(
   }
 }
 
-/** Forward income outlook: upcoming coupons + per-holding trailing yield. */
-export async function loadIncomeOutlook(): Promise<IncomeOutlook | null> {
+export type IncomeStatsView =
+  | { status: "ok"; data: IncomeStats }
+  | { status: "empty" }
+  | { status: "unavailable" };
+
+/**
+ * Income analytics for the active scope: a single portfolio when one is selected,
+ * else the cross-portfolio aggregate. Mirrors {@link loadContributions}.
+ */
+export async function loadIncomeStats(): Promise<IncomeStatsView> {
   const api = await getServerApi();
-  if (!api) return null;
+  if (!api) return { status: "unavailable" };
   try {
-    return await api.getIncomeOutlook();
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty" };
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    const data = selected
+      ? await api.getPortfolioIncome(selected.id)
+      : await api.getIncome();
+    return { status: "ok", data };
   } catch {
-    return null;
+    return { status: "unavailable" };
   }
 }
 

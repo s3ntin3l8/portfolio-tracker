@@ -968,13 +968,119 @@ describe("auth + portfolios + transactions", () => {
     expect(body.upcoming).toHaveLength(1);
     expect(body.upcoming[0]).toMatchObject({ symbol: "ORI-T", amount: "300000" });
 
-    // Trailing yield: 300,000 income over par value 10,000,000 = 0.03.
+    // Trailing yield: 300,000 income over par value 10,000,000 = 0.03; yield-on-cost
+    // is the same since the bond was bought at par.
     const y = body.yields.find((r: { instrumentId: string }) => r.instrumentId === bond.id);
     expect(y).toMatchObject({
       trailingIncome: "300000",
       marketValue: "10000000",
+      costBasis: "10000000",
       yield: "0.03",
+      yieldOnCost: "0.03",
     });
+
+    // Aggregated stats are derived from the single coupon event.
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0]).toMatchObject({ type: "coupon", amount: "300000", symbol: "ORI-T" });
+    expect(body.lifetimeTotal).toBe("300000");
+    expect(body.ttm).toBe("300000");
+    expect(body.byYear).toEqual([
+      { year: "2026", total: "300000", paymentCount: 1 },
+    ]);
+    // Forecast = TTM dividends (none) + the upcoming coupon (300,000).
+    expect(body.forecastNextYear).toBe("300000");
+    expect(body.byCurrency).toContainEqual({
+      currency: "IDR",
+      totalNative: "300000",
+      totalNormalized: "300000",
+    });
+
+    // The per-portfolio twin returns the same stats for this lone portfolio.
+    const scoped = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/income`,
+      headers: auth(t),
+    });
+    expect(scoped.statusCode).toBe(200);
+    expect(scoped.json().lifetimeTotal).toBe("300000");
+
+    // Ownership is enforced.
+    const other = await token("income-intruder");
+    const denied = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/income`,
+      headers: auth(other),
+    });
+    expect(denied.statusCode).toBe(404);
+  });
+
+  it("normalizes income yields for a non-display-currency holding (#93)", async () => {
+    const { fxRates } = await import("@portfolio/db");
+    const t = await token("income-fx-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "USD income", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // USD instrument priced 9500 by the fixture (by symbol), USD→IDR at 16000.
+    const [us] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBCA", market: "NASDAQ", assetClass: "equity", currency: "USD", name: "BCA (USD)" })
+      .returning();
+    await app.db
+      .insert(fxRates)
+      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) })
+      .onConflictDoNothing();
+
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: us.id,
+        quantity: "10",
+        price: "9500",
+        currency: "USD",
+        executedAt: "2026-01-10T00:00:00.000Z",
+      },
+    });
+    // A recent dividend of 100 USD (inside the trailing-12-month window).
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "dividend",
+        instrumentId: us.id,
+        quantity: "0",
+        price: "100",
+        currency: "USD",
+        executedAt: new Date(Date.now() - 10 * 86_400_000).toISOString(),
+      },
+    });
+
+    const body = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/income`,
+        headers: auth(t),
+      })
+    ).json();
+
+    const y = body.yields.find((r: { instrumentId: string }) => r.instrumentId === us.id);
+    // Everything in the display currency (IDR): income 100×16000, value/cost 95000×16000.
+    expect(y.trailingIncome).toBe("1600000");
+    expect(y.marketValue).toBe("1520000000");
+    expect(y.costBasis).toBe("1520000000");
+    // Yields divide like-for-like, so the FX rate cancels: 100 / 95000 ≈ 0.00105.
+    // (Pre-fix this divided IDR income by USD value and was ~16000× too large.)
+    expect(Number(y.yield)).toBeCloseTo(100 / 95000, 8);
+    expect(Number(y.yieldOnCost)).toBeCloseTo(100 / 95000, 8);
   });
 
   it("fetches a single instrument and its price history", async () => {
