@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import type {
   ApiClient,
+  GoldSource,
   Instrument,
   InstrumentSearchResult,
 } from "@portfolio/api-client";
@@ -21,6 +22,7 @@ export type AddTransactionClient = Pick<
   | "createInstrument"
   | "createTransaction"
   | "updateTransaction"
+  | "getGoldSources"
 >;
 
 /** Prefill values when editing an existing transaction. */
@@ -40,15 +42,7 @@ export interface AddTransactionInitial {
   executedAt: string;
 }
 
-const TX_TYPES = [
-  "buy",
-  "sell",
-  "dividend",
-  "coupon",
-  "deposit",
-  "withdrawal",
-  "fee",
-] as const;
+const TX_TYPES = ["buy", "sell", "dividend", "coupon", "deposit", "withdrawal", "fee"] as const;
 type TxType = (typeof TX_TYPES)[number];
 const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf"] as const;
 const UNITS = ["shares", "grams", "units"] as const;
@@ -73,6 +67,20 @@ function unitForClass(assetClass: string): (typeof UNITS)[number] {
   return "shares";
 }
 
+/**
+ * Derive a grouping symbol for a gold position from its label. Gold has no ticker — the
+ * label (e.g. "Antam 5g bar") plus the source's market identify the holding, so a labelled
+ * position gets its own instrument. Falls back to "GOLD" when no label is given.
+ */
+function goldSymbolFromLabel(label: string): string {
+  const slug = label
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "GOLD";
+}
+
 export function AddTransactionForm({
   client,
   portfolioId,
@@ -91,9 +99,7 @@ export function AddTransactionForm({
   const tc = useTranslations("AssetClass");
 
   const isEdit = Boolean(transactionId);
-  const [type, setType] = useState<TxType>(
-    () => (initial?.type as TxType) ?? "buy",
-  );
+  const [type, setType] = useState<TxType>(() => (initial?.type as TxType) ?? "buy");
   const [currency, setCurrency] = useState(() => initial?.currency ?? "IDR");
   const [date, setDate] = useState(() => initial?.executedAt?.slice(0, 10) ?? "");
   const [quantity, setQuantity] = useState(() => initial?.quantity ?? "");
@@ -121,20 +127,42 @@ export function AddTransactionForm({
   );
   const [symbol, setSymbol] = useState("");
   const [name, setName] = useState("");
-  const [assetClass, setAssetClass] =
-    useState<(typeof ASSET_CLASSES)[number]>("equity");
+  const [assetClass, setAssetClass] = useState<(typeof ASSET_CLASSES)[number]>("equity");
   const [unit, setUnit] = useState<(typeof UNITS)[number]>("shares");
   // Set when fields were auto-filled from a discovery match: carries the ISIN +
   // resolved market so they persist on create. Cleared once the user edits the symbol.
   const [isin, setIsin] = useState<string | null>(null);
   const [discoveredMarket, setDiscoveredMarket] = useState<string | null>(null);
 
+  // Gold buyback sources (registry-driven), with the currently selected source's market.
+  const [goldSourceList, setGoldSourceList] = useState<GoldSource[]>([]);
+  const [goldMarket, setGoldMarket] = useState("");
+
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Cash movements carry no instrument; dividend/coupon are instrument income.
   const isCash = type === "deposit" || type === "withdrawal" || type === "fee";
   const isTrade = type === "buy" || type === "sell";
+  // Gold gets a dedicated entry flow (source + label, no symbol/search). For an already
+  // selected instrument (edit) trust its own class; otherwise the picked asset kind.
+  const isGold = !isCash && (selected ? selected.assetClass : assetClass) === "gold";
+
+  // Load the selectable gold sources once; default to the first (highest-priority) one.
+  useEffect(() => {
+    let active = true;
+    void client
+      .getGoldSources()
+      .then((sources) => {
+        if (!active) return;
+        setGoldSourceList(sources);
+        if (sources[0]) setGoldMarket((m) => m || sources[0].market);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
   function runSearch(q: string) {
     setQuery(q);
@@ -178,6 +206,20 @@ export function AddTransactionForm({
   async function resolveInstrumentId(): Promise<string | null> {
     if (isCash) return null;
     if (selected) return selected.id;
+    if (assetClass === "gold") {
+      const label = name.trim();
+      const market = goldMarket || goldSourceList[0]?.market || "ANTAM";
+      const sourceLabel = goldSourceList.find((s) => s.market === market)?.label;
+      const created = await client.createInstrument({
+        symbol: goldSymbolFromLabel(label),
+        market,
+        assetClass: "gold",
+        unit: "grams",
+        currency,
+        name: label || sourceLabel || "Gold",
+      });
+      return created.id;
+    }
     const created = await client.createInstrument({
       symbol: symbol.trim(),
       market: discoveredMarket ?? marketForAssetClass(assetClass),
@@ -193,8 +235,14 @@ export function AddTransactionForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    // A new non-gold instrument needs a symbol (gold derives one from its label). Catch the
+    // empty case here with a clear message instead of letting the API reject it generically.
+    if (!isCash && !selected && assetClass !== "gold" && !symbol.trim()) {
+      setError(t("symbolRequired"));
+      return;
+    }
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       const instrumentId = await resolveInstrumentId();
       const payload = {
@@ -214,7 +262,7 @@ export function AddTransactionForm({
       }
       onSuccess?.();
     } catch {
-      setError(true);
+      setError(t("error"));
     } finally {
       setBusy(false);
     }
@@ -228,16 +276,12 @@ export function AddTransactionForm({
           className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
           <AlertCircle className="size-4 shrink-0" />
-          {t("error")}
+          {error}
         </div>
       )}
 
       <Field label={t("type")} htmlFor="tx-type">
-        <Select
-          id="tx-type"
-          value={type}
-          onChange={(e) => setType(e.target.value as TxType)}
-        >
+        <Select id="tx-type" value={type} onChange={(e) => setType(e.target.value as TxType)}>
           {TX_TYPES.map((ty) => (
             <option key={ty} value={ty}>
               {tt(ty)}
@@ -267,116 +311,144 @@ export function AddTransactionForm({
             </div>
           ) : (
             <>
-              <Input
-                value={query}
-                onChange={(e) => runSearch(e.target.value)}
-                placeholder={t("search")}
-                aria-label={t("search")}
-              />
-              {results.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {t("savedResults")}
-                  </p>
-                  <ul className="divide-y divide-border rounded-md border border-border">
-                    {results.map((i) => (
-                      <li key={i.id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelected(i);
-                            setResults([]);
-                            setDiscovered([]);
-                          }}
-                          className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                        >
-                          <span className="font-medium">{i.symbol}</span>
-                          <span className="text-muted-foreground">{i.name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <Field label={t("kind")} htmlFor="tx-kind">
+                <Select
+                  id="tx-kind"
+                  value={assetClass}
+                  onChange={(e) => {
+                    const ac = e.target.value as (typeof ASSET_CLASSES)[number];
+                    setAssetClass(ac);
+                    setUnit(unitForClass(ac));
+                  }}
+                >
+                  {ASSET_CLASSES.map((c) => (
+                    <option key={c} value={c}>
+                      {tc(c)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-              {discovered.length > 0 && (
-                <div className="space-y-1">
-                  <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                    <Sparkles className="size-3" />
-                    {t("discoveredResults")}
-                  </p>
-                  <ul className="divide-y divide-border rounded-md border border-border">
-                    {discovered.map((i) => (
-                      <li key={`${i.market}:${i.symbol}:${i.source}`}>
-                        <button
-                          type="button"
-                          onClick={() => prefillFrom(i)}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                        >
-                          <span className="font-medium">{i.symbol}</span>
-                          <span className="truncate text-muted-foreground">{i.name}</span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {i.currency}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+              {assetClass === "gold" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t("goldSource")} htmlFor="tx-gold-source">
+                    <Select
+                      id="tx-gold-source"
+                      value={goldMarket}
+                      onChange={(e) => setGoldMarket(e.target.value)}
+                    >
+                      {goldSourceList.map((s) => (
+                        <option key={s.market} value={s.market}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label={t("goldLabel")} htmlFor="tx-gold-label">
+                    <Input
+                      id="tx-gold-label"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={t("goldLabelPlaceholder")}
+                    />
+                  </Field>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">{t("goldNote")}</p>
                 </div>
-              )}
+              ) : (
+                <>
+                  <Input
+                    value={query}
+                    onChange={(e) => runSearch(e.target.value)}
+                    placeholder={t("search")}
+                    aria-label={t("search")}
+                  />
+                  {results.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {t("savedResults")}
+                      </p>
+                      <ul className="divide-y divide-border rounded-md border border-border">
+                        {results.map((i) => (
+                          <li key={i.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelected(i);
+                                setResults([]);
+                                setDiscovered([]);
+                              }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+                            >
+                              <span className="font-medium">{i.symbol}</span>
+                              <span className="text-muted-foreground">{i.name}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-              <p className="pt-1 text-xs font-medium text-muted-foreground">
-                {t("newInstrument")}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={t("symbol")} htmlFor="tx-symbol">
-                  <Input
-                    id="tx-symbol"
-                    value={symbol}
-                    onChange={(e) => {
-                      setSymbol(e.target.value.toUpperCase());
-                      // Manual edits override a discovered identity.
-                      setIsin(null);
-                      setDiscoveredMarket(null);
-                    }}
-                  />
-                </Field>
-                <Field label={t("name")} htmlFor="tx-name">
-                  <Input
-                    id="tx-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </Field>
-                <Field label={t("assetClass")} htmlFor="tx-class">
-                  <Select
-                    id="tx-class"
-                    value={assetClass}
-                    onChange={(e) =>
-                      setAssetClass(e.target.value as (typeof ASSET_CLASSES)[number])
-                    }
-                  >
-                    {ASSET_CLASSES.map((c) => (
-                      <option key={c} value={c}>
-                        {tc(c)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label={t("unit")} htmlFor="tx-unit">
-                  <Select
-                    id="tx-unit"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value as (typeof UNITS)[number])}
-                  >
-                    {UNITS.map((u) => (
-                      <option key={u} value={u}>
-                        {t(`units.${u}`)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
+                  {discovered.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                        <Sparkles className="size-3" />
+                        {t("discoveredResults")}
+                      </p>
+                      <ul className="divide-y divide-border rounded-md border border-border">
+                        {discovered.map((i) => (
+                          <li key={`${i.market}:${i.symbol}:${i.source}`}>
+                            <button
+                              type="button"
+                              onClick={() => prefillFrom(i)}
+                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                            >
+                              <span className="font-medium">{i.symbol}</span>
+                              <span className="truncate text-muted-foreground">{i.name}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {i.currency}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="pt-1 text-xs font-medium text-muted-foreground">
+                    {t("newInstrument")}
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={t("symbol")} htmlFor="tx-symbol">
+                      <Input
+                        id="tx-symbol"
+                        value={symbol}
+                        onChange={(e) => {
+                          setSymbol(e.target.value.toUpperCase());
+                          // Manual edits override a discovered identity.
+                          setIsin(null);
+                          setDiscoveredMarket(null);
+                        }}
+                      />
+                    </Field>
+                    <Field label={t("name")} htmlFor="tx-name">
+                      <Input id="tx-name" value={name} onChange={(e) => setName(e.target.value)} />
+                    </Field>
+                    <Field label={t("unit")} htmlFor="tx-unit">
+                      <Select
+                        id="tx-unit"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value as (typeof UNITS)[number])}
+                      >
+                        {UNITS.map((u) => (
+                          <option key={u} value={u}>
+                            {t(`units.${u}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -384,7 +456,7 @@ export function AddTransactionForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         {isTrade && (
-          <Field label={t("quantity")} htmlFor="tx-qty">
+          <Field label={isGold ? t("grams") : t("quantity")} htmlFor="tx-qty">
             <Input
               id="tx-qty"
               inputMode="decimal"
@@ -393,7 +465,10 @@ export function AddTransactionForm({
             />
           </Field>
         )}
-        <Field label={isTrade ? t("price") : t("amount")} htmlFor="tx-price">
+        <Field
+          label={isGold && isTrade ? t("pricePerGram") : isTrade ? t("price") : t("amount")}
+          htmlFor="tx-price"
+        >
           <Input
             id="tx-price"
             inputMode="decimal"
@@ -413,11 +488,7 @@ export function AddTransactionForm({
           </Field>
         )}
         <Field label={t("currency")} htmlFor="tx-currency">
-          <Select
-            id="tx-currency"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-          >
+          <Select id="tx-currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
             {CURRENCIES.map((c) => (
               <option key={c} value={c}>
                 {c}

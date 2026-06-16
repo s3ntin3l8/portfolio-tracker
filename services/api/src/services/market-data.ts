@@ -30,6 +30,13 @@ export interface ProviderDescriptor {
   configured: () => boolean;
   /** Instantiate the provider. Only called when `configured()` is true. */
   create: () => MarketDataProvider;
+  /**
+   * The `market` constant this provider serves as a *user-selectable gold buyback source*
+   * (e.g. `"ANTAM"`). Set only on providers that price physical/savings gold holdings, so
+   * the manual-entry form can offer them in a source picker (see {@link goldSources}). Spot
+   * (XAU) is the live ticker, not a holding source, so the spot providers stay unset.
+   */
+  goldMarket?: string;
 }
 
 /**
@@ -41,9 +48,7 @@ export interface ProviderDescriptor {
  * URLs can be repointed at an external scraper without code changes.
  */
 function selfBaseUrl(): string {
-  return (
-    process.env.MARKET_DATA_SELF_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3000}`
-  );
+  return process.env.MARKET_DATA_SELF_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3000}`;
 }
 
 // Registration order matches the historical hardcoded chain: keyed primaries first,
@@ -68,14 +73,14 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     id: "antam",
     label: "Antam buyback",
     defaultPriority: 3,
+    goldMarket: "ANTAM",
     // Always available: defaults to the internal route fed by the buyback scraper, served
     // from the scraped_quotes cache. 404 until the first scrape, which the provider treats
     // as "no quote" (falls through to spot / fixture).
     configured: () => true,
     create: () =>
       new AntamProvider({
-        baseUrl:
-          process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
+        baseUrl: process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
       }),
   },
   {
@@ -137,6 +142,30 @@ export function resolveProviderConfig(
       };
     })
     .sort((a, b) => a.priority - b.priority);
+}
+
+/** A gold buyback source the manual-entry form can offer, mapped to its routing market. */
+export interface GoldSource {
+  market: string;
+  label: string;
+}
+
+/**
+ * The selectable gold buyback sources: every registry provider that declares a `goldMarket`
+ * and is both `configured` and `enabled`, in effective priority order. Drives the gold-source
+ * picker in the add-transaction form — a new gold provider (e.g. Galeri24) surfaces here
+ * automatically once it's in the registry and configured. Pure (no env/network).
+ */
+export function goldSources(
+  rows: Pick<ProviderSetting, "provider" | "enabled" | "priority">[],
+  registry: ProviderDescriptor[] = PROVIDER_REGISTRY,
+): GoldSource[] {
+  const goldMarketById = new Map(
+    registry.filter((d) => d.goldMarket).map((d) => [d.id, d.goldMarket!]),
+  );
+  return resolveProviderConfig(rows, registry)
+    .filter((p) => p.configured && p.enabled && goldMarketById.has(p.id))
+    .map((p) => ({ market: goldMarketById.get(p.id)!, label: p.label }));
 }
 
 // In-process tally of API calls per provider since the last flush. Incremented by the

@@ -28,6 +28,7 @@ function makeClient(over: Partial<AddTransactionClient> = {}): AddTransactionCli
     createInstrument: vi.fn(async () => INSTRUMENT),
     createTransaction: vi.fn(async () => ({}) as never),
     updateTransaction: vi.fn(async () => ({}) as never),
+    getGoldSources: vi.fn(async () => [{ market: "ANTAM", label: "Antam buyback" }]),
     ...over,
   };
 }
@@ -102,6 +103,103 @@ describe("AddTransactionForm", () => {
     );
   });
 
+  it("records a gold buy via the dedicated gold flow (source + label, no symbol)", async () => {
+    const gold: Instrument = {
+      ...INSTRUMENT,
+      id: "g1",
+      symbol: "ANTAM-5G-BAR",
+      market: "ANTAM",
+      assetClass: "gold",
+      unit: "grams",
+      name: "Antam 5g bar",
+    };
+    const client = makeClient({ createInstrument: vi.fn(async () => gold) });
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "gold" } });
+
+    // The symbol/search fields are replaced by the gold source + label.
+    expect(screen.queryByLabelText(m.symbol)).toBeNull();
+    expect(screen.queryByLabelText(m.search)).toBeNull();
+    await screen.findByRole("option", { name: "Antam buyback" });
+
+    fireEvent.change(screen.getByLabelText(m.goldLabel), {
+      target: { value: "Antam 5g bar" },
+    });
+    fireEvent.change(screen.getByLabelText(m.grams), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText(m.pricePerGram), {
+      target: { value: "1150000" },
+    });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-02-03" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
+    expect(client.createInstrument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "ANTAM-5G-BAR", // derived from the label
+        market: "ANTAM", // the chosen source's market
+        assetClass: "gold",
+        unit: "grams",
+        name: "Antam 5g bar",
+      }),
+    );
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        type: "buy",
+        instrumentId: "g1",
+        quantity: "5", // grams
+        price: "1150000",
+      }),
+    );
+  });
+
+  it("defaults the gold symbol to GOLD when no label is given", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "gold" } });
+    await screen.findByRole("option", { name: "Antam buyback" });
+    fireEvent.change(screen.getByLabelText(m.grams), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText(m.pricePerGram), {
+      target: { value: "1150000" },
+    });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-02-03" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
+    expect(client.createInstrument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbol: "GOLD",
+        market: "ANTAM",
+        assetClass: "gold",
+        unit: "grams",
+        name: "Antam buyback", // falls back to the source label
+      }),
+    );
+  });
+
+  it("blocks a non-gold instrument submitted without a symbol", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    // Equity is the default kind; leave the symbol empty.
+    fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText(m.price), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-02-03" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    expect(await screen.findByText(m.symbolRequired)).toBeInTheDocument();
+    expect(client.createInstrument).not.toHaveBeenCalled();
+    expect(client.createTransaction).not.toHaveBeenCalled();
+  });
+
   it("records a cash deposit without an instrument", async () => {
     const client = makeClient();
     renderForm(client);
@@ -141,9 +239,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.search), {
       target: { value: "bbca" },
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /BBCA/ })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /BBCA/ })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /BBCA/ }));
 
     fireEvent.change(screen.getByLabelText(m.quantity), {

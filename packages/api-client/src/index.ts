@@ -90,6 +90,12 @@ export interface InstrumentSearchResult {
   source: string;
 }
 
+/** A selectable gold buyback source (Antam, Galeri24, …) mapped to its routing market. */
+export interface GoldSource {
+  market: string;
+  label: string;
+}
+
 export interface CorporateAction {
   id: string;
   instrumentId: string;
@@ -425,11 +431,7 @@ export type ApiClient = ReturnType<typeof createApiClient>;
 export function createApiClient(config: ApiClientConfig) {
   const doFetch = config.fetch ?? globalThis.fetch;
 
-  async function request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = await config.getToken?.();
     // Only declare a JSON content-type when we actually send a body. A bodyless
     // request (e.g. DELETE) that still advertises application/json trips Fastify's
@@ -455,8 +457,7 @@ export function createApiClient(config: ApiClientConfig) {
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
     // Admin: market-data provider config (enable/disable + fallback priority).
-    getAdminProviders: () =>
-      request<AdminProvider[]>("GET", "/admin/providers"),
+    getAdminProviders: () => request<AdminProvider[]>("GET", "/admin/providers"),
     updateAdminProviders: (input: ProviderSettingUpdate[]) =>
       request<AdminProvider[]>("PATCH", "/admin/providers", input),
 
@@ -464,18 +465,11 @@ export function createApiClient(config: ApiClientConfig) {
     getIncome: () => request<IncomeStats>("GET", "/networth/income"),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
-    getContributions: () =>
-      request<ContributionStats>("GET", "/networth/contributions"),
+    getContributions: () => request<ContributionStats>("GET", "/networth/contributions"),
     getPortfolioContributions: (portfolioId: string) =>
-      request<ContributionStats>(
-        "GET",
-        `/portfolios/${portfolioId}/contributions`,
-      ),
+      request<ContributionStats>("GET", `/portfolios/${portfolioId}/contributions`),
     getNetWorthHistory: (range = "1y") =>
-      request<NetWorthPoint[]>(
-        "GET",
-        `/networth/history?range=${encodeURIComponent(range)}`,
-      ),
+      request<NetWorthPoint[]>("GET", `/networth/history?range=${encodeURIComponent(range)}`),
     getPortfolioHistory: (portfolioId: string, range = "1y") =>
       request<NetWorthPoint[]>(
         "GET",
@@ -483,45 +477,26 @@ export function createApiClient(config: ApiClientConfig) {
       ),
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
-    createPortfolio: (input: PortfolioInput) =>
-      request<Portfolio>("POST", "/portfolios", input),
+    createPortfolio: (input: PortfolioInput) => request<Portfolio>("POST", "/portfolios", input),
     updatePortfolio: (portfolioId: string, input: Partial<PortfolioInput>) =>
       request<Portfolio>("PATCH", `/portfolios/${portfolioId}`, input),
-    deletePortfolio: (portfolioId: string) =>
-      request<void>("DELETE", `/portfolios/${portfolioId}`),
+    deletePortfolio: (portfolioId: string) => request<void>("DELETE", `/portfolios/${portfolioId}`),
 
     listTransactions: (portfolioId: string) =>
       request<Transaction[]>("GET", `/portfolios/${portfolioId}/transactions`),
-    createTransaction: (
-      portfolioId: string,
-      input: Omit<TransactionInput, "portfolioId">,
-    ) =>
-      request<Transaction>(
-        "POST",
-        `/portfolios/${portfolioId}/transactions`,
-        input,
-      ),
+    createTransaction: (portfolioId: string, input: Omit<TransactionInput, "portfolioId">) =>
+      request<Transaction>("POST", `/portfolios/${portfolioId}/transactions`, input),
     updateTransaction: (
       portfolioId: string,
       txId: string,
       input: Omit<TransactionInput, "portfolioId">,
-    ) =>
-      request<Transaction>(
-        "PATCH",
-        `/portfolios/${portfolioId}/transactions/${txId}`,
-        input,
-      ),
+    ) => request<Transaction>("PATCH", `/portfolios/${portfolioId}/transactions/${txId}`, input),
     deleteTransaction: (portfolioId: string, txId: string) =>
-      request<void>(
-        "DELETE",
-        `/portfolios/${portfolioId}/transactions/${txId}`,
-      ),
+      request<void>("DELETE", `/portfolios/${portfolioId}/transactions/${txId}`),
     bulkDeleteTransactions: (portfolioId: string, ids: string[]) =>
-      request<{ deleted: number }>(
-        "POST",
-        `/portfolios/${portfolioId}/transactions/bulk-delete`,
-        { ids },
-      ),
+      request<{ deleted: number }>("POST", `/portfolios/${portfolioId}/transactions/bulk-delete`, {
+        ids,
+      }),
 
     getQuote: (ref: QuoteRef) =>
       request<Quote>(
@@ -535,68 +510,47 @@ export function createApiClient(config: ApiClientConfig) {
       ),
 
     searchInstruments: (q?: string) =>
-      request<Instrument[]>(
-        "GET",
-        `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`,
-      ),
+      request<Instrument[]>("GET", `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`),
     /** Discover instruments from market data (ticker/name search or ISIN). */
     lookupInstruments: (q: string) =>
-      request<InstrumentSearchResult[]>(
-        "GET",
-        `/instruments/lookup?q=${encodeURIComponent(q)}`,
-      ),
-    getInstrument: (id: string) =>
-      request<Instrument>("GET", `/instruments/${id}`),
+      request<InstrumentSearchResult[]>("GET", `/instruments/lookup?q=${encodeURIComponent(q)}`),
+    getInstrument: (id: string) => request<Instrument>("GET", `/instruments/${id}`),
     getInstrumentHistory: (id: string, range = "1y") =>
-      request<Candle[]>(
-        "GET",
-        `/instruments/${id}/history?range=${encodeURIComponent(range)}`,
-      ),
+      request<Candle[]>("GET", `/instruments/${id}/history?range=${encodeURIComponent(range)}`),
     createInstrument: (input: InstrumentInput) =>
       request<Instrument>("POST", "/instruments", input),
+    /** Configured gold buyback sources for the manual-entry gold flow. */
+    getGoldSources: () => request<GoldSource[]>("GET", "/instruments/gold-sources"),
 
     createCorporateAction: (input: CorporateActionInput) =>
       request<CorporateAction>("POST", "/corporate-actions", input),
     updateCorporateAction: (id: string, input: Partial<CorporateActionInput>) =>
       request<CorporateAction>("PATCH", `/corporate-actions/${id}`, input),
-    deleteCorporateAction: (id: string) =>
-      request<void>("DELETE", `/corporate-actions/${id}`),
+    deleteCorporateAction: (id: string) => request<void>("DELETE", `/corporate-actions/${id}`),
     listCorporateActions: (instrumentId: string) =>
-      request<CorporateAction[]>(
-        "GET",
-        `/instruments/${instrumentId}/corporate-actions`,
-      ),
+      request<CorporateAction[]>("GET", `/instruments/${instrumentId}/corporate-actions`),
 
     getHoldings: (portfolioId: string) =>
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
     getSummary: (portfolioId: string) =>
       request<PortfolioSummary>("GET", `/portfolios/${portfolioId}/summary`),
     getPerformance: (portfolioId: string) =>
-      request<PortfolioPerformance>(
-        "GET",
-        `/portfolios/${portfolioId}/performance`,
-      ),
+      request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
 
     importCsv: (
       portfolioId: string,
       content: string,
       format: "auto" | "generic" | "dkb" | "ibkr" | "coinbase" = "auto",
     ) =>
-      request<CsvImportResult>(
-        "POST",
-        `/portfolios/${portfolioId}/imports/csv`,
-        { content, format },
-      ),
-    importScreenshot: (
-      portfolioId: string,
-      image: string,
-      mimeType = "image/png",
-    ) =>
-      request<ScreenshotImportResult>(
-        "POST",
-        `/portfolios/${portfolioId}/imports/screenshot`,
-        { image, mimeType },
-      ),
+      request<CsvImportResult>("POST", `/portfolios/${portfolioId}/imports/csv`, {
+        content,
+        format,
+      }),
+    importScreenshot: (portfolioId: string, image: string, mimeType = "image/png") =>
+      request<ScreenshotImportResult>("POST", `/portfolios/${portfolioId}/imports/screenshot`, {
+        image,
+        mimeType,
+      }),
     confirmImport: (importId: string, transactions: ParsedTransaction[]) =>
       request<{ confirmed: number; transactions: Transaction[] }>(
         "POST",
@@ -605,11 +559,9 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */
-    getImport: (importId: string) =>
-      request<ImportDetail>("GET", `/imports/${importId}`),
+    getImport: (importId: string) => request<ImportDetail>("GET", `/imports/${importId}`),
     /** Discard a draft import (draft → discarded). */
-    discardImport: (importId: string) =>
-      request<void>("POST", `/imports/${importId}/discard`),
+    discardImport: (importId: string) => request<void>("POST", `/imports/${importId}/discard`),
     /** Undo an import: remove any transactions it wrote, then mark it discarded. */
     deleteImport: (importId: string) =>
       request<{ removed: number }>("DELETE", `/imports/${importId}`),

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { providerUsage } from "@portfolio/db";
 import {
   resolveProviderConfig,
+  goldSources,
   getMarketData,
   invalidateMarketData,
   flushUsage,
@@ -58,6 +59,52 @@ describe("resolveProviderConfig", () => {
     expect(resolveProviderConfig([], REGISTRY).find((r) => r.id === "beta")?.configured).toBe(
       false,
     );
+  });
+});
+
+describe("goldSources", () => {
+  // alpha & gamma are gold sources; gamma is unconfigured, delta has no goldMarket.
+  const GOLD_REGISTRY: ProviderDescriptor[] = [
+    {
+      id: "alpha",
+      label: "Alpha buyback",
+      defaultPriority: 1,
+      goldMarket: "ALPHA",
+      configured: () => true,
+      create: () => ({}) as never,
+    },
+    {
+      id: "gamma",
+      label: "Gamma buyback",
+      defaultPriority: 2,
+      goldMarket: "GAMMA",
+      configured: () => false, // env not set yet
+      create: () => ({}) as never,
+    },
+    {
+      id: "delta",
+      label: "Delta spot",
+      defaultPriority: 3,
+      configured: () => true,
+      create: () => ({}) as never,
+    },
+  ];
+
+  it("returns only configured, enabled providers that declare a goldMarket", () => {
+    expect(goldSources([], GOLD_REGISTRY)).toEqual([{ market: "ALPHA", label: "Alpha buyback" }]);
+  });
+
+  it("omits a gold source disabled via a DB row", () => {
+    const rows = [{ provider: "alpha", enabled: false, priority: 1 }];
+    expect(goldSources(rows, GOLD_REGISTRY)).toEqual([]);
+  });
+
+  it("orders sources by the effective priority", () => {
+    const configuredGamma: ProviderDescriptor[] = GOLD_REGISTRY.map((d) =>
+      d.id === "gamma" ? { ...d, configured: () => true } : d,
+    );
+    const rows = [{ provider: "gamma", enabled: true, priority: 0 }];
+    expect(goldSources(rows, configuredGamma).map((s) => s.market)).toEqual(["GAMMA", "ALPHA"]);
   });
 });
 

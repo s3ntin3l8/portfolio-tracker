@@ -54,7 +54,11 @@ describe("auth + portfolios + transactions", () => {
   });
 
   it("creates the user on first authenticated request", async () => {
-    const res = await app.inject({ method: "GET", url: "/me", headers: auth(await token("user-a")) });
+    const res = await app.inject({
+      method: "GET",
+      url: "/me",
+      headers: auth(await token("user-a")),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ authSub: "user-a", email: "user-a@example.com" });
   });
@@ -161,7 +165,9 @@ describe("auth + portfolios + transactions", () => {
 
   it("records a transaction and derives holdings", async () => {
     const t = await token("user-a");
-    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+    const portfolioId = (
+      await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })
+    ).json()[0].id;
 
     // Reference instrument (no instrument endpoint in this slice).
     const [bbca] = await app.db
@@ -191,7 +197,13 @@ describe("auth + portfolios + transactions", () => {
     });
     expect(holdings.statusCode).toBe(200);
     expect(holdings.json()).toEqual([
-      { instrumentId: bbca.id, quantity: "100", avgCost: "9500", costBasis: "950000", realizedPnL: "0" },
+      {
+        instrumentId: bbca.id,
+        quantity: "100",
+        avgCost: "9500",
+        costBasis: "950000",
+        realizedPnL: "0",
+      },
     ]);
 
     // The transaction list carries instrument metadata for rendering.
@@ -210,7 +222,9 @@ describe("auth + portfolios + transactions", () => {
 
   it("values the portfolio via /summary (priced by market data)", async () => {
     const t = await token("user-a");
-    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+    const portfolioId = (
+      await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })
+    ).json()[0].id;
 
     const res = await app.inject({
       method: "GET",
@@ -283,6 +297,18 @@ describe("auth + portfolios + transactions", () => {
     expect(search.json().some((i: { id: string }) => i.id === tlkm.id)).toBe(true);
   });
 
+  it("lists the configured gold buyback sources", async () => {
+    const t = await token("user-a");
+    const res = await app.inject({
+      method: "GET",
+      url: "/instruments/gold-sources",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    // Antam is always configured; with no DB override it appears as a gold source.
+    expect(res.json()).toContainEqual({ market: "ANTAM", label: "Antam buyback" });
+  });
+
   it("looks up instrument metadata from market data (auto-discovery)", async () => {
     const t = await token("user-a");
 
@@ -331,7 +357,9 @@ describe("auth + portfolios + transactions", () => {
 
   it("deletes a transaction (owner only)", async () => {
     const t = await token("user-a");
-    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+    const portfolioId = (
+      await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })
+    ).json()[0].id;
 
     const [oas] = await app.db
       .insert(instruments)
@@ -382,11 +410,20 @@ describe("auth + portfolios + transactions", () => {
 
   it("updates a transaction (owner only)", async () => {
     const t = await token("user-a");
-    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })).json()[0].id;
+    const portfolioId = (
+      await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })
+    ).json()[0].id;
 
     const [gld] = await app.db
       .insert(instruments)
-      .values({ symbol: "GLD", market: "XAU", assetClass: "gold", unit: "grams", currency: "IDR", name: "Antam Gold" })
+      .values({
+        symbol: "GLD",
+        market: "XAU",
+        assetClass: "gold",
+        unit: "grams",
+        currency: "IDR",
+        name: "Antam Gold",
+      })
       .returning();
     const txId = (
       await app.inject({
@@ -409,7 +446,13 @@ describe("auth + portfolios + transactions", () => {
       method: "PATCH",
       url: `/portfolios/${portfolioId}/transactions/${txId}`,
       headers: auth(await token("user-b")),
-      payload: { type: "buy", quantity: "9", price: "1140000", currency: "IDR", executedAt: "2026-02-08T00:00:00.000Z" },
+      payload: {
+        type: "buy",
+        quantity: "9",
+        price: "1140000",
+        currency: "IDR",
+        executedAt: "2026-02-08T00:00:00.000Z",
+      },
     });
     expect(cross.statusCode).toBe(404);
 
@@ -435,7 +478,13 @@ describe("auth + portfolios + transactions", () => {
       method: "PATCH",
       url: `/portfolios/${portfolioId}/transactions/${gld.id}`,
       headers: auth(t),
-      payload: { type: "buy", quantity: "1", price: "1", currency: "IDR", executedAt: "2026-02-08T00:00:00.000Z" },
+      payload: {
+        type: "buy",
+        quantity: "1",
+        price: "1",
+        currency: "IDR",
+        executedAt: "2026-02-08T00:00:00.000Z",
+      },
     });
     expect(missing.statusCode).toBe(404);
   });
@@ -454,7 +503,13 @@ describe("auth + portfolios + transactions", () => {
 
     const [ins] = await app.db
       .insert(instruments)
-      .values({ symbol: "ANTM", market: "IDX", assetClass: "equity", currency: "IDR", name: "Aneka Tambang" })
+      .values({
+        symbol: "ANTM",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Aneka Tambang",
+      })
       .returning();
     async function makeTx() {
       return (
@@ -499,7 +554,11 @@ describe("auth + portfolios + transactions", () => {
 
     // Only id3 remains.
     const remaining = (
-      await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) })
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+      })
     ).json();
     expect(remaining.map((x: { id: string }) => x.id)).toEqual([id3]);
 
@@ -555,7 +614,13 @@ describe("auth + portfolios + transactions", () => {
     // Give it a transaction, then delete the portfolio — the transaction cascades.
     const [ins] = await app.db
       .insert(instruments)
-      .values({ symbol: "UNVR", market: "IDX", assetClass: "equity", currency: "IDR", name: "Unilever" })
+      .values({
+        symbol: "UNVR",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Unilever",
+      })
       .returning();
     await app.inject({
       method: "POST",
@@ -697,9 +762,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     const summary = res.json();
-    const bond = summary.holdings.find(
-      (h: { instrumentId: string }) => h.instrumentId === sr.id,
-    );
+    const bond = summary.holdings.find((h: { instrumentId: string }) => h.instrumentId === sr.id);
     expect(bond.price).toBe("1000000"); // valued at par
     expect(bond.marketValue).toBe("5000000"); // 5 units × 1,000,000
   });
@@ -721,11 +784,22 @@ describe("auth + portfolios + transactions", () => {
     // (market, symbol) uniqueness clash with the IDX instrument above.
     const [us] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBCA", market: "NYSE", assetClass: "equity", currency: "USD", name: "BCA (USD)" })
+      .values({
+        symbol: "BBCA",
+        market: "NYSE",
+        assetClass: "equity",
+        currency: "USD",
+        name: "BCA (USD)",
+      })
       .returning();
     await app.db
       .insert(fxRates)
-      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) });
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      });
 
     await app.inject({
       method: "POST",
@@ -765,7 +839,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "SPLT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Splitco" })
+      .values({
+        symbol: "SPLT",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Splitco",
+      })
       .returning();
     await app.inject({
       method: "POST",
@@ -821,7 +901,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "EDIT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Editco" })
+      .values({
+        symbol: "EDIT",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Editco",
+      })
       .returning();
     await app.inject({
       method: "POST",
@@ -913,7 +999,13 @@ describe("auth + portfolios + transactions", () => {
     // BBCA priced 9500 by the fixture; distinct market avoids the IDX clash.
     const [bbca] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBCA", market: "JKSE", assetClass: "equity", currency: "IDR", name: "BCA" })
+      .values({
+        symbol: "BBCA",
+        market: "JKSE",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "BCA",
+      })
       .returning();
 
     const post = (portfolioId: string, payload: object) =>
@@ -923,10 +1015,34 @@ describe("auth + portfolios + transactions", () => {
         headers: auth(t),
         payload,
       });
-    await post(p1, { type: "deposit", price: "2000000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
-    await post(p1, { type: "buy", instrumentId: bbca.id, quantity: "100", price: "9000", currency: "IDR", executedAt: "2026-01-02T00:00:00.000Z" });
-    await post(p2, { type: "deposit", price: "1000000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
-    await post(p2, { type: "buy", instrumentId: bbca.id, quantity: "50", price: "9000", currency: "IDR", executedAt: "2026-01-02T00:00:00.000Z" });
+    await post(p1, {
+      type: "deposit",
+      price: "2000000",
+      currency: "IDR",
+      executedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await post(p1, {
+      type: "buy",
+      instrumentId: bbca.id,
+      quantity: "100",
+      price: "9000",
+      currency: "IDR",
+      executedAt: "2026-01-02T00:00:00.000Z",
+    });
+    await post(p2, {
+      type: "deposit",
+      price: "1000000",
+      currency: "IDR",
+      executedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await post(p2, {
+      type: "buy",
+      instrumentId: bbca.id,
+      quantity: "50",
+      price: "9000",
+      currency: "IDR",
+      executedAt: "2026-01-02T00:00:00.000Z",
+    });
 
     const res = await app.inject({ method: "GET", url: "/networth", headers: auth(t) });
     expect(res.statusCode).toBe(200);
@@ -1025,9 +1141,7 @@ describe("auth + portfolios + transactions", () => {
     expect(body.events[0]).toMatchObject({ type: "coupon", amount: "300000", symbol: "ORI-T" });
     expect(body.lifetimeTotal).toBe("300000");
     expect(body.ttm).toBe("300000");
-    expect(body.byYear).toEqual([
-      { year: "2026", total: "300000", paymentCount: 1 },
-    ]);
+    expect(body.byYear).toEqual([{ year: "2026", total: "300000", paymentCount: 1 }]);
     // Forecast = TTM dividends (none) + the upcoming coupon (300,000).
     expect(body.forecastNextYear).toBe("300000");
     expect(body.byCurrency).toContainEqual({
@@ -1070,11 +1184,22 @@ describe("auth + portfolios + transactions", () => {
     // USD instrument priced 9500 by the fixture (by symbol), USD→IDR at 16000.
     const [us] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBCA", market: "NASDAQ", assetClass: "equity", currency: "USD", name: "BCA (USD)" })
+      .values({
+        symbol: "BBCA",
+        market: "NASDAQ",
+        assetClass: "equity",
+        currency: "USD",
+        name: "BCA (USD)",
+      })
       .returning();
     await app.db
       .insert(fxRates)
-      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) })
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      })
       .onConflictDoNothing();
 
     await app.inject({
@@ -1137,7 +1262,12 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     await app.db
       .insert(fxRates)
-      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) })
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      })
       .onConflictDoNothing();
 
     // A single foreign-currency deposit, no holdings → net worth is just the cash.
@@ -1153,9 +1283,7 @@ describe("auth + portfolios + transactions", () => {
       },
     });
 
-    const nw = (
-      await app.inject({ method: "GET", url: "/networth", headers: auth(t) })
-    ).json();
+    const nw = (await app.inject({ method: "GET", url: "/networth", headers: auth(t) })).json();
 
     // Cash 1000 USD → 16,000,000 IDR.
     expect(nw.netWorth).toBe("16000000");
@@ -1169,7 +1297,13 @@ describe("auth + portfolios + transactions", () => {
     const t = await token("user-a");
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "HIST", market: "IDX", assetClass: "equity", currency: "IDR", name: "Histco" })
+      .values({
+        symbol: "HIST",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Histco",
+      })
       .returning();
 
     const one = await app.inject({
@@ -1201,7 +1335,9 @@ describe("auth + portfolios + transactions", () => {
   it("isolates portfolios between users", async () => {
     const tA = await token("user-a");
     const tB = await token("user-b");
-    const portfolioId = (await app.inject({ method: "GET", url: "/portfolios", headers: auth(tA) })).json()[0].id;
+    const portfolioId = (
+      await app.inject({ method: "GET", url: "/portfolios", headers: auth(tA) })
+    ).json()[0].id;
 
     // user-b sees none of user-a's portfolios...
     const listB = await app.inject({ method: "GET", url: "/portfolios", headers: auth(tB) });
@@ -1288,8 +1424,18 @@ describe("auth + portfolios + transactions", () => {
         headers: auth(t),
         payload,
       });
-    await post({ type: "deposit", price: "1000000", currency: "IDR", executedAt: "2025-01-01T00:00:00.000Z" });
-    await post({ type: "withdrawal", price: "100000", currency: "IDR", executedAt: "2025-07-01T00:00:00.000Z" });
+    await post({
+      type: "deposit",
+      price: "1000000",
+      currency: "IDR",
+      executedAt: "2025-01-01T00:00:00.000Z",
+    });
+    await post({
+      type: "withdrawal",
+      price: "100000",
+      currency: "IDR",
+      executedAt: "2025-07-01T00:00:00.000Z",
+    });
 
     const res = await app.inject({
       method: "GET",
