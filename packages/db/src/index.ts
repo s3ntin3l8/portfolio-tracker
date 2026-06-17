@@ -33,3 +33,5 @@ export type ProviderUsageRow = typeof schema.providerUsage.$inferSelect;
 export type NewProviderUsageRow = typeof schema.providerUsage.$inferInsert;
 export type ScrapedQuote = typeof schema.scrapedQuotes.$inferSelect;
 export type NewScrapedQuote = typeof schema.scrapedQuotes.$inferInsert;
+export type DividendEvent = typeof schema.dividendEvents.$inferSelect;
+export type NewDividendEvent = typeof schema.dividendEvents.$inferInsert;

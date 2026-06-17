@@ -320,7 +320,15 @@ export default async function IncomePage({
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={c.status === "scheduled" ? "default" : "outline"}
+                        variant={
+                          c.status === "scheduled"
+                            ? "default"
+                            : c.status === "announced"
+                              ? "warning"
+                              : c.status === "paid"
+                                ? "success"
+                                : "outline"
+                        }
                       >
                         {t(c.status)}
                       </Badge>

@@ -59,6 +59,17 @@ export interface ProviderUsage {
   resetAt?: string;
 }
 
+/** A dividend event for an instrument, as returned by a market-data provider. */
+export interface DividendEvent {
+  /** Ex-dividend date: YYYY-MM-DD. */
+  exDate: string;
+  /** Cash payment date: YYYY-MM-DD, or null/undefined when not yet known. */
+  payDate?: string | null;
+  /** Per-share cash amount in the instrument's native currency (unadjusted). */
+  amountPerShare: string;
+  currency: string;
+}
+
 export interface MarketDataProvider {
   readonly name: string;
   supports(assetClass: AssetClass, market: string): boolean;
@@ -72,6 +83,11 @@ export interface MarketDataProvider {
   ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
   /** Live API quota/usage from the provider, when it exposes a usage endpoint. */
   getUsage?(): Promise<ProviderUsage | null>;
+  /**
+   * Fetch historical + upcoming dividend events for an instrument.
+   * `fromDate` (YYYY-MM-DD) limits the window; defaults to 2 years back.
+   */
+  getDividends?(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]>;
 }
 
 /** A 12-char ISIN: 2-letter country, 9 alphanumerics, 1 check digit. */

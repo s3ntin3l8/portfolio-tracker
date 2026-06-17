@@ -72,6 +72,11 @@ export const trConnectionStatusEnum = pgEnum("tr_connection_status", [
   "error",
 ]);
 
+export const dividendStatusEnum = pgEnum("dividend_status", [
+  "announced", // ex-date known, amount may still change
+  "paid",      // cash has settled; amount is final
+]);
+
 // --- Tables --------------------------------------------------------------
 
 // Users are keyed to the Authentik OIDC subject; the API never stores passwords.
@@ -305,6 +310,34 @@ export const corporateActions = pgTable("corporate_actions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Provider-sourced dividend events: announced ex-dates and settled payments. Deduped
+// by (instrumentId, exDate) — an upsert from the scheduler updates the amount and
+// status as more information becomes available (announced → paid).
+export const dividendEvents = pgTable(
+  "dividend_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    instrumentId: uuid("instrument_id")
+      .notNull()
+      .references(() => instruments.id, { onDelete: "cascade" }),
+    // The date the stock goes ex-dividend — the deduplication anchor.
+    exDate: date("ex_date").notNull(),
+    // Cash settlement date; may arrive days after ex-date, or be null when not yet announced.
+    payDate: date("pay_date"),
+    // Per-share cash amount in the instrument's native currency (unadjusted).
+    amountPerShare: numeric("amount_per_share").notNull(),
+    currency: text("currency").notNull(),
+    status: dividendStatusEnum("status").notNull().default("announced"),
+    // Provider that last wrote this row (debug/audit only; not a dedup key).
+    source: text("source"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dividend_events_instrument_exdate_idx").on(t.instrumentId, t.exDate),
+  ],
+);
+
 // Historical daily closes.
 export const prices = pgTable(
   "prices",
@@ -390,6 +423,7 @@ export const instrumentsRelations = relations(instruments, ({ many }) => ({
   transactions: many(transactions),
   prices: many(prices),
   corporateActions: many(corporateActions),
+  dividendEvents: many(dividendEvents),
 }));
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({

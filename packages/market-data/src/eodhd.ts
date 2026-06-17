@@ -1,5 +1,6 @@
 import type {
   AssetClass,
+  DividendEvent,
   InstrumentRef,
   MarketDataProvider,
   ProviderUsage,
@@ -108,6 +109,31 @@ export class EodhdProvider implements MarketDataProvider {
     } catch {
       return null;
     }
+  }
+
+  async getDividends(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]> {
+    const ticker = this.directTicker(ref) ?? (await this.resolveIsinTicker(ref));
+    if (!ticker) return [];
+    const from =
+      fromDate ??
+      new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const res = await this.doFetch(
+      `${this.baseUrl}/div/${encodeURIComponent(ticker)}?api_token=${this.apiKey}&fmt=json&from=${from}`,
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as
+      | { date?: string; paymentDate?: string; unadjustedValue?: number | string; value?: number | string; currency?: string }[]
+      | null;
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((d) => d.date && (d.unadjustedValue ?? d.value) != null)
+      .map((d) => ({
+        exDate: d.date as string,
+        payDate: d.paymentDate ?? null,
+        // Prefer unadjustedValue (pre-split) so stored amounts stay stable.
+        amountPerShare: String(d.unadjustedValue ?? d.value),
+        currency: d.currency ?? ref.currency,
+      }));
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {

@@ -1,6 +1,7 @@
 import type {
   AssetClass,
   Candle,
+  DividendEvent,
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
@@ -198,6 +199,42 @@ export class YahooFinanceProvider implements MarketDataProvider {
       });
     }
     return out;
+  }
+
+  async getDividends(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]> {
+    // Yahoo chart events=dividends is keyless and works for most equities/ETFs.
+    if (ref.assetClass === "gold" || ref.assetClass === "crypto") return [];
+    const symbol = this.yahooSymbol(ref);
+    const res = await this.doFetch(
+      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1mo&events=dividends`,
+      { headers: this.defaultHeaders },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      chart?: {
+        result?: [
+          {
+            events?: {
+              dividends?: Record<string, { amount: number; date: number }>;
+            };
+          },
+        ];
+      };
+    };
+    const divs = data.chart?.result?.[0]?.events?.dividends ?? {};
+    const fromMs = fromDate ? new Date(fromDate).getTime() : 0;
+    const out: DividendEvent[] = [];
+    for (const d of Object.values(divs)) {
+      if (!d.amount || !d.date) continue;
+      const ts = d.date * 1000;
+      if (ts < fromMs) continue;
+      out.push({
+        exDate: new Date(ts).toISOString().slice(0, 10),
+        amountPerShare: String(d.amount),
+        currency: ref.currency,
+      });
+    }
+    return out.sort((a, b) => a.exDate.localeCompare(b.exDate));
   }
 
   async getHistory(ref: InstrumentRef, range = "1mo"): Promise<Candle[]> {

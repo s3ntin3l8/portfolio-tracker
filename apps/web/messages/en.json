@@ -71,6 +71,8 @@
     "status": "Status",
     "scheduled": "Scheduled",
     "projected": "Projected",
+    "announced": "Announced",
+    "paid": "Paid",
     "emptyTitle": "No income yet",
     "emptyBody": "Dividends and coupons appear here once you record them as transactions.",
     "thisYear": "This year",

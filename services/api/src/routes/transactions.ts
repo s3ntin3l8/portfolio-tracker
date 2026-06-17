@@ -3,6 +3,7 @@ import { z } from "zod";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import {
   corporateActions,
+  dividendEvents,
   instruments,
   portfolios,
   portfolioSnapshots,
@@ -304,6 +305,52 @@ export async function transactionsRoute(app: FastifyInstance) {
     const pastDivs = enriched.filter((e) => e.type === "dividend");
     const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now);
 
+    // Load announced/paid dividend events from the DB for held instruments.
+    // Scale amountPerShare by current holdings quantity to get the total payout.
+    const todayStr = now.toISOString().slice(0, 10);
+    const announcedRows =
+      heldIds.length > 0
+        ? await app.db
+            .select()
+            .from(dividendEvents)
+            .where(inArray(dividendEvents.instrumentId, heldIds))
+        : [];
+
+    // Build a set of instrument IDs that have any announced future dividends.
+    // For those instruments, announced data replaces projected estimates.
+    const futureAnnouncedByInstrument = new Map<
+      string,
+      { exDate: string; amount: string; currency: string; status: "announced" | "paid" }[]
+    >();
+    for (const row of announcedRows) {
+      const qty = heldQtyMap.get(row.instrumentId);
+      if (!qty) continue;
+      const totalAmount =
+        String(Number(row.amountPerShare) * Number(qty));
+      const list = futureAnnouncedByInstrument.get(row.instrumentId) ?? [];
+      list.push({
+        exDate: row.exDate,
+        amount: totalAmount,
+        currency: row.currency,
+        status: row.status,
+      });
+      futureAnnouncedByInstrument.set(row.instrumentId, list);
+    }
+
+    // Blend: for instruments with announced future dividends, drop projected entries.
+    const instrumentsWithAnnounced = new Set(futureAnnouncedByInstrument.keys());
+    const blendedProjected = projectedDividends.filter(
+      (d) => d.instrumentId && !instrumentsWithAnnounced.has(d.instrumentId),
+    );
+    // Combine for the forecastRestOfYear sum: both projected + future announced amounts.
+    const futureAnnounced = [...futureAnnouncedByInstrument.values()]
+      .flat()
+      .filter((d) => d.exDate > todayStr);
+    const allRestOfYearDividends = [
+      ...blendedProjected.map((d) => ({ amount: d.amount, currency: d.currency })),
+      ...futureAnnounced.map((d) => ({ amount: d.amount, currency: d.currency })),
+    ];
+
     const stats = aggregateIncome({
       events: enriched,
       displayCurrency: display,
@@ -311,7 +358,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       now,
       forecastCoupons: upcomingCoupons12mo,
       restOfYearCoupons,
-      projectedDividends,
+      projectedDividends: allRestOfYearDividends,
     });
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
@@ -325,7 +372,36 @@ export async function transactionsRoute(app: FastifyInstance) {
       currency: e.currency,
     }));
 
-    // Merge 12-month coupons and projected dividends into one date-sorted upcoming stream.
+    // Build announced entries for the upcoming stream (future ex-dates only).
+    const upcomingAnnounced: {
+      instrumentId: string;
+      symbol: string;
+      name: string | null;
+      date: string;
+      amount: string;
+      currency: string;
+      kind: "dividend";
+      status: "announced" | "paid";
+    }[] = [];
+    for (const [instrumentId, entries] of futureAnnouncedByInstrument) {
+      const im = meta.get(instrumentId);
+      for (const entry of entries) {
+        if (entry.exDate <= todayStr) continue;
+        upcomingAnnounced.push({
+          instrumentId,
+          symbol: im?.symbol ?? "",
+          name: im?.name ?? null,
+          date: entry.exDate,
+          amount: entry.amount,
+          currency: entry.currency,
+          kind: "dividend",
+          status: entry.status,
+        });
+      }
+    }
+
+    // Merge 12-month coupons, blended projected, and announced dividends into one
+    // date-sorted upcoming stream.
     const upcoming = [
       ...upcomingCoupons12mo.map((c) => ({
         instrumentId: c.instrumentId,
@@ -337,7 +413,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         kind: "coupon" as const,
         status: "scheduled" as const,
       })),
-      ...projectedDividends.map((d) => ({
+      ...blendedProjected.map((d) => ({
         instrumentId: d.instrumentId,
         symbol: d.symbol ?? "",
         name: d.name,
@@ -347,6 +423,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         kind: "dividend" as const,
         status: "projected" as const,
       })),
+      ...upcomingAnnounced,
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     return { displayCurrency: display, ...stats, yields, upcoming, events };

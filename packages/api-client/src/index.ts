@@ -222,19 +222,22 @@ export interface ProjectedCoupon {
 }
 
 /**
- * A single entry in the upcoming-payments table, covering both bond coupons
- * ("scheduled") and equity dividends projected from last year ("projected").
- * Further statuses ("announced", "paid") will be added in #138.
+ * A single entry in the upcoming-payments table, covering bond coupons and equity
+ * dividends at every stage of the lifecycle:
+ * - "scheduled"  — coupon from a bond's fixed schedule
+ * - "projected"  — dividend projected from last year's actual (seasonal heuristic)
+ * - "announced"  — ex-date announced by the issuer; amount may still change
+ * - "paid"       — cash has settled; amount is final
  */
 export interface UpcomingPayment {
   instrumentId: string;
   symbol: string;
   name: string | null;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD — ex-date for dividends, coupon date for bonds
   amount: string;
   currency: string;
   kind: "coupon" | "dividend";
-  status: "scheduled" | "projected";
+  status: "scheduled" | "projected" | "announced" | "paid";
 }
 
 /** Trailing-12-month income + yield for an income-paying holding (display currency). */
