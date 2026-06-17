@@ -88,13 +88,16 @@ export function PortfolioFormDialog({
   // Show the TR section only once we have a real portfolio id to bind against.
   const showTrSection = effectivePortfolio != null && isTr;
 
-  // Fetch (or re-fetch) the TR connection whenever the section becomes visible or
-  // onChanged fires (trFetchSeq bump). All setState calls are inside async callbacks
-  // so the React Compiler rule against synchronous setState in effects is satisfied.
-  // getTrConnection always resolves to a TrConnection (with status "disconnected" when
-  // no row exists) or rejects; null reliably means "loading/not yet fetched".
+  // Fetch (or re-fetch) the TR connection when the dialog is open and the section is
+  // visible, or when onChanged fires (trFetchSeq bump). Gating on `open` matters: it
+  // re-runs the fetch each time the dialog opens (onOpenChange resets trConnection to
+  // null), and avoids firing getTrConnection() for every closed TR card on the page.
+  // All setState calls are inside async callbacks so the React Compiler rule against
+  // synchronous setState in effects is satisfied. getTrConnection always resolves to a
+  // TrConnection (status "disconnected" when no row exists) or rejects; null reliably
+  // means "loading/not yet fetched".
   useEffect(() => {
-    if (!showTrSection) return;
+    if (!open || !showTrSection) return;
     let active = true;
     api
       .getTrConnection()
@@ -107,9 +110,9 @@ export function PortfolioFormDialog({
     return () => {
       active = false;
     };
-    // api is stable (context); showTrSection and trFetchSeq are the real triggers.
+    // api is stable (context); open, showTrSection and trFetchSeq are the real triggers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showTrSection, trFetchSeq]);
+  }, [open, showTrSection, trFetchSeq]);
 
   // Reset the form to the portfolio's current values whenever the dialog opens, so a
   // cancelled edit never leaks stale drafts into the next open.
@@ -357,7 +360,7 @@ export function PortfolioFormDialog({
             {trConnection === null ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                <span>{ttr("approveWaiting")}</span>
+                <span>{t("trLoading")}</span>
               </div>
             ) : trConnection === false ? (
               <p className="text-sm text-muted-foreground">{te("unavailableBody")}</p>

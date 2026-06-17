@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { Portfolio } from "@portfolio/api-client";
+import type { Portfolio, TrConnection } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
@@ -16,14 +16,16 @@ const createPortfolio = vi.fn(async () => ({
 }) as unknown as Portfolio);
 const updatePortfolio = vi.fn(async () => ({}) as never);
 const deletePortfolio = vi.fn(async () => undefined);
-const getTrConnection = vi.fn(async () => ({
-  status: "disconnected" as const,
-  portfolioId: null,
-  lastSyncAt: null,
-  lastError: null,
-  importCategories: null,
-  lastReconciliation: null,
-}));
+const getTrConnection = vi.fn(
+  async (): Promise<TrConnection> => ({
+    status: "disconnected",
+    portfolioId: null,
+    lastSyncAt: null,
+    lastError: null,
+    importCategories: null,
+    lastReconciliation: null,
+  }),
+);
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/api", () => ({
@@ -243,5 +245,49 @@ describe("PortfolioFormDialog", () => {
 
     expect(screen.queryByText(m.trSectionTitle)).not.toBeInTheDocument();
     expect(getTrConnection).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch the TR connection until the dialog is opened", async () => {
+    renderEdit({
+      id: "p-tr",
+      name: "TR Portfolio",
+      baseCurrency: "EUR",
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: "Trade Republic",
+    });
+    // Dialog is closed on mount — the fetch must be gated on `open`.
+    expect(getTrConnection).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+    await waitFor(() => expect(getTrConnection).toHaveBeenCalled());
+  });
+
+  it("shows the reconnect form for an expired connection (not a stuck loading spinner)", async () => {
+    getTrConnection.mockResolvedValueOnce({
+      status: "expired" as const,
+      portfolioId: "p-tr",
+      lastSyncAt: null,
+      lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
+    });
+    renderEdit({
+      id: "p-tr",
+      name: "TR Portfolio",
+      baseCurrency: "EUR",
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: "Trade Republic",
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    // The expired status resolves into the reconnect form with the expired hint…
+    await waitFor(() =>
+      expect(screen.getByLabelText(messages.TradeRepublic.phone)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(messages.TradeRepublic.expiredHint)).toBeInTheDocument();
+    // …and the loading placeholder is gone (not stuck).
+    expect(screen.queryByText(m.trLoading)).not.toBeInTheDocument();
   });
 });

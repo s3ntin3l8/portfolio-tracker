@@ -152,6 +152,7 @@
     "confirmDelete": "Delete",
     "trSectionTitle": "Trade Republic connection",
     "trConnectAfterSave": "Save the portfolio first to set up the Trade Republic connection.",
+    "trLoading": "Loading connection…",
     "done": "Done"
   },
   "Import": {

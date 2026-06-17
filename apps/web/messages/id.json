@@ -152,6 +152,7 @@
     "confirmDelete": "Hapus",
     "trSectionTitle": "Koneksi Trade Republic",
     "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
+    "trLoading": "Memuat koneksi…",
     "done": "Selesai"
   },
   "Import": {
