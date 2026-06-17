@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/empty-state";
 import { GoldTicker } from "@/components/gold-ticker";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadNetWorth, loadNetWorthHistory } from "@/lib/server-api";
+import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId } from "@/lib/server-api";
 import { cn, formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function DashboardPage({
@@ -29,9 +29,10 @@ export default async function DashboardPage({
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
 
-  const [result, history] = await Promise.all([
+  const [result, history, selectedId] = await Promise.all([
     loadNetWorth(),
     loadNetWorthHistory(),
+    getSelectedPortfolioId(),
   ]);
 
   const Heading = (
@@ -192,7 +193,7 @@ export default async function DashboardPage({
             <CardTitle>{t("valueOverTime")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <NetWorthHistoryChart initial={history} currency={currency} />
+            <NetWorthHistoryChart initial={history} currency={currency} selectedId={selectedId} />
           </CardContent>
         </Card>
         <Card>

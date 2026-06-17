@@ -178,24 +178,91 @@ describe("loadPortfolio", () => {
 
 describe("aggregate + misc loaders", () => {
   it("loadNetWorth folds ok / empty / unavailable", async () => {
+    h.client.listPortfolios = async () => PF;
     h.client.getNetWorth = async () => ({ portfolioCount: 2, netWorth: "100" });
     expect(await api.loadNetWorth()).toMatchObject({ status: "ok" });
 
-    h.client.getNetWorth = async () => ({ portfolioCount: 0 });
+    h.client.listPortfolios = async () => [];
     expect(await api.loadNetWorth()).toMatchObject({ status: "empty" });
 
-    h.client.getNetWorth = async () => {
+    h.client.listPortfolios = async () => {
       throw new Error("x");
     };
     expect(await api.loadNetWorth()).toMatchObject({ status: "unavailable" });
   });
 
-  it("loadNetWorthHistory returns data and [] on failure", async () => {
-    h.client.getNetWorthHistory = async (range: string) => [{ date: "2026-01-01", range }];
-    expect(await api.loadNetWorthHistory("3m")).toEqual([
-      { date: "2026-01-01", range: "3m" },
-    ]);
-    h.client.getNetWorthHistory = async () => {
+  it("loadNetWorth uses the aggregate when no portfolio is selected", async () => {
+    h.client.listPortfolios = async () => PF;
+    const getNetWorth = vi.fn(async () => ({ portfolioCount: 2, netWorth: "200", xirr: 0.05 }));
+    h.client.getNetWorth = getNetWorth;
+    h.client.getSummary = vi.fn();
+    h.client.getPerformance = vi.fn();
+
+    const res = await api.loadNetWorth();
+    expect(res.status).toBe("ok");
+    expect(getNetWorth).toHaveBeenCalled();
+    expect(h.client.getSummary).not.toHaveBeenCalled();
+    expect(h.client.getPerformance).not.toHaveBeenCalled();
+  });
+
+  it("loadNetWorth uses getSummary+getPerformance when a portfolio is selected", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p2" };
+    const getSummary = vi.fn(async () => ({
+      holdings: [],
+      displayCurrency: "EUR",
+      netWorth: "500",
+      totalCost: "400",
+      totalMarketValue: "500",
+      totalUnrealizedPnL: "100",
+      totalRealizedPnL: "0",
+      totalIncome: "10",
+      totalDayChange: "5",
+      cash: {},
+      exposureByCurrency: {},
+    }));
+    const getPerformance = vi.fn(async () => ({ xirr: 0.12, netWorth: "500", asOf: "2026-01-01" }));
+    h.client.getSummary = getSummary;
+    h.client.getPerformance = getPerformance;
+    h.client.getNetWorth = vi.fn();
+
+    const res = await api.loadNetWorth();
+    expect(res.status).toBe("ok");
+    if (res.status === "ok") {
+      expect(res.data.xirr).toBe(0.12);
+      expect(res.data.portfolioCount).toBe(1);
+      expect(res.data.asOf).toBe("2026-01-01");
+    }
+    expect(getSummary).toHaveBeenCalledWith("p2");
+    expect(getPerformance).toHaveBeenCalledWith("p2");
+    expect(h.client.getNetWorth).not.toHaveBeenCalled();
+  });
+
+  it("loadNetWorthHistory uses the aggregate when no portfolio is selected", async () => {
+    h.client.listPortfolios = async () => PF;
+    const getNetWorthHistory = vi.fn(async (range: string) => [{ date: "2026-01-01", netWorth: range }]);
+    h.client.getNetWorthHistory = getNetWorthHistory;
+    h.client.getPortfolioHistory = vi.fn();
+
+    expect(await api.loadNetWorthHistory("3m")).toEqual([{ date: "2026-01-01", netWorth: "3m" }]);
+    expect(getNetWorthHistory).toHaveBeenCalledWith("3m");
+    expect(h.client.getPortfolioHistory).not.toHaveBeenCalled();
+  });
+
+  it("loadNetWorthHistory uses getPortfolioHistory when a portfolio is selected", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p2" };
+    const getPortfolioHistory = vi.fn(async (id: string, range: string) => [{ date: "2026-01-01", netWorth: `${id}/${range}` }]);
+    h.client.getPortfolioHistory = getPortfolioHistory;
+    h.client.getNetWorthHistory = vi.fn();
+
+    expect(await api.loadNetWorthHistory("1m")).toEqual([{ date: "2026-01-01", netWorth: "p2/1m" }]);
+    expect(getPortfolioHistory).toHaveBeenCalledWith("p2", "1m");
+    expect(h.client.getNetWorthHistory).not.toHaveBeenCalled();
+  });
+
+  it("loadNetWorthHistory returns [] on failure", async () => {
+    h.client.listPortfolios = async () => {
       throw new Error("x");
     };
     expect(await api.loadNetWorthHistory()).toEqual([]);

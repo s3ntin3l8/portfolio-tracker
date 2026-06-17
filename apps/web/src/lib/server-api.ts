@@ -52,11 +52,30 @@ export type NetWorthResult =
   | { status: "empty" }
   | { status: "unavailable" };
 
-/** Aggregate net worth across every portfolio, folding empty/unavailable states. */
+/**
+ * Net worth for the active scope: a single portfolio when one is selected, else the
+ * cross-portfolio aggregate ("All portfolios"). Merges `getPerformance` into the
+ * per-portfolio result so the returned shape always matches {@link NetWorth} (which
+ * adds `xirr`, `portfolioCount`, and `asOf` to `PortfolioSummary`).
+ */
 export async function loadNetWorth(): Promise<NetWorthResult> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty" };
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    if (selected) {
+      const [summary, perf] = await Promise.all([
+        api.getSummary(selected.id),
+        api.getPerformance(selected.id),
+      ]);
+      return {
+        status: "ok",
+        data: { ...summary, xirr: perf.xirr, portfolioCount: 1, asOf: perf.asOf },
+      };
+    }
     const data = await api.getNetWorth();
     if (data.portfolioCount === 0) return { status: "empty" };
     return { status: "ok", data };
@@ -65,13 +84,20 @@ export async function loadNetWorth(): Promise<NetWorthResult> {
   }
 }
 
-/** Net-worth-over-time across all portfolios (empty when not signed in / no data). */
+/**
+ * Net-worth-over-time for the active scope: a single portfolio's snapshot history
+ * when one is selected, else the cross-portfolio aggregate series.
+ */
 export async function loadNetWorthHistory(
   range = "1y",
 ): Promise<NetWorthPoint[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {
+    const portfolios = await api.listPortfolios();
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    if (selected) return await api.getPortfolioHistory(selected.id, range);
     return await api.getNetWorthHistory(range);
   } catch {
     return [];
