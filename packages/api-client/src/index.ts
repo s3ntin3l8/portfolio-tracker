@@ -513,7 +513,8 @@ export function createApiClient(config: ApiClientConfig) {
     updateAdminProviders: (input: ProviderSettingUpdate[]) =>
       request<AdminProvider[]>("PATCH", "/admin/providers", input),
 
-    getNetWorth: () => request<NetWorth>("GET", "/networth"),
+    getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
+      request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),
     getIncome: () => request<IncomeStats>("GET", "/networth/income"),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
@@ -584,8 +585,13 @@ export function createApiClient(config: ApiClientConfig) {
 
     getHoldings: (portfolioId: string) =>
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
-    getSummary: (portfolioId: string) =>
-      request<PortfolioSummary>("GET", `/portfolios/${portfolioId}/summary`),
+    getSummary: (portfolioId: string, costBasis?: "purchase_price" | "total_paid") =>
+      request<PortfolioSummary>(
+        "GET",
+        costBasis
+          ? `/portfolios/${portfolioId}/summary?costBasis=${costBasis}`
+          : `/portfolios/${portfolioId}/summary`,
+      ),
     getPerformance: (portfolioId: string) =>
       request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
 

@@ -386,7 +386,9 @@
     "value": "Value",
     "pnl": "P&L",
     "all": "All",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "costBasisPurchasePrice": "Purchase price",
+    "costBasisTotalPaid": "Total paid"
   },
   "Chart": {
     "range": {

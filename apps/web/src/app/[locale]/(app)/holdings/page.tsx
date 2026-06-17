@@ -5,24 +5,32 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { HoldingsTable } from "@/components/holdings-table";
+import { CostBasisToggle } from "@/components/cost-basis-toggle";
 import { Link } from "@/i18n/navigation";
 import { loadHoldings } from "@/lib/server-api";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
 
+type CostBasisMode = "purchase_price" | "total_paid";
+
 export default async function HoldingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ costBasis?: string }>;
 }) {
   const { locale } = await params;
+  const { costBasis: costBasisParam } = await searchParams;
+  const costBasis: CostBasisMode =
+    costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
   setRequestLocale(locale);
   const t = await getTranslations("Holdings");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
   const tca = await getTranslations("CorpAction");
 
-  const result = await loadHoldings();
+  const result = await loadHoldings(costBasis);
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =
@@ -55,6 +63,11 @@ export default async function HoldingsPage({
       </div>
       {result.status === "ok" && (
         <div className="flex items-center gap-2">
+          <CostBasisToggle
+            current={costBasis}
+            labelPurchase={t("costBasisPurchasePrice")}
+            labelTotal={t("costBasisTotalPaid")}
+          />
           {holdings.length > 0 && (
             <ExportCsvButton
               filename="holdings.csv"

@@ -386,7 +386,9 @@
     "value": "Nilai",
     "pnl": "Untung/Rugi",
     "all": "Semua",
-    "exportCsv": "Ekspor CSV"
+    "exportCsv": "Ekspor CSV",
+    "costBasisPurchasePrice": "Harga beli",
+    "costBasisTotalPaid": "Total dibayar"
   },
   "Chart": {
     "range": {
