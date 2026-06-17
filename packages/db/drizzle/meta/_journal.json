@@ -127,6 +127,13 @@
       "when": 1781695113795,
       "tag": "0017_keen_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781703845018,
+      "tag": "0018_majestic_amphibian",
+      "breakpoints": true
     }
   ]
 }

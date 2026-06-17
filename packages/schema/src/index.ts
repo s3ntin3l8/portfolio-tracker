@@ -31,8 +31,15 @@ export const transactionTypeSchema = z.enum([
   "savings_plan",
   "deposit",
   "withdrawal",
+  // Installment-financing legs (e.g. Pegadaian/Galeri24 gold cicilan). The outstanding
+  // liability is derived from these; excluded from XIRR/contributions by design.
+  "loan_drawdown",
+  "loan_repayment",
 ]);
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
+
+export const costBasisModeSchema = z.enum(["purchase_price", "total_paid"]);
+export type CostBasisMode = z.infer<typeof costBasisModeSchema>;
 
 export const transactionSourceSchema = z.enum([
   "screenshot",

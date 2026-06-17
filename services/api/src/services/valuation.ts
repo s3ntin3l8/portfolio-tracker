@@ -4,6 +4,7 @@ import {
   summarizePortfolio,
   type CoreTransaction,
   type CorporateAction,
+  type CostBasisMode,
   type PortfolioSummary,
 } from "@portfolio/core";
 import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
@@ -37,6 +38,7 @@ export async function valuePortfolio(
   ttlMs: number,
   portfolioId: string,
   displayCurrency: string,
+  costBasisMode?: CostBasisMode,
 ): Promise<Valuation> {
   const rows = await db
     .select()
@@ -90,6 +92,7 @@ export async function valuePortfolio(
     fees: r.fees,
     currency: r.currency,
     executedAt: r.executedAt,
+    loanId: r.loanId,
   }));
 
   // Resolve FX so holdings/cash in other currencies convert to the display currency
@@ -107,6 +110,7 @@ export async function valuePortfolio(
     prices,
     displayCurrency,
     fx,
+    costBasisMode,
   });
   return { coreTxns, summary, metaById };
 }

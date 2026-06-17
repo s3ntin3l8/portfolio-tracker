@@ -1,4 +1,5 @@
 import { relations, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   pgEnum,
   pgTable,
@@ -43,6 +44,11 @@ export const txTypeEnum = pgEnum("transaction_type", [
   "savings_plan",
   "deposit",
   "withdrawal",
+  // Financing legs for installment purchases (e.g. Pegadaian/Galeri24 gold cicilan).
+  // Source of truth for the outstanding-liability balance; excluded from XIRR/
+  // contributions by the deposit/withdrawal whitelists, so a loan is not a flow.
+  "loan_drawdown",
+  "loan_repayment",
 ]);
 
 export const txSourceEnum = pgEnum("transaction_source", [
@@ -285,6 +291,11 @@ export const transactions = pgTable(
       onDelete: "set null",
     }),
     savingsPlanId: text("savings_plan_id"),
+    // Links a financing leg (and its paired buy) to the loan it belongs to. Null for
+    // ordinary transactions. The outstanding balance is derived from these legs.
+    loanId: uuid("loan_id").references((): AnyPgColumn => loans.id, {
+      onDelete: "set null",
+    }),
     // Stable id from the source (broker ref / CSV row hash) for idempotent imports.
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -312,6 +323,52 @@ export const corporateActions = pgTable("corporate_actions", {
   terms: text("terms"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Installment-financing contracts (e.g. Pegadaian/Galeri24 gold "MULIA" cicilan).
+// Holds the immutable contract TERMS and amortization schedule only — never the
+// outstanding balance, which is always derived in @portfolio/core from the loan's
+// loan_drawdown/loan_repayment legs (mirrors how corporateActions store terms while
+// the effect is derived). The financed asset is linked via instrumentId.
+export const loans = pgTable(
+  "loans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    portfolioId: uuid("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    // The financed gold position.
+    instrumentId: uuid("instrument_id")
+      .notNull()
+      .references(() => instruments.id, { onDelete: "restrict" }),
+    // Audit link to the import that created the loan (so undo can remove it).
+    importId: uuid("import_id").references(() => screenshotImports.id, {
+      onDelete: "set null",
+    }),
+    contractNo: text("contract_no"),
+    provider: text("provider"), // e.g. "GALERI24" | "PEGADAIAN"
+    purchasePrice: numeric("purchase_price").notNull(), // G24 gold price (Harga Pembelian)
+    downPayment: numeric("down_payment").notNull().default("0"), // uang muka
+    adminFee: numeric("admin_fee").notNull().default("0"), // Biaya Administrasi
+    discount: numeric("discount").notNull().default("0"), // promo (stored positive)
+    principal: numeric("principal").notNull(), // Uang Pinjaman (financed amount)
+    marginTotal: numeric("margin_total").notNull().default("0"), // total Sewa Modal
+    tenorMonths: integer("tenor_months").notNull(),
+    monthlyInstallment: numeric("monthly_installment").notNull().default("0"),
+    startDate: date("start_date").notNull(), // Tgl Kredit
+    // [{ n, dueDate, pokok, sewaModal, angsuran, sisaPokok }] — the full Jadwal Angsuran.
+    schedule: jsonb("schedule"),
+    // Default cost-basis presentation: 'purchase_price' | 'total_paid'.
+    costBasisMode: text("cost_basis_mode").notNull().default("purchase_price"),
+    currency: text("currency").notNull().default("IDR"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("loans_portfolio_id_idx").on(t.portfolioId),
+    uniqueIndex("loans_portfolio_contract_idx")
+      .on(t.portfolioId, t.provider, t.contractNo)
+      .where(sql`${t.contractNo} is not null`),
+  ],
+);
 
 // Provider-sourced dividend events: announced ex-dates and settled payments. Deduped
 // by (instrumentId, exDate) — an upsert from the scheduler updates the amount and
@@ -420,6 +477,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 export const portfoliosRelations = relations(portfolios, ({ one, many }) => ({
   user: one(users, { fields: [portfolios.userId], references: [users.id] }),
   transactions: many(transactions),
+  loans: many(loans),
 }));
 
 export const instrumentsRelations = relations(instruments, ({ many }) => ({
@@ -427,6 +485,7 @@ export const instrumentsRelations = relations(instruments, ({ many }) => ({
   prices: many(prices),
   corporateActions: many(corporateActions),
   dividendEvents: many(dividendEvents),
+  loans: many(loans),
 }));
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
@@ -438,4 +497,20 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
     fields: [transactions.instrumentId],
     references: [instruments.id],
   }),
+  loan: one(loans, {
+    fields: [transactions.loanId],
+    references: [loans.id],
+  }),
+}));
+
+export const loansRelations = relations(loans, ({ one, many }) => ({
+  portfolio: one(portfolios, {
+    fields: [loans.portfolioId],
+    references: [portfolios.id],
+  }),
+  instrument: one(instruments, {
+    fields: [loans.instrumentId],
+    references: [instruments.id],
+  }),
+  transactions: many(transactions),
 }));

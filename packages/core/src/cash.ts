@@ -28,6 +28,13 @@ export function cashFlow(tx: CoreTransaction): Decimal {
       return (q.gt(0) ? notional : p).sub(f);
     case "fee":
       return p.neg().sub(f);
+    case "loan_drawdown":
+      // Financed cash arrives; it is immediately spent on the paired buy, so the
+      // two legs are net-neutral on the contract date.
+      return p;
+    case "loan_repayment":
+      // An installment: principal (price) + financing margin (fees) leave cash.
+      return p.neg().sub(f);
     case "split":
     case "bonus":
     case "rights":
