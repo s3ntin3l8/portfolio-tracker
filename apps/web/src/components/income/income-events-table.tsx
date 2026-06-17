@@ -27,7 +27,9 @@ const COLS: ColDef<IncomeEventRow>[] = [
   { key: "amount", get: (e) => e.amount, type: "numeric" },
 ];
 
+// Certainty order: projected (estimate) → announced (declared) → paid (settled).
 const STATUS_VARIANT: Record<string, "default" | "warning" | "success" | "outline"> = {
+  projected: "outline",
   scheduled: "default",
   announced: "warning",
   paid: "success",
