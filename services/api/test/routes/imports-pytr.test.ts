@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT } from "jose";
-import { instruments, portfolios, screenshotImports } from "@portfolio/db";
+import { instruments, portfolios, screenshotImports, trResolvedEvents } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
 import { buildApp } from "../../src/app.js";
 import { getDb, closeDb } from "../../src/db/client.js";
@@ -204,6 +204,201 @@ describe("pytr import → confirm", () => {
       securityDraft({ isin: "IE00BK5BQT80", name: "Vanguard FTSE All-World", externalId: "vwce-1" }),
     );
     expect(inst).toMatchObject({ market: "XETRA", currency: "EUR" });
+  });
+
+  it("persists detail enrichment (tax, executedPrice, fxRate, kind, docs) on the transaction", async () => {
+    const t = await token("pytr-enrich");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
+    const [imp] = await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: {
+          drafts: [
+            {
+              ...DRAFTS[0],
+              externalId: "enrich-1",
+              tax: "2.31",
+              executedPrice: "142.76",
+              fxRate: "0.8449",
+              venue: "LS Exchange",
+              kind: "saveback",
+              description: "ACME · DE12",
+              documentRefs: [{ id: "d1", type: "TRADE_INVOICE", date: "01.03.2026" }],
+            },
+          ],
+          errors: [],
+        },
+        status: "draft",
+      })
+      .returning();
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.id}/confirm`,
+      headers: auth(t),
+      payload: {
+        transactions: [
+          {
+            ...DRAFTS[0],
+            externalId: "enrich-1",
+            tax: "2.31",
+            executedPrice: "142.76",
+            fxRate: "0.8449",
+            venue: "LS Exchange",
+            kind: "saveback",
+            description: "ACME · DE12",
+            documentRefs: [{ id: "d1", type: "TRADE_INVOICE", date: "01.03.2026" }],
+          },
+        ],
+      },
+    });
+    expect(confirm.statusCode).toBe(201);
+    const tx = confirm.json().transactions[0];
+    expect(tx).toMatchObject({
+      tax: "2.31",
+      executedPrice: "142.76",
+      fxRate: "0.8449",
+      venue: "LS Exchange",
+      kind: "saveback",
+      description: "ACME · DE12",
+    });
+    expect(tx.documentRefs).toEqual([{ id: "d1", type: "TRADE_INVOICE", date: "01.03.2026" }]);
+  });
+
+  it("discarding a pytr draft records its events as resolved (won't resurface)", async () => {
+    const t = await token("pytr-discard");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
+    const importId = await stagePytrImport(portfolioId, pf.userId);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/discard`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(204);
+
+    const resolved = await getDb()
+      .select()
+      .from(trResolvedEvents)
+      .where(eq(trResolvedEvents.portfolioId, portfolioId));
+    expect(resolved.map((r) => r.eventId).sort()).toEqual(["tr-1", "tr-2"]);
+    expect(resolved.every((r) => r.resolution === "discarded")).toBe(true);
+  });
+
+  it("drops a mapped issue from the import once its event is confirmed", async () => {
+    const t = await token("pytr-mapissue");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
+    // One draft + one attention issue (an unmapped event the user will complete).
+    const [imp] = await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: {
+          drafts: [DRAFTS[0]],
+          errors: [
+            { eventId: "iss-1", eventType: "MYSTERY", severity: "attention", message: "unmapped event type: MYSTERY" },
+          ],
+        },
+        status: "draft",
+      })
+      .returning();
+
+    // Confirm both the original draft and the mapped issue (externalId = the event id).
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp.id}/confirm`,
+      headers: auth(t),
+      payload: {
+        transactions: [
+          DRAFTS[0],
+          { ...DRAFTS[0], externalId: "iss-1", action: "deposit", isin: null, name: "Mapped" },
+        ],
+      },
+    });
+
+    // Everything is resolved → the import closes (no drafts, no issues left).
+    const [done] = await getDb()
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, imp.id));
+    expect(done.status).toBe("confirmed");
+  });
+
+  it("partial confirm keeps the import open with the un-confirmed remainder", async () => {
+    const t = await token("pytr-passes");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb()
+      .select()
+      .from(portfolios)
+      .where(eq(portfolios.id, portfolioId));
+    const importId = await stagePytrImport(portfolioId, pf.userId);
+
+    // Confirm only the first draft (tr-1).
+    const first = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [DRAFTS[0]] },
+    });
+    expect(first.json().confirmed).toBe(1);
+
+    // The import stays a draft, now holding only the un-confirmed remainder (tr-2).
+    const [mid] = await getDb()
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, importId));
+    expect(mid.status).toBe("draft");
+    expect((mid.parsedJson as { drafts: { externalId: string }[] }).drafts.map((d) => d.externalId)).toEqual(["tr-2"]);
+
+    // Confirm the rest → the import closes.
+    const second = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [DRAFTS[1]] },
+    });
+    expect(second.json().confirmed).toBe(1);
+    const [done] = await getDb()
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, importId));
+    expect(done.status).toBe("confirmed");
   });
 
   it("is idempotent: a re-synced import with the same event ids inserts nothing new", async () => {

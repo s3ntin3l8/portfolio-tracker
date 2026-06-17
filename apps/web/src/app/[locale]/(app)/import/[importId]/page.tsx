@@ -42,6 +42,7 @@ export default async function ImportReviewPage({
       <DraftReviewClient
         importId={importId}
         drafts={detail.drafts as unknown as ImportDraft[]}
+        issues={detail.errors}
       />
     </div>
   );

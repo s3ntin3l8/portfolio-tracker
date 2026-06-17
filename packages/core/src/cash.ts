@@ -22,7 +22,9 @@ export function cashFlow(tx: CoreTransaction): Decimal {
       return notional.sub(f);
     case "dividend":
     case "coupon":
-      // Per-unit (qty>0) or a lump sum recorded in price.
+    case "interest":
+      // Income: per-unit (qty>0) or a lump sum recorded in price. Interest is always a
+      // lump sum (no instrument) — cash in, never a contribution.
       return (q.gt(0) ? notional : p).sub(f);
     case "fee":
       return p.neg().sub(f);

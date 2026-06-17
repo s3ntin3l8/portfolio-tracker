@@ -15,12 +15,23 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
     verifyTr: vi.fn(async () => ({ status: "connected" as const })),
     syncTr: vi.fn(async () => ({ status: "connected" as const, drafts: 3 })),
     disconnectTr: vi.fn(async () => undefined),
+    reimportTr: vi.fn(async () => ({ removed: 0 })),
+    updateTrCategories: vi.fn(async (importCategories) => ({
+      status: "connected" as const,
+      portfolioId: "p1",
+      lastSyncAt: null,
+      lastError: null,
+      importCategories,
+      lastReconciliation: null,
+    })),
     // The awaiting phase polls this for the authoritative status; default = approved.
     getTrConnection: vi.fn(async () => ({
       status: "connected" as const,
       portfolioId: "p1",
       lastSyncAt: null,
       lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
     })),
     ...over,
   };
@@ -32,6 +43,8 @@ const DISCONNECTED: TrConnection = {
   portfolioId: null,
   lastSyncAt: null,
   lastError: null,
+  importCategories: null,
+  lastReconciliation: null,
 };
 
 function renderFlow(client: TrConnectClient, initial: TrConnection = DISCONNECTED) {
@@ -105,6 +118,8 @@ describe("TrConnectFlow", () => {
         portfolioId: "p1",
         lastSyncAt: null,
         lastError: "login was not approved",
+        importCategories: null,
+        lastReconciliation: null,
       })),
     });
     renderFlow(client);
@@ -145,6 +160,8 @@ describe("TrConnectFlow", () => {
       portfolioId: "p1",
       lastSyncAt: null,
       lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
     });
     fireEvent.click(screen.getByRole("button", { name: /Sync now/ }));
     await waitFor(() => expect(client.syncTr).toHaveBeenCalled());
@@ -157,6 +174,8 @@ describe("TrConnectFlow", () => {
       portfolioId: "p1",
       lastSyncAt: null,
       lastError: "session expired",
+      importCategories: null,
+      lastReconciliation: null,
     });
     expect(screen.getByText(/Your session expired/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect/ })).toBeTruthy();

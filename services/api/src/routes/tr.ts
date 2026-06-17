@@ -1,7 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import { portfolios, trConnections } from "@portfolio/db";
+import {
+  portfolios,
+  screenshotImports,
+  transactions,
+  trConnections,
+  trResolvedEvents,
+} from "@portfolio/db";
 import { requireUser } from "../plugins/auth.js";
 import { PytrApprovalError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
@@ -19,6 +25,11 @@ const connectBodySchema = z.object({
 
 type TrConnection = typeof trConnections.$inferSelect;
 
+const IMPORT_CATEGORIES = ["trade", "income", "cashflow", "card"] as const;
+const settingsBodySchema = z.object({
+  importCategories: z.array(z.enum(IMPORT_CATEGORIES)).min(1),
+});
+
 // Never expose the encrypted secrets — only the connection's public state.
 function serialize(conn: TrConnection | null) {
   return {
@@ -26,6 +37,10 @@ function serialize(conn: TrConnection | null) {
     portfolioId: conn?.portfolioId ?? null,
     lastSyncAt: conn?.lastSyncAt ?? null,
     lastError: conn?.lastError ?? null,
+    // Null = the sync default (everything but card spending).
+    importCategories: conn?.importCategories ?? null,
+    // TR's reported cash vs our derived cash at the last sync (null until first synced).
+    lastReconciliation: conn?.lastReconciliation ?? null,
   };
 }
 
@@ -52,6 +67,19 @@ export async function trRoute(app: FastifyInstance) {
   app.get("/tr/connection", { preHandler: app.authenticate }, async (request) => {
     const { id } = requireUser(request);
     return serialize(await getConnection(id));
+  });
+
+  // Update which event categories the sync stages (trade/income/cashflow/card).
+  app.patch("/tr/connection", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const conn = await getConnection(id);
+    if (!conn) return reply.code(404).send({ error: "not_connected" });
+    const { importCategories } = settingsBodySchema.parse(request.body);
+    await app.db
+      .update(trConnections)
+      .set({ importCategories, updatedAt: new Date() })
+      .where(eq(trConnections.id, conn.id));
+    return serialize({ ...conn, importCategories });
   });
 
   // Begin pairing: store encrypted creds and kick off the v2 web-login (sends an approval
@@ -174,6 +202,39 @@ export async function trRoute(app: FastifyInstance) {
       }
     },
   );
+
+  // Re-import everything: wipe the portfolio's pytr transactions, clear the resolved-events
+  // ledger, and discard any open pytr draft. The next sync then re-stages the full timeline
+  // fresh (enriched) for the user to confirm — the user-driven backfill/refresh path.
+  app.post("/tr/connection/reimport", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const conn = await getConnection(id);
+    if (!conn || !conn.portfolioId) {
+      return reply.code(409).send({ error: "not_connected" });
+    }
+    const portfolioId = conn.portfolioId;
+    return app.db.transaction(async (tx) => {
+      const removed = await tx
+        .delete(transactions)
+        .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr")))
+        .returning({ id: transactions.id });
+      await tx
+        .delete(trResolvedEvents)
+        .where(eq(trResolvedEvents.portfolioId, portfolioId));
+      await tx
+        .update(screenshotImports)
+        .set({ status: "discarded" })
+        .where(
+          and(
+            eq(screenshotImports.userId, id),
+            eq(screenshotImports.portfolioId, portfolioId),
+            eq(screenshotImports.parser, "pytr"),
+            eq(screenshotImports.status, "draft"),
+          ),
+        );
+      return { removed: removed.length };
+    });
+  });
 
   // Disconnect: wipe the stored connection (and any pending pairing).
   app.delete(

@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT } from "jose";
-import { trConnections } from "@portfolio/db";
+import {
+  screenshotImports,
+  transactions,
+  trConnections,
+  trResolvedEvents,
+} from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { getDb, closeDb } from "../../src/db/client.js";
 import {
@@ -235,6 +240,70 @@ describe("Trade Republic connection (encryption enabled)", () => {
     expect(res.statusCode).toBe(503);
     expect(res.json()).toEqual({ error: "pytr_not_available" });
     fake.startResult = { processId: "pid-1" };
+  });
+
+  it("re-import wipes pytr transactions, the resolved ledger, and open drafts", async () => {
+    const t = await token("tr-reimport");
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
+    const [conn] = await getDb()
+      .select()
+      .from(trConnections)
+      .where(eq(trConnections.portfolioId, portfolioId));
+
+    // Seed a confirmed pytr transaction, a ledger entry, and an open pytr draft.
+    await getDb().insert(transactions).values({
+      portfolioId,
+      type: "deposit",
+      price: "100",
+      currency: "EUR",
+      executedAt: new Date("2026-03-01T10:00:00.000Z"),
+      source: "pytr",
+      externalId: "ev-1",
+    });
+    await getDb()
+      .insert(trResolvedEvents)
+      .values({ portfolioId, eventId: "ev-1", resolution: "confirmed" });
+    await getDb().insert(screenshotImports).values({
+      userId: conn.userId,
+      portfolioId,
+      parser: "pytr",
+      parsedJson: { drafts: [], errors: [] },
+      status: "draft",
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/reimport",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ removed: 1 });
+
+    expect(
+      await getDb()
+        .select()
+        .from(transactions)
+        .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr"))),
+    ).toHaveLength(0);
+    expect(
+      await getDb()
+        .select()
+        .from(trResolvedEvents)
+        .where(eq(trResolvedEvents.portfolioId, portfolioId)),
+    ).toHaveLength(0);
+    expect(
+      await getDb()
+        .select()
+        .from(screenshotImports)
+        .where(and(eq(screenshotImports.portfolioId, portfolioId), eq(screenshotImports.status, "draft"))),
+    ).toHaveLength(0);
   });
 
   it("disconnects: DELETE wipes the connection", async () => {

@@ -1,0 +1,1 @@
+ALTER TABLE "tr_connections" ADD COLUMN "last_reconciliation" jsonb;

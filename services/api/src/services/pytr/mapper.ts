@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ParsedAction, ParsedTransaction } from "@portfolio/schema";
+import type { ImportIssue, ParsedAction, ParsedTransaction } from "@portfolio/schema";
 
 // The normalized event shape tr_export.py emits (one JSON object per line). The Python
 // side extracts isin/shares/fees from the timeline detail; any may be absent.
@@ -14,7 +14,58 @@ const trEventSchema = z.object({
   shares: z.number().nullish(),
   fees: z.number().nullish(),
   savingsPlanId: z.string().nullish(),
+  // TR booking status. Only EXECUTED events are real; CANCELED/PENDING are skipped (a
+  // cancellation of an already-confirmed event is un-imported by the sync reconciler).
+  // Absent on older fixtures — treated as EXECUTED for backward compatibility.
+  status: z.string().nullish(),
+  // Detail enrichment extracted by tr_export.py (all best-effort / nullable).
+  executedPrice: z.number().nullish(),
+  tax: z.number().nullish(),
+  fxRate: z.number().nullish(),
+  venue: z.string().nullish(),
+  description: z.string().nullish(),
+  documentRefs: z
+    .array(z.object({ id: z.string(), type: z.string().nullish(), date: z.string().nullish() }))
+    .nullish(),
 });
+
+// TR books crypto under synthetic ISINs (XF000<TICKER>…). Recognised at the source so the
+// draft carries the right asset class; full symbol/venue resolution happens at confirm.
+const TR_CRYPTO_ISIN = /^XF000[A-Z]{2,5}\d+$/;
+
+// Acceptable gap between a trade's executed-price notional and its booked total before the
+// draft is flagged for review (fees + tax are normally well within this).
+const RECONCILE_TOLERANCE = 0.1;
+
+// Savings-plan-funded buys come in two flavours TR distinguishes by event type.
+const EVENT_KIND: Record<string, string> = {
+  SAVEBACK_AGGREGATE: "saveback",
+  SPARE_CHANGE_AGGREGATE: "roundup",
+};
+
+// Coarse import categories so a connection can opt out of (e.g.) day-to-day card spending
+// without losing trades/dividends. TR is a full bank account, not just a brokerage.
+export type ImportCategory = "trade" | "income" | "cashflow" | "card";
+
+const CARD_EVENTS = new Set([
+  "CARD_TRANSACTION",
+  "CARD_ATM_WITHDRAWAL",
+  "CARD_ORDER_FEE",
+  "CARD_REFUND",
+  "CARD_VERIFICATION",
+  "CARD_AFT",
+]);
+
+/** Classify an event into a coarse import category (used by the per-connection filter). */
+export function categoryForEventType(eventType: string): ImportCategory {
+  if (CARD_EVENTS.has(eventType)) return "card";
+  if (TRADE_EVENTS.has(eventType)) return "trade";
+  if (eventType === CASH_CORPORATE_ACTION) return "income"; // Bardividende
+  const action = FIXED_ACTIONS[eventType];
+  if (action === "buy" || action === "sell" || action === "savings_plan") return "trade";
+  if (action === "dividend" || action === "coupon" || action === "interest") return "income";
+  return "cashflow"; // deposits/withdrawals/transfers and anything unmapped
+}
 export type TrEvent = z.infer<typeof trEventSchema>;
 
 // The TR timeline event taxonomy (validated against a real 912-event account, 2026-06-15).
@@ -34,7 +85,9 @@ const FIXED_ACTIONS: Record<string, ParsedAction> = {
   INCOMING_TRANSFER: "deposit",
   ACCOUNT_TRANSFER_INCOMING: "deposit",
   BANK_TRANSACTION_INCOMING: "deposit",
-  INTEREST_PAYOUT: "deposit",
+  // Interest on the cash balance is income, not a deposit (would otherwise be counted as a
+  // contribution and skew invested capital / money-weighted return).
+  INTEREST_PAYOUT: "interest",
   CARD_REFUND: "deposit",
   // --- cash out ---
   PAYMENT_OUTBOUND: "withdrawal",
@@ -69,6 +122,9 @@ const SKIP_EVENTS = new Map<string, string>([
   ["SSP_CORPORATE_ACTION_INSTRUMENT", "share-based corporate action — needs manual entry"],
 ]);
 
+// Skipped events the user may actually want to map (vs. ignorable info like a card ping).
+const ATTENTION_SKIPS = new Set(["SSP_CORPORATE_ACTION_INSTRUMENT"]);
+
 // Actions that move shares (need an instrument + a per-share price). The rest are pure
 // cash movements recorded as a lump sum in `price`.
 const SECURITY_ACTIONS = new Set<ParsedAction>([
@@ -81,13 +137,44 @@ const SECURITY_ACTIONS = new Set<ParsedAction>([
 
 export type MapResult =
   | { draft: ParsedTransaction }
-  | { skip: true; reason: string };
+  | {
+      skip: true;
+      reason: string;
+      severity: "info" | "attention";
+      eventId?: string;
+      eventType?: string;
+      raw?: ImportIssue["raw"];
+    };
 
 // Format a JS number as a decimalString (no exponent, trailing zeros trimmed).
 function dstr(n: number): string {
   if (!Number.isFinite(n)) return "0";
   const s = n.toFixed(10).replace(/\.?0+$/, "");
   return s === "" || s === "-" ? "0" : s;
+}
+
+// Build a skip outcome, carrying the source event so the UI can offer to map it.
+function skip(
+  reason: string,
+  severity: "info" | "attention",
+  ev?: TrEvent,
+): MapResult {
+  if (!ev) return { skip: true, reason, severity };
+  return {
+    skip: true,
+    reason,
+    severity,
+    eventId: ev.id,
+    eventType: ev.eventType,
+    raw: {
+      isin: ev.isin ?? null,
+      name: ev.title ?? null,
+      currency: ev.currency?.toUpperCase() ?? null,
+      executedAt: ev.timestamp,
+      amount: ev.amount,
+      shares: ev.shares ?? null,
+    },
+  };
 }
 
 /**
@@ -98,13 +185,20 @@ function dstr(n: number): string {
 export function mapTrEventToDraft(raw: unknown): MapResult {
   const parsed = trEventSchema.safeParse(raw);
   if (!parsed.success) {
-    return { skip: true, reason: `unparseable event: ${parsed.error.issues[0]?.message}` };
+    return skip(`unparseable event: ${parsed.error.issues[0]?.message}`, "attention");
   }
   const ev = parsed.data;
 
+  // Only EXECUTED events become drafts. A CANCELED/PENDING event is skipped here; if it was
+  // previously confirmed, the sync reconciler removes the written transaction (status flips
+  // in place on the same event id — e.g. annual dividend recalculations).
+  if (ev.status && ev.status.toUpperCase() !== "EXECUTED") {
+    return skip(`non-executed event (${ev.status})`, "info", ev);
+  }
+
   const skipReason = SKIP_EVENTS.get(ev.eventType);
   if (skipReason) {
-    return { skip: true, reason: skipReason };
+    return skip(skipReason, ATTENTION_SKIPS.has(ev.eventType) ? "attention" : "info", ev);
   }
 
   let action: ParsedAction | undefined = FIXED_ACTIONS[ev.eventType];
@@ -120,7 +214,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     action = ev.isin ? "dividend" : "deposit";
   }
   if (!action) {
-    return { skip: true, reason: `unmapped event type: ${ev.eventType}` };
+    return skip(`unmapped event type: ${ev.eventType}`, "attention", ev);
   }
 
   const amount = Math.abs(ev.amount);
@@ -128,23 +222,38 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   const isSecurity = SECURITY_ACTIONS.has(action);
 
   if (isSecurity && !ev.isin) {
-    return { skip: true, reason: `${ev.eventType} without an ISIN` };
+    return skip(`${ev.eventType} without an ISIN`, "attention", ev);
   }
 
   let quantity = "0";
   let price = dstr(amount); // cash lump sum by default (deposit/withdrawal/dividend/...)
+  let confidence = 1;
 
   if (action === "buy" || action === "sell" || action === "savings_plan") {
     const shares = Math.abs(ev.shares ?? 0);
     if (shares === 0) {
-      return { skip: true, reason: `${ev.eventType} without a share count` };
+      return skip(`${ev.eventType} without a share count`, "attention", ev);
     }
     quantity = dstr(shares);
     price = dstr((amount - fees) / shares); // per-share, fees carried separately
+
+    // Reconciliation: the executed price × shares should land near the booked total (fees +
+    // tax are small). A large gap means the share count or price was mis-parsed — flag it for
+    // review (low confidence drives the "needs review" badge + filter) rather than trust it.
+    if (ev.executedPrice != null && amount > 0) {
+      const notional = shares * Math.abs(ev.executedPrice);
+      if (Math.abs(notional - amount) > Math.max(amount * RECONCILE_TOLERANCE, 0.5)) {
+        confidence = 0.5;
+      }
+    }
   }
 
+  // Asset class at the source: crypto when TR's synthetic ISIN says so, else equity/ETF
+  // (refined at confirm via OpenFIGI). Avoids the old confirm-only crypto workaround.
+  const assetClass = ev.isin && TR_CRYPTO_ISIN.test(ev.isin) ? "crypto" : "equity";
+
   const draft: ParsedTransaction = {
-    assetClass: "equity", // TR is equities/ETFs; refined at confirm if needed
+    assetClass,
     action,
     ticker: null,
     isin: ev.isin ?? null,
@@ -156,25 +265,41 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     total: dstr(amount),
     currency: ev.currency.toUpperCase(),
     executedAt: new Date(ev.timestamp),
-    confidence: 1,
+    confidence,
     externalId: ev.id,
     savingsPlanId: ev.savingsPlanId ?? null,
     exchangeCode: null,
+    // Enrichment (informational; persisted on the transaction at confirm).
+    kind: EVENT_KIND[ev.eventType] ?? null,
+    tax: ev.tax != null ? dstr(Math.abs(ev.tax)) : null,
+    executedPrice: ev.executedPrice != null ? dstr(ev.executedPrice) : null,
+    fxRate: ev.fxRate != null ? dstr(ev.fxRate) : null,
+    venue: ev.venue ?? null,
+    description: ev.description ?? null,
+    documentRefs: ev.documentRefs ?? null,
   };
   return { draft };
 }
 
-/** Map a batch of raw events to drafts, collecting skips as errors (not dropped). */
+/** Map a batch of raw events to drafts, collecting skips as issues (surfaced, not dropped). */
 export function mapTrEvents(rawEvents: unknown[]): {
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 } {
   const drafts: ParsedTransaction[] = [];
-  const errors: { line: number; message: string }[] = [];
+  const errors: ImportIssue[] = [];
   rawEvents.forEach((raw, i) => {
     const result = mapTrEventToDraft(raw);
     if ("draft" in result) drafts.push(result.draft);
-    else errors.push({ line: i, message: result.reason });
+    else
+      errors.push({
+        line: i,
+        message: result.reason,
+        severity: result.severity,
+        eventId: result.eventId,
+        eventType: result.eventType,
+        raw: result.raw,
+      });
   });
   return { drafts, errors };
 }

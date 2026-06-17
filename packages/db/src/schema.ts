@@ -12,6 +12,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 // --- Enums ---------------------------------------------------------------
@@ -33,6 +34,8 @@ export const txTypeEnum = pgEnum("transaction_type", [
   "sell",
   "dividend",
   "coupon",
+  // Interest on uninvested cash — income, not a contribution. See transactionTypeSchema.
+  "interest",
   "fee",
   "split",
   "bonus",
@@ -168,11 +171,36 @@ export const trConnections = pgTable("tr_connections", {
   // The pytr cookie file contents (encrypted). Null until the 2FA pairing completes.
   sessionEnc: text("session_enc"),
   status: trConnectionStatusEnum("status").notNull().default("disconnected"),
+  // Which event categories to stage as drafts (trade/income/cashflow/card). Null = the
+  // default set (everything except day-to-day card spending). TR is a full bank account,
+  // so this keeps card noise out of the portfolio unless explicitly opted in.
+  importCategories: jsonb("import_categories").$type<string[]>(),
+  // Last cash reconciliation: TR's reported balance vs our derived balance per currency.
+  // { checkedAt, cash: [{ currency, reported, derived, diff }] }. Null until first synced.
+  lastReconciliation: jsonb("last_reconciliation"),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// A durable record of Trade Republic timeline events the user has already resolved — either
+// confirmed into a transaction or discarded. The sync excludes these from new drafts, so a
+// purposely-deleted transaction (or a discarded draft) stays gone instead of resurfacing.
+// Survives independent of the transactions table and the (ephemeral) collector draft; cleared
+// only by an explicit re-import. Keyed by portfolio (one pytr connection ↔ one portfolio).
+export const trResolvedEvents = pgTable(
+  "tr_resolved_events",
+  {
+    portfolioId: uuid("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    resolution: text("resolution").notNull(), // 'confirmed' | 'discarded'
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.portfolioId, t.eventId] })],
+);
 
 // Server-wide market-data provider config, editable by admins from the UI. Global (not
 // user-scoped) — this is a single-operator self-host setting. Rows OVERRIDE the env-derived
@@ -227,6 +255,21 @@ export const transactions = pgTable(
     quantity: numeric("quantity").notNull().default("0"), // in the instrument's unit
     price: numeric("price").notNull().default("0"),
     fees: numeric("fees").notNull().default("0"),
+    // Tax withheld/corrected (e.g. dividend withholding, Steuerkorrektur). Informational —
+    // the broker's `price`/cash already nets it; kept for reporting. Null = unknown.
+    tax: numeric("tax"),
+    // The broker's actual executed per-share price, when reported (TR's Aktienkurs). `price`
+    // stays the cash-consistent figure; this is the truer cost-basis input for later use.
+    executedPrice: numeric("executed_price"),
+    // FX rate at execution for non-base-currency holdings (units of `currency` per foreign).
+    fxRate: numeric("fx_rate"),
+    venue: text("venue"), // execution venue/exchange when the broker reports it
+    // Source-document references (e.g. TR postbox docs): [{ id, type, date }]. The actual
+    // file URL is short-lived/presigned, so only the reference is stored (see issue #150).
+    documentRefs: jsonb("document_refs"),
+    // Sub-type within an action — e.g. saveback / roundup for TR savings-plan-funded buys.
+    kind: text("kind"),
+    description: text("description"), // memo: transfer counterparty (+ IBAN), card merchant
     currency: text("currency").notNull(),
     executedAt: timestamp("executed_at", { withTimezone: true }).notNull(),
     source: txSourceEnum("source").notNull().default("manual"),

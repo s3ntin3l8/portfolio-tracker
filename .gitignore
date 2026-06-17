@@ -29,3 +29,4 @@ apps/web/public/swe-worker-*.js
 __pycache__/
 *.pyc
 .venv-pytr/
+.claude/projects/

@@ -8,6 +8,7 @@ import {
   withUid,
   stripUid,
   type ImportDraft,
+  type ImportIssue,
   type ReviewDraft,
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
@@ -22,19 +23,28 @@ import { useRouter } from "@/i18n/navigation";
 export function DraftReviewClient({
   importId,
   drafts: initial,
+  issues: initialIssues = [],
 }: {
   importId: string;
   drafts: ImportDraft[];
+  issues?: ImportIssue[];
 }) {
   const t = useTranslations("ImportHistory");
   const api = useApiClient();
   const router = useRouter();
 
   const [drafts, setDrafts] = useState<ReviewDraft[]>(() => initial.map(withUid));
+  const [issues, setIssues] = useState<ImportIssue[]>(initialIssues);
   const [error, setError] = useState<string | null>(null);
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
+  }
+
+  // Promote a mapped issue into a draft, then drop it from the issues list.
+  function mapIssue(eventId: string, draft: ImportDraft) {
+    setDrafts((ds) => [...ds, withUid(draft)]);
+    setIssues((is) => is.filter((i) => i.eventId !== eventId));
   }
 
   function removeDraft(uid: string) {
@@ -56,12 +66,21 @@ export function DraftReviewClient({
     setError(null);
     const subset =
       uids && uids.length ? drafts.filter((d) => uids.includes(d.uid)) : drafts;
+    // A partial confirm keeps the import open server-side — stay on the page, drop the
+    // confirmed rows, and let the user continue in passes. A full confirm closes it.
+    const isPartial = subset.length < drafts.length;
     try {
       await api.confirmImport(
         importId,
         subset.map(stripUid) as unknown as Parameters<typeof api.confirmImport>[1],
       );
-      backToImport();
+      if (isPartial) {
+        const confirmed = new Set(subset.map((d) => d.uid));
+        setDrafts((ds) => ds.filter((d) => !confirmed.has(d.uid)));
+        router.refresh(); // surface the new transactions (and updated history) elsewhere
+      } else {
+        backToImport();
+      }
     } catch {
       setError(t("reviewError"));
     }
@@ -90,6 +109,8 @@ export function DraftReviewClient({
       )}
       <ImportReview
         drafts={drafts}
+        issues={issues}
+        onMapIssue={mapIssue}
         onUpdate={updateDraft}
         onRemove={removeDraft}
         onRemoveMany={removeMany}

@@ -219,6 +219,13 @@
         "assetClass": "Kelas",
         "action": "Aksi"
       },
+      "issues": {
+        "attention": "{count, plural, one {# peristiwa perlu perhatian} other {# peristiwa perlu perhatian}}",
+        "ignored": "{count, plural, one {# peristiwa diabaikan} other {# peristiwa diabaikan}}",
+        "map": "Petakan",
+        "mapTitle": "Petakan peristiwa ini ke transaksi",
+        "mapSave": "Tambahkan ke draf"
+      },
       "empty": "Tidak ada draf yang cocok dengan filter Anda."
     },
     "discard": "Buang",
@@ -502,6 +509,25 @@
     "connectedHint": "Akun Anda terhubung. Sinkronisasi menarik aktivitas baru sebagai draf transaksi untuk Anda konfirmasi.",
     "synced": "Tersinkron — {drafts} draf transaksi disiapkan. Tinjau di halaman Impor.",
     "syncNow": "Sinkronkan sekarang",
+    "categories": {
+      "title": "Apa yang diimpor",
+      "hint": "Trade Republic adalah rekening bank penuh. Pilih aktivitas mana yang dijadikan draf.",
+      "trade": "Perdagangan & rencana tabungan",
+      "income": "Dividen & bunga",
+      "cashflow": "Transfer (setoran & penarikan)",
+      "card": "Belanja kartu"
+    },
+    "reconcile": {
+      "title": "Rekonsiliasi kas",
+      "row": "{currency}: TR {reported} · kami {derived}",
+      "off": "selisih {diff}",
+      "match": "cocok"
+    },
+    "reimport": {
+      "action": "Impor ulang semuanya…",
+      "warning": "Ini menghapus semua transaksi Trade Republic di portofolio ini dan menyiapkan ulang seluruh linimasa untuk dikonfirmasi lagi. Suntingan manual pada baris tersebut akan hilang.",
+      "confirm": "Hapus & impor ulang"
+    },
     "disconnect": "Putuskan",
     "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
     "error": "Terjadi kesalahan. Silakan coba lagi.",

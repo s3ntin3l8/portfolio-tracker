@@ -5,6 +5,7 @@ export type TransactionType =
   | "sell"
   | "dividend"
   | "coupon"
+  | "interest"
   | "fee"
   | "split"
   | "bonus"

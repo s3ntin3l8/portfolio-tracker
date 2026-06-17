@@ -110,8 +110,9 @@ describe("mapTrEventToDraft", () => {
   });
 
   it("maps cash movements with no instrument", () => {
+    // Interest is income, not a deposit (so it isn't counted as a contribution).
     expect(draftOf({ ...base, eventType: "INTEREST_PAYOUT", amount: 3 })).toMatchObject({
-      action: "deposit",
+      action: "interest",
       isin: null,
       quantity: "0",
       price: "3",
@@ -128,6 +129,67 @@ describe("mapTrEventToDraft", () => {
     expect(
       draftOf({ ...base, eventType: "PAYMENT_OUTBOUND", amount: -200 }),
     ).toMatchObject({ action: "withdrawal", price: "200" });
+  });
+
+  it("carries detail enrichment, kind, and source asset-class onto the draft", () => {
+    const div = draftOf({
+      ...base,
+      eventType: "CREDIT",
+      amount: 6.7,
+      isin: "US7561091049",
+      title: "Realty Income",
+      executedPrice: 142.76,
+      tax: 2.31,
+      fxRate: 0.8449,
+      venue: "LS Exchange",
+      description: "ACME Bank · DE12…",
+      documentRefs: [{ id: "doc-1", type: "CA_INCOME_INVOICE", date: "16.06.2026" }],
+    });
+    expect(div).toMatchObject({
+      tax: "2.31",
+      executedPrice: "142.76",
+      fxRate: "0.8449",
+      venue: "LS Exchange",
+      description: "ACME Bank · DE12…",
+    });
+    expect(div.documentRefs).toEqual([{ id: "doc-1", type: "CA_INCOME_INVOICE", date: "16.06.2026" }]);
+
+    // kind from event type; tax stored as a magnitude even when TR signs it negative.
+    expect(draftOf({ ...base, eventType: "SAVEBACK_AGGREGATE", amount: -9.62, shares: 0.0137, isin: "IE00B5BMR087" }).kind).toBe("saveback");
+    expect(draftOf({ ...base, eventType: "SPARE_CHANGE_AGGREGATE", amount: -0.7, shares: 0.001, isin: "IE00B5BMR087" }).kind).toBe("roundup");
+    expect(draftOf({ ...base, eventType: "CREDIT", amount: 5, isin: "US1", tax: -0.98 }).tax).toBe("0.98");
+
+    // Crypto recognised at the source from TR's synthetic XF000… ISIN.
+    expect(draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 0.001, isin: "XF000BTC0017" }).assetClass).toBe("crypto");
+    expect(draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101" }).assetClass).toBe("equity");
+  });
+
+  it("flags a trade for review when executed price × shares doesn't reconcile", () => {
+    // shares 10 × price 100 = 1000 ≈ total 1000 → trusted.
+    expect(
+      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "X", executedPrice: 100 }).confidence,
+    ).toBe(1);
+    // shares mis-parsed (1 instead of 10) → 1 × 100 = 100, far from total 1000 → flagged.
+    expect(
+      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 1, isin: "X", executedPrice: 100 }).confidence,
+    ).toBeLessThan(0.9);
+  });
+
+  it("skips non-executed (cancelled/pending) events", () => {
+    const cancelled = mapTrEventToDraft({
+      ...base,
+      eventType: "CREDIT",
+      amount: 12,
+      isin: "US7561091049",
+      status: "CANCELED",
+    });
+    expect("skip" in cancelled && cancelled.skip).toBe(true);
+    if ("skip" in cancelled) expect(cancelled.reason).toMatch(/non-executed/i);
+
+    // EXECUTED (or absent status) still maps.
+    expect(
+      draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 100, status: "EXECUTED" }).action,
+    ).toBe("deposit");
   });
 
   it("records card spending as a withdrawal so the cash balance stays correct", () => {
@@ -194,6 +256,15 @@ describe("mapTrEvents", () => {
       { ...base, id: "c", eventType: "CREDIT", amount: 5, isin: "X" },
     ]);
     expect(drafts.map((d) => d.externalId)).toEqual(["a", "c"]);
-    expect(errors).toEqual([{ line: 1, message: expect.stringContaining("unmapped") }]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      line: 1,
+      eventId: "b",
+      eventType: "MYSTERY",
+      severity: "attention",
+      message: expect.stringContaining("unmapped"),
+    });
+    // The raw event is carried so the UI can offer to map it.
+    expect(errors[0].raw).toMatchObject({ name: null });
   });
 });

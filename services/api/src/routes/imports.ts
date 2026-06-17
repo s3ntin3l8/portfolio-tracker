@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { portfolios, screenshotImports, transactions } from "@portfolio/db";
+import { portfolios, screenshotImports, transactions, trResolvedEvents } from "@portfolio/db";
 import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { parseCsv } from "../services/parsers/csv.js";
@@ -188,6 +188,30 @@ export async function importsRoute(app: FastifyInstance) {
       if (imp.status === "confirmed") {
         return reply.code(409).send({ error: "already_confirmed" });
       }
+      // For a pytr draft, durably record its events as discarded so the next sync doesn't
+      // re-stage them (the collector would otherwise resurface them indefinitely).
+      if (imp.parser === "pytr" && imp.portfolioId) {
+        const parsed = (imp.parsedJson ?? {}) as {
+          drafts?: { externalId?: string | null }[];
+          errors?: { eventId?: string | null }[];
+        };
+        const ids = [
+          ...(parsed.drafts ?? []).map((d) => d.externalId),
+          ...(parsed.errors ?? []).map((e) => e.eventId),
+        ].filter((x): x is string => Boolean(x));
+        if (ids.length) {
+          await app.db
+            .insert(trResolvedEvents)
+            .values(
+              ids.map((eventId) => ({
+                portfolioId: imp.portfolioId!,
+                eventId,
+                resolution: "discarded",
+              })),
+            )
+            .onConflictDoNothing();
+        }
+      }
       await app.db
         .update(screenshotImports)
         .set({ status: "discarded" })
@@ -275,7 +299,6 @@ export async function importsRoute(app: FastifyInstance) {
           : "screenshot";
       // DKB and Trade Republic are both EU/ISIN brokers — identical instrument resolution.
       const isEu = isDkb || isPytr;
-      const created = [];
 
       // Resolve EU broker (DKB/Trade Republic) ISINs to a ticker/market/currency once
       // each (best-effort, cached). OpenFIGI is keyless; failures and unknown ISINs fall
@@ -317,11 +340,13 @@ export async function importsRoute(app: FastifyInstance) {
         return resolved;
       }
 
-      for (let i = 0; i < drafts.length; i++) {
-        const d = drafts[i];
-
-        // Cash movements (deposit/withdrawal) have no instrument.
-        const isCash = d.action === "deposit" || d.action === "withdrawal";
+      // Pass 1 — resolve each draft's instrument (best-effort, may hit the network). Done
+      // OUTSIDE the transaction so a slow OpenFIGI/provider lookup never holds a DB tx open.
+      const resolved: { draft: (typeof drafts)[number]; instrumentId: string | null }[] = [];
+      for (const d of drafts) {
+        // Cash movements (deposit/withdrawal/interest) have no instrument.
+        const isCash =
+          d.action === "deposit" || d.action === "withdrawal" || d.action === "interest";
         let instrumentId: string | null = null;
 
         if (!isCash) {
@@ -361,34 +386,128 @@ export async function importsRoute(app: FastifyInstance) {
           });
           instrumentId = instrument.id;
         }
-
-        const [tx] = await app.db
-          .insert(transactions)
-          .values({
-            portfolioId: imp.portfolioId,
-            instrumentId,
-            type: d.action,
-            quantity: d.quantity,
-            price: d.price,
-            fees: d.fees,
-            // The cash leg is always in the transaction's own currency (EUR for DKB),
-            // independent of where the instrument is listed/priced.
-            currency: d.currency,
-            executedAt: d.executedAt,
-            source,
-            importId: imp.id,
-            externalId: d.externalId ?? `import:${imp.id}:${i}`,
-            savingsPlanId: d.savingsPlanId ?? null,
-          })
-          .onConflictDoNothing()
-          .returning();
-        if (tx) created.push(tx);
+        resolved.push({ draft: d, instrumentId });
       }
 
-      await app.db
-        .update(screenshotImports)
-        .set({ status: "confirmed" })
-        .where(eq(screenshotImports.id, imp.id));
+      // Pass 2 — write the transactions and reconcile the import atomically.
+      const parsed = (imp.parsedJson ?? {}) as {
+        drafts?: { externalId?: string | null }[];
+        errors?: { eventId?: string; severity?: string }[];
+        seenEventIds?: string[];
+      };
+      const created = await app.db.transaction(async (tx) => {
+        const written: (typeof transactions.$inferSelect)[] = [];
+        for (let i = 0; i < resolved.length; i++) {
+          const { draft: d, instrumentId } = resolved[i];
+          const [row] = await tx
+            .insert(transactions)
+            .values({
+              portfolioId: imp.portfolioId!,
+              instrumentId,
+              type: d.action,
+              quantity: d.quantity,
+              price: d.price,
+              fees: d.fees,
+              tax: d.tax ?? null,
+              executedPrice: d.executedPrice ?? null,
+              fxRate: d.fxRate ?? null,
+              venue: d.venue ?? null,
+              documentRefs: d.documentRefs ?? null,
+              kind: d.kind ?? null,
+              description: d.description ?? null,
+              // The cash leg is always in the transaction's own currency (EUR for DKB),
+              // independent of where the instrument is listed/priced.
+              currency: d.currency,
+              executedAt: d.executedAt,
+              source,
+              importId: imp.id,
+              externalId: d.externalId ?? `import:${imp.id}:${i}`,
+              savingsPlanId: d.savingsPlanId ?? null,
+            })
+            .onConflictDoNothing()
+            .returning();
+          if (row) written.push(row);
+        }
+
+        const staged = Array.isArray(parsed.drafts) ? parsed.drafts : [];
+        const errors = Array.isArray(parsed.errors) ? parsed.errors : [];
+        const confirmedExtIds = new Set(
+          drafts.map((d) => d.externalId).filter((x): x is string => Boolean(x)),
+        );
+
+        if (imp.parser === "pytr") {
+          // Record confirmed events durably so a later manual deletion doesn't resurface them.
+          if (confirmedExtIds.size) {
+            await tx
+              .insert(trResolvedEvents)
+              .values(
+                [...confirmedExtIds].map((eventId) => ({
+                  portfolioId: imp.portfolioId!,
+                  eventId,
+                  resolution: "confirmed",
+                })),
+              )
+              .onConflictDoNothing();
+          }
+          // Pass-based confirm: keep the import open while drafts or *actionable* issues
+          // remain (ignorable `info` issues don't hold it open); close it otherwise.
+          const remaining = staged.filter(
+            (d) => !(d.externalId && confirmedExtIds.has(d.externalId)),
+          );
+          const remainingErrors = errors.filter(
+            (e) => !(e.eventId && confirmedExtIds.has(e.eventId)),
+          );
+          const remainingAttention = remainingErrors.filter((e) => e.severity === "attention");
+
+          if (remaining.length > 0 || remainingAttention.length > 0) {
+            await tx
+              .update(screenshotImports)
+              .set({ parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
+              .where(eq(screenshotImports.id, imp.id));
+          } else {
+            // Closing: record any leftover (ignorable) issues as resolved so the next sync
+            // doesn't re-surface them.
+            const leftover = remainingErrors
+              .map((e) => e.eventId)
+              .filter((x): x is string => Boolean(x));
+            if (leftover.length) {
+              await tx
+                .insert(trResolvedEvents)
+                .values(
+                  leftover.map((eventId) => ({
+                    portfolioId: imp.portfolioId!,
+                    eventId,
+                    resolution: "discarded",
+                  })),
+                )
+                .onConflictDoNothing();
+            }
+            await tx
+              .update(screenshotImports)
+              .set({ status: "confirmed" })
+              .where(eq(screenshotImports.id, imp.id));
+          }
+        } else {
+          // Other importers (CSV/screenshot/DKB): pass-based prune when drafts carry stable
+          // ids, else all-or-nothing — unchanged behaviour, no durable ledger.
+          const everyHasId = staged.length > 0 && staged.every((d) => Boolean(d.externalId));
+          const remaining = everyHasId
+            ? staged.filter((d) => !(d.externalId && confirmedExtIds.has(d.externalId)))
+            : [];
+          if (everyHasId && remaining.length > 0) {
+            await tx
+              .update(screenshotImports)
+              .set({ parsedJson: { ...parsed, drafts: remaining } })
+              .where(eq(screenshotImports.id, imp.id));
+          } else {
+            await tx
+              .update(screenshotImports)
+              .set({ status: "confirmed" })
+              .where(eq(screenshotImports.id, imp.id));
+          }
+        }
+        return written;
+      });
 
       reply.code(201);
       return { confirmed: created.length, transactions: created };

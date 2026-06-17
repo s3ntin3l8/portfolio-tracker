@@ -4,9 +4,12 @@ import type {
   InstrumentInput,
   CorporateActionInput,
   ParsedTransaction,
+  ImportIssue,
   UserUpdate,
   ProviderSettingUpdate,
 } from "@portfolio/schema";
+
+export type { ImportIssue } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
 
@@ -322,13 +325,13 @@ export interface ContributionStats {
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 export interface ScreenshotImportResult {
   importId: string;
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 /** A past import in the user's history (draft, confirmed, or discarded). */
@@ -349,7 +352,7 @@ export interface ImportDetail {
   parser: string;
   status: "draft" | "confirmed" | "discarded";
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 export type TrStatus =
@@ -360,12 +363,24 @@ export type TrStatus =
   | "expired"
   | "error";
 
+export type TrImportCategory = "trade" | "income" | "cashflow" | "card";
+
+/** TR's reported cash vs our derived cash, per currency (decimal strings). */
+export interface CashReconciliation {
+  checkedAt: string;
+  cash: { currency: string; reported: string; derived: string; diff: string }[];
+}
+
 /** Public state of the user's Trade Republic connection — never includes secrets. */
 export interface TrConnection {
   status: TrStatus;
   portfolioId: string | null;
   lastSyncAt: string | null;
   lastError: string | null;
+  /** Which event categories the sync stages; null = default (everything but card spending). */
+  importCategories: TrImportCategory[] | null;
+  /** Last cash reconciliation (TR-reported vs derived), or null until first synced. */
+  lastReconciliation: CashReconciliation | null;
 }
 
 export interface TrConnectInput {
@@ -381,6 +396,8 @@ export interface TrSyncResult {
   importId?: string;
   drafts?: number;
   errors?: number;
+  cancelled?: number;
+  reconciliation?: CashReconciliation;
 }
 
 // --- Client --------------------------------------------------------------
@@ -574,6 +591,9 @@ export function createApiClient(config: ApiClientConfig) {
     // login in the TR mobile app (or it is declined / the window expires).
     verifyTr: () => request<{ status: TrStatus }>("POST", "/tr/connection/verify"),
     syncTr: () => request<TrSyncResult>("POST", "/tr/connection/sync"),
+    updateTrCategories: (importCategories: TrImportCategory[]) =>
+      request<TrConnection>("PATCH", "/tr/connection", { importCategories }),
+    reimportTr: () => request<{ removed: number }>("POST", "/tr/connection/reimport"),
     disconnectTr: () => request<void>("DELETE", "/tr/connection"),
   };
 }

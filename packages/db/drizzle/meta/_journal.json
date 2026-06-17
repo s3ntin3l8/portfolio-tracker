@@ -78,6 +78,41 @@
       "when": 1781630151988,
       "tag": "0010_loud_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781676813259,
+      "tag": "0011_dazzling_annihilus",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781680119183,
+      "tag": "0012_high_nightcrawler",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781680806981,
+      "tag": "0013_cool_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781682638626,
+      "tag": "0014_shiny_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1781685482297,
+      "tag": "0015_motionless_scourge",
+      "breakpoints": true
     }
   ]
 }

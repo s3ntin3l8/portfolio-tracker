@@ -21,6 +21,9 @@ export const transactionTypeSchema = z.enum([
   "sell",
   "dividend",
   "coupon",
+  // Interest paid on uninvested cash — income, NOT a contribution (kept distinct from
+  // `deposit` so it doesn't inflate invested capital / depress money-weighted return).
+  "interest",
   "fee",
   "split",
   "bonus",
@@ -148,6 +151,7 @@ export const parsedActionSchema = z.enum([
   "sell",
   "dividend",
   "coupon",
+  "interest",
   "savings_plan",
   "deposit",
   "withdrawal",
@@ -175,6 +179,46 @@ export const parsedTransactionSchema = z.object({
   externalId: z.string().nullish(),
   // Groups recurring savings-plan executions (set by the Trade Republic importer).
   savingsPlanId: z.string().nullish(),
+  // Broker enrichment (Trade Republic): informational metadata persisted on the
+  // transaction. `tax`/`fxRate`/`executedPrice` are decimal strings; `kind` distinguishes
+  // saveback/roundup; `documentRefs` are source-document pointers (see issue #150).
+  tax: decimalString.nullish(),
+  executedPrice: decimalString.nullish(),
+  fxRate: decimalString.nullish(),
+  venue: z.string().nullish(),
+  kind: z.string().nullish(),
+  description: z.string().nullish(),
+  documentRefs: z
+    .array(
+      z.object({
+        id: z.string(),
+        type: z.string().nullish(),
+        date: z.string().nullish(),
+      }),
+    )
+    .nullish(),
   confidence: z.number().min(0).max(1),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;
+
+// A parse/skip outcome surfaced to the user instead of being silently dropped. `info` is
+// ignorable (e.g. a card-verification ping); `attention` is something the user may want to
+// map into a transaction. `raw` carries the source event fields to seed the mapping editor.
+export const importIssueSchema = z.object({
+  message: z.string(),
+  severity: z.enum(["info", "attention"]).default("attention"),
+  line: z.number().optional(),
+  eventId: z.string().optional(),
+  eventType: z.string().optional(),
+  raw: z
+    .object({
+      isin: z.string().nullish(),
+      name: z.string().nullish(),
+      currency: z.string().nullish(),
+      executedAt: z.string().nullish(),
+      amount: z.number().nullish(),
+      shares: z.number().nullish(),
+    })
+    .nullish(),
+});
+export type ImportIssue = z.infer<typeof importIssueSchema>;

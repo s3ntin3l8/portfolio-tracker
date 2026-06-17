@@ -23,9 +23,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ImportDraft, ReviewDraft } from "@/components/import-flow";
+import type { ImportDraft, ImportIssue, ReviewDraft } from "@/components/import-flow";
 
-const ALL = "all";
+// Actions the mapping editor can assign to an unmapped event.
+const MAP_ACTIONS = [
+  "buy",
+  "sell",
+  "dividend",
+  "coupon",
+  "interest",
+  "savings_plan",
+  "deposit",
+  "withdrawal",
+] as const;
+
 // Confidence below this reads as "needs review" — same threshold as the badge colour.
 const NEEDS_REVIEW_BELOW = 0.9;
 
@@ -37,6 +48,10 @@ export interface ImportReviewProps {
   /** Confirm all drafts, or just the passed subset (confirm-selected). */
   onConfirm: (uids?: string[]) => void | Promise<void>;
   onDiscard: () => void | Promise<void>;
+  /** Unmapped/skipped events surfaced for review (Trade Republic imports). */
+  issues?: ImportIssue[];
+  /** Turn an "attention" issue into a draft (user completed it in the map dialog). */
+  onMapIssue?: (eventId: string, draft: ImportDraft) => void;
 }
 
 /**
@@ -53,9 +68,43 @@ export function ImportReview({
   onRemoveMany,
   onConfirm,
   onDiscard,
+  issues = [],
+  onMapIssue,
 }: ImportReviewProps) {
   const t = useTranslations("Import");
   const tm = useTranslations("Manage");
+
+  const attention = issues.filter((i) => i.severity === "attention" && i.eventId);
+  const ignorable = issues.filter((i) => !(i.severity === "attention" && i.eventId));
+  // The issue currently open in the map dialog, plus its in-progress draft fields.
+  const [mapping, setMapping] = useState<ImportIssue | null>(null);
+  const [mapForm, setMapForm] = useState<ImportDraft | null>(null);
+
+  function openMap(issue: ImportIssue) {
+    const raw = issue.raw ?? {};
+    const amount = raw.amount != null ? Math.abs(raw.amount) : 0;
+    setMapping(issue);
+    setMapForm({
+      assetClass: "equity",
+      action: "buy",
+      isin: raw.isin ?? null,
+      name: raw.name ?? issue.eventType ?? "",
+      quantity: "0",
+      unit: "shares",
+      price: String(amount),
+      fees: "0",
+      currency: raw.currency ?? "EUR",
+      executedAt: (raw.executedAt ?? new Date().toISOString()).slice(0, 10),
+      confidence: 1,
+      externalId: issue.eventId ?? null,
+    });
+  }
+
+  function saveMap() {
+    if (mapping?.eventId && mapForm && onMapIssue) onMapIssue(mapping.eventId, mapForm);
+    setMapping(null);
+    setMapForm(null);
+  }
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
@@ -88,10 +137,25 @@ export function ImportReview({
     }
   }
 
-  const [assetClassFilter, setAssetClassFilter] = useState<string>(ALL);
-  const [actionFilter, setActionFilter] = useState<string>(ALL);
+  // Multi-select filters: an empty set means "all". A non-empty set is OR within the
+  // dimension (e.g. buy OR sell), and dimensions AND together — so you can isolate exactly
+  // the rows you want to confirm in one pass.
+  const [assetClassFilter, setAssetClassFilter] = useState<Set<string>>(new Set());
+  const [actionFilter, setActionFilter] = useState<Set<string>>(new Set());
   const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const [query, setQuery] = useState("");
+
+  function toggleFilter(
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    value: string,
+  ) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
 
   const assetClasses = useMemo(
     () => [...new Set(drafts.map((d) => d.assetClass))].sort(),
@@ -103,16 +167,16 @@ export function ImportReview({
   );
 
   const filtersActive =
-    assetClassFilter !== ALL ||
-    actionFilter !== ALL ||
+    assetClassFilter.size > 0 ||
+    actionFilter.size > 0 ||
     needsReviewOnly ||
     query.trim() !== "";
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
     return drafts.filter((d) => {
-      if (assetClassFilter !== ALL && d.assetClass !== assetClassFilter) return false;
-      if (actionFilter !== ALL && d.action !== actionFilter) return false;
+      if (assetClassFilter.size && !assetClassFilter.has(d.assetClass)) return false;
+      if (actionFilter.size && !actionFilter.has(d.action)) return false;
       if (needsReviewOnly && d.confidence >= NEEDS_REVIEW_BELOW) return false;
       if (q && !(d.name ?? "").toLowerCase().includes(q)) return false;
       return true;
@@ -162,8 +226,8 @@ export function ImportReview({
   }
 
   function clearFilters() {
-    setAssetClassFilter(ALL);
-    setActionFilter(ALL);
+    setAssetClassFilter(new Set());
+    setActionFilter(new Set());
     setNeedsReviewOnly(false);
     setQuery("");
   }
@@ -178,34 +242,67 @@ export function ImportReview({
         {t("draftCount", { count: drafts.length })} — {t("reviewHint")}
       </p>
 
+      {/* Issues: events that didn't map cleanly. "Attention" ones can be completed into
+          drafts via the map dialog; ignorable info is tucked behind a disclosure. */}
+      {(attention.length > 0 || ignorable.length > 0) && (
+        <div className="space-y-2 rounded-lg border border-border bg-card/40 p-3">
+          {attention.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">
+                {t("review.issues.attention", { count: attention.length })}
+              </p>
+              <ul className="space-y-1.5">
+                {attention.map((issue) => (
+                  <li
+                    key={issue.eventId}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {issue.raw?.name ?? issue.eventType} — {issue.message}
+                    </span>
+                    {onMapIssue && (
+                      <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
+                        {t("review.issues.map")}
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {ignorable.length > 0 && (
+            <details className="text-sm text-muted-foreground">
+              <summary className="cursor-pointer">
+                {t("review.issues.ignored", { count: ignorable.length })}
+              </summary>
+              <ul className="mt-1.5 space-y-1 pl-4">
+                {ignorable.map((issue, i) => (
+                  <li key={issue.eventId ?? i}>{issue.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <Select
-          aria-label={t("review.filters.assetClass")}
-          value={assetClassFilter}
-          onChange={(e) => setAssetClassFilter(e.target.value)}
-          className="h-9 sm:w-auto"
-        >
-          <option value={ALL}>{t("review.filters.assetClass")}</option>
-          {assetClasses.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label={t("review.filters.action")}
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          className="h-9 sm:w-auto"
-        >
-          <option value={ALL}>{t("review.filters.action")}</option>
-          {actions.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </Select>
+        {assetClasses.length > 1 && (
+          <ChipGroup
+            label={t("review.filters.assetClass")}
+            values={assetClasses}
+            selected={assetClassFilter}
+            onToggle={(v) => toggleFilter(setAssetClassFilter, v)}
+          />
+        )}
+        {actions.length > 1 && (
+          <ChipGroup
+            label={t("review.filters.action")}
+            values={actions}
+            selected={actionFilter}
+            onToggle={(v) => toggleFilter(setActionFilter, v)}
+          />
+        )}
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
@@ -501,6 +598,73 @@ export function ImportReview({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Map dialog: complete an unmapped event into a confirmable draft */}
+      <Dialog
+        open={mapping !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMapping(null);
+            setMapForm(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("review.issues.mapTitle")}</DialogTitle>
+          </DialogHeader>
+          {mapForm && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("review.columns.action")}>
+                <Select
+                  value={mapForm.action}
+                  onChange={(e) => setMapForm({ ...mapForm, action: e.target.value })}
+                >
+                  {MAP_ACTIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("fields.name")}>
+                <Input
+                  value={mapForm.name ?? ""}
+                  onChange={(e) => setMapForm({ ...mapForm, name: e.target.value })}
+                />
+              </Field>
+              <Field label="ISIN">
+                <Input
+                  value={mapForm.isin ?? ""}
+                  onChange={(e) => setMapForm({ ...mapForm, isin: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.executedAt")}>
+                <Input
+                  type="date"
+                  value={mapForm.executedAt.slice(0, 10)}
+                  onChange={(e) => setMapForm({ ...mapForm, executedAt: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.quantity")}>
+                <Input
+                  value={mapForm.quantity}
+                  onChange={(e) => setMapForm({ ...mapForm, quantity: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.price")}>
+                <Input
+                  value={mapForm.price}
+                  onChange={(e) => setMapForm({ ...mapForm, price: e.target.value })}
+                />
+              </Field>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={saveMap}>{t("review.issues.mapSave")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -510,6 +674,38 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// A labelled row of multi-select toggle chips (OR within the dimension). Empty = all.
+function ChipGroup({
+  label,
+  values,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  values: string[];
+  selected: Set<string>;
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{label}:</span>
+      {values.map((v) => (
+        <Button
+          key={v}
+          type="button"
+          size="sm"
+          variant={selected.has(v) ? "default" : "outline"}
+          aria-pressed={selected.has(v)}
+          className="h-7 px-2 text-xs"
+          onClick={() => onToggle(v)}
+        >
+          {v}
+        </Button>
+      ))}
     </div>
   );
 }

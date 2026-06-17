@@ -14,7 +14,7 @@ Contract (consumed by services/pytr/runner.ts):
 
 Each emitted line is the NORMALIZED event the Node mapper consumes:
   {id, timestamp, eventType, title, amount (signed), currency,
-   isin?, shares?, fees?, savingsPlanId?}
+   isin?, shares?, fees?, savingsPlanId?, status?}
 Extraction of isin/shares/fees from the timeline detail is best-effort and the part most
 sensitive to pytr/TR changes; the raw detail is scanned defensively.
 
@@ -170,6 +170,79 @@ def _extract_shares(details):
     return None
 
 
+def _text_field(details, titles):
+    """First detail row whose (lowercased) title EXACTLY matches one of `titles`. Exact —
+    not substring — so 'an'/'von' don't match 'Anteile'/'Transaktion'."""
+    wanted = set(titles)
+    for title, text in _walk_rows(details or {}):
+        if title in wanted and text:
+            return text
+    return None
+
+
+def _extract_price(details):
+    """The actual executed per-share price (Aktienkurs / Anteilspreis / Bezugspreis).
+
+    Excludes 'Wechselkurs' (FX) and 'Aktienkurs'… wait — only true price rows. Returned
+    so cost basis can lead with TR's figure instead of deriving it from the cash total.
+    """
+    return _field(details, ["aktienkurs", "anteilspreis", "bezugspreis", "share price"])
+
+
+def _extract_tax(details):
+    """Tax withheld/corrected (Steuer/Steuern/Steuerkorrektur), signed as TR shows it."""
+    return _field(details, ["steuer"])  # matches Steuer, Steuern, Steuerkorrektur
+
+
+def _extract_fx(details):
+    """EUR-per-foreign-unit rate from a 'Wechselkurs' row, e.g. '1 $ 0,84492 €' → 0.84492."""
+    for title, text in _walk_rows(details or {}):
+        if "wechselkurs" in title or "devisenkurs" in title:
+            match = re.search(r"([-\d.,]+)\s*€\s*$", text)
+            if match:
+                return _num(match.group(1))
+    return None
+
+
+def _extract_venue(details):
+    """Execution venue (rarely present on TR — 'Börse'/'Handelsplatz'/'Ausführungsort')."""
+    return _text_field(details, ["börse", "handelsplatz", "ausführungsort", "ausführungsplatz"])
+
+
+def _extract_description(event, details):
+    """Memo for cash/transfer rows: the transfer counterparty (name + IBAN) or card merchant.
+
+    The instrument/merchant title is already carried as `title`; here we add the bits that
+    would otherwise be lost — who the money went to/from and the IBAN.
+    """
+    party = _text_field(details, ["absender", "empfänger", "von", "an", "name", "händler"])
+    iban = _text_field(details, ["iban"])
+    bits = [b for b in (party, iban) if b]
+    return " · ".join(bits) or None
+
+
+def _extract_documents(details):
+    """Document references from `documents` sections: {id, type, date}. The S3 URL itself
+    is presigned/short-lived, so it's not persisted — re-fetched at download time."""
+    out = []
+    for section in (details or {}).get("sections", []) or []:
+        if section.get("type") != "documents":
+            continue
+        data = section.get("data")
+        rows = data if isinstance(data, list) else [data] if isinstance(data, dict) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            doc_id = row.get("id")
+            if doc_id:
+                out.append({
+                    "id": doc_id,
+                    "type": row.get("postboxType"),
+                    "date": row.get("detail"),
+                })
+    return out or None
+
+
 def _extract_isin(event):
     match = ISIN_RE.search(event.get("icon") or "")
     if match:
@@ -198,7 +271,33 @@ def _normalize(event):
         "shares": _extract_shares(details),
         "fees": _field(details, ["fee", "gebühr", "provision"]),
         "savingsPlanId": event.get("savingsPlanId"),
+        # Enrichment from the timeline detail (best-effort; absent fields stay null).
+        "executedPrice": _extract_price(details),
+        "tax": _extract_tax(details),
+        "fxRate": _extract_fx(details),
+        "venue": _extract_venue(details),
+        "documentRefs": _extract_documents(details),
+        "description": _extract_description(event, details),
+        # Booking status (EXECUTED / CANCELED / PENDING). Read from the timeline list item
+        # itself — no extra detail fetch — so the Node side can skip non-executed events and
+        # un-import ones that were cancelled after a prior sync confirmed them.
+        "status": event.get("status"),
     }
+
+
+async def _fetch_cash(tr):
+    """TR's reported cash balance per currency, for reconciliation against our derived cash.
+    Shape mirrors pytr's own use: a list of {currencyId, amount}."""
+    try:
+        await tr.cash()
+        resp = await _await_subscription(tr, "cash")
+        return [
+            {"currency": c.get("currencyId"), "amount": c.get("amount")}
+            for c in resp
+            if isinstance(c, dict) and c.get("currencyId")
+        ]
+    except Exception:  # noqa: BLE001 - best effort; reconciliation is optional
+        return None
 
 
 async def _run(tr) -> int:
@@ -206,6 +305,9 @@ async def _run(tr) -> int:
     events = await _attach_details(tr, events)
     for event in events:
         sys.stdout.write(json.dumps(_normalize(event)) + "\n")
+    # A trailing, clearly-tagged summary line (not an event) carrying TR's reported balances.
+    cash = await _fetch_cash(tr)
+    sys.stdout.write(json.dumps({"__summary__": {"cash": cash}}) + "\n")
     sys.stdout.flush()
     # Persist the rolling session so the next sync can resume without re-pairing.
     try:

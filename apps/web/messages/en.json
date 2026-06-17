@@ -219,6 +219,13 @@
         "assetClass": "Class",
         "action": "Action"
       },
+      "issues": {
+        "attention": "{count, plural, one {# event needs attention} other {# events need attention}}",
+        "ignored": "{count, plural, one {# ignored event} other {# ignored events}}",
+        "map": "Map",
+        "mapTitle": "Map this event to a transaction",
+        "mapSave": "Add to drafts"
+      },
       "empty": "No drafts match your filters."
     },
     "discard": "Discard",
@@ -502,6 +509,25 @@
     "connectedHint": "Your account is connected. Sync pulls new activity as draft transactions you confirm.",
     "synced": "Synced — {drafts} draft transactions staged. Review them on the Import page.",
     "syncNow": "Sync now",
+    "categories": {
+      "title": "What to import",
+      "hint": "Trade Republic is a full bank account. Choose which activity to stage as drafts.",
+      "trade": "Trades & savings plans",
+      "income": "Dividends & interest",
+      "cashflow": "Transfers (deposits & withdrawals)",
+      "card": "Card spending"
+    },
+    "reconcile": {
+      "title": "Cash reconciliation",
+      "row": "{currency}: TR {reported} · ours {derived}",
+      "off": "off by {diff}",
+      "match": "matches"
+    },
+    "reimport": {
+      "action": "Re-import everything…",
+      "warning": "This deletes all Trade Republic transactions in this portfolio and re-stages the full timeline to confirm again. Manual edits to those rows are lost.",
+      "confirm": "Delete & re-import"
+    },
     "disconnect": "Disconnect",
     "expiredHint": "Your session expired. Reconnect to resume syncing.",
     "error": "Something went wrong. Please try again.",

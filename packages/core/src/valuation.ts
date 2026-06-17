@@ -160,7 +160,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
 
   let totalIncome = new Decimal(0);
   for (const tx of input.transactions) {
-    if (tx.type === "dividend" || tx.type === "coupon") {
+    if (tx.type === "dividend" || tx.type === "coupon" || tx.type === "interest") {
       totalIncome = totalIncome.add(
         convert(
           cashFlow(tx).toString(),
