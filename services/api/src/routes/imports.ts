@@ -275,6 +275,26 @@ export async function importsRoute(app: FastifyInstance) {
     },
   );
 
+  // Hard-delete a discarded import row. Only works on discarded rows (which provably have
+  // no child transactions/loans — both FK columns are onDelete:"set null"). Safe vs TR
+  // sync: trResolvedEvents has no FK to screenshot_imports; events are written before the
+  // row is discarded, so deleting the row doesn't resurface them.
+  app.delete<{ Params: { importId: string } }>(
+    "/imports/:importId/clear",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+      if (imp.status !== "discarded") {
+        return reply.code(409).send({ error: "not_discarded" });
+      }
+      await app.db.delete(screenshotImports).where(eq(screenshotImports.id, imp.id));
+      reply.code(204);
+      return null;
+    },
+  );
+
   // Fetch a single import with its parsed drafts (owner only) — powers reviewing an
   // already-staged draft (e.g. a Trade Republic sync) from the import history.
   app.get<{ Params: { importId: string } }>(

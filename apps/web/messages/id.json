@@ -296,7 +296,9 @@
       "confirmed": "Terkonfirmasi",
       "discarded": "Dibuang"
     },
-    "importedBanner": "{count, plural, other {# transaksi diimpor}}"
+    "importedBanner": "{count, plural, other {# transaksi diimpor}}",
+    "clear": "Bersihkan",
+    "clearAll": "Bersihkan semua yang dibuang"
   },
   "Dashboard": {
     "title": "Dasbor",

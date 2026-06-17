@@ -8,6 +8,7 @@ import type { ImportRecord } from "@portfolio/api-client";
 const refresh = vi.fn();
 const discardImport = vi.fn(async () => undefined);
 const deleteImport = vi.fn(async () => ({ removed: 1 }));
+const clearImport = vi.fn(async () => undefined);
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -16,7 +17,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ discardImport, deleteImport }),
+  useApiClient: () => ({ discardImport, deleteImport, clearImport }),
 }));
 
 import { ImportHistory } from "../src/components/import-history";
@@ -82,11 +83,24 @@ function renderHistory() {
   );
 }
 
+const discardedItem: ImportRecord = {
+  id: "disc1",
+  portfolioId: "p1",
+  parser: "csv",
+  status: "discarded",
+  confidence: null,
+  count: 1,
+  createdAt: "2026-06-08T10:00:00.000Z",
+};
+
+const itemsWithDiscarded: ImportRecord[] = [...items, discardedItem];
+
 describe("ImportHistory", () => {
   beforeEach(() => {
     refresh.mockClear();
     discardImport.mockClear();
     deleteImport.mockClear();
+    clearImport.mockClear();
   });
 
   it("discards a draft import", async () => {
@@ -158,5 +172,58 @@ describe("ImportHistory", () => {
     expect(parserBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
     fireEvent.click(parserBtn);
     expect(parserBtn.closest("th")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("clears a discarded import via the per-row Clear button", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={itemsWithDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: m.clear }));
+    await waitFor(() => expect(clearImport).toHaveBeenCalledWith("disc1"));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("does not render Clear button for draft or confirmed rows", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={itemsWithDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    // Only one Clear button — for the single discarded row.
+    expect(screen.getAllByRole("button", { name: m.clear })).toHaveLength(1);
+  });
+
+  it("shows Clear all discarded header button when discarded rows exist", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={itemsWithDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: m.clearAll })).toBeInTheDocument();
+  });
+
+  it("hides Clear all discarded when no discarded rows exist", () => {
+    renderHistory();
+    expect(screen.queryByRole("button", { name: m.clearAll })).not.toBeInTheDocument();
+  });
+
+  it("clears all discarded imports via the header button", async () => {
+    const twoDiscarded: ImportRecord[] = [
+      { ...discardedItem, id: "disc1" },
+      { ...discardedItem, id: "disc2" },
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={twoDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: m.clearAll }));
+    await waitFor(() => {
+      expect(clearImport).toHaveBeenCalledWith("disc1");
+      expect(clearImport).toHaveBeenCalledWith("disc2");
+    });
+    expect(refresh).toHaveBeenCalled();
   });
 });

@@ -635,6 +635,9 @@ export function createApiClient(config: ApiClientConfig) {
     /** Undo an import: remove any transactions it wrote, then mark it discarded. */
     deleteImport: (importId: string) =>
       request<{ removed: number }>("DELETE", `/imports/${importId}`),
+    /** Hard-delete a discarded import row (no-op on its already-removed children). */
+    clearImport: (importId: string) =>
+      request<void>("DELETE", `/imports/${importId}/clear`),
 
     // --- Trade Republic ---
     getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),

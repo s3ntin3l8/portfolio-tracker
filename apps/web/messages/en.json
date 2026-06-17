@@ -296,7 +296,9 @@
       "confirmed": "Confirmed",
       "discarded": "Discarded"
     },
-    "importedBanner": "{count, plural, one {# transaction imported} other {# transactions imported}}"
+    "importedBanner": "{count, plural, one {# transaction imported} other {# transactions imported}}",
+    "clear": "Clear",
+    "clearAll": "Clear all discarded"
   },
   "Dashboard": {
     "title": "Dashboard",

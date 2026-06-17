@@ -332,6 +332,134 @@ describe("CSV import → confirm flow", () => {
     ).toBe(404);
   });
 
+  it("clears a discarded import (hard-delete)", async () => {
+    const t = await token("clear-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "ClearTest", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // Create a draft and discard it.
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/discard`,
+      headers: auth(t),
+    });
+
+    // Clear should hard-delete the row → 204, then 404 on GET, and absent from list.
+    const clear = await app.inject({
+      method: "DELETE",
+      url: `/imports/${imp.importId}/clear`,
+      headers: auth(t),
+    });
+    expect(clear.statusCode).toBe(204);
+
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${imp.importId}`, headers: auth(t) }))
+        .statusCode,
+    ).toBe(404);
+
+    const list = await app.inject({ method: "GET", url: "/imports", headers: auth(t) });
+    expect(list.json().map((r: { id: string }) => r.id)).not.toContain(imp.importId);
+  });
+
+  it("rejects clear on a draft or confirmed import (409)", async () => {
+    const t = await token("clear-409-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "ClearTest2", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // draft → 409
+    const draftImp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/imports/${draftImp.importId}/clear`,
+          headers: auth(t),
+        })
+      ).statusCode,
+    ).toBe(409);
+
+    // confirmed → 409
+    await app.inject({
+      method: "POST",
+      url: `/imports/${draftImp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: draftImp.drafts },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/imports/${draftImp.importId}/clear`,
+          headers: auth(t),
+        })
+      ).statusCode,
+    ).toBe(409);
+  });
+
+  it("rejects clear from another user (404)", async () => {
+    const owner = await token("clear-owner");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(owner),
+        payload: { name: "ClearOwner", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(owner),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/discard`,
+      headers: auth(owner),
+    });
+
+    const other = await token("clear-other");
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/imports/${imp.importId}/clear`,
+          headers: auth(other),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
   it("auto-detects and imports an IBKR Flex Trades CSV", async () => {
     const t = await token("ibkr-user");
     const portfolioId = (

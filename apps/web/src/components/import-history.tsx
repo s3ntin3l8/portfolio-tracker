@@ -56,6 +56,7 @@ export function ImportHistory({ items }: { items: ImportRecord[] }) {
   const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<ImportRecord>(IH_COLS);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   async function discard(id: string) {
     setBusyId(id);
@@ -78,10 +79,47 @@ export function ImportHistory({ items }: { items: ImportRecord[] }) {
     }
   }
 
+  async function clear(id: string) {
+    setBusyId(id);
+    try {
+      await api.clearImport(id);
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const discardedIds = items.filter((i) => i.status === "discarded").map((i) => i.id);
+
+  async function clearAllDiscarded() {
+    setClearingAll(true);
+    try {
+      await Promise.all(discardedIds.map((id) => api.clearImport(id)));
+      router.refresh();
+    } finally {
+      setClearingAll(false);
+    }
+  }
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>{t("title")}</CardTitle>
+        {discardedIds.length > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={clearingAll}
+            onClick={clearAllDiscarded}
+          >
+            {clearingAll ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="size-3.5" />
+            )}
+            {t("clearAll")}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <Table>
@@ -141,6 +179,21 @@ export function ImportHistory({ items }: { items: ImportRecord[] }) {
                             {t("discard")}
                           </Button>
                         </>
+                      )}
+                      {imp.status === "discarded" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => clear(imp.id)}
+                        >
+                          {busy ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5" />
+                          )}
+                          {t("clear")}
+                        </Button>
                       )}
                       {imp.status === "confirmed" &&
                         (confirmId === imp.id ? (
