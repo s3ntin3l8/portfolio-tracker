@@ -39,6 +39,13 @@ export default async function HoldingsPage({
       : [];
   const currency = result.status === "ok" ? result.displayCurrency : "IDR";
 
+  // Count holdings per asset class to determine which tabs to disable.
+  const classCounts = holdings.reduce<Record<string, number>>((acc, h) => {
+    const c = h.instrument?.assetClass;
+    if (c) acc[c] = (acc[c] ?? 0) + 1;
+    return acc;
+  }, {});
+
   // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
   // value/P&L are in the display currency (the trailing Currency column).
   const exportRows: (string | number)[][] = holdings.map((h) => [
@@ -140,7 +147,11 @@ export default async function HoldingsPage({
       <Tabs defaultValue="all">
         <TabsList>
           {CLASS_TABS.map((key) => (
-            <TabsTrigger key={key} value={key}>
+            <TabsTrigger
+              key={key}
+              value={key}
+              disabled={key !== "all" && (classCounts[key] ?? 0) === 0}
+            >
               {key === "all" ? t("all") : tc(key)}
             </TabsTrigger>
           ))}

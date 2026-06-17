@@ -69,9 +69,10 @@ function renderTable() {
 describe("HoldingsTable", () => {
   it("renders all rows", () => {
     renderTable();
-    expect(screen.getByText("ZZYX")).toBeInTheDocument();
-    expect(screen.getByText("AAPL")).toBeInTheDocument();
-    expect(screen.getByText("BBCA")).toBeInTheDocument();
+    // Both desktop and mobile layouts render the same symbol; getAllByText handles both.
+    expect(screen.getAllByText("ZZYX")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("AAPL")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("BBCA")[0]).toBeInTheDocument();
   });
 
   it("sorts by instrument name ascending when clicked", () => {
