@@ -18,11 +18,13 @@ export {
 } from "./valuation.js";
 export {
   projectCoupons,
+  projectDividends,
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
   type BondPosition,
   type ProjectedCoupon,
+  type ProjectedDividend,
   type IncomeEntry,
   type IncomeStats,
   type YearIncome,

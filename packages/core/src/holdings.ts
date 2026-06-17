@@ -12,15 +12,22 @@ type Event =
  * Derive per-instrument holdings from transactions using the **average cost**
  * method. Handles buys/savings-plan, sells (realized P&L), and split/bonus
  * corporate actions. Cash movements (null instrument) are ignored here.
+ *
+ * Pass `asOf` to replay only transactions up to (and including) that date.
+ * Corporate actions are **always** applied regardless of `asOf`, so the
+ * returned quantity is in current share terms — making `histQty / currentQty`
+ * ratios split-consistent without extra adjustment.
  */
 export function computeHoldings(
   transactions: CoreTransaction[],
   corporateActions: CorporateAction[] = [],
+  asOf?: Date,
 ): Holding[] {
   const byInstrument = new Map<string, Event[]>();
 
   for (const tx of transactions) {
     if (!tx.instrumentId) continue;
+    if (asOf !== undefined && tx.executedAt > asOf) continue;
     const list = byInstrument.get(tx.instrumentId) ?? [];
     list.push({ kind: "tx", at: tx.executedAt, tx });
     byInstrument.set(tx.instrumentId, list);

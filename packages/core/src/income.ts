@@ -37,17 +37,25 @@ const PERIODS_PER_YEAR: Record<string, number> = {
 };
 
 /**
- * Project the coupon payments due on held bonds within `horizonMonths`.
- * Coupon dates are anchored to the maturity date and stepped back by the payment
- * interval; each amount is `faceValue × quantity × couponRate ÷ periodsPerYear`.
+ * Project the coupon payments due on held bonds within a given horizon.
+ *
+ * `horizon` may be a number of months (default 12) or an explicit `Date`
+ * (e.g. Dec 31 of the current year for the rest-of-year window). Coupon dates
+ * are anchored to the maturity date and stepped back by the payment interval;
+ * each amount is `faceValue × quantity × couponRate ÷ periodsPerYear`.
  */
 export function projectCoupons(
   positions: BondPosition[],
-  horizonMonths = 12,
+  horizon: number | Date = 12,
   now: Date = new Date(),
 ): ProjectedCoupon[] {
-  const horizonEnd = new Date(now);
-  horizonEnd.setUTCMonth(horizonEnd.getUTCMonth() + horizonMonths);
+  let horizonEnd: Date;
+  if (horizon instanceof Date) {
+    horizonEnd = horizon;
+  } else {
+    horizonEnd = new Date(now);
+    horizonEnd.setUTCMonth(horizonEnd.getUTCMonth() + horizon);
+  }
 
   const out: ProjectedCoupon[] = [];
   for (const p of positions) {
@@ -81,6 +89,91 @@ export function projectCoupons(
       d.setUTCMonth(d.getUTCMonth() - intervalMonths);
     }
   }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** A dividend payment projected from last year's actual payout, in instrument currency. */
+export interface ProjectedDividend {
+  instrumentId: string;
+  symbol?: string | null;
+  name?: string | null;
+  /** YYYY-MM-DD — the historical payment date shifted forward by one year. */
+  date: string;
+  /** Total projected cash in `currency`, scaled by quantity change. */
+  amount: string;
+  currency: string;
+  /** Calendar year the estimate is derived from (e.g. 2025 for a 2026 projection). */
+  basisYear: number;
+}
+
+/**
+ * Project equity dividends for the rest of the current year by replaying
+ * each instrument's actual payments from last year's same window (now → Dec 31)
+ * shifted forward one year, scaled by the quantity change.
+ *
+ * Scaling is split-consistent because `qtyAt` should return quantities in
+ * current share terms (i.e. with all corporate actions applied regardless of
+ * the `asOf` date — see `computeHoldings`).
+ *
+ * Only instruments still held (`heldQty` with qty > 0) are projected.
+ * Instruments with no last-year payment in the window are skipped — they
+ * will be covered by announced data once that feature lands.
+ */
+export function projectDividends(
+  pastDividends: IncomeEntry[],
+  heldQty: Map<string, string>,
+  qtyAt: (instrumentId: string, at: Date) => string,
+  now: Date = new Date(),
+): ProjectedDividend[] {
+  // Source window: last year's equivalent of (now, Dec 31].
+  const lastYearEnd = new Date(
+    Date.UTC(now.getUTCFullYear() - 1, 11, 31, 23, 59, 59, 999),
+  );
+  const pastStart = new Date(now);
+  pastStart.setUTCFullYear(pastStart.getUTCFullYear() - 1);
+
+  const nowStr = now.toISOString().slice(0, 10);
+
+  const out: ProjectedDividend[] = [];
+
+  for (const e of pastDividends) {
+    if (e.type !== "dividend" || !e.instrumentId) continue;
+
+    // Filter to the source window (pastStart, lastYearEnd].
+    if (e.executedAt <= pastStart || e.executedAt > lastYearEnd) continue;
+
+    // Only project for still-held instruments.
+    const currentQtyStr = heldQty.get(e.instrumentId);
+    if (!currentQtyStr || new Decimal(currentQtyStr).lte(0)) continue;
+
+    const currentQty = new Decimal(currentQtyStr);
+    const histQtyStr = qtyAt(e.instrumentId, e.executedAt);
+    const histQty = new Decimal(histQtyStr);
+
+    // Scale by qty change; fall back to raw amount if no historical position.
+    const amount = histQty.lte(0)
+      ? new Decimal(e.price)
+      : new Decimal(e.price).mul(currentQty).div(histQty);
+
+    // Shift date one year forward.
+    const projected = new Date(e.executedAt);
+    projected.setUTCFullYear(projected.getUTCFullYear() + 1);
+    const dateStr = projected.toISOString().slice(0, 10);
+
+    // Skip projected dates that aren't strictly in the future.
+    if (dateStr <= nowStr) continue;
+
+    out.push({
+      instrumentId: e.instrumentId,
+      symbol: e.symbol ?? null,
+      name: e.name ?? null,
+      date: dateStr,
+      amount: amount.toString(),
+      currency: e.currency,
+      basisYear: e.executedAt.getUTCFullYear(),
+    });
+  }
+
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -175,6 +268,10 @@ export interface IncomeStats {
   deltaAbs: string; // thisYear − lastYear
   deltaPct: number | null; // null when lastYear is zero
   forecastNextYear: string; // projected coupons + TTM dividend run-rate
+  /** Projected income from now to Dec 31 of the current year. */
+  forecastRestOfYear: string;
+  /** thisYear actuals + forecastRestOfYear (complete current-year outlook). */
+  forecastFullYear: string;
   lifetimeTotal: string;
   byInstrument: InstrumentIncome[]; // descending by total
   byAssetClass: AssetClassIncome[]; // descending by total
@@ -193,6 +290,17 @@ export interface AggregateIncomeInput {
    * combined with the trailing-12-month dividend run-rate to forecast next year.
    */
   forecastCoupons?: { amount: string; currency: string }[];
+  /**
+   * Bond coupons due between now and Dec 31 of the current year (native currency).
+   * Used in `forecastRestOfYear`.
+   */
+  restOfYearCoupons?: { amount: string; currency: string }[];
+  /**
+   * Dividends projected from last year's actual payments in the same calendar
+   * window (now → Dec 31), scaled by quantity change (native currency).
+   * Used in `forecastRestOfYear`.
+   */
+  projectedDividends?: { amount: string; currency: string }[];
 }
 
 const ZERO = () => new Decimal(0);
@@ -273,6 +381,18 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
     ZERO(),
   );
   const forecast = ttmDividends.add(couponForecast);
+
+  const restOfYearCouponSum = (input.restOfYearCoupons ?? []).reduce(
+    (s, c) => s.add(convert(c.amount, c.currency, displayCurrency, fx)),
+    ZERO(),
+  );
+  const projectedDividendSum = (input.projectedDividends ?? []).reduce(
+    (s, d) => s.add(convert(d.amount, d.currency, displayCurrency, fx)),
+    ZERO(),
+  );
+  const forecastRestOfYear = restOfYearCouponSum.add(projectedDividendSum);
+  const forecastFullYear = thisYear.add(forecastRestOfYear);
+
   const count = events.length;
 
   return {
@@ -288,6 +408,8 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
     deltaAbs: deltaAbs.toString(),
     deltaPct: lastYear.isZero() ? null : deltaAbs.div(lastYear).toNumber(),
     forecastNextYear: forecast.toString(),
+    forecastRestOfYear: forecastRestOfYear.toString(),
+    forecastFullYear: forecastFullYear.toString(),
     lifetimeTotal: lifetime.toString(),
     byInstrument: [...byInstrument.entries()]
       .map(([instrumentId, v]) => ({

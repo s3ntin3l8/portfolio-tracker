@@ -15,6 +15,7 @@ import {
   aggregatePortfolios,
   xirr,
   projectCoupons,
+  projectDividends,
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
@@ -253,7 +254,8 @@ export async function transactionsRoute(app: FastifyInstance) {
       .sort((a, b) => Number(b.yield ?? 0) - Number(a.yield ?? 0));
 
     // Upcoming coupons from held bonds (next 12 months) — also the coupon half of
-    // next year's forecast.
+    // next year's forecast. A second projection covers now → Dec 31 for the
+    // rest-of-year forecast.
     const heldIds = summary.holdings.map((h) => h.instrumentId);
     const bondRows = heldIds.length
       ? await app.db
@@ -277,14 +279,39 @@ export async function transactionsRoute(app: FastifyInstance) {
         maturityDate: b.maturityDate as string,
         currency: b.currency,
       }));
-    const upcoming = projectCoupons(positions, 12, now);
+    const upcomingCoupons12mo = projectCoupons(positions, 12, now);
+    const yearEnd = new Date(Date.UTC(now.getUTCFullYear(), 11, 31, 23, 59, 59, 999));
+    const restOfYearCoupons = projectCoupons(positions, yearEnd, now);
+
+    // Project dividends for the rest of the current year from last year's actuals.
+    // Load corporate actions to keep qty-at-date ratios split-consistent.
+    const corpActions = await corporateActionsFor(heldIds);
+    const heldQtyMap = new Map(
+      summary.holdings
+        .filter((h) => Number(h.quantity) > 0)
+        .map((h) => [h.instrumentId, h.quantity]),
+    );
+    // Cache computeHoldings per unique asOf timestamp to avoid redundant work.
+    const holdingsCache = new Map<number, Map<string, string>>();
+    const qtyAt = (instrumentId: string, at: Date): string => {
+      const key = at.getTime();
+      if (!holdingsCache.has(key)) {
+        const hs = computeHoldings(coreTxns, corpActions, at);
+        holdingsCache.set(key, new Map(hs.map((h) => [h.instrumentId, h.quantity])));
+      }
+      return holdingsCache.get(key)!.get(instrumentId) ?? "0";
+    };
+    const pastDivs = enriched.filter((e) => e.type === "dividend");
+    const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now);
 
     const stats = aggregateIncome({
       events: enriched,
       displayCurrency: display,
       fx,
       now,
-      forecastCoupons: upcoming,
+      forecastCoupons: upcomingCoupons12mo,
+      restOfYearCoupons,
+      projectedDividends,
     });
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
@@ -297,6 +324,30 @@ export async function transactionsRoute(app: FastifyInstance) {
       amount: e.price,
       currency: e.currency,
     }));
+
+    // Merge 12-month coupons and projected dividends into one date-sorted upcoming stream.
+    const upcoming = [
+      ...upcomingCoupons12mo.map((c) => ({
+        instrumentId: c.instrumentId,
+        symbol: c.symbol,
+        name: c.name,
+        date: c.date,
+        amount: c.amount,
+        currency: c.currency,
+        kind: "coupon" as const,
+        status: "scheduled" as const,
+      })),
+      ...projectedDividends.map((d) => ({
+        instrumentId: d.instrumentId,
+        symbol: d.symbol ?? "",
+        name: d.name,
+        date: d.date,
+        amount: d.amount,
+        currency: d.currency,
+        kind: "dividend" as const,
+        status: "projected" as const,
+      })),
+    ].sort((a, b) => a.date.localeCompare(b.date));
 
     return { displayCurrency: display, ...stats, yields, upcoming, events };
   }

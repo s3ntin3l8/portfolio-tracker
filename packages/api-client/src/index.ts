@@ -221,6 +221,22 @@ export interface ProjectedCoupon {
   currency: string;
 }
 
+/**
+ * A single entry in the upcoming-payments table, covering both bond coupons
+ * ("scheduled") and equity dividends projected from last year ("projected").
+ * Further statuses ("announced", "paid") will be added in #138.
+ */
+export interface UpcomingPayment {
+  instrumentId: string;
+  symbol: string;
+  name: string | null;
+  date: string; // YYYY-MM-DD
+  amount: string;
+  currency: string;
+  kind: "coupon" | "dividend";
+  status: "scheduled" | "projected";
+}
+
 /** Trailing-12-month income + yield for an income-paying holding (display currency). */
 export interface InstrumentYield {
   instrumentId: string;
@@ -288,6 +304,10 @@ export interface IncomeStats {
   deltaAbs: string;
   deltaPct: number | null;
   forecastNextYear: string;
+  /** Projected income from now to Dec 31 of the current year. */
+  forecastRestOfYear: string;
+  /** thisYear actuals + forecastRestOfYear (complete current-year outlook). */
+  forecastFullYear: string;
   lifetimeTotal: string;
   byInstrument: InstrumentIncome[];
   byAssetClass: AssetClassIncome[];
@@ -295,7 +315,8 @@ export interface IncomeStats {
   paymentCount: number;
   averagePerPayment: string;
   yields: InstrumentYield[];
-  upcoming: ProjectedCoupon[];
+  /** Upcoming bond coupons (next 12 months) and projected dividends (now → Dec 31). */
+  upcoming: UpcomingPayment[];
   events: IncomeEvent[];
 }
 

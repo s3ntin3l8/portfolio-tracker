@@ -105,5 +105,59 @@ describe("aggregateIncome", () => {
     expect(empty.averagePerPayment).toBe("0");
     expect(empty.byInstrument).toEqual([]);
     expect(empty.forecastNextYear).toBe("0");
+    expect(empty.forecastRestOfYear).toBe("0");
+    expect(empty.forecastFullYear).toBe("0");
+  });
+});
+
+describe("aggregateIncome — forecastRestOfYear / forecastFullYear", () => {
+  // now = 2026-06-15; this-year actuals = 300 IDR (2026-03-01) + 17000 IDR (2026-05-01 EUR×17000)
+  const thisYearActual = "17300";
+
+  it("sums projected dividends + rest-of-year coupons (no FX)", () => {
+    const result = aggregateIncome({
+      events,
+      displayCurrency: "IDR",
+      fx,
+      now: NOW,
+      projectedDividends: [{ amount: "200000", currency: "IDR" }],
+      restOfYearCoupons:  [{ amount: "50000",  currency: "IDR" }],
+    });
+    expect(result.forecastRestOfYear).toBe("250000");
+    expect(result.forecastFullYear).toBe(
+      String(Number(thisYearActual) + 250000), // 17300 + 250000
+    );
+  });
+
+  it("FX-converts projected dividends to display currency", () => {
+    const result = aggregateIncome({
+      events,
+      displayCurrency: "IDR",
+      fx, // EUR→IDR = 17000
+      now: NOW,
+      projectedDividends: [{ amount: "2", currency: "EUR" }], // 2 × 17000 = 34000
+      restOfYearCoupons:  [],
+    });
+    expect(result.forecastRestOfYear).toBe("34000");
+    expect(result.forecastFullYear).toBe(String(Number(thisYearActual) + 34000));
+  });
+
+  it("is zero when no projected dividends or rest-of-year coupons are provided", () => {
+    const result = aggregateIncome({ events, displayCurrency: "IDR", fx, now: NOW });
+    expect(result.forecastRestOfYear).toBe("0");
+    expect(result.forecastFullYear).toBe(thisYearActual);
+  });
+
+  it("does not double-count this-year actuals (forecastFullYear = thisYear + forecastRestOfYear)", () => {
+    const result = aggregateIncome({
+      events,
+      displayCurrency: "IDR",
+      fx,
+      now: NOW,
+      projectedDividends: [{ amount: "5000", currency: "IDR" }],
+    });
+    expect(Number(result.forecastFullYear)).toBe(
+      Number(result.thisYear) + Number(result.forecastRestOfYear),
+    );
   });
 });
