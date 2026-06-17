@@ -1524,4 +1524,194 @@ describe("MarketDataService onCall hook", () => {
     await svc.search("BBCA");
     expect(calls).toEqual(["searcher"]);
   });
+
+  it("fires during getDividends and falls through to the next supporting provider", async () => {
+    const calls: string[] = [];
+    const miss: MarketDataProvider = {
+      name: "miss",
+      supports: (ac) => ac === "equity",
+      getQuote: async () => null,
+      getDividends: async () => [],
+    };
+    const hit: MarketDataProvider = {
+      name: "hit",
+      supports: (ac) => ac === "equity",
+      getQuote: async () => null,
+      getDividends: async () => [
+        { exDate: "2026-07-15", amountPerShare: "100", currency: "IDR" },
+      ],
+    };
+    const svc = new MarketDataService([miss, hit], { onCall: (n) => calls.push(n) });
+    const events = await svc.getDividends(bbca);
+    expect(calls).toEqual(["miss", "hit"]);
+    expect(events).toHaveLength(1);
+    expect(events[0].exDate).toBe("2026-07-15");
+  });
+
+  it("returns [] from getDividends when no provider implements it", async () => {
+    const svc = new MarketDataService([new FixtureProvider()]);
+    expect(await svc.getDividends(bbca)).toEqual([]);
+  });
+});
+
+describe("TwelveDataProvider.getDividends", () => {
+  it("fetches dividends and passes amountPerShare through", async () => {
+    let seenUrl = "";
+    const provider = new TwelveDataProvider("key", {
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return {
+          body: {
+            dividends: [
+              { ex_dividend_date: "2026-07-15", payment_date: "2026-07-30", dividend_amount: "100" },
+              { ex_dividend_date: "2025-12-10", payment_date: "2025-12-20", dividend_amount: 80 },
+            ],
+          },
+        };
+      }),
+    });
+    const events = await provider.getDividends(bbca, "2025-01-01");
+    expect(seenUrl).toContain("/dividends?");
+    expect(seenUrl).toContain("symbol=BBCA");
+    expect(seenUrl).toContain("exchange=IDX");
+    expect(seenUrl).toContain("start_date=2025-01-01");
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ exDate: "2026-07-15", payDate: "2026-07-30", amountPerShare: "100", currency: "IDR" });
+    expect(events[1]).toMatchObject({ exDate: "2025-12-10", amountPerShare: "80" });
+  });
+
+  it("returns [] for gold (no dividends) and on non-ok", async () => {
+    const provider = new TwelveDataProvider("key", {
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.getDividends({ ...bbca, assetClass: "gold" })).toEqual([]);
+    expect(await provider.getDividends(bbca)).toEqual([]);
+  });
+
+  it("skips entries missing ex_dividend_date or amount", async () => {
+    const provider = new TwelveDataProvider("key", {
+      fetch: mockFetch(() => ({
+        body: {
+          dividends: [
+            { ex_dividend_date: "2026-07-15", dividend_amount: "100" },
+            { payment_date: "2026-07-30", dividend_amount: "50" }, // no ex_dividend_date
+            { ex_dividend_date: "2026-06-01" }, // no amount
+          ],
+        },
+      })),
+    });
+    const events = await provider.getDividends(bbca);
+    expect(events).toHaveLength(1);
+    expect(events[0].exDate).toBe("2026-07-15");
+  });
+});
+
+describe("EodhdProvider.getDividends", () => {
+  it("fetches dividends and maps ex-date + unadjustedValue", async () => {
+    let seenUrl = "";
+    const provider = new EodhdProvider({
+      apiKey: "key",
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return {
+          body: [
+            { date: "2026-07-15", paymentDate: "2026-07-30", unadjustedValue: 1.5, value: 1.0, currency: "EUR" },
+            { date: "2025-12-10", unadjustedValue: 1.2, currency: "EUR" },
+          ],
+        };
+      }),
+    });
+    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    const events = await provider.getDividends(xetraRef, "2025-01-01");
+    expect(seenUrl).toContain("/div/AAPL.XETRA");
+    expect(seenUrl).toContain("from=2025-01-01");
+    expect(events).toHaveLength(2);
+    // Prefers unadjustedValue over value
+    expect(events[0]).toMatchObject({ exDate: "2026-07-15", payDate: "2026-07-30", amountPerShare: "1.5", currency: "EUR" });
+    expect(events[1]).toMatchObject({ exDate: "2025-12-10", amountPerShare: "1.2" });
+  });
+
+  it("returns [] on non-ok and when response is not an array", async () => {
+    const provider = new EodhdProvider({
+      apiKey: "key",
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    expect(await provider.getDividends(xetraRef)).toEqual([]);
+  });
+
+  it("falls back to value when unadjustedValue is absent", async () => {
+    const provider = new EodhdProvider({
+      apiKey: "key",
+      fetch: mockFetch(() => ({
+        body: [{ date: "2026-07-15", value: 2.0, currency: "EUR" }],
+      })),
+    });
+    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    const events = await provider.getDividends(xetraRef);
+    expect(events[0].amountPerShare).toBe("2");
+  });
+});
+
+describe("YahooFinanceProvider.getDividends", () => {
+  const divBody = {
+    chart: {
+      result: [
+        {
+          events: {
+            dividends: {
+              "1752624000": { amount: 1.25, date: 1752624000 }, // 2025-07-16
+              "1734739200": { amount: 0.9, date: 1734739200 },  // 2024-12-21
+            },
+          },
+        },
+      ],
+    },
+  };
+
+  it("fetches dividends from the chart events endpoint", async () => {
+    let seenUrl = "";
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((url) => {
+        seenUrl = url;
+        return { body: divBody };
+      }),
+    });
+    const events = await provider.getDividends(bbca);
+    expect(seenUrl).toContain("/v8/finance/chart/BBCA.JK");
+    expect(seenUrl).toContain("events=dividends");
+    expect(events).toHaveLength(2);
+    // Should be sorted ascending by exDate
+    expect(events[0].amountPerShare).toBe("0.9");
+    expect(events[1].amountPerShare).toBe("1.25");
+    expect(events[1].currency).toBe("IDR");
+  });
+
+  it("respects fromDate and excludes earlier events", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: divBody })),
+    });
+    // fromDate after the Dec 2024 event but before the Jul 2025 one
+    const from = new Date(1752624000 * 1000 - 1000).toISOString().slice(0, 10);
+    const events = await provider.getDividends(bbca, from);
+    expect(events).toHaveLength(1);
+    expect(events[0].amountPerShare).toBe("1.25");
+  });
+
+  it("returns [] for gold/crypto (no dividend concept) and on non-ok", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.getDividends({ ...bbca, assetClass: "gold" })).toEqual([]);
+    expect(await provider.getDividends(bbca)).toEqual([]);
+  });
+
+  it("returns [] when no dividend events in chart response", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: { chart: { result: [{ meta: { regularMarketPrice: 9500 } }] } },
+      })),
+    });
+    expect(await provider.getDividends(bbca)).toEqual([]);
+  });
 });

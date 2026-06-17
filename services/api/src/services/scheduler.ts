@@ -5,6 +5,7 @@ import { trConnections } from "@portfolio/db";
 import { getDb } from "../db/client.js";
 import { getMarketData, flushUsage } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
+import { refreshDividends } from "./dividends.js";
 import { recordDailySnapshots } from "./snapshots.js";
 import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
@@ -26,6 +27,11 @@ const NAV_QUEUE = "scrape-nav";
 // (~08:00 WIB) to backfill funds whose NAB posted late overnight. NAB is once-per-day, so
 // more frequent runs would only re-fetch the same value.
 const NAV_CRON = "0 1,16 * * *";
+
+const DIVIDEND_QUEUE = "refresh-dividends";
+// Weekly on Monday morning UTC — dividend ex-dates change slowly; daily would burn
+// API quota for no practical gain. Runs early before the IDX open.
+const DIVIDEND_CRON = "0 6 * * 1";
 
 function usesPglite(url: string): boolean {
   return !url || url.startsWith("pglite://");
@@ -126,6 +132,20 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(NAV_QUEUE, NAV_CRON);
 
+  // Weekly dividend refresh: pull announced/historical dividend events from providers
+  // and upsert into dividend_events, ready for the income page blend.
+  await boss.createQueue(DIVIDEND_QUEUE);
+  await boss.work(DIVIDEND_QUEUE, async () => {
+    try {
+      const count = await refreshDividends(getDb(), await getMarketData(), new Date());
+      await flushUsage();
+      app.log.info({ count }, "dividend refresh complete");
+    } catch (err) {
+      app.log.error({ err }, "dividend refresh failed");
+    }
+  });
+  await boss.schedule(DIVIDEND_QUEUE, DIVIDEND_CRON);
+
   app.log.info(
     {
       priceCron: SCHEDULE_CRON,
@@ -133,6 +153,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
       trSyncCron: TR_SYNC_CRON,
       antamCron: ANTAM_CRON,
       navCron: NAV_CRON,
+      dividendCron: DIVIDEND_CRON,
     },
     "Schedulers started",
   );

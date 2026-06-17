@@ -71,6 +71,8 @@
     "status": "Status",
     "scheduled": "Terjadwal",
     "projected": "Proyeksi",
+    "announced": "Diumumkan",
+    "paid": "Dibayar",
     "emptyTitle": "Belum ada pendapatan",
     "emptyBody": "Dividen dan kupon muncul di sini setelah Anda mencatatnya sebagai transaksi.",
     "thisYear": "Tahun ini",

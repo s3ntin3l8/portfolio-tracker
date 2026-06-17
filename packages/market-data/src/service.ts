@@ -1,6 +1,7 @@
 import type {
   AssetClass,
   Candle,
+  DividendEvent,
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
@@ -54,6 +55,16 @@ export class MarketDataService {
       this.opts.onCall?.(provider.name);
       const candles = (await provider.getHistory(ref, range)) ?? [];
       if (candles.length > 0) return candles;
+    }
+    return [];
+  }
+
+  async getDividends(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]> {
+    for (const provider of this.providersFor(ref.assetClass, ref.market)) {
+      if (!provider.getDividends) continue;
+      this.opts.onCall?.(provider.name);
+      const events = (await provider.getDividends(ref, fromDate)) ?? [];
+      if (events.length > 0) return events;
     }
     return [];
   }
