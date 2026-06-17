@@ -246,21 +246,23 @@ export function TrConnectFlow({
               onChange={(e) => setPin(e.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tr-portfolio">{t("portfolio")}</Label>
-            <select
-              id="tr-portfolio"
-              className={selectClass}
-              value={portfolioId}
-              onChange={(e) => setPortfolioId(e.target.value)}
-            >
-              {portfolios.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {portfolios.length > 1 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="tr-portfolio">{t("portfolio")}</Label>
+              <select
+                id="tr-portfolio"
+                className={selectClass}
+                value={portfolioId}
+                onChange={(e) => setPortfolioId(e.target.value)}
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button
             type="button"
