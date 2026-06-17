@@ -23,6 +23,7 @@ import {
   convert,
   contributionStats,
   type CoreTransaction,
+  type CostBasisMode,
   type CorporateAction,
   type CashFlowPoint,
   type PortfolioSummary,
@@ -53,9 +54,7 @@ export async function transactionsRoute(app: FastifyInstance) {
   }
 
   // Load corporate actions for the given instruments, shaped for @portfolio/core.
-  async function corporateActionsFor(
-    instrumentIds: (string | null)[],
-  ): Promise<CorporateAction[]> {
+  async function corporateActionsFor(instrumentIds: (string | null)[]): Promise<CorporateAction[]> {
     const ids = [...new Set(instrumentIds.filter((x): x is string => x !== null))];
     if (ids.length === 0) return [];
     const rows = await app.db
@@ -71,15 +70,10 @@ export async function transactionsRoute(app: FastifyInstance) {
   }
 
   // Build an instrumentId → presentation-metadata lookup for the given ids.
-  async function instrumentMeta(
-    ids: (string | null)[],
-  ): Promise<Map<string, InstrumentMeta>> {
+  async function instrumentMeta(ids: (string | null)[]): Promise<Map<string, InstrumentMeta>> {
     const unique = [...new Set(ids.filter((x): x is string => x !== null))];
     if (!unique.length) return new Map();
-    const rows = await app.db
-      .select()
-      .from(instruments)
-      .where(inArray(instruments.id, unique));
+    const rows = await app.db.select().from(instruments).where(inArray(instruments.id, unique));
     return new Map(
       rows.map((i) => [
         i.id,
@@ -90,36 +84,38 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Value a portfolio (holdings priced + cash + net worth) in `displayCurrency`.
   // Shared by /summary, /performance and /networth via the valuation service.
-  async function loadValuation(portfolioId: string, displayCurrency: string) {
+  async function loadValuation(
+    portfolioId: string,
+    displayCurrency: string,
+    costBasisMode?: CostBasisMode,
+  ) {
     return valuePortfolio(
       app.db,
       await getMarketData(),
       app.config.MARKET_DATA_TTL_MS,
       portfolioId,
       displayCurrency,
+      costBasisMode,
     );
+  }
+
+  // `?costBasis=total_paid` capitalizes financing into a financed holding's cost
+  // basis; the default (purchase_price) keeps it separate. Net worth is unaffected.
+  function costBasisFromQuery(q: { costBasis?: string }): CostBasisMode | undefined {
+    return q.costBasis === "total_paid" || q.costBasis === "purchase_price"
+      ? q.costBasis
+      : undefined;
   }
 
   // External capital flows (deposits in (−), withdrawals out (+)) for XIRR, each
   // FX-converted to `target` so flows in different currencies are comparable with
   // the (target-currency) terminal net-worth point the caller appends.
-  async function externalFlows(
-    txns: CoreTransaction[],
-    target: string,
-  ): Promise<CashFlowPoint[]> {
-    const relevant = txns.filter(
-      (t) => t.type === "deposit" || t.type === "withdrawal",
-    );
-    const rates = await getFxRates(
-      app.db,
-      [...new Set(relevant.map((t) => t.currency))],
-      target,
-    );
+  async function externalFlows(txns: CoreTransaction[], target: string): Promise<CashFlowPoint[]> {
+    const relevant = txns.filter((t) => t.type === "deposit" || t.type === "withdrawal");
+    const rates = await getFxRates(app.db, [...new Set(relevant.map((t) => t.currency))], target);
     const fx = makeFxRateFn(rates, target);
     return relevant.map((t) => ({
-      amount:
-        Number(convert(t.price, t.currency, target, fx)) *
-        (t.type === "deposit" ? -1 : 1),
+      amount: Number(convert(t.price, t.currency, target, fx)) * (t.type === "deposit" ? -1 : 1),
       date: t.executedAt,
     }));
   }
@@ -138,10 +134,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       ...new Set(
         coreTxns
           .filter(
-            (t) =>
-              t.type === "deposit" ||
-              t.type === "savings_plan" ||
-              t.type === "withdrawal",
+            (t) => t.type === "deposit" || t.type === "savings_plan" || t.type === "withdrawal",
           )
           .map((t) => t.currency),
       ),
@@ -165,9 +158,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     const rate = stats.series.length ? xirr(flows) : NaN;
     const xirrVal = Number.isFinite(rate) ? rate : null;
     const seedAnnualReturn =
-      xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5
-        ? xirrVal.toString()
-        : "0.07";
+      xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5 ? xirrVal.toString() : "0.07";
 
     return {
       ...stats,
@@ -191,9 +182,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     display: string,
   ) {
     const now = new Date();
-    const incomeTxns = coreTxns.filter(
-      (t) => t.type === "dividend" || t.type === "coupon",
-    );
+    const incomeTxns = coreTxns.filter((t) => t.type === "dividend" || t.type === "coupon");
 
     const ccys = [...new Set(incomeTxns.map((t) => t.currency))];
     const rates = await getFxRates(app.db, ccys, display);
@@ -262,9 +251,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       ? await app.db
           .select()
           .from(instruments)
-          .where(
-            and(inArray(instruments.id, heldIds), eq(instruments.assetClass, "bond")),
-          )
+          .where(and(inArray(instruments.id, heldIds), eq(instruments.assetClass, "bond")))
       : [];
     const qtyById = new Map(summary.holdings.map((h) => [h.instrumentId, h.quantity]));
     const positions = bondRows
@@ -325,8 +312,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     for (const row of announcedRows) {
       const qty = heldQtyMap.get(row.instrumentId);
       if (!qty) continue;
-      const totalAmount =
-        String(Number(row.amountPerShare) * Number(qty));
+      const totalAmount = String(Number(row.amountPerShare) * Number(qty));
       const list = futureAnnouncedByInstrument.get(row.instrumentId) ?? [];
       list.push({
         exDate: row.exDate,
@@ -496,12 +482,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       }
       const [deleted] = await app.db
         .delete(transactions)
-        .where(
-          and(
-            eq(transactions.id, txId),
-            eq(transactions.portfolioId, portfolioId),
-          ),
-        )
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
         .returning();
       if (!deleted) {
         return reply.code(404).send({ error: "transaction_not_found" });
@@ -524,12 +505,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       const { ids } = bulkDeleteSchema.parse(request.body);
       const deleted = await app.db
         .delete(transactions)
-        .where(
-          and(
-            eq(transactions.portfolioId, portfolioId),
-            inArray(transactions.id, ids),
-          ),
-        )
+        .where(and(eq(transactions.portfolioId, portfolioId), inArray(transactions.id, ids)))
         .returning({ id: transactions.id });
       return { deleted: deleted.length };
     },
@@ -562,12 +538,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           source: input.source,
           externalId: input.externalId,
         })
-        .where(
-          and(
-            eq(transactions.id, txId),
-            eq(transactions.portfolioId, portfolioId),
-          ),
-        )
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
         .returning();
       if (!updated) {
         return reply.code(404).send({ error: "transaction_not_found" });
@@ -605,7 +576,7 @@ export async function transactionsRoute(app: FastifyInstance) {
   );
 
   // Full valuation summary: holdings priced via market data + cash + net worth.
-  app.get<{ Params: PortfolioParams }>(
+  app.get<{ Params: PortfolioParams; Querystring: { costBasis?: string } }>(
     "/portfolios/:portfolioId/summary",
     { preHandler: app.authenticate },
     async (request, reply) => {
@@ -618,6 +589,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       const { summary, metaById } = await loadValuation(
         portfolioId,
         portfolio.baseCurrency,
+        costBasisFromQuery(request.query),
       );
       return {
         ...summary,
@@ -662,10 +634,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(
-        portfolioId,
-        portfolio.baseCurrency,
-      );
+      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
 
       const flows = await externalFlows(coreTxns, portfolio.baseCurrency);
       const asOf = new Date();
@@ -691,10 +660,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(
-        portfolioId,
-        portfolio.baseCurrency,
-      );
+      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
       return buildContributions(
         coreTxns,
         summary,
@@ -707,51 +673,53 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Aggregate net worth across all of the user's portfolios, in their display
   // currency — combined holdings, cash, totals, and money-weighted return.
-  app.get("/networth", { preHandler: app.authenticate }, async (request) => {
-    const { id } = requireUser(request);
-    const [u] = await app.db
-      .select({ displayCurrency: users.displayCurrency })
-      .from(users)
-      .where(eq(users.id, id))
-      .limit(1);
-    const display = u?.displayCurrency ?? "IDR";
+  app.get<{ Querystring: { costBasis?: string } }>(
+    "/networth",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+      const costBasisMode = costBasisFromQuery(request.query);
 
-    const pfs = await app.db
-      .select()
-      .from(portfolios)
-      .where(eq(portfolios.userId, id));
+      const pfs = await app.db.select().from(portfolios).where(eq(portfolios.userId, id));
 
-    const summaries = [];
-    const flowTxns: CoreTransaction[] = [];
-    const instrumentIds = new Set<string>();
-    for (const p of pfs) {
-      const { coreTxns, summary } = await loadValuation(p.id, display);
-      summaries.push(summary);
-      flowTxns.push(...coreTxns);
-      for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
-    }
+      const summaries = [];
+      const flowTxns: CoreTransaction[] = [];
+      const instrumentIds = new Set<string>();
+      for (const p of pfs) {
+        const { coreTxns, summary } = await loadValuation(p.id, display, costBasisMode);
+        summaries.push(summary);
+        flowTxns.push(...coreTxns);
+        for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
+      }
 
-    const aggregated = aggregatePortfolios(summaries, display);
-    const meta = await instrumentMeta([...instrumentIds]);
-    const holdings = aggregated.holdings.map((h) => ({
-      ...h,
-      instrument: meta.get(h.instrumentId) ?? null,
-    }));
+      const aggregated = aggregatePortfolios(summaries, display);
+      const meta = await instrumentMeta([...instrumentIds]);
+      const holdings = aggregated.holdings.map((h) => ({
+        ...h,
+        instrument: meta.get(h.instrumentId) ?? null,
+      }));
 
-    // Flows across all portfolios, each FX-converted to the display currency.
-    const flows = await externalFlows(flowTxns, display);
-    const asOf = new Date();
-    flows.push({ amount: Number(aggregated.netWorth), date: asOf });
-    const rate = xirr(flows);
+      // Flows across all portfolios, each FX-converted to the display currency.
+      const flows = await externalFlows(flowTxns, display);
+      const asOf = new Date();
+      flows.push({ amount: Number(aggregated.netWorth), date: asOf });
+      const rate = xirr(flows);
 
-    return {
-      ...aggregated,
-      holdings,
-      xirr: Number.isFinite(rate) ? rate : null,
-      portfolioCount: pfs.length,
-      asOf: asOf.toISOString(),
-    };
-  });
+      return {
+        ...aggregated,
+        holdings,
+        xirr: Number.isFinite(rate) ? rate : null,
+        portfolioCount: pfs.length,
+        asOf: asOf.toISOString(),
+      };
+    },
+  );
 
   // Income analytics across all of the user's portfolios, in their display currency:
   // per-period totals, forecast, delta, breakdowns, yields, upcoming coupons + events.
@@ -792,44 +760,37 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(
-        portfolioId,
-        portfolio.baseCurrency,
-      );
+      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
       return buildIncomeStats(coreTxns, summary, portfolio.baseCurrency);
     },
   );
 
   // Aggregate contribution analytics across all of the user's portfolios, in
   // their display currency.
-  app.get(
-    "/networth/contributions",
-    { preHandler: app.authenticate },
-    async (request) => {
-      const { id } = requireUser(request);
-      const [u] = await app.db
-        .select({ displayCurrency: users.displayCurrency })
-        .from(users)
-        .where(eq(users.id, id))
-        .limit(1);
-      const display = u?.displayCurrency ?? "IDR";
+  app.get("/networth/contributions", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const [u] = await app.db
+      .select({ displayCurrency: users.displayCurrency })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    const display = u?.displayCurrency ?? "IDR";
 
-      const pfs = await app.db
-        .select({ id: portfolios.id })
-        .from(portfolios)
-        .where(eq(portfolios.userId, id));
+    const pfs = await app.db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, id));
 
-      const summaries: PortfolioSummary[] = [];
-      const allTxns: CoreTransaction[] = [];
-      for (const p of pfs) {
-        const { coreTxns, summary } = await loadValuation(p.id, display);
-        summaries.push(summary);
-        allTxns.push(...coreTxns);
-      }
-      const aggregated = aggregatePortfolios(summaries, display);
-      return buildContributions(allTxns, aggregated, display);
-    },
-  );
+    const summaries: PortfolioSummary[] = [];
+    const allTxns: CoreTransaction[] = [];
+    for (const p of pfs) {
+      const { coreTxns, summary } = await loadValuation(p.id, display);
+      summaries.push(summary);
+      allTxns.push(...coreTxns);
+    }
+    const aggregated = aggregatePortfolios(summaries, display);
+    return buildContributions(allTxns, aggregated, display);
+  });
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
   // day's snapshots converted to the display currency.
@@ -862,12 +823,7 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       const currencies = [...new Set(rows.map((r) => r.currency))];
       const dates = [...new Set(rows.map((r) => r.date))];
-      const ratesByDate = await getFxRatesForDates(
-        app.db,
-        currencies,
-        display,
-        dates,
-      );
+      const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
       return aggregateByDate(
         rows.map((r) => ({
           date: r.date,

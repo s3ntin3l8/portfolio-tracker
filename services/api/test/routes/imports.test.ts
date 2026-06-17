@@ -639,6 +639,21 @@ describe("gold installment contract import → confirm → undo", () => {
       })
     ).json();
     expect(summary.totalLiabilities).toBe("68206550");
+    // Default (purchase_price) cost basis is the G24 purchase price.
+    expect(summary.holdings[0].costBasis).toBe("80243000");
+
+    // The cost-basis toggle moves only the holding's cost basis, never net worth.
+    const totalPaid = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/summary?costBasis=total_paid`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(totalPaid.netWorth).toBe(summary.netWorth);
+    expect(totalPaid.totalLiabilities).toBe(summary.totalLiabilities);
+    // financing to date = admin 50,000 − discount 1,250,000 (no installments due yet).
+    expect(totalPaid.holdings[0].costBasis).toBe("79043000");
 
     // Undo removes the legs and the loan; liability and holdings return to zero.
     const undo = await gApp.inject({
