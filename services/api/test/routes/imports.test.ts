@@ -460,6 +460,196 @@ describe("CSV import → confirm flow", () => {
     ).toBe(404);
   });
 
+  it("assigns deterministic content-hash externalIds to generic CSV drafts", async () => {
+    const t = await token("hash-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "HashTest", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // First parse.
+    const imp1 = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    const id1 = imp1.drafts[0].externalId as string;
+    expect(id1).toMatch(/^csv:[0-9a-f]+:0$/);
+
+    // Second parse of the same content produces the same id.
+    const imp2 = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(imp2.drafts[0].externalId).toBe(id1);
+  });
+
+  it("assigns distinct occ-suffixed ids to N identical rows in the same CSV", async () => {
+    const t = await token("occ-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "OccTest", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // Three identical rows.
+    const header = "date,action,assetClass,ticker,name,quantity,unit,price,fees,currency";
+    const row = "2026-01-15,buy,equity,BBCA,Bank Central Asia,100,shares,9500,0,IDR";
+    const tripleCSV = `${header}\n${row}\n${row}\n${row}`;
+
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: tripleCSV },
+      })
+    ).json();
+
+    const ids = imp.drafts.map((d: { externalId: string }) => d.externalId);
+    expect(ids).toHaveLength(3);
+    // All share the same hash prefix but differ by occ suffix.
+    expect(ids[0]).toMatch(/:0$/);
+    expect(ids[1]).toMatch(/:1$/);
+    expect(ids[2]).toMatch(/:2$/);
+    // Hash prefix is identical across all three.
+    const prefix = (ids[0] as string).replace(/:0$/, "");
+    expect(ids[1]).toBe(`${prefix}:1`);
+    expect(ids[2]).toBe(`${prefix}:2`);
+  });
+
+  it("re-confirming the same CSV writes each transaction exactly once", async () => {
+    const t = await token("dedup-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DedupTest", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // First import + confirm.
+    const imp1 = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    const confirm1 = await app.inject({
+      method: "POST",
+      url: `/imports/${imp1.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: imp1.drafts },
+    });
+    expect(confirm1.json().confirmed).toBe(1);
+
+    // Second import of the same CSV + confirm: should be silently skipped.
+    const imp2 = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    const confirm2 = await app.inject({
+      method: "POST",
+      url: `/imports/${imp2.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: imp2.drafts },
+    });
+    expect(confirm2.json().confirmed).toBe(0);
+
+    // Holdings unchanged — still one position.
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(holdings.json()).toHaveLength(1);
+  });
+
+  it("partial-then-rest confirm writes each unique transaction exactly once", async () => {
+    const t = await token("partial-dedup-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "PartialDedup", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // Two different rows so we can confirm one then the other.
+    const header = "date,action,assetClass,ticker,name,quantity,unit,price,fees,currency";
+    const twoRowCSV = [
+      header,
+      "2026-01-15,buy,equity,BBCA,Bank Central Asia,100,shares,9500,0,IDR",
+      "2026-01-16,buy,equity,BMRI,Bank Mandiri,200,shares,6000,0,IDR",
+    ].join("\n");
+
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: twoRowCSV },
+      })
+    ).json();
+
+    // Confirm first draft only.
+    const c1 = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [imp.drafts[0]] },
+    });
+    expect(c1.json().confirmed).toBe(1);
+
+    // Re-use the same import to confirm the second draft.
+    const c2 = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [imp.drafts[1]] },
+    });
+    expect(c2.json().confirmed).toBe(1);
+
+    // After both drafts are confirmed the import is fully confirmed (409 on re-confirm).
+    const c3 = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [imp.drafts[0]] },
+    });
+    expect(c3.statusCode).toBe(409);
+
+    // Two distinct holdings (BBCA + BMRI).
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(holdings.json()).toHaveLength(2);
+  });
+
   it("auto-detects and imports an IBKR Flex Trades CSV", async () => {
     const t = await token("ibkr-user");
     const portfolioId = (
