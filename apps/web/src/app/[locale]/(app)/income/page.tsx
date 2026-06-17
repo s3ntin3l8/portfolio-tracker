@@ -22,7 +22,7 @@ import { IncomeBarChart } from "@/components/charts/income-bar-chart";
 import { IncomeHeatmap } from "@/components/charts/income-heatmap";
 import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
-import type { IncomeEvent } from "@portfolio/api-client";
+import type { IncomeEvent, UpcomingPayment } from "@portfolio/api-client";
 
 /** Sum a year's events per currency (income can span currencies). */
 function totalsByCurrency(events: IncomeEvent[]): Record<string, number> {
@@ -123,7 +123,7 @@ export default async function IncomePage({
     <div className="space-y-8">
       {heading}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           label={t("thisYear")}
           value={m(Number(s.thisYear))}
@@ -135,7 +135,13 @@ export default async function IncomePage({
           deltaTone={deltaAbs > 0 ? "up" : deltaAbs < 0 ? "down" : "neutral"}
         />
         <StatCard label={t("ttm")} value={m(Number(s.ttm))} />
-        <StatCard label={t("forecast")} value={m(Number(s.forecastNextYear))} />
+        {Number(s.forecastRestOfYear) > 0 && (
+          <StatCard
+            label={t("restOfYear", { year: String(new Date().getUTCFullYear()) })}
+            value={m(Number(s.forecastRestOfYear))}
+          />
+        )}
+        <StatCard label={t("forecastNext12")} value={m(Number(s.forecastNextYear))} />
         <StatCard label={t("lifetime")} value={m(Number(s.lifetimeTotal))} />
         <StatCard
           label={t("payments")}
@@ -301,15 +307,23 @@ export default async function IncomePage({
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("date")}</TableHead>
+                  <TableHead>{t("status")}</TableHead>
                   <TableHead>{t("instrument")}</TableHead>
                   <TableHead className="text-right">{t("amount")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {s.upcoming.map((c, i) => (
+                {s.upcoming.map((c: UpcomingPayment, i: number) => (
                   <TableRow key={`${c.instrumentId}-${c.date}-${i}`}>
                     <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                       {df.format(new Date(c.date))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={c.status === "scheduled" ? "default" : "outline"}
+                      >
+                        {t(c.status)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{c.symbol}</div>

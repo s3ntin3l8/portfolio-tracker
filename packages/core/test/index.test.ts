@@ -10,11 +10,13 @@ import {
   summarizePortfolio,
   aggregatePortfolios,
   projectCoupons,
+  projectDividends,
   trailingIncomeByInstrument,
   trailingYield,
   type BondPosition,
   type CoreTransaction,
   type CorporateAction,
+  type IncomeEntry,
   type PortfolioSummary,
 } from "../src/index.js";
 
@@ -81,6 +83,34 @@ describe("computeHoldings", () => {
       tx({ type: "buy", quantity: "10", price: "950", currency: "EUR", executedAt: new Date("2026-01-02") }),
     ];
     expect(() => computeHoldings(txs)).toThrow(/multiple currencies/);
+  });
+
+  it("excludes transactions after the asOf cutoff", () => {
+    const txs: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "100", price: "9500", executedAt: new Date("2025-03-01") }),
+      tx({ type: "buy", quantity: "50",  price: "10000", executedAt: new Date("2025-09-01") }), // after cutoff
+    ];
+    const cutoff = new Date("2025-06-30");
+    const [h] = computeHoldings(txs, [], cutoff);
+    // Only the March buy should be included.
+    expect(h.quantity).toBe("100");
+    expect(h.costBasis).toBe("950000");
+  });
+
+  it("applies all corporate actions even when asOf precedes the ex-date (split-consistent qty)", () => {
+    // 100 shares bought in January; 2:1 split in June; asOf in March (before split).
+    // The result should be 200 (split applied to historical qty) so that the ratio
+    // 200 / currentQty=200 = 1 correctly reflects "same position, just post-split terms".
+    const txs: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "100", price: "10000", executedAt: new Date("2025-01-01") }),
+    ];
+    const cas: CorporateAction[] = [
+      { instrumentId: AAPL, type: "split", ratio: "2", exDate: new Date("2025-06-01") },
+    ];
+    const cutoff = new Date("2025-03-01"); // before the split
+    const [h] = computeHoldings(txs, cas, cutoff);
+    // All splits applied → 100 × 2 = 200, expressed in current share terms.
+    expect(h.quantity).toBe("200");
   });
 });
 
@@ -337,6 +367,106 @@ describe("projectCoupons", () => {
   it("skips zero-quantity positions and unparseable maturities", () => {
     expect(projectCoupons([bond({ quantity: "0" })], 12, now)).toHaveLength(0);
     expect(projectCoupons([bond({ maturityDate: "n/a" })], 12, now)).toHaveLength(0);
+  });
+
+  it("accepts an explicit Date horizon and collects only coupons up to that date", () => {
+    // Dec 31 of the current year: only the 2026-12-10 coupon falls within; 2027-06-10 does not.
+    const yearEnd = new Date(Date.UTC(2026, 11, 31));
+    const coupons = projectCoupons([bond()], yearEnd, now);
+    expect(coupons.map((c) => c.date)).toEqual(["2026-12-10"]);
+  });
+});
+
+describe("projectDividends", () => {
+  const now = new Date("2026-06-15T00:00:00.000Z");
+
+  const entry = (over: Partial<IncomeEntry>): IncomeEntry => ({
+    instrumentId: "bbca",
+    symbol: "BBCA",
+    name: "BCA",
+    assetClass: "equity",
+    type: "dividend",
+    price: "100000",
+    currency: "IDR",
+    executedAt: new Date("2025-09-01T00:00:00.000Z"),
+    ...over,
+  });
+
+  it("projects last year's payment into the same future window (+1 year)", () => {
+    const heldQty = new Map([["bbca", "100"]]);
+    // Same qty then and now → amount unchanged.
+    const qtyAt = () => "100";
+    const result = projectDividends([entry()], heldQty, qtyAt, now);
+    expect(result).toHaveLength(1);
+    expect(result[0].date).toBe("2026-09-01");
+    expect(result[0].amount).toBe("100000");
+    expect(result[0].basisYear).toBe(2025);
+  });
+
+  it("scales amount when current qty differs from historical qty", () => {
+    // Bought more shares: 100 → 150. Projected = 100000 × (150/100) = 150000.
+    const heldQty = new Map([["bbca", "150"]]);
+    const qtyAt = () => "100";
+    const [r] = projectDividends([entry()], heldQty, qtyAt, now);
+    expect(r.amount).toBe("150000");
+  });
+
+  it("scales correctly when a 2:1 split occurred between payout and now (split-consistent)", () => {
+    // Before split: 100 shares; after split: 200 shares (all in current share terms).
+    // qtyAt returns 200 (split applied to historical), currentQty = 200 → ratio 1 → same amount.
+    const heldQty = new Map([["bbca", "200"]]);
+    const qtyAt = () => "200"; // already in current (post-split) terms
+    const [r] = projectDividends([entry()], heldQty, qtyAt, now);
+    expect(r.amount).toBe("100000"); // same total, not doubled
+  });
+
+  it("falls back to raw amount when historical qty is zero or missing", () => {
+    const heldQty = new Map([["bbca", "100"]]);
+    const qtyAt = () => "0";
+    const [r] = projectDividends([entry()], heldQty, qtyAt, now);
+    expect(r.amount).toBe("100000");
+  });
+
+  it("skips instruments not in heldQty (sold before now)", () => {
+    const heldQty = new Map<string, string>(); // empty — BBCA sold
+    const result = projectDividends([entry()], heldQty, () => "100", now);
+    expect(result).toHaveLength(0);
+  });
+
+  it("skips dividends outside the source window (too old or already this year)", () => {
+    const heldQty = new Map([["bbca", "100"]]);
+    const qtyAt = () => "100";
+    // 2025-01-01 is before (now − 1yr = 2025-06-15) → outside source window.
+    const tooOld = entry({ executedAt: new Date("2025-01-01T00:00:00.000Z") });
+    // 2025-06-10 is also before pastStart → skip (projects to 2026-06-10 ≤ now).
+    const borderline = entry({ executedAt: new Date("2025-06-10T00:00:00.000Z") });
+    // 2026-03-01 is this year → outside source window (only last year accepted).
+    const thisYear = entry({ executedAt: new Date("2026-03-01T00:00:00.000Z") });
+    const result = projectDividends(
+      [tooOld, borderline, thisYear],
+      heldQty,
+      qtyAt,
+      now,
+    );
+    expect(result).toHaveLength(0);
+  });
+
+  it("skips non-dividend events (coupons)", () => {
+    const heldQty = new Map([["fr01", "10"]]);
+    const coupon = entry({ instrumentId: "fr01", type: "coupon" });
+    expect(projectDividends([coupon], heldQty, () => "10", now)).toHaveLength(0);
+  });
+
+  it("returns results sorted ascending by projected date", () => {
+    const heldQty = new Map([["bbca", "100"], ["vwrl", "50"]]);
+    const qtyAt = () => "100";
+    const e1 = entry({ executedAt: new Date("2025-12-01T00:00:00.000Z") }); // → 2026-12-01
+    const e2 = entry({
+      instrumentId: "vwrl", symbol: "VWRL",
+      executedAt: new Date("2025-09-15T00:00:00.000Z"), // → 2026-09-15
+    });
+    const result = projectDividends([e1, e2], heldQty, qtyAt, now);
+    expect(result.map((r) => r.date)).toEqual(["2026-09-15", "2026-12-01"]);
   });
 });
 
