@@ -502,6 +502,14 @@
     "connectedHint": "Your account is connected. Sync pulls new activity as draft transactions you confirm.",
     "synced": "Synced — {drafts} draft transactions staged. Review them on the Import page.",
     "syncNow": "Sync now",
+    "categories": {
+      "title": "What to import",
+      "hint": "Trade Republic is a full bank account. Choose which activity to stage as drafts.",
+      "trade": "Trades & savings plans",
+      "income": "Dividends & interest",
+      "cashflow": "Transfers (deposits & withdrawals)",
+      "card": "Card spending"
+    },
     "disconnect": "Disconnect",
     "expiredHint": "Your session expired. Reconnect to resume syncing.",
     "error": "Something went wrong. Please try again.",

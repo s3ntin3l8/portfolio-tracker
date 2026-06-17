@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, RefreshCw, Plug, Smartphone, Unplug } from "lucide-react";
 import { apiErrorCode } from "@portfolio/api-client";
-import type { ApiClient, TrConnection, TrSyncResult } from "@portfolio/api-client";
+import type {
+  ApiClient,
+  TrConnection,
+  TrSyncResult,
+  TrImportCategory,
+} from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +17,17 @@ import { Label } from "@/components/ui/label";
 /** The slice of the API client this flow needs (injectable for tests). */
 export type TrConnectClient = Pick<
   ApiClient,
-  "connectTr" | "verifyTr" | "syncTr" | "disconnectTr" | "getTrConnection"
+  | "connectTr"
+  | "verifyTr"
+  | "syncTr"
+  | "disconnectTr"
+  | "getTrConnection"
+  | "updateTrCategories"
 >;
+
+// Default staged categories when the connection hasn't been customised (card spending off).
+const DEFAULT_CATEGORIES: TrImportCategory[] = ["trade", "income", "cashflow"];
+const ALL_CATEGORIES: TrImportCategory[] = ["trade", "income", "cashflow", "card"];
 
 // How long the awaiting phase waits for the approval to resolve before giving up, and
 // how often it re-checks the authoritative connection status. The window matches the
@@ -56,6 +70,9 @@ export function TrConnectFlow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sync, setSync] = useState<TrSyncResult | null>(null);
+  const [categories, setCategories] = useState<Set<TrImportCategory>>(
+    new Set(initial.importCategories ?? DEFAULT_CATEGORIES),
+  );
 
   const expired = initial.status === "expired";
 
@@ -170,6 +187,18 @@ export function TrConnectFlow({
       onChanged?.();
     });
 
+  // Toggle a staged category and persist it. At least one must stay enabled (server-enforced).
+  const toggleCategory = (cat: TrImportCategory) => {
+    const next = new Set(categories);
+    if (next.has(cat)) next.delete(cat);
+    else next.add(cat);
+    if (next.size === 0) return; // never allow an empty selection
+    setCategories(next);
+    void run(async () => {
+      await client.updateTrCategories([...next]);
+    });
+  };
+
   return (
     <div className="max-w-md space-y-4">
       {error && (
@@ -276,6 +305,24 @@ export function TrConnectFlow({
               {t("synced", { drafts: sync.drafts ?? 0 })}
             </div>
           )}
+
+          <fieldset className="space-y-2 rounded-md border px-3 py-3">
+            <legend className="px-1 text-sm font-medium">{t("categories.title")}</legend>
+            <p className="text-xs text-muted-foreground">{t("categories.hint")}</p>
+            {ALL_CATEGORIES.map((cat) => (
+              <label key={cat} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 align-middle accent-primary"
+                  checked={categories.has(cat)}
+                  disabled={busy}
+                  onChange={() => toggleCategory(cat)}
+                />
+                {t(`categories.${cat}`)}
+              </label>
+            ))}
+          </fieldset>
+
           <div className="flex items-center gap-3">
             <Button onClick={doSync} disabled={busy}>
               {busy ? (

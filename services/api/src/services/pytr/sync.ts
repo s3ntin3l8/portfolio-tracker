@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { screenshotImports, transactions, trConnections } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
-import { mapTrEvents } from "./mapper.js";
+import { mapTrEvents, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
 import type { PytrRunner } from "./runner.js";
 import type { DB } from "../../db/client.js";
@@ -32,6 +32,9 @@ function isCancelled(status: unknown): boolean {
   const s = typeof status === "string" ? status.toUpperCase() : "";
   return s === "CANCELED" || s === "CANCELLED";
 }
+
+// Default staged categories: everything except day-to-day card spending.
+const DEFAULT_CATEGORIES = ["trade", "income", "cashflow"];
 
 /**
  * Sync one Trade Republic connection: resume the saved session, export the full timeline,
@@ -83,11 +86,22 @@ export async function syncTrConnection(
   const meta = events
     .map((e) => {
       const o = e as Record<string, unknown>;
-      return { id: typeof o.id === "string" ? o.id : "", status: o.status };
+      return {
+        id: typeof o.id === "string" ? o.id : "",
+        status: o.status,
+        eventType: typeof o.eventType === "string" ? o.eventType : "",
+      };
     })
     .filter((m) => m.id);
   const exportIds = new Set(meta.map((m) => m.id));
   const cancelledIds = new Set(meta.filter((m) => isCancelled(m.status)).map((m) => m.id));
+  const eventTypeById = new Map(meta.map((m) => [m.id, m.eventType]));
+
+  // Per-connection category filter: only stage events whose category is enabled. Excluded
+  // events are NOT marked seen, so enabling the category later stages them on the next sync.
+  const enabled = new Set(connection.importCategories ?? DEFAULT_CATEGORIES);
+  const allowed = (id: string) =>
+    enabled.has(categoryForEventType(eventTypeById.get(id) ?? ""));
 
   // 1. Un-import any already-confirmed transactions whose source event is now cancelled.
   let cancelled = 0;
@@ -134,30 +148,35 @@ export async function syncTrConnection(
       (existing?.drafts ?? []).map((d) => d.externalId).filter((x): x is string => Boolean(x)),
   );
 
-  // 4. New events = present, executed, not already confirmed, not already seen.
+  // 4. New events = present, executed, in an enabled category, not confirmed, not seen.
   const newRaw = events.filter((e) => {
     const o = e as Record<string, unknown>;
     const id = typeof o.id === "string" ? o.id : "";
-    if (!id || confirmedIds.has(id) || seen.has(id)) return false;
+    if (!id || confirmedIds.has(id) || seen.has(id) || !allowed(id)) return false;
     if (typeof o.status === "string" && o.status.toUpperCase() !== "EXECUTED") return false;
     return true;
   });
   const { drafts: newDrafts, errors: newErrors } = mapTrEvents(newRaw);
 
-  // 5. Reconcile the collector: keep staged drafts that are still pending + present, drop
-  //    ones now confirmed/cancelled/vanished, then append the freshly mapped ones.
+  // 5. Reconcile the collector: keep staged drafts that are still pending + present + in an
+  //    enabled category, drop ones now confirmed/cancelled/vanished/excluded, then append.
   const keptDrafts = (existing?.drafts ?? []).filter(
     (d) =>
       d.externalId &&
       !confirmedIds.has(d.externalId) &&
       !cancelledIds.has(d.externalId) &&
-      exportIds.has(d.externalId),
+      exportIds.has(d.externalId) &&
+      allowed(d.externalId),
   );
   const mergedDrafts = [...keptDrafts, ...newDrafts];
   const mergedErrors = [...(existing?.errors ?? []), ...newErrors];
 
   const nextSeen = new Set(seen);
-  for (const m of meta) if (!confirmedIds.has(m.id) || cancelledIds.has(m.id)) nextSeen.add(m.id);
+  for (const m of meta) {
+    if (confirmedIds.has(m.id) && !cancelledIds.has(m.id)) continue; // confirmed → tracked there
+    if (!allowed(m.id)) continue; // category-excluded → stay re-evaluatable if enabled later
+    nextSeen.add(m.id);
+  }
   for (const id of cancelledIds) nextSeen.delete(id); // allow a re-executed event to re-stage
   const parsedJson: CollectorJson = {
     drafts: mergedDrafts,

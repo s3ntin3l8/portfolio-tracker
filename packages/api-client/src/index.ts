@@ -360,12 +360,16 @@ export type TrStatus =
   | "expired"
   | "error";
 
+export type TrImportCategory = "trade" | "income" | "cashflow" | "card";
+
 /** Public state of the user's Trade Republic connection — never includes secrets. */
 export interface TrConnection {
   status: TrStatus;
   portfolioId: string | null;
   lastSyncAt: string | null;
   lastError: string | null;
+  /** Which event categories the sync stages; null = default (everything but card spending). */
+  importCategories: TrImportCategory[] | null;
 }
 
 export interface TrConnectInput {
@@ -574,6 +578,8 @@ export function createApiClient(config: ApiClientConfig) {
     // login in the TR mobile app (or it is declined / the window expires).
     verifyTr: () => request<{ status: TrStatus }>("POST", "/tr/connection/verify"),
     syncTr: () => request<TrSyncResult>("POST", "/tr/connection/sync"),
+    updateTrCategories: (importCategories: TrImportCategory[]) =>
+      request<TrConnection>("PATCH", "/tr/connection", { importCategories }),
     disconnectTr: () => request<void>("DELETE", "/tr/connection"),
   };
 }

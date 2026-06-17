@@ -159,6 +159,36 @@ describe("syncTrConnection", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("excludes card spending by default, stages it once the category is enabled", async () => {
+    const conn = await makeConnection("categories");
+    const db = getDb();
+    const evs = [
+      { id: "card-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "CARD_TRANSACTION", amount: -12.5, currency: "EUR" },
+      { id: "dep-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" },
+    ];
+    const runner = runnerWith(async () => ({ events: evs, sessionData: "J" }));
+
+    // Default categories exclude card spending → only the deposit is staged.
+    const r1 = await syncTrConnection(db, enc, runner, conn);
+    expect(r1.drafts).toBe(1);
+
+    // Enable the card category; the card event (not previously marked seen) now stages.
+    await db
+      .update(trConnections)
+      .set({ importCategories: ["trade", "income", "cashflow", "card"] })
+      .where(eq(trConnections.id, conn.id));
+    const [conn2] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
+    const r2 = await syncTrConnection(db, enc, runner, conn2);
+    expect(r2.drafts).toBe(1); // the card txn; the deposit was already staged
+
+    const [draft] = await db
+      .select()
+      .from(screenshotImports)
+      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
+    const parsed = draft.parsedJson as { drafts: { externalId: string }[] };
+    expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["card-1", "dep-1"]);
+  });
+
   it("marks the connection expired when the session can't be resumed", async () => {
     const conn = await makeConnection("expired");
     const runner = runnerWith(async () => {

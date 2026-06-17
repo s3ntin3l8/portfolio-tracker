@@ -19,6 +19,11 @@ const connectBodySchema = z.object({
 
 type TrConnection = typeof trConnections.$inferSelect;
 
+const IMPORT_CATEGORIES = ["trade", "income", "cashflow", "card"] as const;
+const settingsBodySchema = z.object({
+  importCategories: z.array(z.enum(IMPORT_CATEGORIES)).min(1),
+});
+
 // Never expose the encrypted secrets — only the connection's public state.
 function serialize(conn: TrConnection | null) {
   return {
@@ -26,6 +31,8 @@ function serialize(conn: TrConnection | null) {
     portfolioId: conn?.portfolioId ?? null,
     lastSyncAt: conn?.lastSyncAt ?? null,
     lastError: conn?.lastError ?? null,
+    // Null = the sync default (everything but card spending).
+    importCategories: conn?.importCategories ?? null,
   };
 }
 
@@ -52,6 +59,19 @@ export async function trRoute(app: FastifyInstance) {
   app.get("/tr/connection", { preHandler: app.authenticate }, async (request) => {
     const { id } = requireUser(request);
     return serialize(await getConnection(id));
+  });
+
+  // Update which event categories the sync stages (trade/income/cashflow/card).
+  app.patch("/tr/connection", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const conn = await getConnection(id);
+    if (!conn) return reply.code(404).send({ error: "not_connected" });
+    const { importCategories } = settingsBodySchema.parse(request.body);
+    await app.db
+      .update(trConnections)
+      .set({ importCategories, updatedAt: new Date() })
+      .where(eq(trConnections.id, conn.id));
+    return serialize({ ...conn, importCategories });
   });
 
   // Begin pairing: store encrypted creds and kick off the v2 web-login (sends an approval

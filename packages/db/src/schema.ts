@@ -170,6 +170,10 @@ export const trConnections = pgTable("tr_connections", {
   // The pytr cookie file contents (encrypted). Null until the 2FA pairing completes.
   sessionEnc: text("session_enc"),
   status: trConnectionStatusEnum("status").notNull().default("disconnected"),
+  // Which event categories to stage as drafts (trade/income/cashflow/card). Null = the
+  // default set (everything except day-to-day card spending). TR is a full bank account,
+  // so this keeps card noise out of the portfolio unless explicitly opted in.
+  importCategories: jsonb("import_categories").$type<string[]>(),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

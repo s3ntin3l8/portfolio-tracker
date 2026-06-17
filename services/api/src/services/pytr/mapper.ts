@@ -38,6 +38,30 @@ const EVENT_KIND: Record<string, string> = {
   SAVEBACK_AGGREGATE: "saveback",
   SPARE_CHANGE_AGGREGATE: "roundup",
 };
+
+// Coarse import categories so a connection can opt out of (e.g.) day-to-day card spending
+// without losing trades/dividends. TR is a full bank account, not just a brokerage.
+export type ImportCategory = "trade" | "income" | "cashflow" | "card";
+
+const CARD_EVENTS = new Set([
+  "CARD_TRANSACTION",
+  "CARD_ATM_WITHDRAWAL",
+  "CARD_ORDER_FEE",
+  "CARD_REFUND",
+  "CARD_VERIFICATION",
+  "CARD_AFT",
+]);
+
+/** Classify an event into a coarse import category (used by the per-connection filter). */
+export function categoryForEventType(eventType: string): ImportCategory {
+  if (CARD_EVENTS.has(eventType)) return "card";
+  if (TRADE_EVENTS.has(eventType)) return "trade";
+  if (eventType === CASH_CORPORATE_ACTION) return "income"; // Bardividende
+  const action = FIXED_ACTIONS[eventType];
+  if (action === "buy" || action === "sell" || action === "savings_plan") return "trade";
+  if (action === "dividend" || action === "coupon" || action === "interest") return "income";
+  return "cashflow"; // deposits/withdrawals/transfers and anything unmapped
+}
 export type TrEvent = z.infer<typeof trEventSchema>;
 
 // The TR timeline event taxonomy (validated against a real 912-event account, 2026-06-15).

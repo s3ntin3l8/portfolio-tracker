@@ -502,6 +502,14 @@
     "connectedHint": "Akun Anda terhubung. Sinkronisasi menarik aktivitas baru sebagai draf transaksi untuk Anda konfirmasi.",
     "synced": "Tersinkron — {drafts} draf transaksi disiapkan. Tinjau di halaman Impor.",
     "syncNow": "Sinkronkan sekarang",
+    "categories": {
+      "title": "Apa yang diimpor",
+      "hint": "Trade Republic adalah rekening bank penuh. Pilih aktivitas mana yang dijadikan draf.",
+      "trade": "Perdagangan & rencana tabungan",
+      "income": "Dividen & bunga",
+      "cashflow": "Transfer (setoran & penarikan)",
+      "card": "Belanja kartu"
+    },
     "disconnect": "Putuskan",
     "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
     "error": "Terjadi kesalahan. Silakan coba lagi.",
