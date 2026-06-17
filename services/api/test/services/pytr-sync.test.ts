@@ -190,26 +190,18 @@ describe("syncTrConnection", () => {
     expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["card-1", "dep-1"]);
   });
 
-  it("reconciles derived cash against TR's reported balance", async () => {
+  it("reconciles derived cash against TR's reported balance using the full event timeline", async () => {
     const conn = await makeConnection("reconcile");
     const db = getDb();
-    // A €500 deposit + a €100 sell-less example; derived cash = 500. TR reports 480 → diff 20.
+    // A €500 deposit; derived cash from mapping = 500. TR reports 480 → diff -20.
+    // Crucially: nothing is pre-confirmed in transactions — reconciliation no longer reads
+    // from the DB, so even a brand-new import (zero confirmed rows) gives a correct diff.
     const evs = [{ id: "d-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" }];
     const runner = runnerWith(async () => ({
       events: evs,
       sessionData: "J",
       summary: { cash: [{ currency: "EUR", amount: 480 }] },
     }));
-    // Confirm the deposit so it counts toward derived cash.
-    await db.insert(transactions).values({
-      portfolioId: conn.portfolioId!,
-      type: "deposit",
-      price: "500",
-      currency: "EUR",
-      executedAt: new Date("2026-03-02T10:00:00.000Z"),
-      source: "pytr",
-      externalId: "d-1",
-    });
 
     const result = await syncTrConnection(db, enc, runner, conn);
     expect(result.reconciliation?.cash).toEqual([
@@ -218,6 +210,29 @@ describe("syncTrConnection", () => {
 
     const [updated] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
     expect((updated.lastReconciliation as { cash: unknown[] }).cash).toHaveLength(1);
+  });
+
+  it("reconciles correctly even before any events are confirmed (fresh full import)", async () => {
+    const conn = await makeConnection("reconcile-fresh");
+    const db = getDb();
+    // Full import: all events are staged drafts, none confirmed. Derived cash must still
+    // be non-zero (was always 0 before the fix because it read from transactions table).
+    const evs = [
+      { id: "e-1", timestamp: "2026-01-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 1000, currency: "EUR" },
+      { id: "e-2", timestamp: "2026-01-02T10:00:00.000Z", eventType: "CARD_TRANSACTION", amount: -50, currency: "EUR" },
+    ];
+    const runner = runnerWith(async () => ({
+      events: evs,
+      sessionData: "J",
+      summary: { cash: [{ currency: "EUR", amount: 950 }] },
+    }));
+
+    // Nothing pre-confirmed (simulates a brand-new full import with 0 rows in transactions).
+    const result = await syncTrConnection(db, enc, runner, conn);
+    expect(result.reconciliation?.cash).toEqual([
+      // deposit 1000 - card withdrawal 50 = 950; TR reports 950 → diff 0.
+      { currency: "EUR", reported: "950", derived: "950", diff: "0.00" },
+    ]);
   });
 
   it("a purposely-deleted confirmed transaction stays gone (durable ledger)", async () => {

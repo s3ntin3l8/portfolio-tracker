@@ -219,7 +219,11 @@
       "name": "Name",
       "executedAt": "Date",
       "quantity": "Quantity",
-      "price": "Price"
+      "price": "Price",
+      "isin": "ISIN",
+      "total": "Total",
+      "fees": "Fees",
+      "currency": "Currency"
     },
     "review": {
       "filters": {
@@ -256,7 +260,8 @@
         "ignored": "{count, plural, one {# ignored event} other {# ignored events}}",
         "map": "Map",
         "mapTitle": "Map this event to a transaction",
-        "mapSave": "Add to drafts"
+        "mapSave": "Add to drafts",
+        "attentionHint": "see table rows below (needs review filter)"
       },
       "empty": "No drafts match your filters."
     },
@@ -290,7 +295,8 @@
       "draft": "Draft",
       "confirmed": "Confirmed",
       "discarded": "Discarded"
-    }
+    },
+    "importedBanner": "{count, plural, one {# transaction imported} other {# transactions imported}}"
   },
   "Dashboard": {
     "title": "Dashboard",

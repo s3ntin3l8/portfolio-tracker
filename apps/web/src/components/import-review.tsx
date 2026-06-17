@@ -33,15 +33,19 @@ const REVIEW_COLS: ColDef<ReviewDraft>[] = [
   { key: "assetClass", get: (d) => d.assetClass, type: "text" },
   { key: "action", get: (d) => d.action, type: "text" },
   { key: "name", get: (d) => d.name ?? "", type: "text" },
+  { key: "isin", get: (d) => d.isin ?? "", type: "text" },
   { key: "executedAt", get: (d) => d.executedAt, type: "date" },
   { key: "quantity", get: (d) => d.quantity, type: "numeric" },
   { key: "price", get: (d) => d.price, type: "numeric" },
+  { key: "total", get: (d) => d.total ?? "", type: "numeric" },
+  { key: "fees", get: (d) => d.fees ?? "", type: "numeric" },
 ];
 
 // Actions the mapping editor can assign to an unmapped event.
 const MAP_ACTIONS = [
   "buy",
   "sell",
+  "bonus",
   "dividend",
   "coupon",
   "interest",
@@ -49,6 +53,23 @@ const MAP_ACTIONS = [
   "deposit",
   "withdrawal",
 ] as const;
+
+// Number of columns in the desktop table (used for empty / issue row colSpan).
+const TABLE_COL_COUNT = 13; // checkbox + conf + class + action + name + isin + date + qty + price + total + fees + currency + actions
+
+/** Format a quantity string to up to 4 decimal places, stripping trailing zeros. */
+function fmtQty(s: string): string {
+  const n = parseFloat(s);
+  if (!isFinite(n)) return s;
+  return n.toFixed(4).replace(/\.?0+$/, "") || "0";
+}
+
+/** Format a monetary amount string to 2 decimal places. */
+function fmtAmt(s: string): string {
+  const n = parseFloat(s);
+  if (!isFinite(n)) return s;
+  return n.toFixed(2);
+}
 
 // Confidence below this reads as "needs review" — same threshold as the badge colour.
 const NEEDS_REVIEW_BELOW = 0.9;
@@ -98,15 +119,22 @@ export function ImportReview({
   function openMap(issue: ImportIssue) {
     const raw = issue.raw ?? {};
     const amount = raw.amount != null ? Math.abs(raw.amount) : 0;
+    // Derive a sensible default action from the event type so the user doesn't
+    // have to change it for the common cases (share corp actions → bonus).
+    const defaultAction =
+      issue.eventType === "SSP_CORPORATE_ACTION_INSTRUMENT" ? "bonus" : "buy";
+    // Use the raw share count if available (Python may have extracted it for corp actions).
+    const defaultQty =
+      raw.shares != null && raw.shares > 0 ? String(raw.shares) : "0";
     setMapping(issue);
     setMapForm({
       assetClass: "equity",
-      action: "buy",
+      action: defaultAction,
       isin: raw.isin ?? null,
       name: raw.name ?? issue.eventType ?? "",
-      quantity: "0",
+      quantity: defaultQty,
       unit: "shares",
-      price: String(amount),
+      price: defaultAction === "bonus" ? "0" : String(amount),
       fees: "0",
       currency: raw.currency ?? "EUR",
       executedAt: (raw.executedAt ?? new Date().toISOString()).slice(0, 10),
@@ -138,6 +166,10 @@ export function ImportReview({
     setPending(action);
     try {
       await onConfirm(uids);
+      // After a successful (partial) confirm: reset filters and selection so the user
+      // sees all remaining drafts. For a full confirm, onConfirm navigates away anyway.
+      clearFilters();
+      setSelected(new Set());
     } finally {
       setPending(null);
     }
@@ -199,6 +231,17 @@ export function ImportReview({
     return sort(filtered);
   }, [drafts, assetClassFilter, actionFilter, needsReviewOnly, query, sort]);
 
+  // Attention issues are rendered as table rows (confidence 0%) so they appear under the
+  // "needs review" filter. They are hidden when a dimension-specific filter is active
+  // (they have no action/class to match) but visible otherwise.
+  const visibleIssueRows = useMemo(() => {
+    if (assetClassFilter.size > 0 || actionFilter.size > 0) return [];
+    const q = query.trim().toLowerCase();
+    return attention.filter(
+      (i) => !q || (i.raw?.name ?? i.eventType ?? "").toLowerCase().includes(q),
+    );
+  }, [attention, assetClassFilter, actionFilter, query]);
+
   // Resolve selection through the live drafts so stale uids (from removals) never count.
   const selectedIds = useMemo(
     () => drafts.filter((d) => selected.has(d.uid)).map((d) => d.uid),
@@ -258,32 +301,19 @@ export function ImportReview({
         {t("draftCount", { count: drafts.length })} — {t("reviewHint")}
       </p>
 
-      {/* Issues: events that didn't map cleanly. "Attention" ones can be completed into
-          drafts via the map dialog; ignorable info is tucked behind a disclosure. */}
+      {/* Issues: attention events become rows in the table (see below); only the count
+          is shown here as a banner so users know to check the "needs review" filter.
+          Ignorable info events are tucked behind a disclosure as before. */}
       {(attention.length > 0 || ignorable.length > 0) && (
-        <div className="space-y-2 rounded-lg border border-border bg-card/40 p-3">
+        <div className="space-y-2">
           {attention.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              <span className="font-medium">
                 {t("review.issues.attention", { count: attention.length })}
-              </p>
-              <ul className="space-y-1.5">
-                {attention.map((issue) => (
-                  <li
-                    key={issue.eventId}
-                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                      {issue.raw?.name ?? issue.eventType} — {issue.message}
-                    </span>
-                    {onMapIssue && (
-                      <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
-                        {t("review.issues.map")}
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              </span>
+              <span className="text-amber-700/70 dark:text-amber-400/70">
+                — {t("review.issues.attentionHint")}
+              </span>
             </div>
           )}
           {ignorable.length > 0 && (
@@ -413,9 +443,13 @@ export function ImportReview({
               <SortableTableHead colKey="assetClass" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.assetClass")}</SortableTableHead>
               <SortableTableHead colKey="action" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.action")}</SortableTableHead>
               <SortableTableHead colKey="name" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.name")}</SortableTableHead>
+              <SortableTableHead colKey="isin" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.isin")}</SortableTableHead>
               <SortableTableHead colKey="executedAt" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.executedAt")}</SortableTableHead>
               <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.quantity")}</SortableTableHead>
               <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.price")}</SortableTableHead>
+              <SortableTableHead colKey="total" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.total")}</SortableTableHead>
+              <SortableTableHead colKey="fees" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.fees")}</SortableTableHead>
+              <TableHead>{t("fields.currency")}</TableHead>
               <TableHead className="text-right">
                 <span className="sr-only">{tm("actions")}</span>
               </TableHead>
@@ -444,14 +478,18 @@ export function ImportReview({
                     <Badge variant="outline">{d.assetClass}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="success">{d.action}</Badge>
+                    <Badge variant={d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"}>{d.action}</Badge>
                   </TableCell>
                   <TableCell className="font-medium">{d.name ?? "—"}</TableCell>
+                  <TableCell className="tabular text-xs text-muted-foreground">{d.isin ?? "—"}</TableCell>
                   <TableCell className="tabular whitespace-nowrap text-muted-foreground">
                     {dateOf(d)}
                   </TableCell>
-                  <TableCell className="tabular text-right">{d.quantity}</TableCell>
-                  <TableCell className="tabular text-right">{d.price}</TableCell>
+                  <TableCell className="tabular text-right">{fmtQty(d.quantity)}</TableCell>
+                  <TableCell className="tabular text-right">{fmtAmt(d.price)}</TableCell>
+                  <TableCell className="tabular text-right text-muted-foreground">{d.total ? fmtAmt(d.total) : "—"}</TableCell>
+                  <TableCell className="tabular text-right text-muted-foreground">{d.fees ? fmtAmt(d.fees) : "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{d.currency}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
@@ -477,10 +515,63 @@ export function ImportReview({
                 </TableRow>
               );
             })}
-            {view.length === 0 && (
+            {/* Attention issue rows: shown as 0% confidence entries so they appear when
+                the "needs review" filter is active. Cannot be selected or confirmed
+                directly — Map first to turn them into a confirmable draft. */}
+            {visibleIssueRows.map((issue) => (
+              <TableRow key={issue.eventId ?? issue.eventType} className="opacity-80">
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    className="size-4 align-middle opacity-40"
+                    disabled
+                    aria-label={t("review.selectRow")}
+                    checked={false}
+                    onChange={() => undefined}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Badge variant="warning">{pct(0)}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">—</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">—</Badge>
+                </TableCell>
+                <TableCell className="font-medium">
+                  {issue.raw?.name ?? issue.eventType ?? "—"}
+                </TableCell>
+                <TableCell className="tabular text-xs text-muted-foreground">
+                  {issue.raw?.isin ?? "—"}
+                </TableCell>
+                <TableCell className="tabular whitespace-nowrap text-muted-foreground">
+                  {issue.raw?.executedAt?.slice(0, 10) ?? "—"}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">
+                  {issue.raw?.shares != null ? fmtQty(String(issue.raw.shares)) : "—"}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">
+                  {issue.raw?.amount != null ? fmtAmt(String(Math.abs(issue.raw.amount))) : "—"}
+                </TableCell>
+                <TableCell />
+                <TableCell />
+                <TableCell className="text-xs text-muted-foreground">
+                  {issue.raw?.currency ?? "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {onMapIssue && (
+                    <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
+                      {t("review.issues.map")}
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            {view.length === 0 && visibleIssueRows.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={TABLE_COL_COUNT}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
                   {t("review.empty")}
@@ -516,11 +607,14 @@ export function ImportReview({
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                   <Badge variant="outline">{d.assetClass}</Badge>
-                  <Badge variant="success">{d.action}</Badge>
+                  <Badge variant={d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"}>{d.action}</Badge>
                   <span className="text-muted-foreground">{dateOf(d)}</span>
+                  {d.isin && <span className="font-mono text-muted-foreground">{d.isin}</span>}
                 </div>
                 <div className="mt-1 tabular text-sm text-muted-foreground">
-                  {d.quantity} × {d.price}
+                  {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
+                  {d.total && <span className="ml-2">= {fmtAmt(d.total)}</span>}
+                  {d.fees && d.fees !== "0" && <span className="ml-1">(+{fmtAmt(d.fees)} fees)</span>}
                 </div>
               </button>
               {drafts.length > 1 && (

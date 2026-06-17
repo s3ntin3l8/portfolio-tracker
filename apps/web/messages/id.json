@@ -219,7 +219,11 @@
       "name": "Nama",
       "executedAt": "Tanggal",
       "quantity": "Jumlah",
-      "price": "Harga"
+      "price": "Harga",
+      "isin": "ISIN",
+      "total": "Total",
+      "fees": "Biaya",
+      "currency": "Mata Uang"
     },
     "review": {
       "filters": {
@@ -256,7 +260,8 @@
         "ignored": "{count, plural, one {# peristiwa diabaikan} other {# peristiwa diabaikan}}",
         "map": "Petakan",
         "mapTitle": "Petakan peristiwa ini ke transaksi",
-        "mapSave": "Tambahkan ke draf"
+        "mapSave": "Tambahkan ke draf",
+        "attentionHint": "lihat baris tabel di bawah (filter perlu diperiksa)"
       },
       "empty": "Tidak ada draf yang cocok dengan filter Anda."
     },
@@ -290,7 +295,8 @@
       "draft": "Draf",
       "confirmed": "Terkonfirmasi",
       "discarded": "Dibuang"
-    }
+    },
+    "importedBanner": "{count, plural, other {# transaksi diimpor}}"
   },
   "Dashboard": {
     "title": "Dasbor",

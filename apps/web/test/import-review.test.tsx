@@ -158,7 +158,7 @@ describe("ImportReview", () => {
     expect(within(table).getByText("FR Bond")).toBeInTheDocument();
   });
 
-  it("maps an attention issue into a draft via the map dialog", () => {
+  it("renders attention issues as a banner + table rows, and maps them via the row Map button", () => {
     const onMapIssue = vi.fn();
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -171,24 +171,36 @@ describe("ImportReview", () => {
               eventId: "ev-9",
               eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
               severity: "attention",
-              message: "share-based corporate action — needs manual entry",
-              raw: { name: "Acme Corp", isin: "US123", currency: "EUR", executedAt: "2026-02-01", amount: 12, shares: 2 },
+              message: "SSP_CORPORATE_ACTION_INSTRUMENT without a share count — check the event details",
+              raw: { name: "Acme Corp", isin: "US123", currency: "EUR", executedAt: "2026-02-01", amount: 0, shares: 2 },
             },
             { eventId: "ev-10", eventType: "CARD_VERIFICATION", severity: "info", message: "card verification" },
           ]}
         />
       </NextIntlClientProvider>,
     );
-    // Ignorable info is tucked behind a disclosure; the attention issue is listed directly.
+    // Ignorable info events are still in the <details> disclosure.
     expect(screen.getByText("1 ignored event")).toBeInTheDocument();
-    expect(screen.getByText(/needs manual entry/)).toBeInTheDocument();
-    // Open the map dialog for the attention issue and save it as a draft.
+    // Attention count is now a banner (not a detailed list).
+    expect(screen.getByText("1 event needs attention")).toBeInTheDocument();
+    // The issue's message text is NOT expanded in the banner (it's a table row now).
+    // The issue appears as a table row; "Acme Corp" is rendered there.
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+    // Open the map dialog via the row-level Map button and save.
     fireEvent.click(screen.getByRole("button", { name: tr.issues.map }));
     fireEvent.click(screen.getByRole("button", { name: tr.issues.mapSave }));
     expect(onMapIssue).toHaveBeenCalledTimes(1);
     const [eventId, draft] = onMapIssue.mock.calls[0];
     expect(eventId).toBe("ev-9");
-    expect(draft).toMatchObject({ externalId: "ev-9", name: "Acme Corp", isin: "US123", action: "buy" });
+    // SSP_CORPORATE_ACTION_INSTRUMENT prefills as bonus with the raw share count.
+    expect(draft).toMatchObject({
+      externalId: "ev-9",
+      name: "Acme Corp",
+      isin: "US123",
+      action: "bonus",
+      quantity: "2",
+      price: "0",
+    });
   });
 
   it("edits a draft via the dialog and reports the right uid", () => {

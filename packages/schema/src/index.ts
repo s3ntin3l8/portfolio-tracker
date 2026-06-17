@@ -165,6 +165,8 @@ export type TransactionInput = z.infer<typeof transactionInputSchema>;
 // Actions a parser can emit. Securities trades + income (buy/sell/dividend/coupon),
 // plus the cash/savings-plan flows the DKB Girokonto import produces (a savings-plan
 // execution behaves as a buy; deposit/withdrawal are instrument-less cash movements).
+// `bonus` = shares received with no cash (stock dividend / corporate bonus issue) —
+// mirrored from the DB transaction type so share-based corp actions can be auto-mapped.
 export const parsedActionSchema = z.enum([
   "buy",
   "sell",
@@ -174,6 +176,7 @@ export const parsedActionSchema = z.enum([
   "savings_plan",
   "deposit",
   "withdrawal",
+  "bonus",
 ]);
 export type ParsedAction = z.infer<typeof parsedActionSchema>;
 

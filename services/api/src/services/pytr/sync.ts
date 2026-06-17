@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { Decimal } from "decimal.js";
 import {
   screenshotImports,
   transactions,
@@ -6,7 +7,7 @@ import {
   trResolvedEvents,
 } from "@portfolio/db";
 import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
-import { cashBalances } from "@portfolio/core";
+import { cashBalances, type CoreTransaction } from "@portfolio/core";
 import { mapTrEvents, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
 import type { PytrRunner, TrExportSummary } from "./runner.js";
@@ -51,29 +52,35 @@ function isCancelled(status: unknown): boolean {
 // Default staged categories: everything except day-to-day card spending.
 const DEFAULT_CATEGORIES = ["trade", "income", "cashflow"];
 
-// Compare TR's reported cash balance against the cash we derive from the portfolio's
-// transactions. A non-zero diff flags missing/duplicate/misclassified events (or, expected,
-// a disabled category like card spending). Returns undefined when TR reported no balance.
-async function reconcileCash(
-  db: DB,
-  portfolioId: string,
+// Compare TR's reported cash balance against the cash we derive from the full event
+// timeline. By deriving from the mapped events (not from confirmed transactions), this
+// answers "did our mapper account for every cash movement TR knows about?" regardless of
+// how many events have been confirmed by the user. Card spending is included even when
+// that category is disabled for staging (its CARD_TRANSACTION events map to `withdrawal`).
+// A near-zero diff means all events are mapped; a non-zero diff typically indicates
+// events with unknown types or amounts the mapper can't yet handle. Returns undefined
+// when TR didn't report a balance.
+function reconcileCash(
+  allEvents: unknown[],
   summary: TrExportSummary | undefined,
-): Promise<CashReconciliation | undefined> {
+): CashReconciliation | undefined {
   const reported = summary?.cash;
   if (!reported || reported.length === 0) return undefined;
-  const rows = await db
-    .select({
-      instrumentId: transactions.instrumentId,
-      type: transactions.type,
-      quantity: transactions.quantity,
-      price: transactions.price,
-      fees: transactions.fees,
-      currency: transactions.currency,
-      executedAt: transactions.executedAt,
-    })
-    .from(transactions)
-    .where(eq(transactions.portfolioId, portfolioId));
-  const derived = cashBalances(rows);
+
+  // Map the full timeline (all categories, all event states — the mapper itself skips
+  // non-EXECUTED events). Convert the resulting drafts to CoreTransaction for cashBalances.
+  const { drafts } = mapTrEvents(allEvents);
+  const coreTxns: CoreTransaction[] = drafts.map((d) => ({
+    instrumentId: null, // cashBalances only uses type/qty/price/fees/currency
+    type: d.action as CoreTransaction["type"],
+    quantity: d.quantity,
+    price: d.price,
+    fees: d.fees,
+    currency: d.currency,
+    executedAt: d.executedAt,
+  }));
+
+  const derived = cashBalances(coreTxns);
   const currencies = new Set([...reported.map((c) => c.currency), ...Object.keys(derived)]);
   const cash = [...currencies].map((currency) => {
     const reportedStr = String(reported.find((c) => c.currency === currency)?.amount ?? "0");
@@ -82,7 +89,8 @@ async function reconcileCash(
       currency,
       reported: reportedStr,
       derived: derivedStr,
-      diff: (Number(reportedStr) - Number(derivedStr)).toFixed(2),
+      // Use Decimal arithmetic (not JS float) to avoid floating-point drift.
+      diff: new Decimal(reportedStr).sub(new Decimal(derivedStr)).toFixed(2),
     };
   });
   return { checkedAt: new Date().toISOString(), cash };
@@ -275,7 +283,7 @@ export async function syncTrConnection(
   }
 
   // 7. Reconcile cash against TR's reported balance, then roll the session forward.
-  const reconciliation = await reconcileCash(db, portfolioId, result.summary);
+  const reconciliation = reconcileCash(events, result.summary);
   await db
     .update(trConnections)
     .set({

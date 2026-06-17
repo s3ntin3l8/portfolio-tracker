@@ -148,12 +148,19 @@ def _field(details, keywords):
 def _extract_shares(details):
     """Share count for a trade-like event.
 
-    First a labelled row (Anteile/Aktien/Shares/Anzahl/Stück); failing that, the
-    'Transaktion' row that aggregate buys (round-up, saveback) carry as '<shares> x
-    <price>' — distinguished from a plain cash 'transaction' amount by the ' x '/'×'.
+    First a labelled row (Anteile/Aktien/Shares/Anzahl/Stück); also covers corporate
+    actions that carry received shares as 'Erhaltene Aktien' / 'erhaltene anteile' /
+    'received shares'. Failing that, the 'Transaktion' row that aggregate buys
+    (round-up, saveback) carry as '<shares> x <price>' — distinguished from a plain
+    cash 'transaction' amount by the ' x '/'×'.
     """
+    SHARE_KEYWORDS = (
+        "anteile", "aktien", "shares", "anzahl", "stück",
+        # Corporate-action variants for received shares (stock dividend / bonus issue):
+        "erhaltene", "received",
+    )
     for title, text in _walk_rows(details or {}):
-        if any(k in title for k in ("anteile", "aktien", "shares", "anzahl", "stück")) and (
+        if any(k in title for k in SHARE_KEYWORDS) and (
             # 'aktienkurs' / 'share price' rows contain 'aktien' too — those are a price.
             not any(p in title for p in ("kurs", "preis", "price"))
         ):

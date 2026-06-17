@@ -61,6 +61,7 @@ export function categoryForEventType(eventType: string): ImportCategory {
   if (CARD_EVENTS.has(eventType)) return "card";
   if (TRADE_EVENTS.has(eventType)) return "trade";
   if (eventType === CASH_CORPORATE_ACTION) return "income"; // Bardividende
+  if (eventType === SHARE_CORPORATE_ACTION) return "income"; // stock dividend / bonus issue
   const action = FIXED_ACTIONS[eventType];
   if (action === "buy" || action === "sell" || action === "savings_plan") return "trade";
   if (action === "dividend" || action === "coupon" || action === "interest") return "income";
@@ -119,11 +120,14 @@ const SKIP_EVENTS = new Map<string, string>([
   ["CARD_VERIFICATION", "card verification (no cash movement)"],
   ["TRADING_SAVINGSPLAN_EXECUTION_FAILED", "failed savings-plan execution"],
   ["INTEREST_PAYOUT_CREATED", "interest accrual notice (settled by INTEREST_PAYOUT)"],
-  ["SSP_CORPORATE_ACTION_INSTRUMENT", "share-based corporate action — needs manual entry"],
 ]);
 
 // Skipped events the user may actually want to map (vs. ignorable info like a card ping).
-const ATTENTION_SKIPS = new Set(["SSP_CORPORATE_ACTION_INSTRUMENT"]);
+const ATTENTION_SKIPS = new Set<string>();
+
+// Share-based corporate action (stock dividend / bonus issue). TR event type for shares
+// received with no cash; maps to `bonus` (no cash leg, quantity = received shares).
+const SHARE_CORPORATE_ACTION = "SSP_CORPORATE_ACTION_INSTRUMENT";
 
 // Actions that move shares (need an instrument + a per-share price). The rest are pure
 // cash movements recorded as a lump sum in `price`.
@@ -133,6 +137,7 @@ const SECURITY_ACTIONS = new Set<ParsedAction>([
   "savings_plan",
   "dividend",
   "coupon",
+  "bonus",
 ]);
 
 export type MapResult =
@@ -213,6 +218,9 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   if (!action && ev.eventType === CASH_CORPORATE_ACTION) {
     action = ev.isin ? "dividend" : "deposit";
   }
+  if (!action && ev.eventType === SHARE_CORPORATE_ACTION) {
+    action = "bonus";
+  }
   if (!action) {
     return skip(`unmapped event type: ${ev.eventType}`, "attention", ev);
   }
@@ -246,6 +254,22 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
         confidence = 0.5;
       }
     }
+  }
+
+  if (action === "bonus") {
+    // Stock dividend / bonus issue: shares received, no cash consideration.
+    // The received share count should be extracted by tr_export.py (_extract_shares);
+    // if missing, surface for manual mapping rather than producing a zero-quantity draft.
+    const shares = Math.abs(ev.shares ?? 0);
+    if (shares === 0) {
+      return skip(
+        `${ev.eventType} without a share count — check the event details`,
+        "attention",
+        ev,
+      );
+    }
+    quantity = dstr(shares);
+    price = "0"; // no cash consideration for a bonus share issue
   }
 
   // Asset class at the source: crypto when TR's synthetic ISIN says so, else equity/ETF

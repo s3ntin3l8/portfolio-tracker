@@ -219,17 +219,49 @@ describe("mapTrEventToDraft", () => {
     );
   });
 
-  it("skips known no-ops with a reason (card verification, failed/accrual, share corp action)", () => {
+  it("skips known no-ops with a reason (card verification, failed/accrual events)", () => {
     for (const eventType of [
       "CARD_VERIFICATION",
       "INTEREST_PAYOUT_CREATED",
       "TRADING_SAVINGSPLAN_EXECUTION_FAILED",
-      "SSP_CORPORATE_ACTION_INSTRUMENT",
     ]) {
       expect(mapTrEventToDraft({ ...base, eventType, amount: 0 })).toMatchObject({
         skip: true,
       });
     }
+  });
+
+  it("maps SSP_CORPORATE_ACTION_INSTRUMENT to a bonus draft when shares are known", () => {
+    // Stock dividend: company issues shares with no cash consideration.
+    const result = mapTrEventToDraft({
+      ...base,
+      eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
+      isin: "US0378331005",
+      shares: 3.5,
+      amount: 0,
+    });
+    expect(result).toMatchObject({
+      draft: {
+        action: "bonus",
+        quantity: "3.5",
+        price: "0",
+        isin: "US0378331005",
+        externalId: base.id,
+      },
+    });
+  });
+
+  it("surfaces SSP_CORPORATE_ACTION_INSTRUMENT as attention when share count is missing", () => {
+    // No shares extracted by Python yet — fall back to manual mapping.
+    expect(
+      mapTrEventToDraft({ ...base, eventType: "SSP_CORPORATE_ACTION_INSTRUMENT", isin: "US123", amount: 0 }),
+    ).toMatchObject({ skip: true, severity: "attention", reason: expect.stringContaining("share count") });
+  });
+
+  it("surfaces SSP_CORPORATE_ACTION_INSTRUMENT as attention when ISIN is missing", () => {
+    expect(
+      mapTrEventToDraft({ ...base, eventType: "SSP_CORPORATE_ACTION_INSTRUMENT", shares: 2, amount: 0 }),
+    ).toMatchObject({ skip: true, severity: "attention", reason: expect.stringContaining("ISIN") });
   });
 
   it("skips (never drops) unknown types and securities missing key data", () => {

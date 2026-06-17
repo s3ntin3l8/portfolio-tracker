@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { ImportReview } from "@/components/import-review";
 import {
   withUid,
@@ -36,6 +36,8 @@ export function DraftReviewClient({
   const [drafts, setDrafts] = useState<ReviewDraft[]>(() => initial.map(withUid));
   const [issues, setIssues] = useState<ImportIssue[]>(initialIssues);
   const [error, setError] = useState<string | null>(null);
+  const [importedCount, setImportedCount] = useState<number | null>(null);
+  const importedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
@@ -77,6 +79,10 @@ export function DraftReviewClient({
       if (isPartial) {
         const confirmed = new Set(subset.map((d) => d.uid));
         setDrafts((ds) => ds.filter((d) => !confirmed.has(d.uid)));
+        // Show a brief success banner so the user knows the confirm landed.
+        setImportedCount(subset.length);
+        if (importedTimer.current) clearTimeout(importedTimer.current);
+        importedTimer.current = setTimeout(() => setImportedCount(null), 5000);
         router.refresh(); // surface the new transactions (and updated history) elsewhere
       } else {
         backToImport();
@@ -105,6 +111,15 @@ export function DraftReviewClient({
         >
           <AlertCircle className="size-4 shrink-0" />
           {error}
+        </div>
+      )}
+      {importedCount !== null && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400"
+        >
+          <CheckCircle2 className="size-4 shrink-0" />
+          {t("importedBanner", { count: importedCount })}
         </div>
       )}
       <ImportReview
