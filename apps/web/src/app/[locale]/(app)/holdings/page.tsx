@@ -63,13 +63,13 @@ export default async function HoldingsPage({
   ]);
 
   const Heading = (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       {result.status === "ok" && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <CostBasisToggle
             current={costBasis}
             labelPurchase={t("costBasisPurchasePrice")}
@@ -145,7 +145,7 @@ export default async function HoldingsPage({
       {Heading}
 
       <Tabs defaultValue="all">
-        <TabsList>
+        <TabsList className="h-auto flex-wrap">
           {CLASS_TABS.map((key) => (
             <TabsTrigger
               key={key}

@@ -131,10 +131,10 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
           return (
             <div
               key={h.instrumentId}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3"
+              className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3 overflow-hidden"
             >
               {/* Col 1: symbol / name */}
-              <div className="min-w-0">
+              <div className="min-w-0 overflow-hidden">
                 <Link
                   href={`/instruments/${h.instrumentId}`}
                   className="font-medium hover:underline block truncate"
