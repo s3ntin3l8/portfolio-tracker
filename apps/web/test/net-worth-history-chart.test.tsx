@@ -13,8 +13,12 @@ const getNetWorthHistory = vi.fn(async (): Promise<NetWorthPoint[]> => [
   { date: "2026-02-01", netWorth: "200" },
   { date: "2026-03-01", netWorth: "300" },
 ]);
+const getPortfolioHistory = vi.fn(async (): Promise<NetWorthPoint[]> => [
+  { date: "2026-01-01", netWorth: "50" },
+  { date: "2026-02-01", netWorth: "75" },
+]);
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ getNetWorthHistory }),
+  useApiClient: () => ({ getNetWorthHistory, getPortfolioHistory }),
 }));
 
 import { NetWorthHistoryChart } from "../src/components/charts/net-worth-history-chart";
@@ -33,7 +37,10 @@ function renderChart() {
 }
 
 describe("NetWorthHistoryChart", () => {
-  beforeEach(() => getNetWorthHistory.mockClear());
+  beforeEach(() => {
+    getNetWorthHistory.mockClear();
+    getPortfolioHistory.mockClear();
+  });
 
   it("renders the initial series without fetching", () => {
     renderChart();
@@ -45,5 +52,18 @@ describe("NetWorthHistoryChart", () => {
     renderChart();
     fireEvent.click(screen.getByRole("button", { name: "3M" }));
     await waitFor(() => expect(getNetWorthHistory).toHaveBeenCalledWith("3m"));
+  });
+
+  it("uses getPortfolioHistory instead of getNetWorthHistory when selectedId is set", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <NetWorthHistoryChart initial={initial} currency="IDR" selectedId="p2" />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "3M" }));
+    await waitFor(() =>
+      expect(getPortfolioHistory).toHaveBeenCalledWith("p2", "3m"),
+    );
+    expect(getNetWorthHistory).not.toHaveBeenCalled();
   });
 });

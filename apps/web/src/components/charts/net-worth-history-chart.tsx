@@ -12,13 +12,18 @@ import { useApiClient } from "@/lib/api";
 /**
  * Net-worth-over-time with a selectable range. Initial data (1y) is rendered
  * server-side; changing the range refetches the snapshot series client-side.
+ * When `selectedId` is set the refetch is scoped to that portfolio; otherwise
+ * it uses the cross-portfolio aggregate.
  */
 export function NetWorthHistoryChart({
   initial,
   currency,
+  selectedId = null,
 }: {
   initial: NetWorthPoint[];
   currency: string;
+  /** A specific portfolio id to scope the history to, or null for the aggregate. */
+  selectedId?: string | null;
 }) {
   const te = useTranslations("Empty");
   const api = useApiClient();
@@ -31,7 +36,11 @@ export function NetWorthHistoryChart({
     setRange(r);
     setLoading(true);
     try {
-      setData(await api.getNetWorthHistory(r));
+      setData(
+        selectedId
+          ? await api.getPortfolioHistory(selectedId, r)
+          : await api.getNetWorthHistory(r),
+      );
     } catch {
       // keep the last good series on a failed refetch
     } finally {
