@@ -2,7 +2,17 @@ import { Decimal } from "decimal.js";
 import { computeHoldings, marketValue } from "./holdings.js";
 import { cashBalances, cashFlow } from "./cash.js";
 import { netWorth, convert, type FxRateFn } from "./networth.js";
+import { financingByInstrument, totalLiabilities } from "./loans.js";
 import type { CoreTransaction, CorporateAction, Holding } from "./types.js";
+
+/**
+ * How a financed holding's cost basis is reported. "purchase_price" keeps the
+ * gold at its G24 price and treats financing as a separate expense;
+ * "total_paid" capitalizes the financing (admin + margin − discount) incurred
+ * to date into the cost basis. Net worth is invariant to this choice — only
+ * cost-basis/P&L attribution moves.
+ */
+export type CostBasisMode = "purchase_price" | "total_paid";
 
 export interface HoldingValuation extends Holding {
   price: string | null;
@@ -32,6 +42,8 @@ export interface PortfolioSummary {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  /** Outstanding loan liabilities in the display currency (subtracted from net worth). */
+  totalLiabilities: string;
   /** Cash income received — dividends + bond coupons — in the display currency. */
   totalIncome: string;
   /** Sum of per-holding day change, in the display currency. */
@@ -54,6 +66,8 @@ export interface SummarizeInput {
   >;
   displayCurrency: string;
   fx?: FxRateFn;
+  /** Cost-basis presentation for financed holdings. Defaults to "purchase_price". */
+  costBasisMode?: CostBasisMode;
 }
 
 /**
@@ -64,6 +78,17 @@ export interface SummarizeInput {
 export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   const fx: FxRateFn = input.fx ?? (() => "1");
   const holdings = computeHoldings(input.transactions, input.corporateActions);
+
+  // Total-paid cost basis adds financing incurred to date onto the purchase
+  // price; purchase-price mode leaves cost basis untouched.
+  const financing =
+    input.costBasisMode === "total_paid"
+      ? financingByInstrument(input.transactions)
+      : {};
+  const effectiveCost = (h: Holding): Decimal => {
+    const fin = financing[h.instrumentId];
+    return fin ? new Decimal(h.costBasis).add(fin) : new Decimal(h.costBasis);
+  };
 
   let totalCost = new Decimal(0);
   let totalMarketValue = new Decimal(0);
@@ -78,6 +103,12 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     const quote = input.prices[h.instrumentId];
     const currency = quote?.currency ?? input.displayCurrency;
 
+    // Effective (mode-dependent) cost basis and the derived average cost.
+    const cb = effectiveCost(h);
+    const cbStr = cb.toString();
+    const qty = new Decimal(h.quantity);
+    const avgCost = qty.isZero() ? h.avgCost : cb.div(qty).toString();
+
     totalRealized = totalRealized.add(
       new Decimal(convert(h.realizedPnL, currency, input.displayCurrency, fx)),
     );
@@ -85,6 +116,8 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     if (!quote) {
       return {
         ...h,
+        costBasis: cbStr,
+        avgCost,
         price: null,
         currency: null,
         marketValue: null,
@@ -92,7 +125,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
         // Currency unknown without a quote — keep cost basis as-is (it isn't summed
         // into totalCost either), and leave value/P&L unknown.
         marketValueDisplay: null,
-        costBasisDisplay: h.costBasis,
+        costBasisDisplay: cbStr,
         unrealizedPnLDisplay: null,
         previousClose: null,
         dayChange: null,
@@ -101,14 +134,14 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     }
 
     const mv = marketValue(h.quantity, quote.price);
-    const unrealized = new Decimal(mv).sub(new Decimal(h.costBasis)).toString();
+    const unrealized = new Decimal(mv).sub(cb).toString();
     const marketValueDisplay = convert(mv, currency, input.displayCurrency, fx);
-    const costBasisDisplay = convert(h.costBasis, currency, input.displayCurrency, fx);
+    const costBasisDisplay = convert(cbStr, currency, input.displayCurrency, fx);
     const unrealizedPnLDisplay = new Decimal(marketValueDisplay)
       .sub(new Decimal(costBasisDisplay))
       .toString();
     totalCost = totalCost.add(
-      new Decimal(convert(h.costBasis, currency, input.displayCurrency, fx)),
+      new Decimal(convert(cbStr, currency, input.displayCurrency, fx)),
     );
     totalMarketValue = totalMarketValue.add(
       new Decimal(convert(mv, currency, input.displayCurrency, fx)),
@@ -133,6 +166,8 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
 
     return {
       ...h,
+      costBasis: cbStr,
+      avgCost,
       price: quote.price,
       currency: quote.currency,
       marketValue: mv,
@@ -150,12 +185,18 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   for (const [ccy, amount] of Object.entries(cash)) {
     addExposure(ccy, convert(amount, ccy, input.displayCurrency, fx));
   }
+  const liabilities = totalLiabilities(
+    input.transactions,
+    input.displayCurrency,
+    fx,
+  );
   const nw = netWorth({
     holdings,
     prices: input.prices,
     cash,
     displayCurrency: input.displayCurrency,
     fx,
+    liabilities,
   });
 
   let totalIncome = new Decimal(0);
@@ -181,6 +222,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     totalMarketValue: totalMarketValue.toString(),
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
+    totalLiabilities: liabilities,
     totalIncome: totalIncome.toString(),
     totalDayChange: totalDayChange.toString(),
     exposureByCurrency: Object.fromEntries(
@@ -206,6 +248,7 @@ export function aggregatePortfolios(
   let totalRealized = new Decimal(0);
   let totalIncome = new Decimal(0);
   let totalDayChange = new Decimal(0);
+  let totalLiabilities = new Decimal(0);
   let netWorth = new Decimal(0);
 
   const addNullable = (a: string | null, b: string | null): string | null => {
@@ -221,6 +264,7 @@ export function aggregatePortfolios(
     totalRealized = totalRealized.add(s.totalRealizedPnL);
     totalIncome = totalIncome.add(s.totalIncome);
     totalDayChange = totalDayChange.add(s.totalDayChange);
+    totalLiabilities = totalLiabilities.add(s.totalLiabilities);
 
     for (const [currency, amount] of Object.entries(s.cash)) {
       cash[currency] = new Decimal(cash[currency] ?? "0").add(amount).toString();
@@ -278,6 +322,7 @@ export function aggregatePortfolios(
     totalMarketValue: totalMarketValue.toString(),
     totalUnrealizedPnL: totalMarketValue.sub(totalCost).toString(),
     totalRealizedPnL: totalRealized.toString(),
+    totalLiabilities: totalLiabilities.toString(),
     totalIncome: totalIncome.toString(),
     totalDayChange: totalDayChange.toString(),
     exposureByCurrency: exposure,

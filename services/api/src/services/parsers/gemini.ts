@@ -1,6 +1,10 @@
-import type { ParsedTransaction } from "@portfolio/schema";
-import type { ParserImage, ScreenshotParser } from "./types.js";
-import { JSON_EXTRACTION_PROMPT, parseJsonObject, validateDrafts } from "./shared.js";
+import type { ParserImage, ParseResult, ScreenshotParser } from "./types.js";
+import {
+  JSON_EXTRACTION_PROMPT,
+  parseJsonObject,
+  validateContracts,
+  validateDrafts,
+} from "./shared.js";
 
 export interface GeminiParserOptions {
   baseUrl?: string;
@@ -32,7 +36,7 @@ export class GeminiVisionParser implements ScreenshotParser {
     return this.apiKey.trim().length > 0;
   }
 
-  async parse(image: ParserImage): Promise<ParsedTransaction[]> {
+  async parse(image: ParserImage): Promise<ParseResult> {
     if (!this.isConfigured()) {
       throw new Error("gemini_parser_not_configured");
     }
@@ -66,7 +70,13 @@ export class GeminiVisionParser implements ScreenshotParser {
       candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    const obj = parseJsonObject(text) as { transactions?: unknown };
-    return validateDrafts(obj.transactions);
+    const obj = parseJsonObject(text) as {
+      transactions?: unknown;
+      goldContracts?: unknown;
+    };
+    return {
+      drafts: validateDrafts(obj.transactions),
+      contracts: validateContracts(obj.goldContracts),
+    };
   }
 }

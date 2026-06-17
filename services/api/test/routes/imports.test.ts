@@ -2,18 +2,23 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
-import type { ParsedTransaction } from "@portfolio/schema";
+import {
+  parsedGoldContractSchema,
+  type ParsedGoldContract,
+  type ParsedTransaction,
+} from "@portfolio/schema";
 import type { ScreenshotParser } from "../../src/services/parsers/types.js";
 
 // Mock parser so the screenshot flow is hermetic (no Anthropic/Gemini/OpenRouter call).
 function mockParser(
   drafts: ParsedTransaction[],
   configured = true,
+  contracts: ParsedGoldContract[] = [],
 ): ScreenshotParser {
   return {
     name: "mock",
     isConfigured: () => configured,
-    parse: async () => drafts,
+    parse: async () => ({ drafts, contracts }),
   };
 }
 
@@ -517,5 +522,164 @@ describe("screenshot import → confirm flow", () => {
     });
     expect(res.statusCode).toBe(503);
     await inertApp.close();
+  });
+});
+
+describe("gold installment contract import → confirm → undo", () => {
+  let gApp: App;
+  let gKey: CryptoKey;
+
+  // A future-dated contract: no installment is due yet, so the round-trip is
+  // deterministic (0 repayments booked, liability == principal) regardless of the
+  // wall clock. The repayment/now-dependent path is covered in gold-contract.test.ts.
+  const CONTRACT = parsedGoldContractSchema.parse({
+    provider: "GALERI24",
+    contractNo: "TEST-CONTRACT-1",
+    currency: "IDR",
+    grams: "50",
+    goldName: "LM 50 Gram",
+    purchasePrice: "80243000",
+    downPayment: "12036450",
+    adminFee: "50000",
+    discount: "1250000",
+    principal: "68206550",
+    marginTotal: "8858832",
+    tenorMonths: 12,
+    monthlyInstallment: "6422116",
+    startDate: "2099-01-13",
+    schedule: Array.from({ length: 12 }, (_, i) => ({
+      n: i + 1,
+      dueDate: `2099-${String((i % 11) + 2).padStart(2, "0")}-13`,
+      pokok: "5683880",
+      sewaModal: "738236",
+      angsuran: "6422116",
+      sisaPokok: "0",
+    })),
+    confidence: 0.95,
+  });
+
+  async function gToken(sub: string) {
+    return new SignJWT({})
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject(sub)
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(gKey);
+  }
+
+  beforeAll(async () => {
+    const kp = await generateKeyPair("ES256");
+    gKey = kp.privateKey;
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    gApp = await buildApp({
+      authKey: kp.publicKey,
+      screenshotParser: mockParser([], true, [CONTRACT]),
+    });
+  });
+
+  afterAll(async () => {
+    await gApp.close();
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+  });
+
+  it("parses a contract, confirms it to a gold holding + loan, then undoes it", async () => {
+    const t = await gToken("gold-contract-user");
+    const portfolioId = (
+      await gApp.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Cicilan", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const imp = await gApp.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      headers: auth(t),
+      payload: { image: Buffer.from("fake-pdf").toString("base64"), mimeType: "application/pdf" },
+    });
+    expect(imp.statusCode).toBe(201);
+    const { importId, drafts, contracts } = imp.json();
+    expect(drafts).toHaveLength(0);
+    expect(contracts).toHaveLength(1);
+    expect(contracts[0].grams).toBe("50");
+
+    // Confirm with the (user-reviewed) contract.
+    const confirm = await gApp.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { contracts },
+    });
+    expect(confirm.statusCode).toBe(201);
+    // 4 booking legs (buy, drawdown, admin, discount); no installments due yet.
+    expect(confirm.json().confirmed).toBe(4);
+
+    const holdings = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/holdings`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(holdings).toHaveLength(1);
+    expect(holdings[0].quantity).toBe("50");
+
+    const summary = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/summary`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(summary.totalLiabilities).toBe("68206550");
+    // Default (purchase_price) cost basis is the G24 purchase price.
+    expect(summary.holdings[0].costBasis).toBe("80243000");
+
+    // The cost-basis toggle moves only the holding's cost basis, never net worth.
+    const totalPaid = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/summary?costBasis=total_paid`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(totalPaid.netWorth).toBe(summary.netWorth);
+    expect(totalPaid.totalLiabilities).toBe(summary.totalLiabilities);
+    // financing to date = admin 50,000 − discount 1,250,000 (no installments due yet).
+    expect(totalPaid.holdings[0].costBasis).toBe("79043000");
+
+    // Undo removes the legs and the loan; liability and holdings return to zero.
+    const undo = await gApp.inject({
+      method: "DELETE",
+      url: `/imports/${importId}`,
+      headers: auth(t),
+    });
+    expect(undo.statusCode).toBe(200);
+    expect(undo.json().removed).toBe(4);
+
+    const afterHoldings = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/holdings`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(afterHoldings).toHaveLength(0);
+
+    const afterSummary = (
+      await gApp.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/summary`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(afterSummary.totalLiabilities).toBe("0");
   });
 });

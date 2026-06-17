@@ -4,12 +4,13 @@ import type {
   InstrumentInput,
   CorporateActionInput,
   ParsedTransaction,
+  ParsedGoldContract,
   ImportIssue,
   UserUpdate,
   ProviderSettingUpdate,
 } from "@portfolio/schema";
 
-export type { ImportIssue } from "@portfolio/schema";
+export type { ImportIssue, ParsedGoldContract } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
 
@@ -175,6 +176,8 @@ export interface PortfolioSummary {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  /** Outstanding loan liabilities in the display currency (already netted from netWorth). */
+  totalLiabilities: string;
   totalIncome: string;
   totalDayChange: string;
   /** Wealth denominated in each currency (display-currency magnitudes). */
@@ -198,6 +201,8 @@ export interface NetWorth {
   totalMarketValue: string;
   totalUnrealizedPnL: string;
   totalRealizedPnL: string;
+  /** Outstanding loan liabilities in the display currency (already netted from netWorth). */
+  totalLiabilities: string;
   totalIncome: string;
   totalDayChange: string;
   /** Wealth denominated in each currency (display-currency magnitudes). */
@@ -351,12 +356,15 @@ export interface ContributionStats {
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
+  contracts: ParsedGoldContract[];
   errors: ImportIssue[];
 }
 
 export interface ScreenshotImportResult {
   importId: string;
   drafts: ParsedTransaction[];
+  /** Financed gold-purchase contracts (Pegadaian/Galeri 24 cicilan). */
+  contracts: ParsedGoldContract[];
   errors: ImportIssue[];
 }
 
@@ -378,6 +386,7 @@ export interface ImportDetail {
   parser: string;
   status: "draft" | "confirmed" | "discarded";
   drafts: ParsedTransaction[];
+  contracts: ParsedGoldContract[];
   errors: ImportIssue[];
 }
 
@@ -504,7 +513,8 @@ export function createApiClient(config: ApiClientConfig) {
     updateAdminProviders: (input: ProviderSettingUpdate[]) =>
       request<AdminProvider[]>("PATCH", "/admin/providers", input),
 
-    getNetWorth: () => request<NetWorth>("GET", "/networth"),
+    getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
+      request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),
     getIncome: () => request<IncomeStats>("GET", "/networth/income"),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
@@ -575,8 +585,13 @@ export function createApiClient(config: ApiClientConfig) {
 
     getHoldings: (portfolioId: string) =>
       request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
-    getSummary: (portfolioId: string) =>
-      request<PortfolioSummary>("GET", `/portfolios/${portfolioId}/summary`),
+    getSummary: (portfolioId: string, costBasis?: "purchase_price" | "total_paid") =>
+      request<PortfolioSummary>(
+        "GET",
+        costBasis
+          ? `/portfolios/${portfolioId}/summary?costBasis=${costBasis}`
+          : `/portfolios/${portfolioId}/summary`,
+      ),
     getPerformance: (portfolioId: string) =>
       request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
 
@@ -594,11 +609,15 @@ export function createApiClient(config: ApiClientConfig) {
         image,
         mimeType,
       }),
-    confirmImport: (importId: string, transactions: ParsedTransaction[]) =>
+    confirmImport: (
+      importId: string,
+      transactions: ParsedTransaction[],
+      contracts: ParsedGoldContract[] = [],
+    ) =>
       request<{ confirmed: number; transactions: Transaction[] }>(
         "POST",
         `/imports/${importId}/confirm`,
-        { transactions },
+        { transactions, contracts },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */

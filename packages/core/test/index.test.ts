@@ -554,6 +554,7 @@ describe("aggregatePortfolios", () => {
     totalMarketValue: "0",
     totalUnrealizedPnL: "0",
     totalRealizedPnL: "0",
+    totalLiabilities: "0",
     totalIncome: "0",
     totalDayChange: "0",
     exposureByCurrency: {},

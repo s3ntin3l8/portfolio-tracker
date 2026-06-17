@@ -178,6 +178,7 @@ describe("createApiClient request methods", () => {
     { name: "me", call: (c) => c.me(), method: "GET", url: "/me" },
     { name: "updateMe", call: (c) => c.updateMe({ name: "B" }), method: "PATCH", url: "/me", body: { name: "B" } },
     { name: "getNetWorth", call: (c) => c.getNetWorth(), method: "GET", url: "/networth" },
+    { name: "getNetWorth total_paid", call: (c) => c.getNetWorth("total_paid"), method: "GET", url: "/networth?costBasis=total_paid" },
     { name: "getNetWorthHistory default", call: (c) => c.getNetWorthHistory(), method: "GET", url: "/networth/history?range=1y" },
     { name: "getNetWorthHistory range", call: (c) => c.getNetWorthHistory("3m"), method: "GET", url: "/networth/history?range=3m" },
     { name: "getPortfolioHistory", call: (c) => c.getPortfolioHistory("p1", "6m"), method: "GET", url: "/portfolios/p1/history?range=6m" },
@@ -199,10 +200,11 @@ describe("createApiClient request methods", () => {
     { name: "listCorporateActions", call: (c) => c.listCorporateActions("i1"), method: "GET", url: "/instruments/i1/corporate-actions" },
     { name: "getHoldings", call: (c) => c.getHoldings("p1"), method: "GET", url: "/portfolios/p1/holdings" },
     { name: "getSummary", call: (c) => c.getSummary("p1"), method: "GET", url: "/portfolios/p1/summary" },
+    { name: "getSummary total_paid", call: (c) => c.getSummary("p1", "total_paid"), method: "GET", url: "/portfolios/p1/summary?costBasis=total_paid" },
     { name: "getPerformance", call: (c) => c.getPerformance("p1"), method: "GET", url: "/portfolios/p1/performance" },
     { name: "importCsv default auto", call: (c) => c.importCsv("p1", "x"), method: "POST", url: "/portfolios/p1/imports/csv", body: { content: "x", format: "auto" } },
     { name: "importCsv dkb", call: (c) => c.importCsv("p1", "x", "dkb"), method: "POST", url: "/portfolios/p1/imports/csv", body: { content: "x", format: "dkb" } },
-    { name: "confirmImport", call: (c) => c.confirmImport("imp1", []), method: "POST", url: "/imports/imp1/confirm", body: { transactions: [] } },
+    { name: "confirmImport", call: (c) => c.confirmImport("imp1", []), method: "POST", url: "/imports/imp1/confirm", body: { transactions: [], contracts: [] } },
     { name: "getImport", call: (c) => c.getImport("imp1"), method: "GET", url: "/imports/imp1" },
   ];
 

@@ -15,7 +15,14 @@ export {
   type PortfolioSummary,
   type HoldingValuation,
   type SummarizeInput,
+  type CostBasisMode,
 } from "./valuation.js";
+export {
+  loanBalances,
+  liabilityBalances,
+  totalLiabilities,
+  financingByInstrument,
+} from "./loans.js";
 export {
   projectCoupons,
   projectDividends,

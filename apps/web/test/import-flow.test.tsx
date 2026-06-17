@@ -74,7 +74,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT]);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], []);
   });
 
   it("edits a draft in the dialog and confirms the edited value", async () => {
@@ -113,9 +113,11 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [
-      { ...DRAFT, name: "Antam Gold 2" },
-    ]);
+    expect(client.confirmImport).toHaveBeenCalledWith(
+      "imp1",
+      [{ ...DRAFT, name: "Antam Gold 2" }],
+      [],
+    );
   });
 
   it("sends CSV text when the CSV tab is selected", async () => {
@@ -229,5 +231,53 @@ describe("ImportFlow", () => {
         messages.Import.errors.notConfigured,
       ),
     );
+  });
+
+  it("reviews a gold installment contract and confirms it", async () => {
+    const contract = {
+      provider: "GALERI24",
+      contractNo: "C-9",
+      currency: "IDR",
+      grams: "50",
+      goldName: "LM 50 Gram",
+      purchasePrice: "80243000",
+      downPayment: "12036450",
+      adminFee: "50000",
+      discount: "1250000",
+      principal: "68206550",
+      marginTotal: "8858832",
+      tenorMonths: 12,
+      monthlyInstallment: "6422116",
+      startDate: "2025-02-13",
+      costBasisMode: "purchase_price" as const,
+      schedule: [],
+      confidence: 0.95,
+    };
+    const client: ImportClient = {
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp-c",
+        drafts: [],
+        contracts: [contract],
+        errors: [],
+      })),
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 4 })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.contract.title)).toBeInTheDocument(),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.Import.contract.confirm }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract]);
   });
 });

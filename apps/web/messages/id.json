@@ -193,6 +193,25 @@
     },
     "parsing": "Membaca transaksi Anda…",
     "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
+    "contract": {
+      "title": "Kontrak cicilan emas",
+      "subtitle": "Pembelian emas dengan pembiayaan (Pegadaian / Galeri 24). Konfirmasi detailnya sebelum disimpan.",
+      "grams": "Berat (gram)",
+      "gramsHint": "Dari Bukti Pembelian Emas",
+      "provider": "Penyedia",
+      "contractNo": "No. Kontrak",
+      "purchasePrice": "Harga pembelian",
+      "downPayment": "Uang muka",
+      "principal": "Pinjaman",
+      "marginTotal": "Biaya pembiayaan (Sewa Modal)",
+      "adminFee": "Biaya administrasi",
+      "discount": "Diskon",
+      "tenor": "{count, plural, other {# bulan}}",
+      "installment": "Angsuran per bulan",
+      "schedule": "{count, plural, other {# angsuran}}",
+      "confirm": "Konfirmasi kontrak",
+      "discard": "Buang"
+    },
     "draftCount": "{count, plural, other {# draf}}",
     "confidence": "Yakin {pct}%",
     "remove": "Hapus",
@@ -367,7 +386,9 @@
     "value": "Nilai",
     "pnl": "Untung/Rugi",
     "all": "Semua",
-    "exportCsv": "Ekspor CSV"
+    "exportCsv": "Ekspor CSV",
+    "costBasisPurchasePrice": "Harga beli",
+    "costBasisTotalPaid": "Total dibayar"
   },
   "Chart": {
     "range": {

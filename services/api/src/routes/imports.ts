@@ -1,9 +1,23 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
-import { portfolios, screenshotImports, transactions, trResolvedEvents } from "@portfolio/db";
-import { parsedTransactionSchema, type AssetClass } from "@portfolio/schema";
+import {
+  loans,
+  portfolios,
+  screenshotImports,
+  transactions,
+  trResolvedEvents,
+} from "@portfolio/db";
+import {
+  parsedGoldContractSchema,
+  parsedTransactionSchema,
+  type AssetClass,
+} from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
+import {
+  buildContractLegs,
+  goldInstrumentForContract,
+} from "../services/parsers/gold-contract.js";
 import { parseCsv } from "../services/parsers/csv.js";
 import { parseDkb } from "../services/parsers/dkb.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
@@ -48,7 +62,11 @@ const screenshotBodySchema = z.object({
     ),
 });
 const confirmBodySchema = z.object({
-  transactions: z.array(parsedTransactionSchema).min(1),
+  // At least one of `transactions` / `contracts` must be present.
+  transactions: z.array(parsedTransactionSchema).default([]),
+  // Financed gold-purchase contracts (Pegadaian/Galeri24 cicilan). Each becomes a
+  // loan row plus its derived legs.
+  contracts: z.array(parsedGoldContractSchema).default([]),
 });
 
 export async function importsRoute(app: FastifyInstance) {
@@ -107,9 +125,9 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       const { image, mimeType } = screenshotBodySchema.parse(request.body);
-      let drafts;
+      let parsed;
       try {
-        drafts = await app.screenshotParser.parse({
+        parsed = await app.screenshotParser.parse({
           data: Buffer.from(image, "base64"),
           mimeType,
         });
@@ -118,11 +136,20 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(502).send({ error: "screenshot_parse_failed" });
       }
 
+      const { drafts, contracts } = parsed;
+      const scored = [
+        ...drafts.map((d) => d.confidence),
+        ...contracts.map((c) => c.confidence),
+      ];
       const confidence =
-        drafts.length > 0
-          ? String(drafts.reduce((s, d) => s + d.confidence, 0) / drafts.length)
+        scored.length > 0
+          ? String(scored.reduce((s, c) => s + c, 0) / scored.length)
           : null;
-      const result = { drafts, errors: [] as { line: number; message: string }[] };
+      const result = {
+        drafts,
+        contracts,
+        errors: [] as { line: number; message: string }[],
+      };
 
       const [imp] = await app.db
         .insert(screenshotImports)
@@ -137,7 +164,12 @@ export async function importsRoute(app: FastifyInstance) {
         .returning();
 
       reply.code(201);
-      return { importId: imp.id, drafts: result.drafts, errors: result.errors };
+      return {
+        importId: imp.id,
+        drafts: result.drafts,
+        contracts: result.contracts,
+        errors: result.errors,
+      };
     },
   );
 
@@ -233,6 +265,8 @@ export async function importsRoute(app: FastifyInstance) {
         .delete(transactions)
         .where(eq(transactions.importId, imp.id))
         .returning();
+      // Remove any loans the import created (transactions referencing them are gone).
+      await app.db.delete(loans).where(eq(loans.importId, imp.id));
       await app.db
         .update(screenshotImports)
         .set({ status: "discarded" })
@@ -252,6 +286,7 @@ export async function importsRoute(app: FastifyInstance) {
       if (!imp) return reply.code(404).send({ error: "import_not_found" });
       const parsed = (imp.parsedJson ?? {}) as {
         drafts?: unknown[];
+        contracts?: unknown[];
         errors?: { line: number; message: string }[];
       };
       return {
@@ -260,6 +295,7 @@ export async function importsRoute(app: FastifyInstance) {
         parser: imp.parser,
         status: imp.status,
         drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+        contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
         errors: Array.isArray(parsed.errors) ? parsed.errors : [],
       };
     },
@@ -288,7 +324,12 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "already_confirmed" });
       }
 
-      const { transactions: drafts } = confirmBodySchema.parse(request.body);
+      const { transactions: drafts, contracts } = confirmBodySchema.parse(
+        request.body,
+      );
+      if (drafts.length === 0 && contracts.length === 0) {
+        return reply.code(400).send({ error: "nothing_to_confirm" });
+      }
       const isDkb = imp.parser === "dkb";
       const isPytr = imp.parser === "pytr";
       // pytr is its own source; DKB exports are CSV too; otherwise a screenshot.
@@ -427,6 +468,77 @@ export async function importsRoute(app: FastifyInstance) {
             .onConflictDoNothing()
             .returning();
           if (row) written.push(row);
+        }
+
+        // Financed gold contracts: create the gold instrument + loan, then insert
+        // the derived legs (buy, drawdown, admin/discount fees, due installments),
+        // all linked by loanId so the outstanding balance derives in @portfolio/core.
+        const now = new Date();
+        for (let ci = 0; ci < contracts.length; ci++) {
+          const c = contracts[ci];
+          const gold = goldInstrumentForContract(c);
+          const instrument = await findOrCreateInstrument(tx, {
+            symbol: gold.symbol,
+            market: gold.market,
+            assetClass: "gold",
+            unit: "grams",
+            currency: c.currency,
+            name: gold.name,
+            isin: null,
+          });
+          const [loan] = await tx
+            .insert(loans)
+            .values({
+              portfolioId: imp.portfolioId!,
+              instrumentId: instrument.id,
+              importId: imp.id,
+              contractNo: c.contractNo ?? null,
+              provider: c.provider ?? "GALERI24",
+              purchasePrice: c.purchasePrice,
+              downPayment: c.downPayment,
+              adminFee: c.adminFee,
+              discount: c.discount,
+              principal: c.principal,
+              marginTotal: c.marginTotal,
+              tenorMonths: c.tenorMonths,
+              monthlyInstallment: c.monthlyInstallment,
+              startDate: c.startDate.toISOString().slice(0, 10),
+              schedule: c.schedule.map((r) => ({
+                n: r.n,
+                dueDate: r.dueDate.toISOString().slice(0, 10),
+                pokok: r.pokok,
+                sewaModal: r.sewaModal,
+                angsuran: r.angsuran,
+                sisaPokok: r.sisaPokok,
+              })),
+              costBasisMode: c.costBasisMode,
+              currency: c.currency,
+            })
+            .returning();
+
+          const legs = buildContractLegs(c, now);
+          for (let li = 0; li < legs.length; li++) {
+            const leg = legs[li];
+            const [row] = await tx
+              .insert(transactions)
+              .values({
+                portfolioId: imp.portfolioId!,
+                instrumentId: leg.role === "gold_buy" ? instrument.id : null,
+                type: leg.type,
+                quantity: leg.quantity,
+                price: leg.price,
+                fees: leg.fees,
+                currency: leg.currency,
+                executedAt: leg.executedAt,
+                source,
+                importId: imp.id,
+                loanId: loan.id,
+                externalId: `import:${imp.id}:loan:${ci}:${li}`,
+              })
+              .onConflictDoNothing()
+              .returning();
+            if (row) written.push(row);
+          }
         }
 
         const staged = Array.isArray(parsed.drafts) ? parsed.drafts : [];

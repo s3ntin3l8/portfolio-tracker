@@ -16,21 +16,30 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId } from "@/lib/server-api";
 import { cn, formatMoney, formatPercent } from "@/lib/utils";
+import { CostBasisToggle } from "@/components/cost-basis-toggle";
+
+type CostBasisMode = "purchase_price" | "total_paid";
 
 export default async function DashboardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ costBasis?: string }>;
 }) {
   const { locale } = await params;
+  const { costBasis: costBasisParam } = await searchParams;
+  const costBasis: CostBasisMode =
+    costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
   setRequestLocale(locale);
   const t = await getTranslations("Dashboard");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
+  const th = await getTranslations("Holdings");
 
   const [result, history, selectedId] = await Promise.all([
-    loadNetWorth(),
+    loadNetWorth(costBasis),
     loadNetWorthHistory(),
     getSelectedPortfolioId(),
   ]);
@@ -155,6 +164,14 @@ export default async function DashboardPage({
       {Heading}
 
       <GoldTicker currency={currency} />
+
+      <div className="flex justify-end">
+        <CostBasisToggle
+          current={costBasis}
+          labelPurchase={th("costBasisPurchasePrice")}
+          labelTotal={th("costBasisTotalPaid")}
+        />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />

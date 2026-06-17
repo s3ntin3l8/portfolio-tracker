@@ -1,9 +1,9 @@
-import type { ParsedTransaction } from "@portfolio/schema";
-import type { ParserImage, ScreenshotParser } from "./types.js";
+import type { ParserImage, ParseResult, ScreenshotParser } from "./types.js";
 import {
   EXTRACTION_PROMPT,
   TOOL_NAME,
   TRANSACTIONS_TOOL_SCHEMA,
+  validateContracts,
   validateDrafts,
 } from "./shared.js";
 
@@ -37,7 +37,7 @@ export class ClaudeVisionParser implements ScreenshotParser {
     return this.apiKey.trim().length > 0;
   }
 
-  async parse(image: ParserImage): Promise<ParsedTransaction[]> {
+  async parse(image: ParserImage): Promise<ParseResult> {
     if (!this.isConfigured()) {
       throw new Error("claude_parser_not_configured");
     }
@@ -86,9 +86,15 @@ export class ClaudeVisionParser implements ScreenshotParser {
     }
 
     const data = (await res.json()) as {
-      content?: { type: string; input?: { transactions?: unknown } }[];
+      content?: {
+        type: string;
+        input?: { transactions?: unknown; goldContracts?: unknown };
+      }[];
     };
     const toolUse = data.content?.find((c) => c.type === "tool_use");
-    return validateDrafts(toolUse?.input?.transactions);
+    return {
+      drafts: validateDrafts(toolUse?.input?.transactions),
+      contracts: validateContracts(toolUse?.input?.goldContracts),
+    };
   }
 }

@@ -58,7 +58,9 @@ export type NetWorthResult =
  * per-portfolio result so the returned shape always matches {@link NetWorth} (which
  * adds `xirr`, `portfolioCount`, and `asOf` to `PortfolioSummary`).
  */
-export async function loadNetWorth(): Promise<NetWorthResult> {
+export async function loadNetWorth(
+  costBasis?: "purchase_price" | "total_paid",
+): Promise<NetWorthResult> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
@@ -68,7 +70,7 @@ export async function loadNetWorth(): Promise<NetWorthResult> {
     const selected = portfolios.find((p) => p.id === wanted);
     if (selected) {
       const [summary, perf] = await Promise.all([
-        api.getSummary(selected.id),
+        api.getSummary(selected.id, costBasis),
         api.getPerformance(selected.id),
       ]);
       return {
@@ -76,7 +78,7 @@ export async function loadNetWorth(): Promise<NetWorthResult> {
         data: { ...summary, xirr: perf.xirr, portfolioCount: 1, asOf: perf.asOf },
       };
     }
-    const data = await api.getNetWorth();
+    const data = await api.getNetWorth(costBasis);
     if (data.portfolioCount === 0) return { status: "empty" };
     return { status: "ok", data };
   } catch {
@@ -198,7 +200,9 @@ export interface HoldingsView {
  * else the cross-portfolio `networth` aggregate ("All portfolios"). Both responses
  * expose the same `holdings` + `displayCurrency`, so the screen renders one way.
  */
-export async function loadHoldings(): Promise<HoldingsView> {
+export async function loadHoldings(
+  costBasis?: "purchase_price" | "total_paid",
+): Promise<HoldingsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable", holdings: [], displayCurrency: "IDR" };
   try {
@@ -209,8 +213,8 @@ export async function loadHoldings(): Promise<HoldingsView> {
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
     const data = selected
-      ? await api.getSummary(selected.id)
-      : await api.getNetWorth();
+      ? await api.getSummary(selected.id, costBasis)
+      : await api.getNetWorth(costBasis);
     return {
       status: "ok",
       holdings: data.holdings,

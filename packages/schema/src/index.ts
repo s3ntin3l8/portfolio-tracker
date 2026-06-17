@@ -31,8 +31,15 @@ export const transactionTypeSchema = z.enum([
   "savings_plan",
   "deposit",
   "withdrawal",
+  // Installment-financing legs (e.g. Pegadaian/Galeri24 gold cicilan). The outstanding
+  // liability is derived from these; excluded from XIRR/contributions by design.
+  "loan_drawdown",
+  "loan_repayment",
 ]);
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
+
+export const costBasisModeSchema = z.enum(["purchase_price", "total_paid"]);
+export type CostBasisMode = z.infer<typeof costBasisModeSchema>;
 
 export const transactionSourceSchema = z.enum([
   "screenshot",
@@ -204,6 +211,46 @@ export const parsedTransactionSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;
+
+// --- Gold installment contract (Pegadaian / Galeri 24 "MULIA" cicilan) ----
+
+// One row of the amortization schedule (Jadwal Angsuran): installment number, due
+// date, principal portion (Pokok), financing margin (Sewa Modal), the total
+// installment (Angsuran) and the remaining principal (Sisa Pokok).
+export const loanScheduleRowSchema = z.object({
+  n: z.number().int().positive(),
+  dueDate: z.coerce.date(),
+  pokok: decimalString,
+  sewaModal: decimalString,
+  angsuran: decimalString,
+  sisaPokok: decimalString,
+});
+export type LoanScheduleRow = z.infer<typeof loanScheduleRowSchema>;
+
+// A structured extraction of a financed gold-purchase contract. The vision model
+// emits the RAW figures read off the (multi-page) contract; the API derives the
+// transaction legs deterministically (see services/parsers/gold-contract). The
+// gram weight comes from the Bukti Pembelian Emas page — never inferred from price.
+export const parsedGoldContractSchema = z.object({
+  provider: z.string().nullish(), // "GALERI24" | "PEGADAIAN"
+  contractNo: z.string().nullish(), // No. Kontrak / No. Order
+  currency: currencyCode.default("IDR"),
+  grams: decimalString, // from the Bukti Pembelian Emas line item (e.g. "LM 50 Gram")
+  goldName: z.string().nullish(), // "LM 50 Gram", seeds the instrument name
+  purchasePrice: decimalString, // Harga Pembelian dari G24
+  downPayment: decimalString.default("0"), // uang muka (Sejumlah Uang)
+  adminFee: decimalString.default("0"), // Biaya Administrasi
+  discount: decimalString.default("0"), // promo (Nominal), stored positive
+  principal: decimalString, // Uang Pinjaman (financed amount)
+  marginTotal: decimalString.default("0"), // total Sewa Modal
+  tenorMonths: z.number().int().positive(), // Jangka Waktu (Bulan)
+  monthlyInstallment: decimalString.default("0"), // Angsuran per Bulan
+  startDate: z.coerce.date(), // Tgl Kredit
+  costBasisMode: costBasisModeSchema.default("purchase_price"),
+  schedule: z.array(loanScheduleRowSchema).default([]),
+  confidence: z.number().min(0).max(1).default(1),
+});
+export type ParsedGoldContract = z.infer<typeof parsedGoldContractSchema>;
 
 // A parse/skip outcome surfaced to the user instead of being silently dropped. `info` is
 // ignorable (e.g. a card-verification ping); `attention` is something the user may want to

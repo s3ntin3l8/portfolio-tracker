@@ -193,6 +193,25 @@
     },
     "parsing": "Reading your transactions…",
     "reviewHint": "Check the details before confirming — nothing is saved until you do.",
+    "contract": {
+      "title": "Gold installment contract",
+      "subtitle": "Financed gold purchase (Pegadaian / Galeri 24). Confirm the details before saving.",
+      "grams": "Weight (grams)",
+      "gramsHint": "From the purchase receipt (Bukti Pembelian Emas)",
+      "provider": "Provider",
+      "contractNo": "Contract no.",
+      "purchasePrice": "Purchase price",
+      "downPayment": "Down payment",
+      "principal": "Financed (loan)",
+      "marginTotal": "Financing cost (Sewa Modal)",
+      "adminFee": "Admin fee",
+      "discount": "Discount",
+      "tenor": "{count, plural, one {# month} other {# months}}",
+      "installment": "Monthly installment",
+      "schedule": "{count, plural, one {# installment} other {# installments}}",
+      "confirm": "Confirm contract",
+      "discard": "Discard"
+    },
     "draftCount": "{count, plural, one {# draft} other {# drafts}}",
     "confidence": "{pct}% sure",
     "remove": "Remove",
@@ -367,7 +386,9 @@
     "value": "Value",
     "pnl": "P&L",
     "all": "All",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "costBasisPurchasePrice": "Purchase price",
+    "costBasisTotalPaid": "Total paid"
   },
   "Chart": {
     "range": {

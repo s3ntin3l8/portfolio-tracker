@@ -104,7 +104,7 @@ describe("loadHoldings", () => {
 
     const res = await api.loadHoldings();
     expect(res).toMatchObject({ status: "ok", displayCurrency: "EUR" });
-    expect(getSummary).toHaveBeenCalledWith("p2");
+    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
     expect(h.client.getNetWorth).not.toHaveBeenCalled();
   });
 
@@ -233,7 +233,7 @@ describe("aggregate + misc loaders", () => {
       expect(res.data.portfolioCount).toBe(1);
       expect(res.data.asOf).toBe("2026-01-01");
     }
-    expect(getSummary).toHaveBeenCalledWith("p2");
+    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
     expect(getPerformance).toHaveBeenCalledWith("p2");
     expect(h.client.getNetWorth).not.toHaveBeenCalled();
   });

@@ -25,11 +25,14 @@ export interface NetWorthInput {
   cash: Record<string, string>;
   displayCurrency: string;
   fx?: FxRateFn;
+  /** Outstanding loan liabilities, already summed to the display currency. */
+  liabilities?: string;
 }
 
 /**
  * Net worth in the display currency: market value of all holdings (priced and
- * FX-converted) plus uninvested cash. Holdings without a price are skipped.
+ * FX-converted) plus uninvested cash, minus outstanding loan liabilities.
+ * Holdings without a price are skipped.
  */
 export function netWorth(input: NetWorthInput): string {
   const fx: FxRateFn = input.fx ?? (() => "1");
@@ -49,6 +52,8 @@ export function netWorth(input: NetWorthInput): string {
       new Decimal(convert(amount, currency, input.displayCurrency, fx)),
     );
   }
+
+  if (input.liabilities) total = total.sub(new Decimal(input.liabilities));
 
   return total.toString();
 }

@@ -12,7 +12,12 @@ export type TransactionType =
   | "rights"
   | "savings_plan"
   | "deposit"
-  | "withdrawal";
+  | "withdrawal"
+  // Financing legs (e.g. Pegadaian/Galeri24 gold cicilan). Source of truth for the
+  // outstanding-liability balance; deliberately excluded from XIRR/contributions
+  // (which whitelist deposit/withdrawal), so booking a loan is not a capital flow.
+  | "loan_drawdown"
+  | "loan_repayment";
 
 /** Minimal transaction shape the engine needs. Money/qty are decimal strings. */
 export interface CoreTransaction {
@@ -23,6 +28,8 @@ export interface CoreTransaction {
   fees: string;
   currency: string;
   executedAt: Date;
+  // Links a financing leg (and the financed buy) to its loan; null otherwise.
+  loanId?: string | null;
 }
 
 export interface CorporateAction {

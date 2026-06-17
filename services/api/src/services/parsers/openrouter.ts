@@ -1,10 +1,10 @@
-import type { ParsedTransaction } from "@portfolio/schema";
-import type { ParserImage, ScreenshotParser } from "./types.js";
+import type { ParserImage, ParseResult, ScreenshotParser } from "./types.js";
 import {
   EXTRACTION_PROMPT,
   TOOL_NAME,
   TRANSACTIONS_TOOL_SCHEMA,
   parseJsonObject,
+  validateContracts,
   validateDrafts,
 } from "./shared.js";
 
@@ -39,7 +39,7 @@ export class OpenRouterVisionParser implements ScreenshotParser {
     return this.apiKey.trim().length > 0;
   }
 
-  async parse(image: ParserImage): Promise<ParsedTransaction[]> {
+  async parse(image: ParserImage): Promise<ParseResult> {
     if (!this.isConfigured()) {
       throw new Error("openrouter_parser_not_configured");
     }
@@ -86,7 +86,13 @@ export class OpenRouterVisionParser implements ScreenshotParser {
       }[];
     };
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ?? "{}";
-    const obj = parseJsonObject(args) as { transactions?: unknown };
-    return validateDrafts(obj.transactions);
+    const obj = parseJsonObject(args) as {
+      transactions?: unknown;
+      goldContracts?: unknown;
+    };
+    return {
+      drafts: validateDrafts(obj.transactions),
+      contracts: validateContracts(obj.goldContracts),
+    };
   }
 }

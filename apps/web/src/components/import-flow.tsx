@@ -17,6 +17,7 @@ import { Select } from "@/components/ui/select";
 import type { ImportIssue } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { ImportReview } from "@/components/import-review";
+import { ContractReview } from "@/components/contract-review";
 
 export type { ImportIssue } from "@portfolio/api-client";
 
@@ -39,9 +40,40 @@ export interface ImportDraft {
   externalId?: string | null;
 }
 
+// A financed gold contract as it comes back from the API (dates are ISO strings).
+export interface ImportContractScheduleRow {
+  n: number;
+  dueDate: string;
+  pokok: string;
+  sewaModal: string;
+  angsuran: string;
+  sisaPokok: string;
+}
+
+export interface ImportContract {
+  provider?: string | null;
+  contractNo?: string | null;
+  currency: string;
+  grams: string;
+  goldName?: string | null;
+  purchasePrice: string;
+  downPayment: string;
+  adminFee: string;
+  discount: string;
+  principal: string;
+  marginTotal: string;
+  tenorMonths: number;
+  monthlyInstallment: string;
+  startDate: string;
+  costBasisMode: "purchase_price" | "total_paid";
+  schedule: ImportContractScheduleRow[];
+  confidence: number;
+}
+
 export interface ImportResult {
   importId: string;
   drafts: ImportDraft[];
+  contracts?: ImportContract[];
   errors: ImportIssue[];
 }
 
@@ -83,6 +115,7 @@ export interface ImportClient {
   confirmImport(
     importId: string,
     drafts: ImportDraft[],
+    contracts?: ImportContract[],
   ): Promise<{ confirmed: number }>;
 }
 
@@ -115,10 +148,18 @@ const demoClient: ImportClient = {
   importScreenshot: async () => ({
     importId: "demo",
     drafts: [SAMPLE_DRAFT],
+    contracts: [],
     errors: [],
   }),
-  importCsv: async () => ({ importId: "demo", drafts: [SAMPLE_DRAFT], errors: [] }),
-  confirmImport: async (_id, drafts) => ({ confirmed: drafts.length }),
+  importCsv: async () => ({
+    importId: "demo",
+    drafts: [SAMPLE_DRAFT],
+    contracts: [],
+    errors: [],
+  }),
+  confirmImport: async (_id, drafts, contracts) => ({
+    confirmed: drafts.length + (contracts?.length ?? 0),
+  }),
 };
 
 function fileToBase64(file: File): Promise<string> {
@@ -164,6 +205,7 @@ export function ImportFlow({
     defaultPortfolioId ?? portfolios[0]?.id ?? "demo",
   );
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
+  const [contracts, setContracts] = useState<ImportContract[]>([]);
   const [importId, setImportId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [confirmedCount, setConfirmedCount] = useState(0);
@@ -191,13 +233,15 @@ export function ImportFlow({
               await fileToBase64(file),
               file.type || "image/png",
             );
-      if (result.drafts.length === 0) {
+      const resultContracts = result.contracts ?? [];
+      if (result.drafts.length === 0 && resultContracts.length === 0) {
         setError(t("errors.noDrafts"));
         setStep("upload");
         return;
       }
       setImportId(result.importId);
       setDrafts(result.drafts.map(withUid));
+      setContracts(resultContracts);
       setStep("review");
     } catch (err) {
       setError(errorMessage(err));
@@ -235,7 +279,11 @@ export function ImportFlow({
     setDrafts((ds) => ds.filter((d) => !set.has(d.uid)));
   }
 
-  // Confirm all drafts, or just the subset whose uids are passed (confirm-selected).
+  function updateContract(index: number, patch: Partial<ImportContract>) {
+    setContracts((cs) => cs.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  }
+
+  // Confirm all drafts (or a passed subset) plus any gold contracts.
   async function confirm(uids?: string[]) {
     setError(null);
     setStep("parsing");
@@ -245,6 +293,7 @@ export function ImportFlow({
       const { confirmed } = await client.confirmImport(
         importId,
         subset.map(stripUid),
+        contracts,
       );
       setConfirmedCount(confirmed);
       setStep("done");
@@ -256,6 +305,7 @@ export function ImportFlow({
 
   function reset() {
     setDrafts([]);
+    setContracts([]);
     setImportId("");
     setError(null);
     setStep("upload");
@@ -418,14 +468,28 @@ export function ImportFlow({
       )}
 
       {step === "review" && (
-        <ImportReview
-          drafts={drafts}
-          onUpdate={updateDraft}
-          onRemove={removeDraft}
-          onRemoveMany={removeMany}
-          onConfirm={confirm}
-          onDiscard={reset}
-        />
+        <div className="space-y-6">
+          {contracts.length > 0 && (
+            <ContractReview
+              contracts={contracts}
+              onUpdate={updateContract}
+              // When there are also flat drafts, the draft table owns the confirm
+              // button; otherwise the contract card drives confirm/discard.
+              onConfirm={drafts.length === 0 ? () => confirm() : undefined}
+              onDiscard={drafts.length === 0 ? reset : undefined}
+            />
+          )}
+          {drafts.length > 0 && (
+            <ImportReview
+              drafts={drafts}
+              onUpdate={updateDraft}
+              onRemove={removeDraft}
+              onRemoveMany={removeMany}
+              onConfirm={confirm}
+              onDiscard={reset}
+            />
+          )}
+        </div>
       )}
 
       {step === "done" && (

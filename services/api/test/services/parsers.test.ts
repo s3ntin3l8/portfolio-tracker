@@ -211,7 +211,7 @@ describe("ClaudeVisionParser", () => {
         content: [{ type: "tool_use", input: { transactions: [DRAFT] } }],
       }),
     });
-    const drafts = await parser.parse(IMAGE);
+    const { drafts } = await parser.parse(IMAGE);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]).toMatchObject({ assetClass: "gold", quantity: "5", unit: "grams" });
     expect(drafts[0].executedAt).toBeInstanceOf(Date);
@@ -268,7 +268,7 @@ describe("GeminiVisionParser", () => {
         ],
       }),
     });
-    const drafts = await parser.parse(IMAGE);
+    const { drafts } = await parser.parse(IMAGE);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]).toMatchObject({ name: "Antam Gold", currency: "IDR" });
   });
@@ -300,7 +300,7 @@ describe("OpenRouterVisionParser", () => {
         ],
       }),
     });
-    const drafts = await parser.parse(IMAGE);
+    const { drafts } = await parser.parse(IMAGE);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]).toMatchObject({ assetClass: "gold", price: "1150000" });
   });
