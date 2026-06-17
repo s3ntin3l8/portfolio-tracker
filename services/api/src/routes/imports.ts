@@ -23,6 +23,7 @@ import { parseDkb } from "../services/parsers/dkb.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
+import { assignContentExternalIds } from "../services/parsers/hash.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -92,6 +93,10 @@ export async function importsRoute(app: FastifyInstance) {
       const { content, format } = csvBodySchema.parse(request.body);
       const resolved = format === "auto" ? detectCsvFormat(content) : format;
       const result = CSV_PARSERS[resolved](content);
+      // Assign deterministic content-hash externalIds to drafts that don't already
+      // have a stable parser-supplied id (DKB booking refs, IBKR trade ids, etc.).
+      // Must happen at parse time so partial-confirm batches reproduce the same ids.
+      assignContentExternalIds(result.drafts, "csv");
 
       const [imp] = await app.db
         .insert(screenshotImports)
@@ -145,6 +150,8 @@ export async function importsRoute(app: FastifyInstance) {
         scored.length > 0
           ? String(scored.reduce((s, c) => s + c, 0) / scored.length)
           : null;
+      // Assign content-hash externalIds before storing so subset-confirm is safe.
+      assignContentExternalIds(drafts, "screenshot");
       const result = {
         drafts,
         contracts,

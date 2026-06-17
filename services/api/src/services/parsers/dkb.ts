@@ -1,5 +1,6 @@
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
+import { shortHash } from "./hash.js";
 
 /**
  * Parser for DKB (Deutsche Kreditbank) CSV exports. DKB has no usable live-sync API, so
@@ -115,13 +116,6 @@ function assetClassFromAssetklasse(label: string): ParsedTransaction["assetClass
 /** Collapse internal whitespace runs to single spaces and trim. */
 function collapse(s: string): string {
   return s.replace(/\s+/g, " ").trim();
-}
-
-/** Deterministic short hash (djb2) for content-derived idempotency keys. */
-function shortHash(s: string): string {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(16);
 }
 
 // Index a header row by lower-cased column name.
