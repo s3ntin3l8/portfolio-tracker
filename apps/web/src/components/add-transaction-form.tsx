@@ -38,6 +38,10 @@ export interface AddTransactionInitial {
   quantity: string;
   price: string;
   fees: string;
+  tax?: string | null;
+  fxRate?: string | null;
+  description?: string | null;
+  tags?: string[] | null;
   currency: string;
   executedAt: string;
 }
@@ -107,6 +111,11 @@ export function AddTransactionForm({
   const [quantity, setQuantity] = useState(() => initial?.quantity ?? "");
   const [price, setPrice] = useState(() => initial?.price ?? "");
   const [fees, setFees] = useState(() => initial?.fees ?? "");
+  const [tax, setTax] = useState(() => initial?.tax ?? "");
+  const [fxRate, setFxRate] = useState(() => initial?.fxRate ?? "");
+  const [description, setDescription] = useState(() => initial?.description ?? "");
+  // Tags stored as a comma-separated string in the UI; parsed to string[] on submit.
+  const [tags, setTags] = useState(() => initial?.tags?.join(", ") ?? "");
 
   // Instrument selection (non-cash types). Prefilled from the edited row.
   const [query, setQuery] = useState("");
@@ -247,12 +256,20 @@ export function AddTransactionForm({
     setError(null);
     try {
       const instrumentId = await resolveInstrumentId();
+      const parsedTags = tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
       const payload = {
         type,
         instrumentId,
         quantity: isTrade ? quantity || "0" : "0",
         price: price || "0",
         fees: isTrade ? fees || "0" : "0",
+        tax: isTrade && tax ? tax : null,
+        fxRate: fxRate || null,
+        description: description.trim() || null,
+        tags: parsedTags.length > 0 ? parsedTags : null,
         currency,
         executedAt: new Date(date),
         source: "manual" as const,
@@ -489,6 +506,17 @@ export function AddTransactionForm({
             />
           </Field>
         )}
+        {isTrade && (
+          <Field label={t("tax")} htmlFor="tx-tax">
+            <Input
+              id="tx-tax"
+              inputMode="decimal"
+              value={tax}
+              onChange={(e) => setTax(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+        )}
         <Field label={t("currency")} htmlFor="tx-currency">
           <Select id="tx-currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
             {CURRENCIES.map((c) => (
@@ -508,6 +536,43 @@ export function AddTransactionForm({
           />
         </Field>
       </div>
+
+      <Field label={t("notes")} htmlFor="tx-notes">
+        <textarea
+          id="tx-notes"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={t("notesPlaceholder")}
+          rows={2}
+          className="flex w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </Field>
+
+      <Field label={t("tags")} htmlFor="tx-tags">
+        <Input
+          id="tx-tags"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder={t("tagsPlaceholder")}
+        />
+      </Field>
+
+      <details className="group">
+        <summary className="cursor-pointer select-none text-sm text-muted-foreground hover:text-foreground">
+          {t("advanced")}
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label={t("fxRate")} htmlFor="tx-fx-rate">
+            <Input
+              id="tx-fx-rate"
+              inputMode="decimal"
+              value={fxRate}
+              onChange={(e) => setFxRate(e.target.value)}
+              placeholder={t("fxRatePlaceholder")}
+            />
+          </Field>
+        </div>
+      </details>
 
       <Button type="submit" disabled={busy}>
         {busy && <Loader2 className="size-4 animate-spin" />}

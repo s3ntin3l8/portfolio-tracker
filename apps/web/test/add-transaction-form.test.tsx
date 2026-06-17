@@ -408,4 +408,73 @@ describe("AddTransactionForm", () => {
       expect.objectContaining({ instrumentId: "i1", quantity: "120" }),
     );
   });
+
+  it("sends tax and notes/tags in the payload for a buy", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "BBCA" } });
+    fireEvent.change(screen.getByLabelText(m.name), { target: { value: "BCA" } });
+    fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText(m.price), { target: { value: "9500" } });
+    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText(m.tax), { target: { value: "50" } });
+    fireEvent.change(screen.getByLabelText(m.notes), { target: { value: "rebalance run" } });
+    fireEvent.change(screen.getByLabelText(m.tags), { target: { value: "rebalance, idt" } });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        tax: "50",
+        description: "rebalance run",
+        tags: ["rebalance", "idt"],
+      }),
+    );
+  });
+
+  it("omits tax for a cash deposit", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "deposit" } });
+    // Tax field should not appear (isTrade is false for deposit).
+    expect(screen.queryByLabelText(m.tax)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(m.amount), { target: { value: "1000000" } });
+    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-03-01" } });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ tax: null }),
+    );
+  });
+
+  it("prefills tax, fxRate, description, tags from initial (edit round-trip guard)", async () => {
+    const client = makeClient();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AddTransactionForm
+          client={client}
+          portfolioId="p1"
+          transactionId="t9"
+          initial={{
+            ...EDIT_INITIAL,
+            tax: "25",
+            fxRate: "15500",
+            description: "import note",
+            tags: ["tax-loss", "idx"],
+          }}
+          onSuccess={vi.fn()}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.getByLabelText(m.tax)).toHaveValue("25");
+    expect(screen.getByLabelText(m.notes)).toHaveValue("import note");
+    expect(screen.getByLabelText(m.tags)).toHaveValue("tax-loss, idx");
+  });
 });
