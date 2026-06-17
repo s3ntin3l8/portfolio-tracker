@@ -284,6 +284,8 @@ export const transactions = pgTable(
     // Sub-type within an action — e.g. saveback / roundup for TR savings-plan-funded buys.
     kind: text("kind"),
     description: text("description"), // memo: transfer counterparty (+ IBAN), card merchant
+    // User-defined labels (e.g. ["tax-loss", "rebalance"]) for filtering and reporting.
+    tags: text("tags").array(),
     currency: text("currency").notNull(),
     executedAt: timestamp("executed_at", { withTimezone: true }).notNull(),
     source: txSourceEnum("source").notNull().default("manual"),

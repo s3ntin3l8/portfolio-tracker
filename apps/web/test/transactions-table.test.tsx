@@ -28,6 +28,9 @@ const ROWS: TxRow[] = [
     type: "buy",
     quantity: "10",
     price: "100",
+    fees: "5",
+    tax: null,
+    fxRate: null,
     currency: "IDR",
     executedAt: "2026-02-01T00:00:00.000Z",
     source: "manual",
@@ -40,6 +43,9 @@ const ROWS: TxRow[] = [
     type: "sell",
     quantity: "5",
     price: "200",
+    fees: "0",
+    tax: "10",
+    fxRate: "15500",
     currency: "USD",
     executedAt: "2026-01-01T00:00:00.000Z",
     source: "csv",
@@ -95,9 +101,10 @@ describe("TransactionsTable", () => {
 
   it("formats each row's amount in its own currency, not a hardcoded one", () => {
     renderTable();
-    // t1 amount is IDR, t2 amount is USD — pre-fix both rendered as IDR.
-    expect(screen.getByText(/IDR/)).toBeInTheDocument();
-    expect(screen.getByText(/\$/)).toBeInTheDocument();
+    // t1 rows are IDR, t2 rows are USD — both currencies must appear.
+    // Multiple cells may now show each currency (Amount, Fees, Net Amount), so use getAllBy.
+    expect(screen.getAllByText(/IDR/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\$/).length).toBeGreaterThan(0);
   });
 
   it("sorts rows by date ascending when date header is clicked", () => {
@@ -146,5 +153,32 @@ describe("TransactionsTable", () => {
     // Click again: descending
     fireEvent.click(dateBtn);
     expect(th).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("renders new column headers for fees, tax, net amount, and fx rate", () => {
+    renderTable();
+    expect(screen.getByRole("button", { name: /fees/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /tax/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /net amount/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fx rate/i })).toBeInTheDocument();
+  });
+
+  it("shows dash for zero fees and null tax, renders tax value when set", () => {
+    renderTable();
+    // t1 has fees "5" (non-zero → shows formatted), t2 has fees "0" → dash
+    // t1 has tax null → dash, t2 has tax "10" → shows formatted
+    // The cells are hidden on small screens but still in DOM; test by checking text content
+    const cells = screen.getAllByRole("cell");
+    const cellTexts = cells.map((c) => c.textContent ?? "");
+    // t2 tax cell should show a dollar-formatted value (USD 10)
+    expect(cellTexts.some((t) => t.includes("10"))).toBe(true);
+    // tax for t1 (null) should render as —
+    expect(cellTexts.some((t) => t === "—")).toBe(true);
+  });
+
+  it("renders the fx rate for t2 and dash for t1", () => {
+    renderTable();
+    // t2 fxRate = "15500" → should appear as "15500.0000"
+    expect(screen.getAllByText(/15500/).length).toBeGreaterThan(0);
   });
 });

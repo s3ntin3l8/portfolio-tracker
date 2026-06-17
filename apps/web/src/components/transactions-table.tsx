@@ -26,9 +26,11 @@ import { Button } from "@/components/ui/button";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
+import { cashFlow } from "@portfolio/core";
 import { formatMoney } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
+import type { CoreTransaction } from "@portfolio/core";
 
 const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
@@ -49,10 +51,26 @@ export interface TxRow {
   type: string;
   quantity: string;
   price: string;
+  fees: string;
+  tax?: string | null;
+  fxRate?: string | null;
   currency: string;
   executedAt: string;
   source: string;
   instrument: { symbol?: string | null; name?: string | null } | null;
+}
+
+/** Compute the signed cash-flow (actual cash movement) for a TxRow via core. */
+function txNetAmount(tx: TxRow): number {
+  return cashFlow({
+    instrumentId: null,
+    type: tx.type as CoreTransaction["type"],
+    quantity: tx.quantity,
+    price: tx.price,
+    fees: tx.fees,
+    currency: tx.currency,
+    executedAt: new Date(tx.executedAt),
+  }).toNumber();
 }
 
 /**
@@ -75,6 +93,10 @@ const TX_COLS: ColDef<TxRow>[] = [
     },
     type: "numeric",
   },
+  { key: "fees", get: (r) => Number(r.fees), type: "numeric" },
+  { key: "tax", get: (r) => (r.tax ? Number(r.tax) : 0), type: "numeric" },
+  { key: "netAmount", get: (r) => txNetAmount(r), type: "numeric" },
+  { key: "fxRate", get: (r) => (r.fxRate ? Number(r.fxRate) : 0), type: "numeric" },
   { key: "source", get: (r) => r.source, type: "text" },
 ];
 
@@ -144,7 +166,9 @@ export function TransactionsTable({
     }
   }
 
-  const colSpan = showPortfolio ? 8 : 7;
+  // checkbox + date + type + instrument + [portfolio] + qty + amount + fees(sm) +
+  // tax + netAmount + fxRate(sm) + source(sm) + actions = 12 or 13
+  const colSpan = showPortfolio ? 13 : 12;
 
   return (
     <div className="space-y-3">
@@ -187,7 +211,7 @@ export function TransactionsTable({
         </div>
       )}
 
-      <div className="rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -206,7 +230,11 @@ export function TransactionsTable({
               {showPortfolio && <SortableTableHead colKey="portfolio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("portfolio")}</SortableTableHead>}
               <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("quantity")}</SortableTableHead>
               <SortableTableHead colKey="amount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("amount")}</SortableTableHead>
-              <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("source")}</SortableTableHead>
+              <SortableTableHead colKey="fees" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden text-right sm:table-cell">{t("fees")}</SortableTableHead>
+              <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("tax")}</SortableTableHead>
+              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("netAmount")}</SortableTableHead>
+              <SortableTableHead colKey="fxRate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden text-right sm:table-cell">{t("fxRate")}</SortableTableHead>
+              <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden sm:table-cell">{t("source")}</SortableTableHead>
               <TableHead className="text-right">
                 <span className="sr-only">{tm("actions")}</span>
               </TableHead>
@@ -218,6 +246,7 @@ export function TransactionsTable({
               const qty = Number(tx.quantity);
               const price = Number(tx.price);
               const amount = qty > 0 ? qty * price : price;
+              const netAmount = txNetAmount(tx);
               const isSelected = selected.has(tx.id);
               return (
                 <TableRow key={tx.id} data-state={isSelected ? "selected" : undefined}>
@@ -255,7 +284,19 @@ export function TransactionsTable({
                   <TableCell className="tabular text-right">
                     {m(amount, tx.currency)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="tabular hidden text-right sm:table-cell">
+                    {Number(tx.fees) !== 0 ? m(Number(tx.fees), tx.currency) : "—"}
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {tx.tax && Number(tx.tax) !== 0 ? m(Number(tx.tax), tx.currency) : "—"}
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {m(netAmount, tx.currency)}
+                  </TableCell>
+                  <TableCell className="tabular hidden text-right sm:table-cell">
+                    {tx.fxRate ? Number(tx.fxRate).toFixed(4) : "—"}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Icon className="size-3.5" />
                       {t(`sources.${tx.source}`)}

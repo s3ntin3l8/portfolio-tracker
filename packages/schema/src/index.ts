@@ -145,6 +145,14 @@ export const transactionInputSchema = z.object({
   quantity: decimalString.default("0"),
   price: decimalString.default("0"),
   fees: decimalString.default("0"),
+  // Informational only — broker's price/cash already nets tax; kept for reporting.
+  tax: decimalString.nullable().optional(),
+  // FX rate at execution for cross-currency holdings (units of base currency per foreign).
+  fxRate: decimalString.nullable().optional(),
+  // Free-text memo (e.g. counterparty name, card merchant, transfer IBAN).
+  description: z.string().nullable().optional(),
+  // User-defined labels for filtering/reporting.
+  tags: z.array(z.string()).nullable().optional(),
   currency: currencyCode,
   executedAt: z.coerce.date(),
   source: transactionSourceSchema.default("manual"),

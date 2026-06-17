@@ -136,6 +136,14 @@ export interface Transaction {
   quantity: string;
   price: string;
   fees: string;
+  /** Informational only — broker price/cash already nets it; null = unknown. */
+  tax: string | null;
+  /** FX rate at execution for cross-currency holdings; null for same-currency. */
+  fxRate: string | null;
+  /** Free-text memo (counterparty, merchant, transfer reference). */
+  description: string | null;
+  /** User-defined labels for filtering and reporting. */
+  tags: string[] | null;
   currency: string;
   executedAt: string;
   source: string;
