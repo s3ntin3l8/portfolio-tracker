@@ -63,6 +63,10 @@ export default async function EditTransactionPage({
           quantity: tx.quantity,
           price: tx.price,
           fees: tx.fees,
+          tax: tx.tax,
+          fxRate: tx.fxRate,
+          description: tx.description,
+          tags: tx.tags,
           currency: tx.currency,
           executedAt: tx.executedAt,
         }}
