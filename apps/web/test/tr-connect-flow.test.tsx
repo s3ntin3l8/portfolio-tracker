@@ -212,4 +212,11 @@ describe("TrConnectFlow", () => {
       await screen.findByText(/Trade Republic sync isn't set up on the server/),
     ).toBeTruthy();
   });
+
+  it("hides the portfolio dropdown when only one portfolio is passed", () => {
+    // When embedded in the portfolio form dialog, TrConnectFlow receives a single
+    // portfolio, so the dropdown must not render (the binding is implicit).
+    renderFlow(makeClient());
+    expect(screen.queryByLabelText("Import into")).not.toBeInTheDocument();
+  });
 });

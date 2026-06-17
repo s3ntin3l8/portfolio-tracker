@@ -149,7 +149,10 @@
     "error": "Tidak dapat menyimpan portofolio. Silakan coba lagi.",
     "delete": "Hapus portofolio",
     "deleteWarning": "Ini menghapus portofolio beserta semua transaksinya secara permanen.",
-    "confirmDelete": "Hapus"
+    "confirmDelete": "Hapus",
+    "trSectionTitle": "Koneksi Trade Republic",
+    "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
+    "done": "Selesai"
   },
   "Import": {
     "title": "Impor transaksi",
@@ -342,10 +345,7 @@
     "saving": "Menyimpan…",
     "saved": "Tersimpan",
     "updateError": "Gagal menyimpan perubahan. Silakan coba lagi.",
-    "signOut": "Keluar",
-    "connections": "Koneksi",
-    "tradeRepublic": "Trade Republic",
-    "tradeRepublicHint": "Impor transaksi dari akun Trade Republic Anda."
+    "signOut": "Keluar"
   },
   "Holdings": {
     "title": "Kepemilikan",
@@ -531,6 +531,7 @@
     "disconnect": "Putuskan",
     "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
     "error": "Terjadi kesalahan. Silakan coba lagi.",
+    "boundElsewhere": "Akun Trade Republic ini terhubung ke portofolio lain. Menghubungkan di sini akan memindahkannya ke portofolio ini.",
     "errors": {
       "pytr_not_available": "Sinkronisasi Trade Republic belum disiapkan di server.",
       "encryption_required": "Server belum dapat menyimpan kredensial dengan aman (kunci enkripsi belum ada).",

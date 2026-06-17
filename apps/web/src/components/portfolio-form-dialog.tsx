@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2 } from "lucide-react";
-import type { Portfolio } from "@portfolio/api-client";
+import type { Portfolio, TrConnection } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +20,9 @@ import {
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
-import { KNOWN_BROKERAGES } from "@/lib/brokerages";
+import { KNOWN_BROKERAGES, resolveBrokerage } from "@/lib/brokerages";
 import { BrokerageIcon } from "@/components/brokerage-icon";
+import { TrConnectFlow } from "@/components/tr-connect-flow";
 
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 
@@ -39,6 +40,11 @@ export type EditablePortfolio = Pick<
  *
  * The birth year only applies to "child" portfolios, so its input is shown only when
  * the type is set to child — matching the backend, which clears it otherwise.
+ *
+ * When the portfolio's brokerage is Trade Republic, a TR connection section is shown
+ * below the form fields. In create mode, it appears after the portfolio is saved
+ * (create-then-connect). In edit mode, it appears immediately. The dialog stays open
+ * so the TR connection can be managed without closing and reopening.
  */
 export function PortfolioFormDialog({
   mode,
@@ -50,6 +56,8 @@ export function PortfolioFormDialog({
   trigger: React.ReactNode;
 }) {
   const t = useTranslations("PortfolioForm");
+  const ttr = useTranslations("TradeRepublic");
+  const te = useTranslations("Empty");
   const api = useApiClient();
   const router = useRouter();
 
@@ -66,6 +74,42 @@ export function PortfolioFormDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Create-then-connect: populated after a successful create when brokerage is TR.
+  const [createdPortfolio, setCreatedPortfolio] = useState<Portfolio | null>(null);
+  // TR connection fetched client-side when the TR section is visible.
+  // null = not yet fetched / loading; false = fetch failed; TrConnection = success.
+  const [trConnection, setTrConnection] = useState<TrConnection | null | false>(null);
+  // Incrementing this triggers a re-fetch (used by onChanged callback).
+  const [trFetchSeq, setTrFetchSeq] = useState(0);
+
+  const isTr = resolveBrokerage(brokerage)?.key === "trade-republic";
+  // In edit mode the portfolio already exists; in create mode it exists after creation.
+  const effectivePortfolio = mode === "edit" ? portfolio : createdPortfolio;
+  // Show the TR section only once we have a real portfolio id to bind against.
+  const showTrSection = effectivePortfolio != null && isTr;
+
+  // Fetch (or re-fetch) the TR connection whenever the section becomes visible or
+  // onChanged fires (trFetchSeq bump). All setState calls are inside async callbacks
+  // so the React Compiler rule against synchronous setState in effects is satisfied.
+  // getTrConnection always resolves to a TrConnection (with status "disconnected" when
+  // no row exists) or rejects; null reliably means "loading/not yet fetched".
+  useEffect(() => {
+    if (!showTrSection) return;
+    let active = true;
+    api
+      .getTrConnection()
+      .then((conn) => {
+        if (active) setTrConnection(conn);
+      })
+      .catch(() => {
+        if (active) setTrConnection(false);
+      });
+    return () => {
+      active = false;
+    };
+    // api is stable (context); showTrSection and trFetchSeq are the real triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTrSection, trFetchSeq]);
 
   // Reset the form to the portfolio's current values whenever the dialog opens, so a
   // cancelled edit never leaks stale drafts into the next open.
@@ -78,6 +122,9 @@ export function PortfolioFormDialog({
       setBrokerage(portfolio?.brokerage ?? "");
       setError(false);
       setConfirmDelete(false);
+      setCreatedPortfolio(null);
+      setTrConnection(null);
+      setTrFetchSeq(0);
     }
     setOpen(next);
   }
@@ -100,11 +147,20 @@ export function PortfolioFormDialog({
     try {
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
+        router.refresh();
+        // Keep the dialog open when brokerage is TR so the connection section stays
+        // accessible; the user can close with the × or the Done button.
+        if (!isTr) setOpen(false);
       } else {
-        await api.createPortfolio(input);
+        const created = await api.createPortfolio(input);
+        router.refresh();
+        if (isTr) {
+          // Stay open and reveal the TR connection section bound to the new portfolio.
+          setCreatedPortfolio(created);
+        } else {
+          setOpen(false);
+        }
       }
-      router.refresh();
-      setOpen(false);
     } catch {
       setError(true);
     } finally {
@@ -130,15 +186,34 @@ export function PortfolioFormDialog({
     }
   }
 
+  // Derive the initial state for TrConnectFlow. The connection is one-per-user: if it's
+  // actively bound to a different portfolio, force the connect form so the user can
+  // re-bind here (the server upserts on userId).
+  const boundElsewhere =
+    trConnection !== null &&
+    trConnection !== false &&
+    effectivePortfolio != null &&
+    trConnection.status !== "disconnected" &&
+    trConnection.portfolioId !== null &&
+    trConnection.portfolioId !== effectivePortfolio.id;
+
+  const trInitForFlow: TrConnection | null =
+    !trConnection  // null (loading) or false (error)
+      ? null
+      : boundElsewhere
+        ? { ...trConnection, status: "disconnected", portfolioId: null }
+        : trConnection;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "edit" ? t("editTitle") : t("createTitle")}</DialogTitle>
           <DialogDescription>{t("subtitle")}</DialogDescription>
         </DialogHeader>
 
+        {/* Portfolio fields — the submit button lives inside this form. */}
         <form onSubmit={submit} className="space-y-4">
           {error && (
             <div
@@ -179,6 +254,10 @@ export function PortfolioFormDialog({
                 <option key={b} value={b} />
               ))}
             </datalist>
+            {/* Hint shown only in create mode before the portfolio has been saved. */}
+            {isTr && !effectivePortfolio && (
+              <p className="text-xs text-muted-foreground">{t("trConnectAfterSave")}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -250,18 +329,63 @@ export function PortfolioFormDialog({
                   {t("delete")}
                 </Button>
               ))}
-            <Button type="submit" disabled={busy || !name.trim()}>
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              {busy
-                ? mode === "edit"
-                  ? t("saving")
-                  : t("creating")
-                : mode === "edit"
-                  ? t("save")
-                  : t("create")}
-            </Button>
+            {/* After a TR create the portfolio is saved; swap the create button for Done. */}
+            {mode === "create" && createdPortfolio ? (
+              <Button type="button" onClick={() => setOpen(false)}>
+                {t("done")}
+              </Button>
+            ) : (
+              <Button type="submit" disabled={busy || !name.trim()}>
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy
+                  ? mode === "edit"
+                    ? t("saving")
+                    : t("creating")
+                  : mode === "edit"
+                    ? t("save")
+                    : t("create")}
+              </Button>
+            )}
           </DialogFooter>
         </form>
+
+        {/* TR connection section — rendered outside the form to avoid nested <form> issues.
+            Appears after the portfolio exists (edit always, create after first save). */}
+        {showTrSection && (
+          <div className="border-t pt-4">
+            <p className="mb-3 text-sm font-medium">{t("trSectionTitle")}</p>
+            {trConnection === null ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                <span>{ttr("approveWaiting")}</span>
+              </div>
+            ) : trConnection === false ? (
+              <p className="text-sm text-muted-foreground">{te("unavailableBody")}</p>
+            ) : (
+              <>
+                {boundElsewhere && (
+                  <div
+                    role="note"
+                    className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+                  >
+                    {ttr("boundElsewhere")}
+                  </div>
+                )}
+                <TrConnectFlow
+                  client={api}
+                  portfolios={[
+                    { id: effectivePortfolio.id, name: effectivePortfolio.name },
+                  ]}
+                  initial={trInitForFlow!}
+                  onChanged={() => {
+                    router.refresh();
+                    setTrFetchSeq((s) => s + 1);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

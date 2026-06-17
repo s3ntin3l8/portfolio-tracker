@@ -1,19 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import type { Portfolio } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
-const createPortfolio = vi.fn(async () => ({}) as never);
+const createPortfolio = vi.fn(async () => ({
+  id: "p-new",
+  name: "Test",
+  baseCurrency: "IDR",
+  portfolioType: "standard",
+  birthYear: null,
+  brokerage: null,
+  userId: "u1",
+}) as unknown as Portfolio);
 const updatePortfolio = vi.fn(async () => ({}) as never);
 const deletePortfolio = vi.fn(async () => undefined);
+const getTrConnection = vi.fn(async () => ({
+  status: "disconnected" as const,
+  portfolioId: null,
+  lastSyncAt: null,
+  lastError: null,
+  importCategories: null,
+  lastReconciliation: null,
+}));
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ createPortfolio, updatePortfolio, deletePortfolio }),
+  useApiClient: () => ({ createPortfolio, updatePortfolio, deletePortfolio, getTrConnection }),
 }));
 
-import { PortfolioFormDialog } from "../src/components/portfolio-form-dialog";
+import { PortfolioFormDialog, type EditablePortfolio } from "../src/components/portfolio-form-dialog";
 import { Button } from "../src/components/ui/button";
 
 const m = messages.PortfolioForm;
@@ -27,11 +44,11 @@ function renderCreate() {
 }
 
 function renderEdit(
-  portfolio = {
+  portfolio: EditablePortfolio = {
     id: "p1",
     name: "Main",
     baseCurrency: "IDR",
-    portfolioType: "standard" as const,
+    portfolioType: "standard",
     birthYear: null,
     brokerage: null,
   },
@@ -53,6 +70,7 @@ describe("PortfolioFormDialog", () => {
     createPortfolio.mockClear();
     updatePortfolio.mockClear();
     deletePortfolio.mockClear();
+    getTrConnection.mockClear();
     document.cookie = "pf=; max-age=0; path=/";
   });
 
@@ -80,7 +98,7 @@ describe("PortfolioFormDialog", () => {
 
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Euro" } });
     fireEvent.change(screen.getByLabelText(m.brokerage), {
-      target: { value: "Trade Republic" },
+      target: { value: "Interactive Brokers" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
@@ -90,7 +108,7 @@ describe("PortfolioFormDialog", () => {
       baseCurrency: "IDR",
       portfolioType: "standard",
       birthYear: null,
-      brokerage: "Trade Republic",
+      brokerage: "Interactive Brokers",
     });
   });
 
@@ -152,5 +170,78 @@ describe("PortfolioFormDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: m.confirmDelete }));
     await waitFor(() => expect(deletePortfolio).toHaveBeenCalledWith("p1"));
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows a hint in create mode when brokerage is Trade Republic (save first)", async () => {
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+
+    fireEvent.change(screen.getByLabelText(m.brokerage), {
+      target: { value: "Trade Republic" },
+    });
+
+    expect(screen.getByText(m.trConnectAfterSave)).toBeInTheDocument();
+  });
+
+  it("stays open and shows TR section after creating a Trade Republic portfolio", async () => {
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+
+    fireEvent.change(screen.getByLabelText(m.name), { target: { value: "TR Portfolio" } });
+    fireEvent.change(screen.getByLabelText(m.brokerage), {
+      target: { value: "Trade Republic" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.create }));
+
+    await waitFor(() => expect(createPortfolio).toHaveBeenCalledWith({
+      name: "TR Portfolio",
+      baseCurrency: "IDR",
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: "Trade Republic",
+    }));
+    // Dialog stays open — TR section appears with Done button (no create button anymore)
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: m.done })).toBeInTheDocument(),
+    );
+    // TR section title is visible
+    expect(screen.getByText(m.trSectionTitle)).toBeInTheDocument();
+    // The TR connect form is fetching the connection
+    expect(getTrConnection).toHaveBeenCalled();
+  });
+
+  it("shows the TR connect section immediately in edit mode for a TR portfolio", async () => {
+    renderEdit({
+      id: "p-tr",
+      name: "TR Portfolio",
+      baseCurrency: "EUR",
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: "Trade Republic",
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    // TR section is fetched and rendered
+    await waitFor(() => expect(getTrConnection).toHaveBeenCalled());
+    expect(screen.getByText(m.trSectionTitle)).toBeInTheDocument();
+    // The connect form's phone field should appear (disconnected initial state)
+    await waitFor(() =>
+      expect(screen.getByLabelText(messages.TradeRepublic.phone)).toBeInTheDocument(),
+    );
+  });
+
+  it("does not show the TR section for a non-TR portfolio", async () => {
+    renderEdit({
+      id: "p1",
+      name: "Stockbit",
+      baseCurrency: "IDR",
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: "Stockbit",
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    expect(screen.queryByText(m.trSectionTitle)).not.toBeInTheDocument();
+    expect(getTrConnection).not.toHaveBeenCalled();
   });
 });
