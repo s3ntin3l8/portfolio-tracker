@@ -15,6 +15,7 @@ import {
   marketForEuInstrument,
 } from "../services/instruments.js";
 import { getMarketData } from "../services/market-data.js";
+import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS } from "@portfolio/market-data";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -291,19 +292,26 @@ export async function importsRoute(app: FastifyInstance) {
           currency: string;
           assetClass: AssetClass;
         } | null = null;
-        try {
-          const md = await getMarketData();
-          const [hit] = await md.search(isin);
-          if (hit) {
-            resolved = {
-              symbol: hit.symbol,
-              market: hit.market,
-              currency: hit.currency,
-              assetClass: hit.assetClass,
-            };
+        // Trade Republic books crypto under synthetic `XF…` ISINs that OpenFIGI can't resolve;
+        // recognise those first and route them to CoinGecko (priced in the broker's EUR).
+        const crypto = resolveCryptoIsin(isin);
+        if (crypto) {
+          resolved = { ...crypto, currency: "EUR" };
+        } else {
+          try {
+            const md = await getMarketData();
+            const [hit] = await md.search(isin);
+            if (hit) {
+              resolved = {
+                symbol: hit.symbol,
+                market: hit.market,
+                currency: hit.currency,
+                assetClass: hit.assetClass,
+              };
+            }
+          } catch {
+            // best-effort; never block a confirm on discovery
           }
-        } catch {
-          // best-effort; never block a confirm on discovery
         }
         isinCache.set(isin, resolved);
         return resolved;
@@ -318,22 +326,27 @@ export async function importsRoute(app: FastifyInstance) {
 
         if (!isCash) {
           let symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
-          const market = isEu
+          let market = isEu
             ? marketForEuInstrument(d.assetClass)
             : marketForAssetClass(d.assetClass ?? "equity");
-          const instrumentCurrency = d.currency;
+          let instrumentCurrency = d.currency;
           let assetClass = d.assetClass ?? "equity";
 
           if (isEu && d.isin) {
             const r = await resolveEuIsin(d.isin);
             if (r) {
-              // Adopt the resolved ticker and asset class, but keep the broker's venue:
-              // DKB/Trade Republic execute on Xetra in EUR, whereas OpenFIGI's first
-              // listing for a fund is often another venue (e.g. Euronext Paris) and
-              // falls back to USD when the exchange is unmapped — which mis-routes
-              // pricing (no provider covers that venue) and stores the wrong currency.
+              // Always adopt the resolved ticker and asset class. Adopt the venue + currency
+              // only when resolution lands on a market our providers price directly that
+              // differs from the broker's Xetra/EUR default — US stocks (USD via Twelve Data)
+              // and crypto (EUR via CoinGecko). Otherwise keep the Xetra/EUR pin: DKB/Trade
+              // Republic execute on Xetra, and OpenFIGI's first listing for a EUR fund is
+              // often another venue that no provider covers / defaults to USD (PR #130).
               symbol = r.symbol;
               assetClass = r.assetClass;
+              if (PRICEABLE_FOREIGN_MARKETS.has(r.market)) {
+                market = r.market;
+                instrumentCurrency = r.currency;
+              }
             }
           }
 

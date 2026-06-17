@@ -109,4 +109,13 @@ const DEFAULT_CATALOGUE: InstrumentSearchResult[] = [
     currency: "IDR",
     source: "fixture",
   },
+  {
+    symbol: "O",
+    name: "Realty Income Corporation",
+    market: "US",
+    assetClass: "equity",
+    currency: "USD",
+    isin: "US7561091049",
+    source: "fixture",
+  },
 ];

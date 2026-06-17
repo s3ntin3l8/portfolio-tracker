@@ -59,8 +59,15 @@ export class OpenFigiProvider implements MarketDataProvider {
 
     const payload = (await res.json()) as { data?: FigiRecord[]; error?: string }[];
     const records = payload?.[0]?.data ?? [];
-    // Prefer a record that actually carries a ticker (some venues omit it).
-    const match = records.find((r) => r.ticker) ?? records[0];
+    // Prefer the composite US listing (exchCode "US"): it carries the canonical US ticker,
+    // and OpenFIGI sometimes orders foreign venues first where the *local* ticker differs —
+    // e.g. Verizon (US92343V1044) lists as "BAC" on German exchanges but "VZ" in the US.
+    // Fall back to any record with a ticker (non-US instruments have no US line), then the
+    // first record at all.
+    const match =
+      records.find((r) => r.exchCode === "US" && r.ticker) ??
+      records.find((r) => r.ticker) ??
+      records[0];
     if (!match?.ticker) return null;
 
     return {

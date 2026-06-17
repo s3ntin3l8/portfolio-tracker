@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT } from "jose";
-import { portfolios, screenshotImports } from "@portfolio/db";
+import { instruments, portfolios, screenshotImports } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
 import { buildApp } from "../../src/app.js";
 import { getDb, closeDb } from "../../src/db/client.js";
@@ -120,6 +120,90 @@ describe("pytr import → confirm", () => {
     expect(buy.instrumentId).toBeTruthy();
     expect(deposit).toMatchObject({ source: "pytr", type: "deposit" });
     expect(deposit.instrumentId).toBeNull();
+  });
+
+  // Stage + confirm one security draft for a fresh TR portfolio, returning the stored instrument.
+  async function confirmDraftInstrument(t: string, draft: ParsedTransaction) {
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb()
+      .select()
+      .from(portfolios)
+      .where(eq(portfolios.id, portfolioId));
+    const [imp] = await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: { drafts: [draft], errors: [] },
+        status: "draft",
+      })
+      .returning();
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.id}/confirm`,
+      headers: auth(t),
+      payload: { transactions: [draft] },
+    });
+    expect(confirm.statusCode).toBe(201);
+    const instrumentId = confirm.json().transactions[0].instrumentId as string;
+    const [inst] = await getDb()
+      .select()
+      .from(instruments)
+      .where(eq(instruments.id, instrumentId));
+    return inst;
+  }
+
+  const securityDraft = (over: Partial<ParsedTransaction>): ParsedTransaction => ({
+    assetClass: "equity",
+    action: "buy",
+    isin: null,
+    name: "Security",
+    quantity: "1",
+    unit: "shares",
+    price: "100",
+    fees: "0",
+    currency: "EUR",
+    executedAt: new Date("2026-03-01T10:00:00.000Z"),
+    confidence: 1,
+    externalId: "x",
+    ...over,
+  });
+
+  it("routes a TR crypto ISIN (XF000…) to CoinGecko: crypto/CRYPTO, EUR", async () => {
+    const inst = await confirmDraftInstrument(
+      await token("tr-btc"),
+      securityDraft({ isin: "XF000BTC0017", name: "Bitcoin", externalId: "btc-1" }),
+    );
+    expect(inst).toMatchObject({
+      symbol: "BTC",
+      market: "CRYPTO",
+      assetClass: "crypto",
+      currency: "EUR",
+    });
+  });
+
+  it("adopts the US venue/currency for a US stock resolved off the Xetra default", async () => {
+    const inst = await confirmDraftInstrument(
+      await token("tr-us"),
+      securityDraft({ isin: "US7561091049", name: "Realty Income", externalId: "o-1" }),
+    );
+    expect(inst).toMatchObject({ symbol: "O", market: "US", currency: "USD" });
+  });
+
+  it("keeps an unresolved EU ISIN pinned to the broker's Xetra/EUR default", async () => {
+    const inst = await confirmDraftInstrument(
+      await token("tr-eu"),
+      securityDraft({ isin: "IE00BK5BQT80", name: "Vanguard FTSE All-World", externalId: "vwce-1" }),
+    );
+    expect(inst).toMatchObject({ market: "XETRA", currency: "EUR" });
   });
 
   it("is idempotent: a re-synced import with the same event ids inserts nothing new", async () => {

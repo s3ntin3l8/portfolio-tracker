@@ -79,6 +79,63 @@ describe("findOrCreateInstrument", () => {
     expect(unchanged.assetClass).toBe("etf");
   });
 
+  it("re-pins a US stock stuck on the Xetra/EUR default to US/USD", async () => {
+    const isin = "US7561091049"; // Realty Income (O)
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: isin, assetClass: "equity", name: isin, isin });
+
+    const healed = await findOrCreateInstrument(getDb(), {
+      symbol: "O",
+      market: "US",
+      assetClass: "equity",
+      unit: "shares",
+      currency: "USD",
+      name: "Realty Income",
+      isin,
+    });
+    expect(healed.symbol).toBe("O");
+    expect(healed.market).toBe("US");
+    expect(healed.currency).toBe("USD");
+  });
+
+  it("re-pins a TR crypto holding stuck on Xetra/EUR to CRYPTO (currency kept)", async () => {
+    const isin = "XF000BTC0017";
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: isin, assetClass: "equity", name: isin, isin });
+
+    const healed = await findOrCreateInstrument(getDb(), {
+      symbol: "BTC",
+      market: "CRYPTO",
+      assetClass: "crypto",
+      unit: "shares",
+      currency: "EUR",
+      name: "Bitcoin",
+      isin,
+    });
+    expect(healed.symbol).toBe("BTC");
+    expect(healed.market).toBe("CRYPTO");
+    expect(healed.assetClass).toBe("crypto");
+    expect(healed.currency).toBe("EUR");
+  });
+
+  it("does not re-pin a real EUR fund off Xetra", async () => {
+    const isin = "IE00BK5BQV03"; // a EUR UCITS fund
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "SXR8", assetClass: "etf", name: "iShares S&P 500", isin });
+
+    const unchanged = await findOrCreateInstrument(getDb(), {
+      ...base, // still XETRA/EUR — not a pricable foreign market
+      symbol: "SXR8",
+      name: "iShares S&P 500",
+      isin,
+    });
+    expect(unchanged.market).toBe("XETRA");
+    expect(unchanged.currency).toBe("EUR");
+  });
+
   it("heals a row matched by (symbol, market) when no ISIN is supplied", async () => {
     await getDb()
       .insert(instruments)

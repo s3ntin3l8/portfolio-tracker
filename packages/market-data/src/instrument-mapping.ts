@@ -1,3 +1,4 @@
+import { CRYPTO_MARKET } from "./coingecko.js";
 import type { AssetClass } from "./types.js";
 
 /** Our internal market + the currency instruments on it trade in. */
@@ -65,6 +66,40 @@ const EXCHANGE_MAP: Record<string, MarketInfo> = {
 export function mapExchange(exchange: string | undefined | null): MarketInfo | undefined {
   if (!exchange) return undefined;
   return EXCHANGE_MAP[exchange.trim().toUpperCase()];
+}
+
+/**
+ * Internal markets whose instruments a price provider can quote directly *and* that differ
+ * from the EU-broker default (Xetra/EUR). When ISIN resolution at import lands on one of
+ * these, the resolved market/currency should override the broker's Xetra/EUR pin: a US stock
+ * or a crypto held on Trade Republic is bought in EUR but priced on its real venue (US in USD
+ * via Twelve Data; crypto in EUR via CoinGecko). EU venues are deliberately absent — PR #130
+ * keeps real EUR funds pinned to Xetra, where the broker executes them.
+ */
+export const PRICEABLE_FOREIGN_MARKETS: ReadonlySet<string> = new Set(["US", CRYPTO_MARKET]);
+
+/**
+ * Trade Republic books crypto under synthetic ISINs (`XF000<TICKER>…`, e.g. `XF000BTC0017`,
+ * `XF000ETH0019`) that no ISIN registry — including OpenFIGI — resolves. Recognise the format
+ * and extract the embedded ticker so the holding routes to CoinGecko, which resolves a ticker
+ * → coin id (`BTC` → `bitcoin`). Returns `undefined` for any non-crypto ISIN.
+ */
+const TR_CRYPTO_ISIN = /^XF000([A-Z]{2,5})\d+$/;
+
+/** Override only when CoinGecko's market-cap-ranked ticker search picks the wrong coin. */
+const TR_CRYPTO_SYMBOL_OVERRIDES: Record<string, string> = {};
+
+export function resolveCryptoIsin(
+  isin: string | undefined | null,
+): { symbol: string; market: string; assetClass: AssetClass } | undefined {
+  const match = TR_CRYPTO_ISIN.exec((isin ?? "").trim().toUpperCase());
+  if (!match) return undefined;
+  const ticker = match[1];
+  return {
+    symbol: TR_CRYPTO_SYMBOL_OVERRIDES[ticker] ?? ticker,
+    market: CRYPTO_MARKET,
+    assetClass: "crypto",
+  };
 }
 
 /**

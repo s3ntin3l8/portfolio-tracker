@@ -15,6 +15,8 @@ import {
   CoinGeckoProvider,
   assetClassFromType,
   mapExchange,
+  resolveCryptoIsin,
+  PRICEABLE_FOREIGN_MARKETS,
   type InstrumentRef,
   type InstrumentSearchResult,
   type MarketDataProvider,
@@ -106,6 +108,38 @@ describe("mapExchange", () => {
   it("leaves London (LSE) unmapped — its listings mix currencies", () => {
     expect(mapExchange("LSE")).toBeUndefined();
     expect(mapExchange(undefined)).toBeUndefined();
+  });
+});
+
+describe("resolveCryptoIsin", () => {
+  it("extracts the ticker from Trade Republic synthetic crypto ISINs", () => {
+    expect(resolveCryptoIsin("XF000BTC0017")).toEqual({
+      symbol: "BTC",
+      market: "CRYPTO",
+      assetClass: "crypto",
+    });
+    expect(resolveCryptoIsin("XF000ETH0019")).toEqual({
+      symbol: "ETH",
+      market: "CRYPTO",
+      assetClass: "crypto",
+    });
+    expect(resolveCryptoIsin("xf000eth0019")).toMatchObject({ symbol: "ETH" }); // case-insensitive
+  });
+
+  it("returns undefined for a normal ISIN or empty input", () => {
+    expect(resolveCryptoIsin("US7561091049")).toBeUndefined(); // Realty Income
+    expect(resolveCryptoIsin("IE00BK5BQT80")).toBeUndefined(); // a UCITS ETF
+    expect(resolveCryptoIsin(null)).toBeUndefined();
+    expect(resolveCryptoIsin("")).toBeUndefined();
+  });
+});
+
+describe("PRICEABLE_FOREIGN_MARKETS", () => {
+  it("covers the venues we adopt over the broker's Xetra default, and excludes EU venues", () => {
+    expect(PRICEABLE_FOREIGN_MARKETS.has("US")).toBe(true);
+    expect(PRICEABLE_FOREIGN_MARKETS.has("CRYPTO")).toBe(true);
+    expect(PRICEABLE_FOREIGN_MARKETS.has("XETRA")).toBe(false);
+    expect(PRICEABLE_FOREIGN_MARKETS.has("PAR")).toBe(false);
   });
 });
 
@@ -911,6 +945,26 @@ describe("OpenFigiProvider", () => {
     expect(resolved).toMatchObject({ symbol: "AAPL", exchange: "US", name: "APPLE INC" });
     expect(apiKey).toBe("figi-key");
     expect(body).toEqual([{ idType: "ID_ISIN", idValue: "US0378331005" }]);
+  });
+
+  it("prefers the composite US listing's ticker when foreign venues are returned first", async () => {
+    // OpenFIGI returns Verizon (US92343V1044) German-venue-first, where it trades as "BAC";
+    // the resolver must skip past those to the US line carrying the canonical "VZ".
+    const p = new OpenFigiProvider({
+      fetch: mockFetch(() => ({
+        body: [
+          {
+            data: [
+              { ticker: "BAC", name: "VERIZON COMMUNICATIONS INC", exchCode: "GR" },
+              { ticker: "BAC", name: "VERIZON COMMUNICATIONS INC", exchCode: "GF" },
+              { ticker: "VZ", name: "VERIZON COMMUNICATIONS INC", exchCode: "US" },
+            ],
+          },
+        ],
+      })),
+    });
+    const resolved = await p.resolveISIN("US92343V1044");
+    expect(resolved).toMatchObject({ symbol: "VZ", exchange: "US" });
   });
 
   it("returns null for malformed ISINs, empty data, and failed requests", async () => {

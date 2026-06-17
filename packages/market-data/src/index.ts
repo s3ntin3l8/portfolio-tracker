@@ -14,5 +14,7 @@ export {
   assetClassFromType,
   yahooSuffixForMarket,
   eodhdExchangeForMarket,
+  resolveCryptoIsin,
+  PRICEABLE_FOREIGN_MARKETS,
   type MarketInfo,
 } from "./instrument-mapping.js";

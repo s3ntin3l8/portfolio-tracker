@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { instruments } from "@portfolio/db";
-import { isIsin } from "@portfolio/market-data";
+import { isIsin, PRICEABLE_FOREIGN_MARKETS } from "@portfolio/market-data";
 import type { InstrumentInput } from "@portfolio/schema";
 import type { DB } from "../db/client.js";
 
@@ -15,8 +15,8 @@ type Instrument = typeof instruments.$inferSelect;
 function instrumentUpgrade(
   existing: Instrument,
   input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
-): Partial<Pick<Instrument, "symbol" | "assetClass">> {
-  const set: Partial<Pick<Instrument, "symbol" | "assetClass">> = {};
+): Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency">> {
+  const set: Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency">> = {};
   // Replace an ISIN-as-symbol with a real ticker (but never the reverse).
   if (isIsin(existing.symbol) && !isIsin(input.symbol)) set.symbol = input.symbol;
   // Refine the generic defaults (`equity`, `mutual_fund`) to a more specific class —
@@ -27,6 +27,17 @@ function instrumentUpgrade(
     (existing.assetClass === "equity" || existing.assetClass === "mutual_fund")
   )
     set.assetClass = input.assetClass;
+  // Re-pin a row stuck on the EU-broker default (Xetra/EUR) to its real tradeable venue when a
+  // fresh import resolves one our providers price directly (US stocks, crypto). Mirrors the
+  // import adoption guard; only upgrades off the default, so real EUR funds are never touched.
+  if (
+    existing.market === "XETRA" &&
+    existing.currency === "EUR" &&
+    PRICEABLE_FOREIGN_MARKETS.has(input.market)
+  ) {
+    set.market = input.market;
+    set.currency = input.currency;
+  }
   return set;
 }
 
