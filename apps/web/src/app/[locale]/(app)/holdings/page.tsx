@@ -69,12 +69,13 @@ export default async function HoldingsPage({
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       {result.status === "ok" && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <CostBasisToggle
             current={costBasis}
             labelPurchase={t("costBasisPurchasePrice")}
             labelTotal={t("costBasisTotalPaid")}
           />
+          <div className="flex items-center gap-2">
           {holdings.length > 0 && (
             <ExportCsvButton
               filename="holdings.csv"
@@ -101,6 +102,7 @@ export default async function HoldingsPage({
               {tca("link")}
             </Link>
           </Button>
+          </div>
         </div>
       )}
     </div>
@@ -145,7 +147,8 @@ export default async function HoldingsPage({
       {Heading}
 
       <Tabs defaultValue="all">
-        <TabsList className="h-auto flex-wrap">
+        <div className="overflow-x-auto">
+        <TabsList>
           {CLASS_TABS.map((key) => (
             <TabsTrigger
               key={key}
@@ -156,6 +159,7 @@ export default async function HoldingsPage({
             </TabsTrigger>
           ))}
         </TabsList>
+        </div>
         {CLASS_TABS.map((key) => (
           <TabsContent key={key} value={key}>
             <div className="rounded-xl border border-border">

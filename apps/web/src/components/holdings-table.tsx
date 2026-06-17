@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import type { HoldingValuation } from "@portfolio/api-client";
 import {
@@ -119,8 +120,10 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
       </div>
 
       {/* ── Mobile list (< md) ── */}
-      <div className="md:hidden divide-y divide-border">
-        {sorted.map((h) => {
+      {/* Single shared grid so all rows have identical column widths,
+          which ensures col-1 (1fr) is consistently constrained and names truncate. */}
+      <div className="md:hidden grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3">
+        {sorted.map((h, i) => {
           const { pnl, pct, native, display } = computeRowValues(h, currency, locale);
           const pnlColor =
             pnl === null
@@ -129,12 +132,11 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
                 ? "text-success"
                 : "text-destructive";
           return (
-            <div
-              key={h.instrumentId}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-0.5 px-4 py-3 overflow-hidden"
-            >
+            <Fragment key={h.instrumentId}>
+              {i > 0 && <div className="col-span-3 border-t border-border" />}
+
               {/* Col 1: symbol / name */}
-              <div className="min-w-0 overflow-hidden">
+              <div className="min-w-0 overflow-hidden py-3 pl-4">
                 <Link
                   href={`/instruments/${h.instrumentId}`}
                   className="font-medium hover:underline block truncate"
@@ -147,7 +149,7 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
               </div>
 
               {/* Col 2: avg cost / quantity */}
-              <div className="text-right tabular">
+              <div className="text-right tabular py-3">
                 <div className="text-sm">{native(Number(h.avgCost))}</div>
                 <div className="text-xs text-muted-foreground">
                   {Number(h.quantity)} {h.instrument?.unit ?? ""}
@@ -155,7 +157,7 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
               </div>
 
               {/* Col 3: value / P&L */}
-              <div className="text-right tabular">
+              <div className="text-right tabular py-3 pr-4">
                 <div className="text-sm">
                   {h.marketValueDisplay !== null
                     ? display(Number(h.marketValueDisplay))
@@ -167,7 +169,7 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
                     : `${pnl >= 0 ? "+" : ""}${display(pnl)}${pct !== null ? ` ${formatPct(pct)}` : ""}`}
                 </div>
               </div>
-            </div>
+            </Fragment>
           );
         })}
       </div>
