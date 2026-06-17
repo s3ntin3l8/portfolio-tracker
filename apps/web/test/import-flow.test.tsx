@@ -21,6 +21,19 @@ const DRAFT: ImportDraft = {
   confidence: 0.94,
 };
 
+const DRAFT_B: ImportDraft = {
+  assetClass: "equity",
+  action: "buy",
+  name: "BBCA",
+  quantity: "100",
+  unit: "shares",
+  price: "9000",
+  fees: "5000",
+  currency: "IDR",
+  executedAt: "2026-03-01",
+  confidence: 0.97,
+};
+
 function renderFlow(
   client: ImportClient,
   portfolios: { id: string; name: string }[] = [{ id: "p1", name: "Main" }],
@@ -38,6 +51,10 @@ function renderFlow(
 
 function pngFile() {
   return new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+}
+
+function csvFile(name: string, content = "date,action\n2026-01-01,buy") {
+  return new File([content], name, { type: "text/csv" });
 }
 
 function fileInput(container: HTMLElement) {
@@ -129,7 +146,7 @@ describe("ImportFlow", () => {
     const { container } = renderFlow(client);
 
     fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
-    const csv = new File(["date,action\n2026-01-01,buy"], "t.csv", { type: "text/csv" });
+    const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
@@ -150,7 +167,7 @@ describe("ImportFlow", () => {
     fireEvent.change(screen.getByLabelText(messages.Import.csvFormat.label), {
       target: { value: "dkb" },
     });
-    const csv = new File(["Datum der Erstellung;..."], "dkb.csv", { type: "text/csv" });
+    const csv = csvFile("dkb.csv", "Datum der Erstellung;...");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() =>
@@ -173,7 +190,7 @@ describe("ImportFlow", () => {
       target: { value: "p2" },
     });
     fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
-    const csv = new File(["date,action\n2026-01-01,buy"], "t.csv", { type: "text/csv" });
+    const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() =>
@@ -279,5 +296,149 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract]);
+  });
+
+  // ── Multi-file CSV tests ────────────────────────────────────────────────────
+
+  it("two CSV files → grouped review sections → confirm fans out per import", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi
+        .fn()
+        .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
+        .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    const fileA = csvFile("broker-a.csv", "a");
+    const fileB = csvFile("broker-b.csv", "b");
+    fireEvent.change(fileInput(container), { target: { files: [fileA, fileB] } });
+
+    // Both filenames should appear as section headings.
+    await waitFor(() => expect(screen.getByText("broker-a.csv")).toBeInTheDocument());
+    expect(screen.getByText("broker-b.csv")).toBeInTheDocument();
+
+    // Both draft names should appear.
+    expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+
+    // Global confirm button (from the shared footer).
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+
+    // One confirmImport call per import id.
+    expect(client.confirmImport).toHaveBeenCalledTimes(2);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], []);
+  });
+
+  it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi
+        .fn()
+        .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
+        .mockResolvedValueOnce({
+          importId: "imp-skip",
+          drafts: [],
+          errors: [],
+          alreadyConfirmed: true,
+        })
+        .mockResolvedValueOnce({ importId: "imp-c", drafts: [DRAFT_B], errors: [] }),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.change(fileInput(container), {
+      target: {
+        files: [csvFile("good-a.csv", "a"), csvFile("dup.csv", "b"), csvFile("good-c.csv", "c")],
+      },
+    });
+
+    // Two good sections appear.
+    await waitFor(() => expect(screen.getByText("good-a.csv")).toBeInTheDocument());
+    expect(screen.getByText("good-c.csv")).toBeInTheDocument();
+
+    // Skip notice for the confirmed file.
+    expect(
+      screen.getByText(
+        messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.csv"),
+      ),
+    ).toBeInTheDocument();
+
+    // Confirm fans out over only the two good imports.
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    expect(client.confirmImport).toHaveBeenCalledTimes(2);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], []);
+  });
+
+  it("all files empty/duplicate → stays on upload with error notice", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi
+        .fn()
+        .mockResolvedValueOnce({
+          importId: "i1",
+          drafts: [],
+          errors: [],
+          alreadyConfirmed: true,
+        })
+        .mockResolvedValueOnce({ importId: "i2", drafts: [], errors: [] }),
+      confirmImport: vi.fn(),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.change(fileInput(container), {
+      target: { files: [csvFile("a.csv", "a"), csvFile("b.csv", "b")] },
+    });
+
+    // Should stay on upload (no filename headings in review).
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("a.csv")).not.toBeInTheDocument();
+    expect(client.confirmImport).not.toHaveBeenCalled();
+  });
+
+  it("single CSV file uses single-group path with ImportReview's own footer", async () => {
+    // The single-file path must NOT render filename headings.
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi.fn(async () => ({
+        importId: "imp-s",
+        drafts: [DRAFT],
+        errors: [],
+      })),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("single.csv")] } });
+
+    await waitFor(() =>
+      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
+    );
+
+    // No filename heading rendered.
+    expect(screen.queryByText("single.csv")).not.toBeInTheDocument();
+
+    // The standard Confirm button (from ImportReview's own footer) works.
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], []);
   });
 });

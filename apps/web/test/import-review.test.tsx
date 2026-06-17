@@ -8,6 +8,7 @@ import messages from "../messages/en.json";
 const DRAFTS: ReviewDraft[] = [
   {
     uid: "a",
+    importId: "imp1",
     assetClass: "gold",
     action: "buy",
     name: "Antam Gold",
@@ -21,6 +22,7 @@ const DRAFTS: ReviewDraft[] = [
   },
   {
     uid: "b",
+    importId: "imp1",
     assetClass: "stock",
     action: "buy",
     name: "Apple Inc",
@@ -34,6 +36,7 @@ const DRAFTS: ReviewDraft[] = [
   },
   {
     uid: "c",
+    importId: "imp1",
     assetClass: "bond",
     action: "sell",
     name: "FR Bond",

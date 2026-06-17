@@ -86,6 +86,12 @@ export interface ImportReviewProps {
   issues?: ImportIssue[];
   /** Turn an "attention" issue into a draft (user completed it in the map dialog). */
   onMapIssue?: (eventId: string, draft: ImportDraft) => void;
+  /**
+   * When true the component is embedded inside a multi-file container that owns
+   * the global Confirm / Discard footer. Hides the footer and the "Confirm selected"
+   * batch button so the parent provides a single shared action bar.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -104,6 +110,7 @@ export function ImportReview({
   onDiscard,
   issues = [],
   onMapIssue,
+  embedded = false,
 }: ImportReviewProps) {
   const t = useTranslations("Import");
   const tm = useTranslations("Manage");
@@ -385,16 +392,18 @@ export function ImportReview({
             {t("review.batch.selected", { count: selectedIds.length })}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => runConfirm("confirmSelected", selectedIds)}
-            >
-              {pending === "confirmSelected" && (
-                <Loader2 className="size-3.5 animate-spin" />
-              )}
-              {t("review.batch.confirmSelected")}
-            </Button>
+            {!embedded && (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() => runConfirm("confirmSelected", selectedIds)}
+              >
+                {pending === "confirmSelected" && (
+                  <Loader2 className="size-3.5 animate-spin" />
+                )}
+                {t("review.batch.confirmSelected")}
+              </Button>
+            )}
             {confirming ? (
               <span className="flex items-center gap-2">
                 <span className="text-muted-foreground">
@@ -637,20 +646,22 @@ export function ImportReview({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={runDiscard} disabled={busy}>
-          {pending === "discard" && <Loader2 className="size-4 animate-spin" />}
-          {t("discard")}
-        </Button>
-        <Button
-          onClick={() => runConfirm("confirm")}
-          disabled={busy || drafts.length === 0}
-        >
-          {pending === "confirm" && <Loader2 className="size-4 animate-spin" />}
-          {t("confirm")}
-        </Button>
-      </div>
+      {/* Footer — hidden when the parent multi-file container provides its own. */}
+      {!embedded && (
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={runDiscard} disabled={busy}>
+            {pending === "discard" && <Loader2 className="size-4 animate-spin" />}
+            {t("discard")}
+          </Button>
+          <Button
+            onClick={() => runConfirm("confirm")}
+            disabled={busy || drafts.length === 0}
+          >
+            {pending === "confirm" && <Loader2 className="size-4 animate-spin" />}
+            {t("confirm")}
+          </Button>
+        </div>
+      )}
 
       {/* Edit dialog */}
       <Dialog
