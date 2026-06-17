@@ -75,6 +75,10 @@ export interface ImportResult {
   drafts: ImportDraft[];
   contracts?: ImportContract[];
   errors: ImportIssue[];
+  /** Server detected this exact file was already uploaded; existing draft returned. */
+  alreadyExists?: boolean;
+  /** Server detected this exact file was already uploaded and confirmed. */
+  alreadyConfirmed?: boolean;
 }
 
 /**
@@ -233,6 +237,11 @@ export function ImportFlow({
               await fileToBase64(file),
               file.type || "image/png",
             );
+      if (result.alreadyConfirmed) {
+        setError(t("errors.alreadyConfirmed"));
+        setStep("upload");
+        return;
+      }
       const resultContracts = result.contracts ?? [];
       if (result.drafts.length === 0 && resultContracts.length === 0) {
         setError(t("errors.noDrafts"));

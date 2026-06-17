@@ -192,21 +192,17 @@ describe("CSV import → confirm flow", () => {
     expect(cash.every((x) => x.instrumentId === null)).toBe(true);
     expect(securities.every((x) => x.instrumentId !== null)).toBe(true);
 
-    // Re-importing the same export confirms zero new transactions (stable externalIds).
+    // Re-uploading the same export: the file fingerprint returns the confirmed import
+    // (no new draft created). The idempotency guarantee is now enforced at the upload
+    // level before a new draft would be spawned.
     const reImp = await app.inject({
       method: "POST",
       url: `/portfolios/${portfolioId}/imports/csv`,
       headers: auth(t),
       payload: { content: DKB_GIRO_CSV, format: "dkb" },
     });
-    const reConfirm = await app.inject({
-      method: "POST",
-      url: `/imports/${reImp.json().importId}/confirm`,
-      headers: auth(t),
-      payload: { transactions: reImp.json().drafts },
-    });
-    expect(reConfirm.statusCode).toBe(201);
-    expect(reConfirm.json().confirmed).toBe(0);
+    expect(reImp.json().alreadyConfirmed).toBe(true);
+    expect(reImp.json().importId).toBe(importId);
   });
 
   it("auto-detects the parser when format is omitted (DKB vs generic)", async () => {
@@ -263,6 +259,8 @@ describe("CSV import → confirm flow", () => {
     ).json().id;
 
     // One draft we'll discard, one we'll confirm then undo.
+    // Use distinct CSV content so the file fingerprint creates two separate imports.
+    const CSV_BMRI = `date,action,assetClass,ticker,name,quantity,unit,price,fees,currency\n2026-01-16,buy,equity,BMRI,Bank Mandiri,200,shares,6000,0,IDR`;
     const draftImp = (
       await app.inject({
         method: "POST",
@@ -276,7 +274,7 @@ describe("CSV import → confirm flow", () => {
         method: "POST",
         url: `/portfolios/${portfolioId}/imports/csv`,
         headers: auth(t),
-        payload: { content: CSV },
+        payload: { content: CSV_BMRI },
       })
     ).json();
     await app.inject({
@@ -460,6 +458,157 @@ describe("CSV import → confirm flow", () => {
     ).toBe(404);
   });
 
+  it("returns existing draft import on re-upload of identical CSV", async () => {
+    const t = await token("fingerprint-draft-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "FpDraft", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const first = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(first.importId).toBeDefined();
+
+    // Second upload of the same content → same importId, alreadyExists flag.
+    const second = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(second.importId).toBe(first.importId);
+    expect(second.alreadyExists).toBe(true);
+    expect(second.alreadyConfirmed).toBeFalsy();
+
+    // Only one row in the import list.
+    const list = await app.inject({ method: "GET", url: "/imports", headers: auth(t) });
+    expect(list.json().filter((r: { portfolioId: string }) => r.portfolioId === portfolioId)).toHaveLength(1);
+  });
+
+  it("returns alreadyConfirmed when re-uploading a confirmed CSV", async () => {
+    const t = await token("fingerprint-confirmed-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "FpConf", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp.importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: imp.drafts },
+    });
+
+    const second = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(second.importId).toBe(imp.importId);
+    expect(second.alreadyConfirmed).toBe(true);
+    expect(second.alreadyExists).toBeFalsy();
+    expect(second.drafts).toHaveLength(0);
+  });
+
+  it("allows re-import after discarding (discarded imports do not block)", async () => {
+    const t = await token("fingerprint-discard-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "FpDiscard", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const first = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${first.importId}/discard`,
+      headers: auth(t),
+    });
+
+    // Same content after discard → new import, no alreadyExists/alreadyConfirmed.
+    const second = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+    expect(second.importId).not.toBe(first.importId);
+    expect(second.alreadyExists).toBeFalsy();
+    expect(second.alreadyConfirmed).toBeFalsy();
+  });
+
+  it("different CSV content creates a new import (hash is content-sensitive)", async () => {
+    const t = await token("fingerprint-diff-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "FpDiff", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const first = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
+    ).json();
+
+    const CSV2 = `date,action,assetClass,ticker,name,quantity,unit,price,fees,currency\n2026-02-01,buy,equity,BMRI,Bank Mandiri,200,shares,6000,0,IDR`;
+    const second = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV2 },
+      })
+    ).json();
+    expect(second.importId).not.toBe(first.importId);
+    expect(second.alreadyExists).toBeFalsy();
+  });
+
   it("assigns deterministic content-hash externalIds to generic CSV drafts", async () => {
     const t = await token("hash-user");
     const portfolioId = (
@@ -560,7 +709,8 @@ describe("CSV import → confirm flow", () => {
     });
     expect(confirm1.json().confirmed).toBe(1);
 
-    // Second import of the same CSV + confirm: should be silently skipped.
+    // Re-uploading the same CSV returns the confirmed import (file fingerprint),
+    // preventing a duplicate draft from being created in the first place.
     const imp2 = (
       await app.inject({
         method: "POST",
@@ -569,13 +719,8 @@ describe("CSV import → confirm flow", () => {
         payload: { content: CSV },
       })
     ).json();
-    const confirm2 = await app.inject({
-      method: "POST",
-      url: `/imports/${imp2.importId}/confirm`,
-      headers: auth(t),
-      payload: { transactions: imp2.drafts },
-    });
-    expect(confirm2.json().confirmed).toBe(0);
+    expect(imp2.alreadyConfirmed).toBe(true);
+    expect(imp2.importId).toBe(imp1.importId);
 
     // Holdings unchanged — still one position.
     const holdings = await app.inject({

@@ -277,6 +277,7 @@
       "parseFailed": "Couldn't read that screenshot. Try a clearer image or enter it manually.",
       "fileRead": "Couldn't read that file. Please try again.",
       "noDrafts": "No transactions were found in that file.",
+      "alreadyConfirmed": "This file was already imported and confirmed.",
       "generic": "Something went wrong. Please try again."
     }
   },

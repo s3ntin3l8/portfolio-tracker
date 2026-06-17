@@ -1,0 +1,1 @@
+ALTER TABLE "screenshot_imports" ADD COLUMN "content_hash" text;

@@ -163,6 +163,8 @@ export const screenshotImports = pgTable("screenshot_imports", {
   model: text("model"),
   parsedJson: jsonb("parsed_json"),
   confidence: numeric("confidence"),
+  /** djb2 hash of the raw upload bytes — used to detect re-uploads of the same file. */
+  contentHash: text("content_hash"),
   status: importStatusEnum("status").notNull().default("draft"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
