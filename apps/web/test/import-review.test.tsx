@@ -137,12 +137,25 @@ describe("ImportReview", () => {
     const table = screen.getByRole("table");
     // Select draft c (index 3 of [select-all, a, b, c]).
     fireEvent.click(within(table).getAllByRole("checkbox")[3]);
-    // Filter to bonds — only c stays visible, but selection still targets c by uid.
-    fireEvent.change(screen.getByLabelText(tr.filters.assetClass), {
-      target: { value: "bond" },
-    });
+    // Filter to bonds via the multi-select chip — only c stays visible, but selection
+    // still targets c by uid.
+    fireEvent.click(screen.getByRole("button", { name: "bond" }));
     fireEvent.click(screen.getByRole("button", { name: tr.batch.confirmSelected }));
     expect(onConfirm).toHaveBeenCalledWith(["c"]);
+  });
+
+  it("OR-filters within a dimension (buy OR sell shows both)", () => {
+    renderReview();
+    const table = screen.getByRole("table");
+    // Sells only → just the bond sell.
+    fireEvent.click(screen.getByRole("button", { name: "sell" }));
+    expect(within(table).queryByText("Apple Inc")).not.toBeInTheDocument();
+    expect(within(table).getByText("FR Bond")).toBeInTheDocument();
+    // Add buy → OR within the action dimension brings the buys back too.
+    fireEvent.click(screen.getByRole("button", { name: "buy" }));
+    expect(within(table).getByText("Antam Gold")).toBeInTheDocument();
+    expect(within(table).getByText("Apple Inc")).toBeInTheDocument();
+    expect(within(table).getByText("FR Bond")).toBeInTheDocument();
   });
 
   it("edits a draft via the dialog and reports the right uid", () => {

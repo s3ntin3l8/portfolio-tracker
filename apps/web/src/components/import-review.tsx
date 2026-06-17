@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +24,6 @@ import {
 } from "@/components/ui/dialog";
 import type { ImportDraft, ReviewDraft } from "@/components/import-flow";
 
-const ALL = "all";
 // Confidence below this reads as "needs review" — same threshold as the badge colour.
 const NEEDS_REVIEW_BELOW = 0.9;
 
@@ -88,10 +86,25 @@ export function ImportReview({
     }
   }
 
-  const [assetClassFilter, setAssetClassFilter] = useState<string>(ALL);
-  const [actionFilter, setActionFilter] = useState<string>(ALL);
+  // Multi-select filters: an empty set means "all". A non-empty set is OR within the
+  // dimension (e.g. buy OR sell), and dimensions AND together — so you can isolate exactly
+  // the rows you want to confirm in one pass.
+  const [assetClassFilter, setAssetClassFilter] = useState<Set<string>>(new Set());
+  const [actionFilter, setActionFilter] = useState<Set<string>>(new Set());
   const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const [query, setQuery] = useState("");
+
+  function toggleFilter(
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    value: string,
+  ) {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
 
   const assetClasses = useMemo(
     () => [...new Set(drafts.map((d) => d.assetClass))].sort(),
@@ -103,16 +116,16 @@ export function ImportReview({
   );
 
   const filtersActive =
-    assetClassFilter !== ALL ||
-    actionFilter !== ALL ||
+    assetClassFilter.size > 0 ||
+    actionFilter.size > 0 ||
     needsReviewOnly ||
     query.trim() !== "";
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
     return drafts.filter((d) => {
-      if (assetClassFilter !== ALL && d.assetClass !== assetClassFilter) return false;
-      if (actionFilter !== ALL && d.action !== actionFilter) return false;
+      if (assetClassFilter.size && !assetClassFilter.has(d.assetClass)) return false;
+      if (actionFilter.size && !actionFilter.has(d.action)) return false;
       if (needsReviewOnly && d.confidence >= NEEDS_REVIEW_BELOW) return false;
       if (q && !(d.name ?? "").toLowerCase().includes(q)) return false;
       return true;
@@ -162,8 +175,8 @@ export function ImportReview({
   }
 
   function clearFilters() {
-    setAssetClassFilter(ALL);
-    setActionFilter(ALL);
+    setAssetClassFilter(new Set());
+    setActionFilter(new Set());
     setNeedsReviewOnly(false);
     setQuery("");
   }
@@ -180,32 +193,22 @@ export function ImportReview({
 
       {/* Filter bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <Select
-          aria-label={t("review.filters.assetClass")}
-          value={assetClassFilter}
-          onChange={(e) => setAssetClassFilter(e.target.value)}
-          className="h-9 sm:w-auto"
-        >
-          <option value={ALL}>{t("review.filters.assetClass")}</option>
-          {assetClasses.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label={t("review.filters.action")}
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          className="h-9 sm:w-auto"
-        >
-          <option value={ALL}>{t("review.filters.action")}</option>
-          {actions.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </Select>
+        {assetClasses.length > 1 && (
+          <ChipGroup
+            label={t("review.filters.assetClass")}
+            values={assetClasses}
+            selected={assetClassFilter}
+            onToggle={(v) => toggleFilter(setAssetClassFilter, v)}
+          />
+        )}
+        {actions.length > 1 && (
+          <ChipGroup
+            label={t("review.filters.action")}
+            values={actions}
+            selected={actionFilter}
+            onToggle={(v) => toggleFilter(setActionFilter, v)}
+          />
+        )}
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
@@ -510,6 +513,38 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// A labelled row of multi-select toggle chips (OR within the dimension). Empty = all.
+function ChipGroup({
+  label,
+  values,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  values: string[];
+  selected: Set<string>;
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{label}:</span>
+      {values.map((v) => (
+        <Button
+          key={v}
+          type="button"
+          size="sm"
+          variant={selected.has(v) ? "default" : "outline"}
+          aria-pressed={selected.has(v)}
+          className="h-7 px-2 text-xs"
+          onClick={() => onToggle(v)}
+        >
+          {v}
+        </Button>
+      ))}
     </div>
   );
 }
