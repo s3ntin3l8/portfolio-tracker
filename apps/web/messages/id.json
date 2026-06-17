@@ -277,6 +277,7 @@
       "parseFailed": "Tidak dapat membaca tangkapan layar itu. Coba gambar yang lebih jelas atau masukkan manual.",
       "fileRead": "Tidak dapat membaca berkas itu. Silakan coba lagi.",
       "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
+      "alreadyConfirmed": "Berkas ini sudah diimpor dan dikonfirmasi.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
   },

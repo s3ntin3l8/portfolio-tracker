@@ -366,6 +366,10 @@ export interface CsvImportResult {
   drafts: ParsedTransaction[];
   contracts: ParsedGoldContract[];
   errors: ImportIssue[];
+  /** True when the exact file was already uploaded and the existing draft was returned. */
+  alreadyExists?: boolean;
+  /** True when the exact file was already uploaded and fully confirmed. */
+  alreadyConfirmed?: boolean;
 }
 
 export interface ScreenshotImportResult {
@@ -374,6 +378,10 @@ export interface ScreenshotImportResult {
   /** Financed gold-purchase contracts (Pegadaian/Galeri 24 cicilan). */
   contracts: ParsedGoldContract[];
   errors: ImportIssue[];
+  /** True when the exact image was already uploaded and the existing draft was returned. */
+  alreadyExists?: boolean;
+  /** True when the exact image was already uploaded and fully confirmed. */
+  alreadyConfirmed?: boolean;
 }
 
 /** A past import in the user's history (draft, confirmed, or discarded). */

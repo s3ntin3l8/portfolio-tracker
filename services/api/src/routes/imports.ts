@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import {
   loans,
   portfolios,
@@ -23,7 +23,7 @@ import { parseDkb } from "../services/parsers/dkb.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
-import { assignContentExternalIds } from "../services/parsers/hash.js";
+import { assignContentExternalIds, shortHash } from "../services/parsers/hash.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -80,6 +80,22 @@ export async function importsRoute(app: FastifyInstance) {
     return p ?? null;
   }
 
+  /** Look up a non-discarded import for the same (portfolioId, contentHash). */
+  async function existingImport(portfolioId: string, contentHash: string) {
+    const [row] = await app.db
+      .select()
+      .from(screenshotImports)
+      .where(
+        and(
+          eq(screenshotImports.portfolioId, portfolioId),
+          eq(screenshotImports.contentHash, contentHash),
+          ne(screenshotImports.status, "discarded"),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   // Parse a CSV into draft transactions and store them as a draft import.
   app.post<{ Params: { portfolioId: string } }>(
     "/portfolios/:portfolioId/imports/csv",
@@ -91,6 +107,30 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const { content, format } = csvBodySchema.parse(request.body);
+      const contentHash = shortHash(content);
+
+      // Re-upload guard: return the existing non-discarded import instead of creating
+      // a duplicate draft row. Discarded imports with the same hash are ignored so the
+      // user can re-import after deliberately discarding.
+      const existing = await existingImport(portfolioId, contentHash);
+      if (existing) {
+        const isDraft = existing.status === "draft";
+        const parsed = isDraft
+          ? ((existing.parsedJson ?? {}) as { drafts?: unknown[]; errors?: unknown[] })
+          : null;
+        reply.code(200);
+        return {
+          importId: existing.id,
+          // Return drafts only for existing draft imports (so the user can review them).
+          // Confirmed imports have nothing to review — empty drafts signals alreadyConfirmed.
+          drafts: isDraft && parsed && Array.isArray(parsed.drafts) ? parsed.drafts : [],
+          contracts: [] as unknown[],
+          errors: isDraft && parsed && Array.isArray(parsed.errors) ? parsed.errors : [],
+          alreadyExists: isDraft,
+          alreadyConfirmed: !isDraft,
+        };
+      }
+
       const resolved = format === "auto" ? detectCsvFormat(content) : format;
       const result = CSV_PARSERS[resolved](content);
       // Assign deterministic content-hash externalIds to drafts that don't already
@@ -105,12 +145,13 @@ export async function importsRoute(app: FastifyInstance) {
           portfolioId,
           parser: PARSER_TAG[resolved] ?? "csv",
           parsedJson: result,
+          contentHash,
           status: "draft",
         })
         .returning();
 
       reply.code(201);
-      return { importId: imp.id, drafts: result.drafts, errors: result.errors };
+      return { importId: imp.id, drafts: result.drafts, contracts: [] as unknown[], errors: result.errors };
     },
   );
 
@@ -130,6 +171,41 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       const { image, mimeType } = screenshotBodySchema.parse(request.body);
+      // Hash the raw base64 bytes before parsing so we can detect re-uploads even if
+      // the parser is non-deterministic (LLM responses may vary for the same image).
+      const contentHash = shortHash(image);
+
+      // Re-upload guard: same image already imported and not discarded → return it.
+      const existing = await existingImport(portfolioId, contentHash);
+      if (existing) {
+        const isDraft = existing.status === "draft";
+        const storedParsed = isDraft
+          ? ((existing.parsedJson ?? {}) as {
+              drafts?: unknown[];
+              contracts?: unknown[];
+              errors?: unknown[];
+            })
+          : null;
+        reply.code(200);
+        return {
+          importId: existing.id,
+          drafts:
+            isDraft && storedParsed && Array.isArray(storedParsed.drafts)
+              ? storedParsed.drafts
+              : [],
+          contracts:
+            isDraft && storedParsed && Array.isArray(storedParsed.contracts)
+              ? storedParsed.contracts
+              : [],
+          errors:
+            isDraft && storedParsed && Array.isArray(storedParsed.errors)
+              ? storedParsed.errors
+              : [],
+          alreadyExists: isDraft,
+          alreadyConfirmed: !isDraft,
+        };
+      }
+
       let parsed;
       try {
         parsed = await app.screenshotParser.parse({
@@ -166,6 +242,7 @@ export async function importsRoute(app: FastifyInstance) {
           parser: app.screenshotParser.name,
           parsedJson: result,
           confidence,
+          contentHash,
           status: "draft",
         })
         .returning();
