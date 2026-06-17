@@ -245,6 +245,15 @@ describe("mapTrEvents", () => {
       { ...base, id: "c", eventType: "CREDIT", amount: 5, isin: "X" },
     ]);
     expect(drafts.map((d) => d.externalId)).toEqual(["a", "c"]);
-    expect(errors).toEqual([{ line: 1, message: expect.stringContaining("unmapped") }]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      line: 1,
+      eventId: "b",
+      eventType: "MYSTERY",
+      severity: "attention",
+      message: expect.stringContaining("unmapped"),
+    });
+    // The raw event is carried so the UI can offer to map it.
+    expect(errors[0].raw).toMatchObject({ name: null });
   });
 });

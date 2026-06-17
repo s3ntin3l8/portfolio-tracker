@@ -4,9 +4,12 @@ import type {
   InstrumentInput,
   CorporateActionInput,
   ParsedTransaction,
+  ImportIssue,
   UserUpdate,
   ProviderSettingUpdate,
 } from "@portfolio/schema";
+
+export type { ImportIssue } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
 
@@ -322,13 +325,13 @@ export interface ContributionStats {
 export interface CsvImportResult {
   importId: string;
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 export interface ScreenshotImportResult {
   importId: string;
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 /** A past import in the user's history (draft, confirmed, or discarded). */
@@ -349,7 +352,7 @@ export interface ImportDetail {
   parser: string;
   status: "draft" | "confirmed" | "discarded";
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 export type TrStatus =

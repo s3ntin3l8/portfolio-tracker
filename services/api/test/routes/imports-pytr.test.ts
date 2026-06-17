@@ -276,6 +276,55 @@ describe("pytr import → confirm", () => {
     expect(tx.documentRefs).toEqual([{ id: "d1", type: "TRADE_INVOICE", date: "01.03.2026" }]);
   });
 
+  it("drops a mapped issue from the import once its event is confirmed", async () => {
+    const t = await token("pytr-mapissue");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
+    // One draft + one attention issue (an unmapped event the user will complete).
+    const [imp] = await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: {
+          drafts: [DRAFTS[0]],
+          errors: [
+            { eventId: "iss-1", eventType: "MYSTERY", severity: "attention", message: "unmapped event type: MYSTERY" },
+          ],
+        },
+        status: "draft",
+      })
+      .returning();
+
+    // Confirm both the original draft and the mapped issue (externalId = the event id).
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp.id}/confirm`,
+      headers: auth(t),
+      payload: {
+        transactions: [
+          DRAFTS[0],
+          { ...DRAFTS[0], externalId: "iss-1", action: "deposit", isin: null, name: "Mapped" },
+        ],
+      },
+    });
+
+    // Everything is resolved → the import closes (no drafts, no issues left).
+    const [done] = await getDb()
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, imp.id));
+    expect(done.status).toBe("confirmed");
+  });
+
   it("partial confirm keeps the import open with the un-confirmed remainder", async () => {
     const t = await token("pytr-passes");
     const portfolioId = (

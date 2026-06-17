@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ParsedAction, ParsedTransaction } from "@portfolio/schema";
+import type { ImportIssue, ParsedAction, ParsedTransaction } from "@portfolio/schema";
 
 // The normalized event shape tr_export.py emits (one JSON object per line). The Python
 // side extracts isin/shares/fees from the timeline detail; any may be absent.
@@ -118,6 +118,9 @@ const SKIP_EVENTS = new Map<string, string>([
   ["SSP_CORPORATE_ACTION_INSTRUMENT", "share-based corporate action — needs manual entry"],
 ]);
 
+// Skipped events the user may actually want to map (vs. ignorable info like a card ping).
+const ATTENTION_SKIPS = new Set(["SSP_CORPORATE_ACTION_INSTRUMENT"]);
+
 // Actions that move shares (need an instrument + a per-share price). The rest are pure
 // cash movements recorded as a lump sum in `price`.
 const SECURITY_ACTIONS = new Set<ParsedAction>([
@@ -130,13 +133,44 @@ const SECURITY_ACTIONS = new Set<ParsedAction>([
 
 export type MapResult =
   | { draft: ParsedTransaction }
-  | { skip: true; reason: string };
+  | {
+      skip: true;
+      reason: string;
+      severity: "info" | "attention";
+      eventId?: string;
+      eventType?: string;
+      raw?: ImportIssue["raw"];
+    };
 
 // Format a JS number as a decimalString (no exponent, trailing zeros trimmed).
 function dstr(n: number): string {
   if (!Number.isFinite(n)) return "0";
   const s = n.toFixed(10).replace(/\.?0+$/, "");
   return s === "" || s === "-" ? "0" : s;
+}
+
+// Build a skip outcome, carrying the source event so the UI can offer to map it.
+function skip(
+  reason: string,
+  severity: "info" | "attention",
+  ev?: TrEvent,
+): MapResult {
+  if (!ev) return { skip: true, reason, severity };
+  return {
+    skip: true,
+    reason,
+    severity,
+    eventId: ev.id,
+    eventType: ev.eventType,
+    raw: {
+      isin: ev.isin ?? null,
+      name: ev.title ?? null,
+      currency: ev.currency?.toUpperCase() ?? null,
+      executedAt: ev.timestamp,
+      amount: ev.amount,
+      shares: ev.shares ?? null,
+    },
+  };
 }
 
 /**
@@ -147,7 +181,7 @@ function dstr(n: number): string {
 export function mapTrEventToDraft(raw: unknown): MapResult {
   const parsed = trEventSchema.safeParse(raw);
   if (!parsed.success) {
-    return { skip: true, reason: `unparseable event: ${parsed.error.issues[0]?.message}` };
+    return skip(`unparseable event: ${parsed.error.issues[0]?.message}`, "attention");
   }
   const ev = parsed.data;
 
@@ -155,12 +189,12 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   // previously confirmed, the sync reconciler removes the written transaction (status flips
   // in place on the same event id — e.g. annual dividend recalculations).
   if (ev.status && ev.status.toUpperCase() !== "EXECUTED") {
-    return { skip: true, reason: `non-executed event (${ev.status})` };
+    return skip(`non-executed event (${ev.status})`, "info", ev);
   }
 
   const skipReason = SKIP_EVENTS.get(ev.eventType);
   if (skipReason) {
-    return { skip: true, reason: skipReason };
+    return skip(skipReason, ATTENTION_SKIPS.has(ev.eventType) ? "attention" : "info", ev);
   }
 
   let action: ParsedAction | undefined = FIXED_ACTIONS[ev.eventType];
@@ -176,7 +210,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     action = ev.isin ? "dividend" : "deposit";
   }
   if (!action) {
-    return { skip: true, reason: `unmapped event type: ${ev.eventType}` };
+    return skip(`unmapped event type: ${ev.eventType}`, "attention", ev);
   }
 
   const amount = Math.abs(ev.amount);
@@ -184,7 +218,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   const isSecurity = SECURITY_ACTIONS.has(action);
 
   if (isSecurity && !ev.isin) {
-    return { skip: true, reason: `${ev.eventType} without an ISIN` };
+    return skip(`${ev.eventType} without an ISIN`, "attention", ev);
   }
 
   let quantity = "0";
@@ -193,7 +227,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   if (action === "buy" || action === "sell" || action === "savings_plan") {
     const shares = Math.abs(ev.shares ?? 0);
     if (shares === 0) {
-      return { skip: true, reason: `${ev.eventType} without a share count` };
+      return skip(`${ev.eventType} without a share count`, "attention", ev);
     }
     quantity = dstr(shares);
     price = dstr((amount - fees) / shares); // per-share, fees carried separately
@@ -232,17 +266,25 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   return { draft };
 }
 
-/** Map a batch of raw events to drafts, collecting skips as errors (not dropped). */
+/** Map a batch of raw events to drafts, collecting skips as issues (surfaced, not dropped). */
 export function mapTrEvents(rawEvents: unknown[]): {
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 } {
   const drafts: ParsedTransaction[] = [];
-  const errors: { line: number; message: string }[] = [];
+  const errors: ImportIssue[] = [];
   rawEvents.forEach((raw, i) => {
     const result = mapTrEventToDraft(raw);
     if ("draft" in result) drafts.push(result.draft);
-    else errors.push({ line: i, message: result.reason });
+    else
+      errors.push({
+        line: i,
+        message: result.reason,
+        severity: result.severity,
+        eventId: result.eventId,
+        eventType: result.eventType,
+        raw: result.raw,
+      });
   });
   return { drafts, errors };
 }

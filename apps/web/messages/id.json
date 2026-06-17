@@ -219,6 +219,13 @@
         "assetClass": "Kelas",
         "action": "Aksi"
       },
+      "issues": {
+        "attention": "{count, plural, one {# peristiwa perlu perhatian} other {# peristiwa perlu perhatian}}",
+        "ignored": "{count, plural, one {# peristiwa diabaikan} other {# peristiwa diabaikan}}",
+        "map": "Petakan",
+        "mapTitle": "Petakan peristiwa ini ke transaksi",
+        "mapSave": "Tambahkan ke draf"
+      },
       "empty": "Tidak ada draf yang cocok dengan filter Anda."
     },
     "discard": "Buang",

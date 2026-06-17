@@ -158,6 +158,39 @@ describe("ImportReview", () => {
     expect(within(table).getByText("FR Bond")).toBeInTheDocument();
   });
 
+  it("maps an attention issue into a draft via the map dialog", () => {
+    const onMapIssue = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportReview
+          drafts={DRAFTS}
+          {...handlers()}
+          onMapIssue={onMapIssue}
+          issues={[
+            {
+              eventId: "ev-9",
+              eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
+              severity: "attention",
+              message: "share-based corporate action — needs manual entry",
+              raw: { name: "Acme Corp", isin: "US123", currency: "EUR", executedAt: "2026-02-01", amount: 12, shares: 2 },
+            },
+            { eventId: "ev-10", eventType: "CARD_VERIFICATION", severity: "info", message: "card verification" },
+          ]}
+        />
+      </NextIntlClientProvider>,
+    );
+    // Ignorable info is tucked behind a disclosure; the attention issue is listed directly.
+    expect(screen.getByText("1 ignored event")).toBeInTheDocument();
+    expect(screen.getByText(/needs manual entry/)).toBeInTheDocument();
+    // Open the map dialog for the attention issue and save it as a draft.
+    fireEvent.click(screen.getByRole("button", { name: tr.issues.map }));
+    fireEvent.click(screen.getByRole("button", { name: tr.issues.mapSave }));
+    expect(onMapIssue).toHaveBeenCalledTimes(1);
+    const [eventId, draft] = onMapIssue.mock.calls[0];
+    expect(eventId).toBe("ev-9");
+    expect(draft).toMatchObject({ externalId: "ev-9", name: "Acme Corp", isin: "US123", action: "buy" });
+  });
+
   it("edits a draft via the dialog and reports the right uid", () => {
     const { onUpdate } = renderReview();
     // Edit buttons are desktop-only and in row order [a, b, c].

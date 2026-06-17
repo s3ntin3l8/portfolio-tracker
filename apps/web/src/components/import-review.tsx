@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ImportDraft, ReviewDraft } from "@/components/import-flow";
+import type { ImportDraft, ImportIssue, ReviewDraft } from "@/components/import-flow";
+
+// Actions the mapping editor can assign to an unmapped event.
+const MAP_ACTIONS = [
+  "buy",
+  "sell",
+  "dividend",
+  "coupon",
+  "interest",
+  "savings_plan",
+  "deposit",
+  "withdrawal",
+] as const;
 
 // Confidence below this reads as "needs review" — same threshold as the badge colour.
 const NEEDS_REVIEW_BELOW = 0.9;
@@ -35,6 +48,10 @@ export interface ImportReviewProps {
   /** Confirm all drafts, or just the passed subset (confirm-selected). */
   onConfirm: (uids?: string[]) => void | Promise<void>;
   onDiscard: () => void | Promise<void>;
+  /** Unmapped/skipped events surfaced for review (Trade Republic imports). */
+  issues?: ImportIssue[];
+  /** Turn an "attention" issue into a draft (user completed it in the map dialog). */
+  onMapIssue?: (eventId: string, draft: ImportDraft) => void;
 }
 
 /**
@@ -51,9 +68,43 @@ export function ImportReview({
   onRemoveMany,
   onConfirm,
   onDiscard,
+  issues = [],
+  onMapIssue,
 }: ImportReviewProps) {
   const t = useTranslations("Import");
   const tm = useTranslations("Manage");
+
+  const attention = issues.filter((i) => i.severity === "attention" && i.eventId);
+  const ignorable = issues.filter((i) => !(i.severity === "attention" && i.eventId));
+  // The issue currently open in the map dialog, plus its in-progress draft fields.
+  const [mapping, setMapping] = useState<ImportIssue | null>(null);
+  const [mapForm, setMapForm] = useState<ImportDraft | null>(null);
+
+  function openMap(issue: ImportIssue) {
+    const raw = issue.raw ?? {};
+    const amount = raw.amount != null ? Math.abs(raw.amount) : 0;
+    setMapping(issue);
+    setMapForm({
+      assetClass: "equity",
+      action: "buy",
+      isin: raw.isin ?? null,
+      name: raw.name ?? issue.eventType ?? "",
+      quantity: "0",
+      unit: "shares",
+      price: String(amount),
+      fees: "0",
+      currency: raw.currency ?? "EUR",
+      executedAt: (raw.executedAt ?? new Date().toISOString()).slice(0, 10),
+      confidence: 1,
+      externalId: issue.eventId ?? null,
+    });
+  }
+
+  function saveMap() {
+    if (mapping?.eventId && mapForm && onMapIssue) onMapIssue(mapping.eventId, mapForm);
+    setMapping(null);
+    setMapForm(null);
+  }
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
@@ -190,6 +241,49 @@ export function ImportReview({
       <p className="text-sm text-muted-foreground">
         {t("draftCount", { count: drafts.length })} — {t("reviewHint")}
       </p>
+
+      {/* Issues: events that didn't map cleanly. "Attention" ones can be completed into
+          drafts via the map dialog; ignorable info is tucked behind a disclosure. */}
+      {(attention.length > 0 || ignorable.length > 0) && (
+        <div className="space-y-2 rounded-lg border border-border bg-card/40 p-3">
+          {attention.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">
+                {t("review.issues.attention", { count: attention.length })}
+              </p>
+              <ul className="space-y-1.5">
+                {attention.map((issue) => (
+                  <li
+                    key={issue.eventId}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {issue.raw?.name ?? issue.eventType} — {issue.message}
+                    </span>
+                    {onMapIssue && (
+                      <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
+                        {t("review.issues.map")}
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {ignorable.length > 0 && (
+            <details className="text-sm text-muted-foreground">
+              <summary className="cursor-pointer">
+                {t("review.issues.ignored", { count: ignorable.length })}
+              </summary>
+              <ul className="mt-1.5 space-y-1 pl-4">
+                {ignorable.map((issue, i) => (
+                  <li key={issue.eventId ?? i}>{issue.message}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -501,6 +595,73 @@ export function ImportReview({
               <X className="size-4" />
               {t("review.edit.done")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Map dialog: complete an unmapped event into a confirmable draft */}
+      <Dialog
+        open={mapping !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMapping(null);
+            setMapForm(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("review.issues.mapTitle")}</DialogTitle>
+          </DialogHeader>
+          {mapForm && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("review.columns.action")}>
+                <Select
+                  value={mapForm.action}
+                  onChange={(e) => setMapForm({ ...mapForm, action: e.target.value })}
+                >
+                  {MAP_ACTIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("fields.name")}>
+                <Input
+                  value={mapForm.name ?? ""}
+                  onChange={(e) => setMapForm({ ...mapForm, name: e.target.value })}
+                />
+              </Field>
+              <Field label="ISIN">
+                <Input
+                  value={mapForm.isin ?? ""}
+                  onChange={(e) => setMapForm({ ...mapForm, isin: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.executedAt")}>
+                <Input
+                  type="date"
+                  value={mapForm.executedAt.slice(0, 10)}
+                  onChange={(e) => setMapForm({ ...mapForm, executedAt: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.quantity")}>
+                <Input
+                  value={mapForm.quantity}
+                  onChange={(e) => setMapForm({ ...mapForm, quantity: e.target.value })}
+                />
+              </Field>
+              <Field label={t("fields.price")}>
+                <Input
+                  value={mapForm.price}
+                  onChange={(e) => setMapForm({ ...mapForm, price: e.target.value })}
+                />
+              </Field>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={saveMap}>{t("review.issues.mapSave")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

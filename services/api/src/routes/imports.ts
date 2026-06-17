@@ -368,7 +368,7 @@ export async function importsRoute(app: FastifyInstance) {
       // Pass 2 — write the transactions and reconcile the import atomically.
       const parsed = (imp.parsedJson ?? {}) as {
         drafts?: { externalId?: string | null }[];
-        errors?: unknown[];
+        errors?: { eventId?: string }[];
         seenEventIds?: string[];
       };
       const created = await app.db.transaction(async (tx) => {
@@ -418,11 +418,15 @@ export async function importsRoute(app: FastifyInstance) {
         const remaining = everyHasId
           ? staged.filter((d) => !(d.externalId && confirmedExtIds.has(d.externalId)))
           : [];
+        // Drop issues the user just mapped + confirmed (their event id is now a transaction).
+        const remainingErrors = errors.filter(
+          (e) => !(e.eventId && confirmedExtIds.has(e.eventId)),
+        );
 
-        if (everyHasId && (remaining.length > 0 || errors.length > 0)) {
+        if (everyHasId && (remaining.length > 0 || remainingErrors.length > 0)) {
           await tx
             .update(screenshotImports)
-            .set({ parsedJson: { ...parsed, drafts: remaining } })
+            .set({ parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
             .where(eq(screenshotImports.id, imp.id));
         } else {
           await tx

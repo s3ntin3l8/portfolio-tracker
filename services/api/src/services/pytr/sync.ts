@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { screenshotImports, transactions, trConnections } from "@portfolio/db";
-import type { ParsedTransaction } from "@portfolio/schema";
+import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
 import { mapTrEvents, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
 import type { PytrRunner } from "./runner.js";
@@ -23,7 +23,7 @@ export interface SyncResult {
 // every event already processed (mapped OR skipped) so nothing is re-evaluated.
 interface CollectorJson {
   drafts: ParsedTransaction[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
   seenEventIds?: string[];
 }
 

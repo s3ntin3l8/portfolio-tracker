@@ -200,3 +200,25 @@ export const parsedTransactionSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;
+
+// A parse/skip outcome surfaced to the user instead of being silently dropped. `info` is
+// ignorable (e.g. a card-verification ping); `attention` is something the user may want to
+// map into a transaction. `raw` carries the source event fields to seed the mapping editor.
+export const importIssueSchema = z.object({
+  message: z.string(),
+  severity: z.enum(["info", "attention"]).default("attention"),
+  line: z.number().optional(),
+  eventId: z.string().optional(),
+  eventType: z.string().optional(),
+  raw: z
+    .object({
+      isin: z.string().nullish(),
+      name: z.string().nullish(),
+      currency: z.string().nullish(),
+      executedAt: z.string().nullish(),
+      amount: z.number().nullish(),
+      shares: z.number().nullish(),
+    })
+    .nullish(),
+});
+export type ImportIssue = z.infer<typeof importIssueSchema>;

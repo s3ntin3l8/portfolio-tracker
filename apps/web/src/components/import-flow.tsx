@@ -14,8 +14,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import type { ImportIssue } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { ImportReview } from "@/components/import-review";
+
+export type { ImportIssue } from "@portfolio/api-client";
 
 // A draft transaction as it comes back from the API (executedAt is an ISO string).
 export interface ImportDraft {
@@ -32,12 +35,14 @@ export interface ImportDraft {
   currency: string;
   executedAt: string;
   confidence: number;
+  /** Stable source id (TR event id) — set when a draft is mapped from an issue. */
+  externalId?: string | null;
 }
 
 export interface ImportResult {
   importId: string;
   drafts: ImportDraft[];
-  errors: { line: number; message: string }[];
+  errors: ImportIssue[];
 }
 
 /**

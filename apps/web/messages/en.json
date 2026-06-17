@@ -219,6 +219,13 @@
         "assetClass": "Class",
         "action": "Action"
       },
+      "issues": {
+        "attention": "{count, plural, one {# event needs attention} other {# events need attention}}",
+        "ignored": "{count, plural, one {# ignored event} other {# ignored events}}",
+        "map": "Map",
+        "mapTitle": "Map this event to a transaction",
+        "mapSave": "Add to drafts"
+      },
       "empty": "No drafts match your filters."
     },
     "discard": "Discard",
