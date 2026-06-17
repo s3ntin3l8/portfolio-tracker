@@ -189,9 +189,15 @@
       "title": "Add a transaction",
       "hint": "From a broker, gold app or bank confirmation",
       "cta": "Choose a screenshot or PDF",
-      "csvCta": "Choose a CSV file"
+      "csvCta": "Choose one or more CSV files"
     },
     "parsing": "Reading your transactions…",
+    "parsingFile": "Parsing file {current} of {total}…",
+    "skipped": {
+      "alreadyConfirmed": "{file}: already imported — skipped.",
+      "parseError": "{file}: couldn't be read — skipped.",
+      "noDrafts": "{file}: no transactions found."
+    },
     "reviewHint": "Check the details before confirming — nothing is saved until you do.",
     "contract": {
       "title": "Gold installment contract",

@@ -189,9 +189,15 @@
       "title": "Tambah transaksi",
       "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
       "cta": "Pilih tangkapan layar atau PDF",
-      "csvCta": "Pilih berkas CSV"
+      "csvCta": "Pilih satu atau beberapa berkas CSV"
     },
     "parsing": "Membaca transaksi Anda…",
+    "parsingFile": "Membaca berkas {current} dari {total}…",
+    "skipped": {
+      "alreadyConfirmed": "{file}: sudah diimpor — dilewati.",
+      "parseError": "{file}: tidak dapat dibaca — dilewati.",
+      "noDrafts": "{file}: tidak ada transaksi ditemukan."
+    },
     "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
     "contract": {
       "title": "Kontrak cicilan emas",

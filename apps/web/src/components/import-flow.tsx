@@ -9,6 +9,7 @@ import {
   Upload,
   FileText,
   AlertCircle,
+  Info,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -82,25 +83,27 @@ export interface ImportResult {
 }
 
 /**
- * A draft augmented with a stable client-side id. Selection, inline editing and the
- * filter view all key off `uid` so they stay correct as drafts are removed (which
- * reindexes the array) or hidden by a filter. The id never leaves the client — it is
- * stripped before the drafts are sent to `confirmImport`.
+ * A draft augmented with a stable client-side id and its source import id.
+ * Selection, inline editing and the filter view all key off `uid` so they stay
+ * correct as drafts are removed (which reindexes the array) or hidden by a filter.
+ * Neither `uid` nor `importId` ever leaves the client — both are stripped before
+ * the drafts are sent to `confirmImport`.
  */
-export type ReviewDraft = ImportDraft & { uid: string };
+export type ReviewDraft = ImportDraft & { uid: string; importId: string };
 
 let uidCounter = 0;
-export function withUid(draft: ImportDraft): ReviewDraft {
+export function withUid(draft: ImportDraft, importId: string): ReviewDraft {
   const uid =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `draft-${uidCounter++}`;
-  return { ...draft, uid };
+  return { ...draft, uid, importId };
 }
 
 export function stripUid(draft: ReviewDraft): ImportDraft {
-  const copy: ImportDraft & { uid?: string } = { ...draft };
+  const copy: ImportDraft & { uid?: string; importId?: string } = { ...draft };
   delete copy.uid;
+  delete copy.importId;
   return copy;
 }
 
@@ -188,6 +191,18 @@ function fileToText(file: File): Promise<string> {
   });
 }
 
+/** A file that was skipped during the multi-file parse pass. */
+interface SkippedFile {
+  file: string;
+  reason: "alreadyConfirmed" | "parseError" | "noDrafts";
+}
+
+/** Per-import parse issues keyed by importId. */
+type IssueMap = Map<string, ImportIssue[]>;
+
+/** Map from importId → filename heading for multi-file groups. */
+type GroupMap = Map<string, string>;
+
 export function ImportFlow({
   client = demoClient,
   portfolios = [{ id: "demo", name: "Demo" }],
@@ -210,9 +225,21 @@ export function ImportFlow({
   );
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [contracts, setContracts] = useState<ImportContract[]>([]);
+  // For the single-file/screenshot path: the one import id.
+  // For multi-file CSV: the id of the import that carries contracts (if any).
+  const [contractImportId, setContractImportId] = useState<string>("");
+  // importId kept for backwards-compat in single-file path (points at contractImportId).
   const [importId, setImportId] = useState<string>("");
+  // Multi-file groups: importId → filename.
+  const [groups, setGroups] = useState<GroupMap>(new Map());
+  // Per-group parse issues.
+  const [issueMap, setIssueMap] = useState<IssueMap>(new Map());
+  // Files skipped during the parse pass.
+  const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [confirmedCount, setConfirmedCount] = useState(0);
+  // Progress hint for multi-file: "Parsing file X of Y…"
+  const [parseProgress, setParseProgress] = useState<{ current: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const activeIndex = step === "parsing" ? 0 : STEPS.indexOf(step);
@@ -225,52 +252,132 @@ export function ImportFlow({
     return t("errors.generic");
   }
 
-  async function handleFile(file: File) {
+  /**
+   * Parse one or more files sequentially. For a single file the behaviour is
+   * identical to the old `handleFile` path (same error messages, same state
+   * transitions). For multiple CSV files we collect all results, skip bad ones
+   * with a notice, and only abort to upload if everything failed.
+   */
+  async function handleFiles(files: File[]) {
     setError(null);
+    setSkipped([]);
     setStep("parsing");
-    try {
-      const result =
-        mode === "csv"
-          ? await client.importCsv(portfolioId, await fileToText(file), csvFormat)
-          : await client.importScreenshot(
-              portfolioId,
-              await fileToBase64(file),
-              file.type || "image/png",
-            );
-      if (result.alreadyConfirmed) {
-        setError(t("errors.alreadyConfirmed"));
+
+    if (files.length === 1) {
+      // ── Single-file path (identical behaviour to before) ─────────────────
+      const file = files[0]!;
+      try {
+        const result =
+          mode === "csv"
+            ? await client.importCsv(portfolioId, await fileToText(file), csvFormat)
+            : await client.importScreenshot(
+                portfolioId,
+                await fileToBase64(file),
+                file.type || "image/png",
+              );
+        if (result.alreadyConfirmed) {
+          setError(t("errors.alreadyConfirmed"));
+          setStep("upload");
+          return;
+        }
+        const resultContracts = result.contracts ?? [];
+        if (result.drafts.length === 0 && resultContracts.length === 0) {
+          setError(t("errors.noDrafts"));
+          setStep("upload");
+          return;
+        }
+        setImportId(result.importId);
+        setContractImportId(result.importId);
+        setDrafts(result.drafts.map((d) => withUid(d, result.importId)));
+        setContracts(resultContracts);
+        setGroups(new Map([[result.importId, file.name]]));
+        setIssueMap(new Map([[result.importId, result.errors]]));
+        setStep("review");
+      } catch (err) {
+        setError(errorMessage(err));
         setStep("upload");
-        return;
       }
-      const resultContracts = result.contracts ?? [];
-      if (result.drafts.length === 0 && resultContracts.length === 0) {
-        setError(t("errors.noDrafts"));
-        setStep("upload");
-        return;
-      }
-      setImportId(result.importId);
-      setDrafts(result.drafts.map(withUid));
-      setContracts(resultContracts);
-      setStep("review");
-    } catch (err) {
-      setError(errorMessage(err));
-      setStep("upload");
+      return;
     }
+
+    // ── Multi-file CSV path ───────────────────────────────────────────────
+    const mergedDrafts: ReviewDraft[] = [];
+    const newGroups: GroupMap = new Map();
+    const newIssueMap: IssueMap = new Map();
+    const newSkipped: SkippedFile[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
+      setParseProgress({ current: i + 1, total: files.length });
+      try {
+        const content = await fileToText(file);
+        const result = await client.importCsv(portfolioId, content, csvFormat);
+
+        if (result.alreadyConfirmed) {
+          newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
+          continue;
+        }
+        if (result.drafts.length === 0 && (result.contracts ?? []).length === 0) {
+          newSkipped.push({ file: file.name, reason: "noDrafts" });
+          continue;
+        }
+        newGroups.set(result.importId, file.name);
+        newIssueMap.set(result.importId, result.errors);
+        for (const d of result.drafts) {
+          mergedDrafts.push(withUid(d, result.importId));
+        }
+        // Contracts: only the first file to return contracts "owns" them.
+        // In practice CSV files don't produce contracts, but guard defensively.
+        if ((result.contracts ?? []).length > 0 && !contractImportId) {
+          setContractImportId(result.importId);
+          setContracts(result.contracts ?? []);
+        }
+      } catch (err) {
+        const reason =
+          (err as Error)?.message === "file_read_error" ? "parseError" : "parseError";
+        newSkipped.push({ file: file.name, reason });
+      }
+    }
+
+    setParseProgress(null);
+    setSkipped(newSkipped);
+
+    if (mergedDrafts.length === 0 && contracts.length === 0) {
+      // Everything failed / was skipped — show a combined notice and stay on upload.
+      if (newSkipped.length === 1) {
+        const s = newSkipped[0]!;
+        if (s.reason === "alreadyConfirmed") setError(t("errors.alreadyConfirmed"));
+        else if (s.reason === "noDrafts") setError(t("errors.noDrafts"));
+        else setError(t("errors.fileRead"));
+      } else {
+        setError(t("errors.generic"));
+      }
+      setStep("upload");
+      return;
+    }
+
+    setDrafts(mergedDrafts);
+    setGroups(newGroups);
+    setIssueMap(newIssueMap);
+    // Use the first group's importId as the "primary" import id for back-compat.
+    const firstId = newGroups.keys().next().value ?? "";
+    setImportId(firstId);
+    setStep("review");
   }
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
-    if (file) void handleFile(file);
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // allow re-selecting the same file(s)
+    if (files.length > 0) void handleFiles(files);
   }
 
   // Auto-parse a screenshot shared into the app (Web Share Target). The guard ref keeps
-  // it to a single run even though `handleFile` is recreated each render.
+  // it to a single run even though `handleFiles` is recreated each render.
   const sharedHandled = useRef(false);
   useEffect(() => {
     if (initialFile && !sharedHandled.current) {
       sharedHandled.current = true;
-      void handleFile(initialFile);
+      void handleFiles([initialFile]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFile]);
@@ -292,19 +399,53 @@ export function ImportFlow({
     setContracts((cs) => cs.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   }
 
-  // Confirm all drafts (or a passed subset) plus any gold contracts.
+  /**
+   * Confirm all drafts (or a passed subset) plus any gold contracts.
+   *
+   * Single-group: one `confirmImport` call (identical to the old path).
+   * Multi-group: fan-out — one call per import id, contracts attached to their
+   * owning import. Confirmed counts are summed.
+   */
   async function confirm(uids?: string[]) {
     setError(null);
     setStep("parsing");
     try {
       const subset =
         uids && uids.length ? drafts.filter((d) => uids.includes(d.uid)) : drafts;
-      const { confirmed } = await client.confirmImport(
-        importId,
-        subset.map(stripUid),
-        contracts,
-      );
-      setConfirmedCount(confirmed);
+
+      if (groups.size <= 1) {
+        // ── Single-import fast path ──────────────────────────────────────
+        const { confirmed } = await client.confirmImport(
+          importId,
+          subset.map(stripUid),
+          contracts,
+        );
+        setConfirmedCount(confirmed);
+      } else {
+        // ── Multi-import fan-out ─────────────────────────────────────────
+        // Group the to-confirm drafts by their importId.
+        const byImport = new Map<string, ReviewDraft[]>();
+        for (const d of subset) {
+          const list = byImport.get(d.importId) ?? [];
+          list.push(d);
+          byImport.set(d.importId, list);
+        }
+        // Ensure every group is represented (even if all its drafts were removed).
+        for (const iid of groups.keys()) {
+          if (!byImport.has(iid)) byImport.set(iid, []);
+        }
+        // Fire all confirms concurrently.
+        const results = await Promise.all(
+          Array.from(byImport.entries()).map(([iid, ds]) =>
+            client.confirmImport(
+              iid,
+              ds.map(stripUid),
+              iid === contractImportId ? contracts : [],
+            ),
+          ),
+        );
+        setConfirmedCount(results.reduce((s, r) => s + r.confirmed, 0));
+      }
       setStep("done");
     } catch (err) {
       setError(errorMessage(err));
@@ -316,9 +457,23 @@ export function ImportFlow({
     setDrafts([]);
     setContracts([]);
     setImportId("");
+    setContractImportId("");
+    setGroups(new Map());
+    setIssueMap(new Map());
+    setSkipped([]);
     setError(null);
     setStep("upload");
   }
+
+  // ── Derived: group drafts for the multi-file review layout ──────────────────
+  const isMultiGroup = groups.size > 1;
+  const groupEntries: [string, string, ReviewDraft[]][] = isMultiGroup
+    ? Array.from(groups.entries()).map(([iid, filename]) => [
+        iid,
+        filename,
+        drafts.filter((d) => d.importId === iid),
+      ])
+    : [];
 
   return (
     <div
@@ -460,6 +615,7 @@ export function ImportFlow({
             ref={fileRef}
             type="file"
             accept={mode === "csv" ? ".csv,text/csv" : "image/*,application/pdf"}
+            multiple={mode === "csv"}
             className="sr-only"
             aria-label={t("dropzone.cta")}
             onChange={onPick}
@@ -471,13 +627,29 @@ export function ImportFlow({
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
             <Loader2 className="size-6 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">{t("parsing")}</p>
+            <p className="text-sm text-muted-foreground">
+              {parseProgress
+                ? t("parsingFile", { current: parseProgress.current, total: parseProgress.total })
+                : t("parsing")}
+            </p>
           </CardContent>
         </Card>
       )}
 
       {step === "review" && (
         <div className="space-y-6">
+          {/* Skip notices — files that were excluded from the review */}
+          {skipped.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              {skipped.map((s) => (
+                <span key={s.file} className="flex items-start gap-2">
+                  <Info className="mt-0.5 size-3.5 shrink-0" />
+                  {t(`skipped.${s.reason}`, { file: s.file })}
+                </span>
+              ))}
+            </div>
+          )}
+
           {contracts.length > 0 && (
             <ContractReview
               contracts={contracts}
@@ -488,7 +660,9 @@ export function ImportFlow({
               onDiscard={drafts.length === 0 ? reset : undefined}
             />
           )}
-          {drafts.length > 0 && (
+
+          {drafts.length > 0 && !isMultiGroup && (
+            // ── Single-group: render ImportReview with its own footer (unchanged) ──
             <ImportReview
               drafts={drafts}
               onUpdate={updateDraft}
@@ -496,7 +670,38 @@ export function ImportFlow({
               onRemoveMany={removeMany}
               onConfirm={confirm}
               onDiscard={reset}
+              issues={issueMap.get(importId) ?? []}
             />
+          )}
+
+          {drafts.length > 0 && isMultiGroup && (
+            // ── Multi-group: one embedded section per file, shared global footer ──
+            <>
+              {groupEntries.map(([iid, filename, groupDrafts]) => (
+                <div key={iid} className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">{filename}</h3>
+                  <ImportReview
+                    drafts={groupDrafts}
+                    onUpdate={updateDraft}
+                    onRemove={removeDraft}
+                    onRemoveMany={removeMany}
+                    onConfirm={confirm}
+                    onDiscard={reset}
+                    issues={issueMap.get(iid) ?? []}
+                    embedded
+                  />
+                </div>
+              ))}
+              {/* Global footer */}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={reset}>
+                  {t("discard")}
+                </Button>
+                <Button onClick={() => confirm()} disabled={drafts.length === 0}>
+                  {t("confirm")}
+                </Button>
+              </div>
+            </>
           )}
         </div>
       )}

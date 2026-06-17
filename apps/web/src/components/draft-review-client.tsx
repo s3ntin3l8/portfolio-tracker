@@ -33,7 +33,9 @@ export function DraftReviewClient({
   const api = useApiClient();
   const router = useRouter();
 
-  const [drafts, setDrafts] = useState<ReviewDraft[]>(() => initial.map(withUid));
+  const [drafts, setDrafts] = useState<ReviewDraft[]>(() =>
+    initial.map((d) => withUid(d, importId)),
+  );
   const [issues, setIssues] = useState<ImportIssue[]>(initialIssues);
   const [error, setError] = useState<string | null>(null);
   const [importedCount, setImportedCount] = useState<number | null>(null);
@@ -45,7 +47,7 @@ export function DraftReviewClient({
 
   // Promote a mapped issue into a draft, then drop it from the issues list.
   function mapIssue(eventId: string, draft: ImportDraft) {
-    setDrafts((ds) => [...ds, withUid(draft)]);
+    setDrafts((ds) => [...ds, withUid(draft, importId)]);
     setIssues((is) => is.filter((i) => i.eventId !== eventId));
   }
 
