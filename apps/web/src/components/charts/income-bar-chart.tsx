@@ -17,13 +17,56 @@ import { formatMoney } from "@/lib/utils";
 export interface IncomeBar {
   label: string;
   value: number;
+  /** Projected (rest-of-year) income stacked on top of the paid amount. */
+  projected?: number;
   /** Drawn muted/translucent to read as a projection, not actual income. */
   forecast?: boolean;
 }
 
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  money,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey: string; value: number; payload: IncomeBar }>;
+  label?: string;
+  money: (v: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  const bar = payload[0]?.payload;
+  if (!bar) return null;
+  const projected = bar.projected ?? 0;
+  return (
+    <div
+      style={{
+        background: "var(--color-card)",
+        border: "1px solid var(--color-border)",
+        borderRadius: 8,
+        fontSize: 12,
+        padding: "8px 12px",
+      }}
+    >
+      <p style={{ marginBottom: 4, fontWeight: 500 }}>{label}</p>
+      {projected > 0 ? (
+        <>
+          <p>{money(bar.value)}</p>
+          <p style={{ opacity: 0.6 }}>{money(projected)}</p>
+          <p style={{ fontWeight: 500, marginTop: 2 }}>{money(bar.value + projected)}</p>
+        </>
+      ) : (
+        <p>{money(bar.value + projected)}</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Income per calendar year as a bar chart, with the next-year forecast appended as
- * a muted bar. Theming + axes mirror {@link ForecastChart}/{@link PriceChart}.
+ * a muted bar. Current-year bars stack projected rest-of-year income on top of
+ * paid amounts as a shaded segment. Theming + axes mirror
+ * {@link ForecastChart}/{@link PriceChart}.
  */
 export function IncomeBarChart({
   data,
@@ -59,15 +102,9 @@ export function IncomeBarChart({
           />
           <Tooltip
             cursor={{ fill: "var(--color-muted)", opacity: 0.3 }}
-            formatter={(v) => money(Number(v))}
-            contentStyle={{
-              background: "var(--color-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
+            content={<ChartTooltip money={money} />}
           />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="value" stackId="stack" radius={[4, 4, 0, 0]}>
             {data.map((d, i) => (
               <Cell
                 key={i}
@@ -77,6 +114,15 @@ export function IncomeBarChart({
                     : "var(--color-primary)"
                 }
                 fillOpacity={d.forecast ? 0.4 : 1}
+              />
+            ))}
+          </Bar>
+          <Bar dataKey="projected" stackId="stack">
+            {data.map((d, i) => (
+              <Cell
+                key={i}
+                fill="var(--color-primary)"
+                fillOpacity={0.25}
               />
             ))}
           </Bar>

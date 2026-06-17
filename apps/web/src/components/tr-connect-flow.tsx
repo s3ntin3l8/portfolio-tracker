@@ -283,10 +283,12 @@ export function TrConnectFlow({
             </div>
           )}
 
-          <Button type="submit" disabled={busy || !phone || !pin || !portfolioId}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
-            {t("connect")}
-          </Button>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={busy || !phone || !pin || !portfolioId}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
+              {t("connect")}
+            </Button>
+          </div>
         </form>
       )}
 
@@ -303,9 +305,11 @@ export function TrConnectFlow({
             <Loader2 className="size-4 animate-spin" />
             {t("approveWaiting")}
           </div>
-          <Button variant="outline" onClick={disconnect} disabled={busy}>
-            {t("cancel")}
-          </Button>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={disconnect} disabled={busy}>
+              {t("cancel")}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -358,7 +362,7 @@ export function TrConnectFlow({
             ))}
           </fieldset>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end gap-3">
             <Button onClick={doSync} disabled={busy}>
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />

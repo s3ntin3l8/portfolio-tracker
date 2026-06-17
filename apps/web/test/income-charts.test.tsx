@@ -47,12 +47,33 @@ describe("IncomeBarChart", () => {
     );
     expect(screen.getByTestId("barchart")).toHaveAttribute("data-count", "3");
     const cells = screen.getAllByTestId("cell");
-    expect(cells).toHaveLength(3);
-    // The forecast bar reads as a projection: muted fill, reduced opacity.
+    // 3 value cells + 3 projected cells (all zero, but still rendered)
+    expect(cells).toHaveLength(6);
+    // First value bar: forecast bar is muted
     const forecast = cells[2];
     expect(forecast).toHaveAttribute("data-fill", "var(--color-muted-foreground)");
     expect(forecast).toHaveAttribute("data-opacity", "0.4");
     expect(cells[0]).toHaveAttribute("data-fill", "var(--color-primary)");
+  });
+
+  it("renders a stacked projected segment for the current year", () => {
+    wrap(
+      <IncomeBarChart
+        currency="IDR"
+        data={[
+          { label: "2025", value: 100 },
+          { label: "2026", value: 200, projected: 80 },
+          { label: "Next yr", value: 250, forecast: true },
+        ]}
+      />,
+    );
+    const cells = screen.getAllByTestId("cell");
+    // value bar: 3 cells; projected bar: 3 cells
+    expect(cells).toHaveLength(6);
+    // The projected cell for 2026 (index 4 = 3 value cells + 1 projected cell)
+    const projected = cells[4];
+    expect(projected).toHaveAttribute("data-fill", "var(--color-primary)");
+    expect(projected).toHaveAttribute("data-opacity", "0.25");
   });
 });
 

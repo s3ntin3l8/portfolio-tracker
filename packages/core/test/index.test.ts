@@ -468,6 +468,25 @@ describe("projectDividends", () => {
     const result = projectDividends([e1, e2], heldQty, qtyAt, now);
     expect(result.map((r) => r.date)).toEqual(["2026-09-15", "2026-12-01"]);
   });
+
+  it("projects quarterly dividends (MSFT pattern) for the rest of the year", () => {
+    // MSFT pays quarterly: Mar 12, Jun 12, Sep 12, Dec 12
+    // Source window: (2025-06-17, 2025-12-31] → only Sep 12 and Dec 12 2025 qualify
+    // Projected: Sep 12 2026 and Dec 12 2026 (both > now = 2026-06-15)
+    const msftDivs: IncomeEntry[] = [
+      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.75", currency: "USD", executedAt: new Date("2025-03-12T00:00:00.000Z") },
+      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.75", currency: "USD", executedAt: new Date("2025-06-12T00:00:00.000Z") },
+      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.80", currency: "USD", executedAt: new Date("2025-09-12T00:00:00.000Z") },
+      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.80", currency: "USD", executedAt: new Date("2025-12-12T00:00:00.000Z") },
+    ];
+    const heldQty = new Map([["msft", "10"]]);
+    const qtyAt = () => "10";
+    const result = projectDividends(msftDivs, heldQty, qtyAt, now);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.date)).toEqual(["2026-09-12", "2026-12-12"]);
+    expect(Number(result[0].amount)).toBe(0.80);
+    expect(Number(result[1].amount)).toBe(0.80);
+  });
 });
 
 describe("trailingIncomeByInstrument / trailingYield", () => {

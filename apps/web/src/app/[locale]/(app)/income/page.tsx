@@ -13,14 +13,12 @@ import { IncomeBarChart } from "@/components/charts/income-bar-chart";
 import { IncomeHeatmap } from "@/components/charts/income-heatmap";
 import { YieldsTable } from "@/components/income/yields-table";
 import { ByCurrencyTable } from "@/components/income/by-currency-table";
-import { UpcomingTable } from "@/components/income/upcoming-table";
-import { IncomeEventsTable } from "@/components/income/income-events-table";
+import { IncomeEventsTable, type IncomeEventRow } from "@/components/income/income-events-table";
 import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
-import type { IncomeEvent } from "@portfolio/api-client";
 
 /** Sum a year's events per currency (income can span currencies). */
-function totalsByCurrency(events: IncomeEvent[]): Record<string, number> {
+function totalsByCurrency(events: IncomeEventRow[]): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const e of events) {
     totals[e.currency] = (totals[e.currency] ?? 0) + Number(e.amount);
@@ -89,11 +87,20 @@ export default async function IncomePage({
   }
 
   const lastYearLabel = String(new Date().getUTCFullYear() - 1);
-  const deltaAbs = Number(s.deltaAbs);
+  const thisFullYear = Number(s.forecastFullYear);
+  const lastYearTotal = Number(s.lastYear);
+  const deltaAbs = thisFullYear - lastYearTotal;
+  const deltaPct = lastYearTotal > 0 ? deltaAbs / lastYearTotal : null;
 
-  // Yearly bars + the next-year forecast appended as a muted projection bar.
+  const currentYear = String(new Date().getUTCFullYear());
+
+  // Yearly bars: current year includes projected rest-of-year as a stacked segment.
   const yearBars = [
-    ...s.byYear.map((y) => ({ label: y.year, value: Number(y.total) })),
+    ...s.byYear.map((y) => ({
+      label: y.year,
+      value: Number(y.total),
+      ...(y.year === currentYear ? { projected: Number(s.forecastRestOfYear) } : {}),
+    })),
     { label: t("nextYear"), value: Number(s.forecastNextYear), forecast: true },
   ];
 
@@ -103,13 +110,22 @@ export default async function IncomePage({
     value: Number(c.total),
   }));
 
-  // Group events newest-first by year (events are already sorted desc by date).
-  const byYear = new Map<string, IncomeEvent[]>();
+  // Group events + upcoming payments by year, sorted newest-first by date.
+  const byYear = new Map<string, IncomeEventRow[]>();
   for (const e of s.events) {
     const year = e.date.slice(0, 4);
     const bucket = byYear.get(year) ?? [];
     bucket.push(e);
     byYear.set(year, bucket);
+  }
+  for (const u of s.upcoming) {
+    const year = u.date.slice(0, 4);
+    const bucket = byYear.get(year) ?? [];
+    bucket.push({ ...u, type: u.kind });
+    byYear.set(year, bucket);
+  }
+  for (const bucket of byYear.values()) {
+    bucket.sort((a, b) => b.date.localeCompare(a.date));
   }
 
   return (
@@ -119,10 +135,10 @@ export default async function IncomePage({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           label={t("thisYear")}
-          value={m(Number(s.thisYear))}
+          value={m(thisFullYear)}
           delta={
-            s.deltaPct !== null
-              ? `${formatPercent(s.deltaPct, locale)} ${t("vsLastYear", { year: lastYearLabel })}`
+            deltaPct !== null
+              ? `${formatPercent(deltaPct, locale)} ${t("vsLastYear", { year: lastYearLabel })}`
               : undefined
           }
           deltaTone={deltaAbs > 0 ? "up" : deltaAbs < 0 ? "down" : "neutral"}
@@ -227,15 +243,6 @@ export default async function IncomePage({
           <h2 className="text-lg font-semibold">{t("currencyTitle")}</h2>
           <div className="rounded-xl border border-border">
             <ByCurrencyTable rows={s.byCurrency} displayCurrency={currency} />
-          </div>
-        </section>
-      )}
-
-      {s.upcoming.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">{t("upcomingTitle")}</h2>
-          <div className="rounded-xl border border-border">
-            <UpcomingTable rows={s.upcoming} />
           </div>
         </section>
       )}

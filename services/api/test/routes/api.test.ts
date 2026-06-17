@@ -1287,6 +1287,202 @@ describe("auth + portfolios + transactions", () => {
     expect(Number(y.yieldOnCost)).toBeCloseTo(100 / 95000, 8);
   });
 
+  it("includes quarterly dividends in forecastRestOfYear when dividend_events has future announced rows", async () => {
+    const { dividendEvents, fxRates } = await import("@portfolio/db");
+    const t = await token("msft-forecast-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "MSFT Forecast", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const [msft] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "MSFT",
+        market: "NASDAQ",
+        assetClass: "equity",
+        currency: "USD",
+        name: "Microsoft",
+      })
+      .returning();
+
+    await app.db
+      .insert(fxRates)
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      })
+      .onConflictDoNothing();
+
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: msft.id,
+        quantity: "10",
+        price: "450",
+        currency: "USD",
+        executedAt: "2025-01-10T00:00:00.000Z",
+      },
+    });
+
+    // Quarterly dividends: Mar/Jun 2025 (outside source window), Sep/Dec 2025 (inside)
+    for (const [date, amt] of [
+      ["2025-03-12", "0.75"],
+      ["2025-06-12", "0.75"],
+      ["2025-09-12", "0.80"],
+      ["2025-12-12", "0.80"],
+    ]) {
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "dividend",
+          instrumentId: msft.id,
+          quantity: "0",
+          price: amt,
+          currency: "USD",
+          executedAt: `${date}T00:00:00.000Z`,
+        },
+      });
+    }
+
+    // Simulate refreshDividends with TwelveData/EODHD (returns future announced dividends)
+    await app.db.insert(dividendEvents).values([
+      { instrumentId: msft.id, exDate: "2025-03-12", amountPerShare: "0.75", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
+      { instrumentId: msft.id, exDate: "2025-06-12", amountPerShare: "0.75", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
+      { instrumentId: msft.id, exDate: "2025-09-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
+      { instrumentId: msft.id, exDate: "2025-12-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
+      // Future announced — trigger instrumentsWithAnnounced path
+      { instrumentId: msft.id, exDate: "2026-09-12", amountPerShare: "0.80", currency: "USD", status: "announced", source: "test", fetchedAt: new Date() },
+      { instrumentId: msft.id, exDate: "2026-12-12", amountPerShare: "0.80", currency: "USD", status: "announced", source: "test", fetchedAt: new Date() },
+    ]);
+
+    const body = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/income`,
+        headers: auth(t),
+      })
+    ).json();
+
+    // MSFT should appear in forecastRestOfYear via futureAnnounced
+    // (0.80 USD × 10 shares × 2 quarters = 16 USD × 16000 IDR)
+    const forecastRestOfYear = Number(body.forecastRestOfYear);
+    expect(forecastRestOfYear).toBeGreaterThan(0);
+
+    // MSFT's announced dividends should appear in upcoming
+    const upcomingDividends = body.upcoming.filter(
+      (u: { kind: string; instrumentId: string }) => u.kind === "dividend" && u.instrumentId === msft.id,
+    );
+    expect(upcomingDividends.length).toBeGreaterThanOrEqual(2);
+
+    // Verify the amounts: 0.80 × 10 = 8.00 USD per quarter
+    const totalAnnouncedUSD = upcomingDividends.reduce(
+      (sum: number, u: { amount: string }) => sum + Number(u.amount),
+      0,
+    );
+    expect(totalAnnouncedUSD).toBeCloseTo(16.0, 1);
+  });
+
+  it("uses projected dividends when dividend_events has only past paid rows (Yahoo Finance scenario)", async () => {
+    const { dividendEvents, fxRates } = await import("@portfolio/db");
+    const t = await token("msft-yahoo-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "MSFT Yahoo", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const [msft] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "MSFT2",
+        market: "NASDAQ",
+        assetClass: "equity",
+        currency: "USD",
+        name: "Microsoft 2",
+      })
+      .returning();
+
+    await app.db
+      .insert(fxRates)
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      })
+      .onConflictDoNothing();
+
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: msft.id,
+        quantity: "10",
+        price: "450",
+        currency: "USD",
+        executedAt: "2025-01-10T00:00:00.000Z",
+      },
+    });
+
+    for (const [date, amt] of [["2025-09-12", "0.80"], ["2025-12-12", "0.80"]]) {
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "dividend",
+          instrumentId: msft.id,
+          quantity: "0",
+          price: amt,
+          currency: "USD",
+          executedAt: `${date}T00:00:00.000Z`,
+        },
+      });
+    }
+
+    // Only past paid rows (Yahoo Finance — no future announced dividends)
+    await app.db.insert(dividendEvents).values([
+      { instrumentId: msft.id, exDate: "2025-09-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "yahoo", fetchedAt: new Date() },
+      { instrumentId: msft.id, exDate: "2025-12-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "yahoo", fetchedAt: new Date() },
+    ]);
+
+    const body = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/income`,
+        headers: auth(t),
+      })
+    ).json();
+
+    // forecastRestOfYear should include projected dividends (Sep/Dec 2026)
+    // MSFT should NOT be in instrumentsWithAnnounced (no future rows)
+    // So blendedProjected should include MSFT's projected entries
+    expect(Number(body.forecastRestOfYear)).toBeGreaterThan(0);
+
+    const upcomingMsft = body.upcoming.filter(
+      (u: { kind: string; instrumentId: string }) => u.kind === "dividend" && u.instrumentId === msft.id,
+    );
+    expect(upcomingMsft.length).toBe(2);
+    expect(upcomingMsft.every((u: { status: string }) => u.status === "projected")).toBe(true);
+  });
+
   it("FX-converts XIRR cash flows to the display currency (#A)", async () => {
     const { fxRates } = await import("@portfolio/db");
     const t = await token("xirr-fx-user"); // display currency defaults to IDR
