@@ -56,6 +56,12 @@ export class PytrError extends Error {
 // downstream by the mapper — kept loose here on purpose.
 export type RawTrEvent = Record<string, unknown>;
 
+// The trailing summary line: TR's own reported balances, used to reconcile our derived
+// figures against the broker's. `amount` is a decimal-ish value (number or string).
+export interface TrExportSummary {
+  cash?: { currency: string; amount: number | string }[] | null;
+}
+
 interface PendingPairing {
   child: ChildProcess;
   cookiesFile: string;
@@ -307,7 +313,7 @@ export class PytrRunner {
     phone: string;
     pin: string;
     sessionData: string;
-  }): Promise<{ events: RawTrEvent[]; sessionData: string }> {
+  }): Promise<{ events: RawTrEvent[]; sessionData: string; summary?: TrExportSummary }> {
     if (!this.opts.enabled) throw new PytrUnavailableError();
     const tmpDir = await mkdtemp(join(tmpdir(), "pytr-export-"));
     const cookiesFile = join(tmpDir, "cookies.txt");
@@ -323,17 +329,28 @@ export class PytrRunner {
       if (code !== 0) {
         throw new PytrError(stderr.trim() || `pytr export exited with code ${code}`);
       }
-      const events = stdout
+      const lines = stdout
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean)
-        .map((l) => JSON.parse(l) as RawTrEvent);
+        .map((l) => JSON.parse(l) as RawTrEvent | { __summary__: TrExportSummary });
+      // The export emits one trailing `{__summary__: …}` line (TR's reported balances);
+      // everything else is a timeline event.
+      let summary: TrExportSummary | undefined;
+      const events: RawTrEvent[] = [];
+      for (const line of lines) {
+        if (line && typeof line === "object" && "__summary__" in line) {
+          summary = (line as { __summary__: TrExportSummary }).__summary__;
+        } else {
+          events.push(line as RawTrEvent);
+        }
+      }
       // The export refreshes the session cookie; persist the rolling jar to extend the
       // session's life. Fall back to the original if it wasn't rewritten.
       const sessionData = await readFile(cookiesFile, "utf8").catch(
         () => input.sessionData,
       );
-      return { events, sessionData };
+      return { events, sessionData, summary };
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

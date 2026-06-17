@@ -1,13 +1,19 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { screenshotImports, transactions, trConnections } from "@portfolio/db";
 import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
+import { cashBalances } from "@portfolio/core";
 import { mapTrEvents, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
-import type { PytrRunner } from "./runner.js";
+import type { PytrRunner, TrExportSummary } from "./runner.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 
 type TrConnectionRow = typeof trConnections.$inferSelect;
+
+export interface CashReconciliation {
+  checkedAt: string;
+  cash: { currency: string; reported: string; derived: string; diff: string }[];
+}
 
 export interface SyncResult {
   status: "connected" | "expired" | "error";
@@ -16,6 +22,8 @@ export interface SyncResult {
   errors?: number;
   /** Confirmed transactions removed because their source event was cancelled. */
   cancelled?: number;
+  /** TR's reported cash vs our derived cash, per currency (when TR reported a balance). */
+  reconciliation?: CashReconciliation;
 }
 
 // The parsed_json shape of a pytr "collector" draft: the single open draft per connection
@@ -35,6 +43,43 @@ function isCancelled(status: unknown): boolean {
 
 // Default staged categories: everything except day-to-day card spending.
 const DEFAULT_CATEGORIES = ["trade", "income", "cashflow"];
+
+// Compare TR's reported cash balance against the cash we derive from the portfolio's
+// transactions. A non-zero diff flags missing/duplicate/misclassified events (or, expected,
+// a disabled category like card spending). Returns undefined when TR reported no balance.
+async function reconcileCash(
+  db: DB,
+  portfolioId: string,
+  summary: TrExportSummary | undefined,
+): Promise<CashReconciliation | undefined> {
+  const reported = summary?.cash;
+  if (!reported || reported.length === 0) return undefined;
+  const rows = await db
+    .select({
+      instrumentId: transactions.instrumentId,
+      type: transactions.type,
+      quantity: transactions.quantity,
+      price: transactions.price,
+      fees: transactions.fees,
+      currency: transactions.currency,
+      executedAt: transactions.executedAt,
+    })
+    .from(transactions)
+    .where(eq(transactions.portfolioId, portfolioId));
+  const derived = cashBalances(rows);
+  const currencies = new Set([...reported.map((c) => c.currency), ...Object.keys(derived)]);
+  const cash = [...currencies].map((currency) => {
+    const reportedStr = String(reported.find((c) => c.currency === currency)?.amount ?? "0");
+    const derivedStr = derived[currency] ?? "0";
+    return {
+      currency,
+      reported: reportedStr,
+      derived: derivedStr,
+      diff: (Number(reportedStr) - Number(derivedStr)).toFixed(2),
+    };
+  });
+  return { checkedAt: new Date().toISOString(), cash };
+}
 
 /**
  * Sync one Trade Republic connection: resume the saved session, export the full timeline,
@@ -208,7 +253,8 @@ export async function syncTrConnection(
     importId = imp.id;
   }
 
-  // 7. Roll the session forward + mark the connection healthy.
+  // 7. Reconcile cash against TR's reported balance, then roll the session forward.
+  const reconciliation = await reconcileCash(db, portfolioId, result.summary);
   await db
     .update(trConnections)
     .set({
@@ -217,6 +263,7 @@ export async function syncTrConnection(
       lastSyncAt: new Date(),
       lastError: null,
       updatedAt: new Date(),
+      ...(reconciliation ? { lastReconciliation: reconciliation } : {}),
     })
     .where(eq(trConnections.id, connection.id));
 
@@ -226,5 +273,6 @@ export async function syncTrConnection(
     drafts: newDrafts.length,
     errors: newErrors.length,
     cancelled,
+    reconciliation,
   };
 }

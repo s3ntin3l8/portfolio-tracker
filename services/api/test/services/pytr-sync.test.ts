@@ -189,6 +189,36 @@ describe("syncTrConnection", () => {
     expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["card-1", "dep-1"]);
   });
 
+  it("reconciles derived cash against TR's reported balance", async () => {
+    const conn = await makeConnection("reconcile");
+    const db = getDb();
+    // A €500 deposit + a €100 sell-less example; derived cash = 500. TR reports 480 → diff 20.
+    const evs = [{ id: "d-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" }];
+    const runner = runnerWith(async () => ({
+      events: evs,
+      sessionData: "J",
+      summary: { cash: [{ currency: "EUR", amount: 480 }] },
+    }));
+    // Confirm the deposit so it counts toward derived cash.
+    await db.insert(transactions).values({
+      portfolioId: conn.portfolioId!,
+      type: "deposit",
+      price: "500",
+      currency: "EUR",
+      executedAt: new Date("2026-03-02T10:00:00.000Z"),
+      source: "pytr",
+      externalId: "d-1",
+    });
+
+    const result = await syncTrConnection(db, enc, runner, conn);
+    expect(result.reconciliation?.cash).toEqual([
+      { currency: "EUR", reported: "480", derived: "500", diff: "-20.00" },
+    ]);
+
+    const [updated] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
+    expect((updated.lastReconciliation as { cash: unknown[] }).cash).toHaveLength(1);
+  });
+
   it("marks the connection expired when the session can't be resumed", async () => {
     const conn = await makeConnection("expired");
     const runner = runnerWith(async () => {

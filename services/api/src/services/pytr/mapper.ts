@@ -33,6 +33,10 @@ const trEventSchema = z.object({
 // draft carries the right asset class; full symbol/venue resolution happens at confirm.
 const TR_CRYPTO_ISIN = /^XF000[A-Z]{2,5}\d+$/;
 
+// Acceptable gap between a trade's executed-price notional and its booked total before the
+// draft is flagged for review (fees + tax are normally well within this).
+const RECONCILE_TOLERANCE = 0.1;
+
 // Savings-plan-funded buys come in two flavours TR distinguishes by event type.
 const EVENT_KIND: Record<string, string> = {
   SAVEBACK_AGGREGATE: "saveback",
@@ -223,6 +227,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
 
   let quantity = "0";
   let price = dstr(amount); // cash lump sum by default (deposit/withdrawal/dividend/...)
+  let confidence = 1;
 
   if (action === "buy" || action === "sell" || action === "savings_plan") {
     const shares = Math.abs(ev.shares ?? 0);
@@ -231,6 +236,16 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     }
     quantity = dstr(shares);
     price = dstr((amount - fees) / shares); // per-share, fees carried separately
+
+    // Reconciliation: the executed price × shares should land near the booked total (fees +
+    // tax are small). A large gap means the share count or price was mis-parsed — flag it for
+    // review (low confidence drives the "needs review" badge + filter) rather than trust it.
+    if (ev.executedPrice != null && amount > 0) {
+      const notional = shares * Math.abs(ev.executedPrice);
+      if (Math.abs(notional - amount) > Math.max(amount * RECONCILE_TOLERANCE, 0.5)) {
+        confidence = 0.5;
+      }
+    }
   }
 
   // Asset class at the source: crypto when TR's synthetic ISIN says so, else equity/ETF
@@ -250,7 +265,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     total: dstr(amount),
     currency: ev.currency.toUpperCase(),
     executedAt: new Date(ev.timestamp),
-    confidence: 1,
+    confidence,
     externalId: ev.id,
     savingsPlanId: ev.savingsPlanId ?? null,
     exchangeCode: null,

@@ -517,6 +517,12 @@
       "cashflow": "Transfer (setoran & penarikan)",
       "card": "Belanja kartu"
     },
+    "reconcile": {
+      "title": "Rekonsiliasi kas",
+      "row": "{currency}: TR {reported} · kami {derived}",
+      "off": "selisih {diff}",
+      "match": "cocok"
+    },
     "disconnect": "Putuskan",
     "expiredHint": "Sesi Anda kedaluwarsa. Hubungkan kembali untuk melanjutkan sinkronisasi.",
     "error": "Terjadi kesalahan. Silakan coba lagi.",

@@ -517,6 +517,12 @@
       "cashflow": "Transfers (deposits & withdrawals)",
       "card": "Card spending"
     },
+    "reconcile": {
+      "title": "Cash reconciliation",
+      "row": "{currency}: TR {reported} · ours {derived}",
+      "off": "off by {diff}",
+      "match": "matches"
+    },
     "disconnect": "Disconnect",
     "expiredHint": "Your session expired. Reconnect to resume syncing.",
     "error": "Something went wrong. Please try again.",

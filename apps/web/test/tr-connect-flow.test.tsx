@@ -21,6 +21,7 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
       lastSyncAt: null,
       lastError: null,
       importCategories,
+      lastReconciliation: null,
     })),
     // The awaiting phase polls this for the authoritative status; default = approved.
     getTrConnection: vi.fn(async () => ({
@@ -29,6 +30,7 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
       lastSyncAt: null,
       lastError: null,
       importCategories: null,
+      lastReconciliation: null,
     })),
     ...over,
   };
@@ -41,6 +43,7 @@ const DISCONNECTED: TrConnection = {
   lastSyncAt: null,
   lastError: null,
   importCategories: null,
+  lastReconciliation: null,
 };
 
 function renderFlow(client: TrConnectClient, initial: TrConnection = DISCONNECTED) {
@@ -115,6 +118,7 @@ describe("TrConnectFlow", () => {
         lastSyncAt: null,
         lastError: "login was not approved",
         importCategories: null,
+        lastReconciliation: null,
       })),
     });
     renderFlow(client);
@@ -156,6 +160,7 @@ describe("TrConnectFlow", () => {
       lastSyncAt: null,
       lastError: null,
       importCategories: null,
+      lastReconciliation: null,
     });
     fireEvent.click(screen.getByRole("button", { name: /Sync now/ }));
     await waitFor(() => expect(client.syncTr).toHaveBeenCalled());
@@ -169,6 +174,7 @@ describe("TrConnectFlow", () => {
       lastSyncAt: null,
       lastError: "session expired",
       importCategories: null,
+      lastReconciliation: null,
     });
     expect(screen.getByText(/Your session expired/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Connect/ })).toBeTruthy();

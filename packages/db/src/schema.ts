@@ -174,6 +174,9 @@ export const trConnections = pgTable("tr_connections", {
   // default set (everything except day-to-day card spending). TR is a full bank account,
   // so this keeps card noise out of the portfolio unless explicitly opted in.
   importCategories: jsonb("import_categories").$type<string[]>(),
+  // Last cash reconciliation: TR's reported balance vs our derived balance per currency.
+  // { checkedAt, cash: [{ currency, reported, derived, diff }] }. Null until first synced.
+  lastReconciliation: jsonb("last_reconciliation"),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -306,6 +306,29 @@ export function TrConnectFlow({
             </div>
           )}
 
+          {(() => {
+            const recon = sync?.reconciliation ?? initial.lastReconciliation;
+            if (!recon) return null;
+            return (
+              <div className="space-y-1 rounded-md border px-3 py-2 text-sm">
+                <p className="font-medium">{t("reconcile.title")}</p>
+                {recon.cash.map((c) => {
+                  const off = Number(c.diff) !== 0;
+                  return (
+                    <div key={c.currency} className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {t("reconcile.row", { currency: c.currency, reported: c.reported, derived: c.derived })}
+                      </span>
+                      <span className={off ? "text-destructive" : "text-muted-foreground"}>
+                        {off ? t("reconcile.off", { diff: c.diff }) : t("reconcile.match")}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           <fieldset className="space-y-2 rounded-md border px-3 py-3">
             <legend className="px-1 text-sm font-medium">{t("categories.title")}</legend>
             <p className="text-xs text-muted-foreground">{t("categories.hint")}</p>

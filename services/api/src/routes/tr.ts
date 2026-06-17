@@ -33,6 +33,8 @@ function serialize(conn: TrConnection | null) {
     lastError: conn?.lastError ?? null,
     // Null = the sync default (everything but card spending).
     importCategories: conn?.importCategories ?? null,
+    // TR's reported cash vs our derived cash at the last sync (null until first synced).
+    lastReconciliation: conn?.lastReconciliation ?? null,
   };
 }
 

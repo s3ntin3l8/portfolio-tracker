@@ -365,6 +365,12 @@ export type TrStatus =
 
 export type TrImportCategory = "trade" | "income" | "cashflow" | "card";
 
+/** TR's reported cash vs our derived cash, per currency (decimal strings). */
+export interface CashReconciliation {
+  checkedAt: string;
+  cash: { currency: string; reported: string; derived: string; diff: string }[];
+}
+
 /** Public state of the user's Trade Republic connection — never includes secrets. */
 export interface TrConnection {
   status: TrStatus;
@@ -373,6 +379,8 @@ export interface TrConnection {
   lastError: string | null;
   /** Which event categories the sync stages; null = default (everything but card spending). */
   importCategories: TrImportCategory[] | null;
+  /** Last cash reconciliation (TR-reported vs derived), or null until first synced. */
+  lastReconciliation: CashReconciliation | null;
 }
 
 export interface TrConnectInput {
@@ -388,6 +396,8 @@ export interface TrSyncResult {
   importId?: string;
   drafts?: number;
   errors?: number;
+  cancelled?: number;
+  reconciliation?: CashReconciliation;
 }
 
 // --- Client --------------------------------------------------------------

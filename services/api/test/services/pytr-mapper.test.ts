@@ -164,6 +164,17 @@ describe("mapTrEventToDraft", () => {
     expect(draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101" }).assetClass).toBe("equity");
   });
 
+  it("flags a trade for review when executed price × shares doesn't reconcile", () => {
+    // shares 10 × price 100 = 1000 ≈ total 1000 → trusted.
+    expect(
+      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "X", executedPrice: 100 }).confidence,
+    ).toBe(1);
+    // shares mis-parsed (1 instead of 10) → 1 × 100 = 100, far from total 1000 → flagged.
+    expect(
+      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 1, isin: "X", executedPrice: 100 }).confidence,
+    ).toBeLessThan(0.9);
+  });
+
   it("skips non-executed (cancelled/pending) events", () => {
     const cancelled = mapTrEventToDraft({
       ...base,

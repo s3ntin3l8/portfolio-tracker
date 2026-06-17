@@ -285,11 +285,29 @@ def _normalize(event):
     }
 
 
+async def _fetch_cash(tr):
+    """TR's reported cash balance per currency, for reconciliation against our derived cash.
+    Shape mirrors pytr's own use: a list of {currencyId, amount}."""
+    try:
+        await tr.cash()
+        resp = await _await_subscription(tr, "cash")
+        return [
+            {"currency": c.get("currencyId"), "amount": c.get("amount")}
+            for c in resp
+            if isinstance(c, dict) and c.get("currencyId")
+        ]
+    except Exception:  # noqa: BLE001 - best effort; reconciliation is optional
+        return None
+
+
 async def _run(tr) -> int:
     events = await _collect_transactions(tr)
     events = await _attach_details(tr, events)
     for event in events:
         sys.stdout.write(json.dumps(_normalize(event)) + "\n")
+    # A trailing, clearly-tagged summary line (not an event) carrying TR's reported balances.
+    cash = await _fetch_cash(tr)
+    sys.stdout.write(json.dumps({"__summary__": {"cash": cash}}) + "\n")
     sys.stdout.flush()
     # Persist the rolling session so the next sync can resume without re-pairing.
     try:
