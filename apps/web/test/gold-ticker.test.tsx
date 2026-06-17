@@ -9,10 +9,10 @@ vi.mock("../src/lib/api", () => ({ useApiClient: () => ({ getQuote }) }));
 
 import { GoldTicker } from "../src/components/gold-ticker";
 
-function renderTicker() {
+function renderTicker(currency = "EUR") {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <GoldTicker />
+      <GoldTicker currency={currency} />
     </NextIntlClientProvider>,
   );
 }
@@ -23,7 +23,31 @@ afterEach(() => {
 });
 
 describe("GoldTicker", () => {
-  it("fetches and shows the live gold spot price", async () => {
+  it("passes the currency prop into the quote request and displays the result", async () => {
+    getQuote.mockResolvedValue({
+      symbol: "GOLD",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "EUR",
+      price: "119.60",
+      asOf: "2026-02-08T03:00:00.000Z",
+    });
+
+    renderTicker("EUR");
+
+    await waitFor(() =>
+      expect(screen.getByText(/as of/i)).toBeInTheDocument(),
+    );
+    expect(getQuote).toHaveBeenCalledWith({
+      symbol: "GOLD",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "EUR",
+    });
+    expect(screen.getByText(messages.Gold.title)).toBeInTheDocument();
+  });
+
+  it("requests the correct currency when rendered with IDR", async () => {
     getQuote.mockResolvedValue({
       symbol: "GOLD",
       market: "XAU",
@@ -33,18 +57,15 @@ describe("GoldTicker", () => {
       asOf: "2026-02-08T03:00:00.000Z",
     });
 
-    renderTicker();
+    renderTicker("IDR");
 
-    await waitFor(() =>
-      expect(screen.getByText(/as of/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(getQuote).toHaveBeenCalled());
     expect(getQuote).toHaveBeenCalledWith({
       symbol: "GOLD",
       market: "XAU",
       assetClass: "gold",
       currency: "IDR",
     });
-    expect(screen.getByText(messages.Gold.title)).toBeInTheDocument();
   });
 
   it("renders nothing when no quote source is reachable", async () => {

@@ -66,7 +66,7 @@ describe("recordDailySnapshots", () => {
 
   it("writes one net-worth snapshot per portfolio, idempotent per day", async () => {
     const db = getDb();
-    const svc = new MarketDataService([new FixtureProvider()]);
+    const svc = new MarketDataService([new FixtureProvider({ BBCA: "9500" })]);
     const now = new Date("2026-02-08T16:00:00.000Z");
 
     const count = await recordDailySnapshots(db, svc, 10_000, now);

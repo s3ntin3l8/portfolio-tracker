@@ -66,20 +66,10 @@ export class FixtureProvider implements MarketDataProvider {
   }
 }
 
-const DEFAULT_PRICES: Record<string, string> = {
-  BBCA: "9500",
-  TLKM: "3800",
-  GOLD: "1150000",
-  ORI023: "100000",
-  RDPU: "1200",
-};
+const DEFAULT_PRICES: Record<string, string> = {};
 
 // Prior-session closes for the deterministic symbols, so day-change is testable.
-const DEFAULT_PREV_CLOSES: Record<string, string> = {
-  BBCA: "9000",
-  TLKM: "3900",
-  GOLD: "1140000",
-};
+const DEFAULT_PREV_CLOSES: Record<string, string> = {};
 
 // Discoverable reference data for the manual-entry picker (deterministic, no network).
 const DEFAULT_CATALOGUE: InstrumentSearchResult[] = [

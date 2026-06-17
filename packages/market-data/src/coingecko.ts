@@ -8,6 +8,16 @@ import type {
   Quote,
 } from "./types.js";
 
+const TROY_OUNCE_GRAMS = 31.1034768;
+
+/**
+ * Pax Gold coin id on CoinGecko. PAXG is a gold-backed ERC-20 token where each token
+ * represents one fine troy ounce of physical gold, tracking XAU spot within ~1%. It
+ * supports any `vs_currency` — so a single keyless call yields gold per-gram in
+ * EUR/IDR/USD without an FX hop.
+ */
+const GOLD_COIN_ID = "pax-gold";
+
 export interface CoinGeckoOptions {
   baseUrl?: string;
   /** Free Demo API key — keyless works at a lower rate limit, a key raises it. */
@@ -65,7 +75,9 @@ export class CoinGeckoProvider implements MarketDataProvider {
     this.doFetch = opts.fetch ?? globalThis.fetch;
   }
 
-  supports(assetClass: AssetClass): boolean {
+  supports(assetClass: AssetClass, market: string): boolean {
+    // Gold spot (XAU) via PAXG; physical gold buyback markets belong to BuybackProvider.
+    if (assetClass === "gold") return market === "XAU";
     return assetClass === "crypto";
   }
 
@@ -95,7 +107,9 @@ export class CoinGeckoProvider implements MarketDataProvider {
   }
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
-    const id = await this.resolveId(ref.symbol);
+    // Gold spot: use the fixed PAXG coin id — no ticker→id resolution needed.
+    const isGold = ref.assetClass === "gold";
+    const id = isGold ? GOLD_COIN_ID : await this.resolveId(ref.symbol);
     if (!id) return null;
     const vs = ref.currency.toLowerCase();
     const res = await this.fetchJson(
@@ -108,9 +122,12 @@ export class CoinGeckoProvider implements MarketDataProvider {
       Record<string, number> & { last_updated_at?: number }
     >;
     const row = data[id];
-    const price = row?.[vs];
-    if (price === undefined || price === null) return null;
+    const rawPrice = row?.[vs];
+    if (rawPrice === undefined || rawPrice === null) return null;
 
+    // PAXG quotes per troy ounce; the rest of the app values gold per gram.
+    const toGram = (v: number) => (isGold ? v / TROY_OUNCE_GRAMS : v);
+    const price = toGram(rawPrice);
     const change = row[`${vs}_24h_change`];
     const previousClose =
       typeof change === "number" && Number.isFinite(change)
@@ -123,7 +140,8 @@ export class CoinGeckoProvider implements MarketDataProvider {
   }
 
   async getHistory(ref: InstrumentRef, range = "1y"): Promise<Candle[]> {
-    const id = await this.resolveId(ref.symbol);
+    const isGold = ref.assetClass === "gold";
+    const id = isGold ? GOLD_COIN_ID : await this.resolveId(ref.symbol);
     if (!id) return [];
     const vs = ref.currency.toLowerCase();
     const res = await this.fetchJson(
@@ -136,7 +154,8 @@ export class CoinGeckoProvider implements MarketDataProvider {
       .filter(([, close]) => close !== null && close !== undefined)
       .map(([ms, close]) => ({
         date: new Date(ms).toISOString().slice(0, 10),
-        close: String(close),
+        // PAXG quotes per troy ounce; convert to per-gram like quote path.
+        close: isGold ? String(close / TROY_OUNCE_GRAMS) : String(close),
       }));
   }
 

@@ -49,17 +49,23 @@ describe("asset classes", () => {
 describe("FixtureProvider", () => {
   const provider = new FixtureProvider();
 
-  it("quotes known symbols (with previous close) and returns null for unknown", async () => {
-    expect(await provider.getQuote(bbca)).toMatchObject({
-      price: "9500",
-      currency: "IDR",
-      previousClose: "9000",
-    });
+  it("returns null for all symbols (no fixture prices configured)", async () => {
+    expect(await provider.getQuote(bbca)).toBeNull();
     expect(await provider.getQuote({ ...bbca, symbol: "UNKNOWN" })).toBeNull();
   });
 
   it("supports any asset class / market", () => {
     expect(provider.supports("gold", "XAU")).toBe(true);
+  });
+
+  it("returns null for gold spot (no fixture gold price — prefer no data over a stale value)", async () => {
+    const goldRef = {
+      symbol: "GOLD",
+      market: "XAU",
+      assetClass: "gold",
+    } as const;
+    expect(await provider.getQuote({ ...goldRef, currency: "IDR" })).toBeNull();
+    expect(await provider.getQuote({ ...goldRef, currency: "EUR" })).toBeNull();
   });
 
   it("searches its catalogue by symbol, name, or ISIN", async () => {
@@ -154,7 +160,8 @@ describe("MarketDataService", () => {
         asOf: "2026-02-08T00:00:00.000Z",
       }),
     };
-    const svc = new MarketDataService([goldOnly, new FixtureProvider()]);
+    const fixture = new FixtureProvider({ BBCA: "9500" });
+    const svc = new MarketDataService([goldOnly, fixture]);
 
     // equity → falls through gold-only to the fixture provider
     expect((await svc.getQuote(bbca))?.price).toBe("9500");
@@ -169,7 +176,7 @@ describe("MarketDataService", () => {
   });
 
   it("batch-quotes by id and drops misses", async () => {
-    const svc = new MarketDataService([new FixtureProvider()]);
+    const svc = new MarketDataService([new FixtureProvider({ BBCA: "9500" })]);
     const quotes = await svc.getQuotes([
       { id: "i1", ref: bbca },
       { id: "i2", ref: { ...bbca, symbol: "MISSING" } },
@@ -368,6 +375,21 @@ describe("YahooFinanceProvider", () => {
     });
     expect(await provider.getQuote(bbca)).toBeNull();
     expect(await provider.getHistory(bbca, "1mo")).toEqual([]);
+  });
+
+  it("sends a browser User-Agent on chart and search requests", async () => {
+    const seenHeaders: Array<Record<string, string>> = [];
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch((_url, init) => {
+        if (init?.headers) {
+          seenHeaders.push(init.headers as Record<string, string>);
+        }
+        return { body: chartBody(9500) };
+      }),
+    });
+    await provider.getQuote(bbca);
+    expect(seenHeaders.length).toBeGreaterThan(0);
+    expect(seenHeaders[0]["User-Agent"]).toMatch(/Mozilla/);
   });
 });
 
@@ -1254,11 +1276,12 @@ describe("CoinGeckoProvider", () => {
     ],
   };
 
-  it("supports only crypto", () => {
+  it("supports crypto and gold spot (XAU), not other asset classes or markets", () => {
     const p = new CoinGeckoProvider();
-    expect(p.supports("crypto")).toBe(true);
-    expect(p.supports("equity")).toBe(false);
-    expect(p.supports("gold")).toBe(false);
+    expect(p.supports("crypto", "CRYPTO")).toBe(true);
+    expect(p.supports("gold", "XAU")).toBe(true);
+    expect(p.supports("gold", "ANTAM")).toBe(false); // buyback ≠ spot
+    expect(p.supports("equity", "IDX")).toBe(false);
   });
 
   it("resolves the ticker to a coin id and quotes with a previous close", async () => {
@@ -1380,6 +1403,86 @@ describe("CoinGeckoProvider", () => {
     });
     await p.search("btc");
     expect(header).toBe("demo-key");
+  });
+});
+
+describe("CoinGeckoProvider gold spot (PAXG)", () => {
+  const TROY_OUNCE_GRAMS = 31.1034768;
+  const goldEur: InstrumentRef = {
+    symbol: "GOLD",
+    market: "XAU",
+    assetClass: "gold",
+    currency: "EUR",
+  };
+
+  it("quotes gold via pax-gold without a search call, converting oz→g", async () => {
+    const urls: string[] = [];
+    const perOz = 3719.8;
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        urls.push(url);
+        return {
+          body: {
+            "pax-gold": {
+              eur: perOz,
+              eur_24h_change: 2,
+              last_updated_at: 1738972800,
+            },
+          },
+        };
+      }),
+    });
+    const quote = await p.getQuote(goldEur);
+    // No search call — coin id is a fixed constant, not resolved from the symbol
+    expect(urls.every((u) => !u.includes("/search"))).toBe(true);
+    expect(urls.some((u) => u.includes("ids=pax-gold"))).toBe(true);
+    expect(urls.some((u) => u.includes("vs_currencies=eur"))).toBe(true);
+    // Price is per-gram, not per-ounce
+    const perGram = perOz / TROY_OUNCE_GRAMS;
+    expect(quote?.price).toBe(String(perGram));
+    expect(quote?.currency).toBe("EUR");
+    // previousClose = perGram / (1 + 2/100)
+    expect(quote?.previousClose).toBe(String(perGram / (1 + 2 / 100)));
+    expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
+  });
+
+  it("prices gold in any currency via vs_currency (IDR, USD, EUR)", async () => {
+    const perOzIdr = 76_667_539;
+    let priceUrl = "";
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch((url) => {
+        priceUrl = url;
+        return { body: { "pax-gold": { idr: perOzIdr } } };
+      }),
+    });
+    const quote = await p.getQuote({ ...goldEur, currency: "IDR" });
+    expect(priceUrl).toContain("vs_currencies=idr");
+    expect(quote?.price).toBe(String(perOzIdr / TROY_OUNCE_GRAMS));
+    expect(quote?.currency).toBe("IDR");
+  });
+
+  it("converts history closes from per-oz to per-gram", async () => {
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          prices: [
+            [1738972800000, 3700],
+            [1739059200000, 3720],
+          ],
+        },
+      })),
+    });
+    const candles = await p.getHistory(goldEur, "1mo");
+    expect(candles).toHaveLength(2);
+    expect(candles[0].close).toBe(String(3700 / TROY_OUNCE_GRAMS));
+    expect(candles[1].close).toBe(String(3720 / TROY_OUNCE_GRAMS));
+  });
+
+  it("returns null when the pax-gold row is absent from the response", async () => {
+    const p = new CoinGeckoProvider({
+      fetch: mockFetch(() => ({ body: {} })),
+    });
+    expect(await p.getQuote(goldEur)).toBeNull();
   });
 });
 

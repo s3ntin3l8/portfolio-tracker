@@ -9,20 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useApiClient } from "@/lib/api";
 import { formatMoney } from "@/lib/utils";
 
-// Gold spot ref: works against the fixture locally (GOLD) and GoldAPI/TwelveData
-// live (which price XAU→currency per gram regardless of symbol).
-const GOLD_REF = {
-  symbol: "GOLD",
-  market: "XAU",
-  assetClass: "gold",
-  currency: "IDR",
-} as const;
 const REFRESH_MS = 60_000;
 
 type State = "loading" | "ok" | "error";
 
 /** Live gold spot ticker — fetches on mount and refreshes every minute. */
-export function GoldTicker() {
+export function GoldTicker({ currency }: { currency: string }) {
   const t = useTranslations("Gold");
   const locale = useLocale();
   const api = useApiClient();
@@ -33,7 +25,12 @@ export function GoldTicker() {
     let active = true;
     async function load() {
       try {
-        const q = await api.getQuote(GOLD_REF);
+        const q = await api.getQuote({
+          symbol: "GOLD",
+          market: "XAU",
+          assetClass: "gold",
+          currency,
+        });
         if (active) {
           setQuote(q);
           setState("ok");
@@ -48,7 +45,7 @@ export function GoldTicker() {
       active = false;
       clearInterval(id);
     };
-  }, [api]);
+  }, [api, currency]);
 
   // Stay out of the way when no quote source is reachable.
   if (state === "error") return null;

@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT, exportJWK, type JWK } from "jose";
 import { instruments } from "@portfolio/db";
+import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
+import { overrideMarketData, invalidateMarketData } from "../../src/services/market-data.js";
 
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const AUDIENCE = "portfolio-tracker";
@@ -36,11 +38,15 @@ describe("auth + portfolios + transactions", () => {
     // This suite shares one app across many requests in a single rate-limit window.
     process.env.RATE_LIMIT_MAX = "10000";
     app = await buildApp({ authKey: kp.publicKey });
+    overrideMarketData(
+      new MarketDataService([new FixtureProvider({ BBCA: "9500" }, undefined, { BBCA: "9000" })]),
+    );
   });
 
   afterAll(async () => {
     await app.close();
     await closeDb();
+    invalidateMarketData();
     delete process.env.AUTHENTIK_ISSUER;
     delete process.env.AUTHENTIK_AUDIENCE;
     delete process.env.RATE_LIMIT_MAX;
@@ -686,24 +692,17 @@ describe("auth + portfolios + transactions", () => {
     expect(del.statusCode).toBe(204);
   });
 
-  it("returns a live quote for the gold ticker", async () => {
+  it("returns 404 for gold when no live provider is configured (no fixture gold price)", async () => {
     const t = await token("user-a");
     const res = await app.inject({
       method: "GET",
-      url: "/quotes?symbol=GOLD&market=XAU&assetClass=gold&currency=idr",
+      url: "/quotes?symbol=GOLD&market=XAU&assetClass=gold&currency=IDR",
       headers: auth(t),
     });
-    expect(res.statusCode).toBe(200);
-    // Fixture provider prices GOLD at 1,150,000/gram.
-    expect(res.json()).toMatchObject({
-      symbol: "GOLD",
-      assetClass: "gold",
-      price: "1150000",
-      currency: "IDR",
-    });
-    expect(typeof res.json().asOf).toBe("string");
+    // No fixture gold price and no live provider in tests → quote unavailable.
+    expect(res.statusCode).toBe(404);
 
-    // Unknown symbol → no provider can price it.
+    // Unknown symbol → also no provider.
     const missing = await app.inject({
       method: "GET",
       url: "/quotes?symbol=NOPE&market=XAU&assetClass=gold&currency=IDR",

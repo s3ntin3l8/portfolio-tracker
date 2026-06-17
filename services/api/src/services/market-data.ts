@@ -247,6 +247,11 @@ export function invalidateMarketData(): void {
   usageCache = null;
 }
 
+/** Override the cached service — for tests that need specific fixture prices. */
+export function overrideMarketData(svc: MarketDataService): void {
+  service = svc;
+}
+
 // --- Usage / quota --------------------------------------------------------
 
 /** The merged usage view for one provider, surfaced to the admin UI. */

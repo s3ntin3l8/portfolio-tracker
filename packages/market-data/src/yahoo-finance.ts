@@ -49,10 +49,20 @@ export class YahooFinanceProvider implements MarketDataProvider {
   private readonly doFetch: typeof fetch;
   /** Memoised ISIN → Yahoo symbol resolution (caches misses as `null`). */
   private readonly isinSymbolCache = new Map<string, string | null>();
+  /**
+   * Yahoo's unofficial chart/search endpoints return 429 ("Too Many Requests") for
+   * requests that lack a browser-like User-Agent. Sending one brings it back to normal
+   * behaviour (still gated only by IP-level rate limits, not the header itself).
+   */
+  private readonly defaultHeaders: Record<string, string>;
 
   constructor(opts: YahooProviderOptions = {}) {
     this.baseUrl = opts.baseUrl ?? "https://query1.finance.yahoo.com";
     this.doFetch = opts.fetch ?? globalThis.fetch;
+    this.defaultHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    };
   }
 
   supports(assetClass: AssetClass, market: string): boolean {
@@ -82,6 +92,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
   private async chartBySymbol(symbol: string, range: string): Promise<ChartResult | null> {
     const res = await this.doFetch(
       `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`,
+      { headers: this.defaultHeaders },
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -109,6 +120,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
 
     const res = await this.doFetch(
       `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(ref.isin)}&quotesCount=10&newsCount=0`,
+      { headers: this.defaultHeaders },
     );
     let symbol: string | null = null;
     if (res.ok) {
@@ -156,6 +168,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
     // whose exchange maps to a currency we recognise (so the form can value them).
     const res = await this.doFetch(
       `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`,
+      { headers: this.defaultHeaders },
     );
     if (!res.ok) return [];
     const data = (await res.json()) as {

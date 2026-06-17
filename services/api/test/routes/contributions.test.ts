@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { instruments } from "@portfolio/db";
+import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
+import { overrideMarketData, invalidateMarketData } from "../../src/services/market-data.js";
 
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const AUDIENCE = "portfolio-tracker";
@@ -52,11 +54,13 @@ describe("contribution analytics", () => {
     process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
     process.env.RATE_LIMIT_MAX = "10000";
     app = await buildApp({ authKey: kp.publicKey });
+    overrideMarketData(new MarketDataService([new FixtureProvider({ BBCA: "9500" })]));
   });
 
   afterAll(async () => {
     await app.close();
     await closeDb();
+    invalidateMarketData();
     delete process.env.AUTHENTIK_ISSUER;
     delete process.env.AUTHENTIK_AUDIENCE;
     delete process.env.RATE_LIMIT_MAX;

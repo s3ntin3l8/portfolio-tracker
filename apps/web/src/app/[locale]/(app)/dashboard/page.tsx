@@ -54,10 +54,11 @@ export default async function DashboardPage({
     title: string,
     description: string,
     action?: React.ReactNode,
+    displayCurrency = "IDR",
   ) => (
     <div className="space-y-6">
       {Heading}
-      <GoldTicker />
+      <GoldTicker currency={displayCurrency} />
       <EmptyState
         icon={Wallet}
         title={title}
@@ -95,6 +96,7 @@ export default async function DashboardPage({
       te("noHoldingsTitle"),
       te("noHoldingsBody"),
       ctaButton(tm("addTransaction")),
+      currency,
     );
   }
 
@@ -151,7 +153,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       {Heading}
 
-      <GoldTicker />
+      <GoldTicker currency={currency} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t("netWorth")} value={m(Number(summary.netWorth))} />
