@@ -66,7 +66,9 @@
     "visionProviders": "Vision LLM providers",
     "visionProvidersHint": "Configure vision models for screenshot parsing. The highest-priority enabled provider is used. Ollama requires OLLAMA_BASE_URL (or a URL set via DB) to be configured.",
     "visionUrlPlaceholder": "http://localhost:11434",
-    "visionUrlSet": "URL set"
+    "visionUrlSet": "URL set",
+    "stats": "Server statistics",
+    "statsHint": "Database size and row counts. Object storage is not used — screenshots are parsed in-memory and discarded."
   },
   "Income": {
     "title": "Income",

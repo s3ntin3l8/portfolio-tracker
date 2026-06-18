@@ -19,6 +19,7 @@ import {
   type TrConnection,
   type AdminProvider,
   type AdminVisionProvider,
+  type AdminStats,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -356,6 +357,20 @@ export async function loadAdminProviders(): Promise<
   try {
     const { providers, encryptionEnabled } = await api.getAdminProviders();
     return { status: "ok", providers, encryptionEnabled };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+/** Admin: server statistics (#140), or "unavailable". */
+export async function loadAdminStats(): Promise<
+  { status: "ok"; stats: AdminStats } | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const stats = await api.getAdminStats();
+    return { status: "ok", stats };
   } catch {
     return { status: "unavailable" };
   }

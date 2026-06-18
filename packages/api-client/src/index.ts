@@ -99,6 +99,30 @@ export interface AdminVisionProvidersResponse {
   encryptionEnabled: boolean;
 }
 
+/** Row in the DB statistics table breakdown. */
+export interface AdminStatsTable {
+  name: string;
+  /** Estimated live row count (pg_stat_user_tables.n_live_tup). Exact after ANALYZE. */
+  rows: number | null;
+  /** Table + index + toast size in bytes (pg_total_relation_size). */
+  sizeBytes: number | null;
+}
+
+/** Server stats surfaced by GET /admin/stats (see #140). */
+export interface AdminStats {
+  db: {
+    /** Total Postgres database size in bytes. Null when unavailable (PGlite / test). */
+    sizeBytes: number | null;
+    /** Per-table breakdown (key user-data tables only). Empty under PGlite. */
+    tables: AdminStatsTable[];
+  };
+  objectStorage: {
+    /** Always false — screenshots are parsed in-memory and discarded. */
+    configured: false;
+    note: string;
+  };
+}
+
 export interface Portfolio {
   id: string;
   userId: string;
@@ -623,6 +647,9 @@ export function createApiClient(config: ApiClientConfig) {
         "DELETE",
         `/admin/vision-providers/${encodeURIComponent(id)}/credential`,
       ),
+
+    // Admin: server statistics (#140).
+    getAdminStats: () => request<AdminStats>("GET", "/admin/stats"),
 
     getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
       request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),

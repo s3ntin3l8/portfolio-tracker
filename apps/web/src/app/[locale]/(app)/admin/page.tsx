@@ -3,7 +3,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminProviders } from "@/components/admin-providers";
 import { AdminVisionProviders } from "@/components/admin-vision-providers";
-import { loadMe, loadAdminProviders, loadAdminVisionProviders } from "@/lib/server-api";
+import { AdminStats } from "@/components/admin-stats";
+import { loadMe, loadAdminProviders, loadAdminVisionProviders, loadAdminStats } from "@/lib/server-api";
 
 export default async function AdminPage({
   params,
@@ -18,9 +19,10 @@ export default async function AdminPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const [result, visionResult] = await Promise.all([
+  const [result, visionResult, statsResult] = await Promise.all([
     loadAdminProviders(),
     loadAdminVisionProviders(),
+    loadAdminStats(),
   ]);
 
   return (
@@ -58,6 +60,20 @@ export default async function AdminPage({
               initialProviders={visionResult.providers}
               encryptionEnabled={visionResult.encryptionEnabled}
             />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("stats")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">{t("statsHint")}</p>
+          {statsResult.status === "ok" ? (
+            <AdminStats stats={statsResult.stats} />
           ) : (
             <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
           )}

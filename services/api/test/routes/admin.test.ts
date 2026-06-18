@@ -375,6 +375,34 @@ describe("admin provider config", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  // ─── DB statistics (#140) ────────────────────────────────────────────────
+
+  it("GET /admin/stats is admin-gated and returns the expected shape", async () => {
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/admin/stats",
+      headers: auth(await token("nobody-stats")),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const ok = await app.inject({
+      method: "GET",
+      url: "/admin/stats",
+      headers: auth(await token("admin-stats", [ADMIN_GROUP])),
+    });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json() as {
+      db: { sizeBytes: number | null; tables: unknown[] };
+      objectStorage: { configured: boolean; note: string };
+    };
+    // Under PGlite (test env) catalog queries are skipped → nulls/empty.
+    expect(body.db.sizeBytes).toBeNull();
+    expect(body.db.tables).toEqual([]);
+    // Object storage is always reported as "not configured".
+    expect(body.objectStorage.configured).toBe(false);
+    expect(typeof body.objectStorage.note).toBe("string");
+  });
+
   it("PATCH /admin/vision-providers records an audit log entry", async () => {
     const t = await token("admin-v-audit", [ADMIN_GROUP]);
     await app.inject({

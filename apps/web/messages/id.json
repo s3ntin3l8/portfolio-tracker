@@ -66,7 +66,9 @@
     "visionProviders": "Penyedia LLM Vision",
     "visionProvidersHint": "Konfigurasi model vision untuk pemrosesan tangkapan layar. Penyedia dengan prioritas tertinggi yang aktif akan digunakan. Ollama memerlukan OLLAMA_BASE_URL (atau URL yang diatur melalui DB) untuk dikonfigurasi.",
     "visionUrlPlaceholder": "http://localhost:11434",
-    "visionUrlSet": "URL telah diatur"
+    "visionUrlSet": "URL telah diatur",
+    "stats": "Statistik server",
+    "statsHint": "Ukuran database dan jumlah baris. Penyimpanan objek tidak digunakan — tangkapan layar diproses dalam memori dan dibuang."
   },
   "Income": {
     "title": "Pendapatan",

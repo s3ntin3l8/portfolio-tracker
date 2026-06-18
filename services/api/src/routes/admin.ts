@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   providerSettings,
   visionProviderSettings,
@@ -401,4 +401,90 @@ export async function adminRoute(app: FastifyInstance) {
       return visionProvidersResponse(await listVisionProviders());
     },
   );
+
+  // ─── DB statistics (#140) ────────────────────────────────────────────────
+
+  /**
+   * Database size, per-table row counts (estimated) and sizes, plus an honest "not
+   * used" entry for object storage (screenshots are parsed in-memory and discarded).
+   *
+   * PGlite guard: `pg_database_size` / `pg_total_relation_size` / `pg_stat_user_tables`
+   * are Postgres catalog functions not available under PGlite (used in tests).
+   * Returns nulls when `NODE_ENV === "test"` so the route stays testable.
+   */
+  app.get("/admin/stats", { preHandler: app.requireAdmin }, async () => {
+    // The key user-data tables whose size we surface in the UI. Admin/config tables
+    // (provider_settings, audit_log, etc.) are omitted — they stay small by design.
+    const TABLES = [
+      "users",
+      "portfolios",
+      "instruments",
+      "transactions",
+      "screenshot_imports",
+      "prices",
+      "last_prices",
+      "fx_rates",
+      "portfolio_snapshots",
+      "dividend_events",
+      "corporate_actions",
+      "loans",
+      "tr_connections",
+      "tr_resolved_events",
+    ] as const;
+
+    let dbSizeBytes: number | null = null;
+    let tableStats: { name: string; rows: number | null; sizeBytes: number | null }[] = [];
+
+    if (process.env.NODE_ENV !== "test") {
+      try {
+        // DB total size
+        const [{ size }] = await app.db.execute<{ size: string }>(
+          sql`SELECT pg_database_size(current_database()) AS size`,
+        );
+        dbSizeBytes = Number(size);
+
+        // Per-table: estimated live rows + total size (table + indexes + toast).
+        // pg_stat_user_tables.n_live_tup is refreshed by autovacuum — exact after
+        // VACUUM ANALYZE, otherwise a fast estimate. ANALYZE is scheduled nightly.
+        const rows = await app.db.execute<{
+          tablename: string;
+          n_live_tup: string;
+          total_bytes: string;
+        }>(
+          sql`SELECT
+                t.tablename,
+                COALESCE(s.n_live_tup, 0) AS n_live_tup,
+                pg_total_relation_size(quote_ident(t.tablename)::regclass) AS total_bytes
+              FROM pg_tables t
+              LEFT JOIN pg_stat_user_tables s USING (tablename)
+              WHERE t.schemaname = 'public'
+                AND t.tablename = ANY(${TABLES})
+              ORDER BY total_bytes DESC`,
+        );
+
+        tableStats = TABLES.map((name) => {
+          const row = rows.find((r) => r.tablename === name);
+          return {
+            name,
+            rows: row ? Number(row.n_live_tup) : 0,
+            sizeBytes: row ? Number(row.total_bytes) : 0,
+          };
+        });
+      } catch {
+        // Catalog query failed (e.g. insufficient permissions or very early boot).
+        // Return nulls rather than 500 — the UI will display "unavailable".
+      }
+    }
+
+    return {
+      db: {
+        sizeBytes: dbSizeBytes,
+        tables: tableStats,
+      },
+      objectStorage: {
+        configured: false,
+        note: "Screenshots are parsed in-memory and discarded; no blob storage is used.",
+      },
+    };
+  });
 }
