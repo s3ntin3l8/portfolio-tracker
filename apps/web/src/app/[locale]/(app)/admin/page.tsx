@@ -5,7 +5,14 @@ import { AdminProviders } from "@/components/admin-providers";
 import { AdminVisionProviders } from "@/components/admin-vision-providers";
 import { AdminStats } from "@/components/admin-stats";
 import { AdminJobs } from "@/components/admin-jobs";
-import { loadMe, loadAdminProviders, loadAdminVisionProviders, loadAdminStats, loadAdminJobs } from "@/lib/server-api";
+import { AdminMenu } from "@/components/admin-menu";
+import {
+  loadMe,
+  loadAdminProviders,
+  loadAdminVisionProviders,
+  loadAdminStats,
+  loadAdminJobs,
+} from "@/lib/server-api";
 
 export default async function AdminPage({
   params,
@@ -34,70 +41,78 @@ export default async function AdminPage({
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("providers")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("providersHint")}</p>
-          {result.status === "ok" ? (
-            <AdminProviders
-              initialProviders={result.providers}
-              encryptionEnabled={result.encryptionEnabled}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Mobile — iOS-Settings grouped list (md:hidden) */}
+      <div className="md:hidden">
+        <AdminMenu />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("visionProviders")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("visionProvidersHint")}</p>
-          {visionResult.status === "ok" ? (
-            <AdminVisionProviders
-              initialProviders={visionResult.providers}
-              encryptionEnabled={visionResult.encryptionEnabled}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Desktop — full section cards stacked (hidden on mobile) */}
+      <div className="hidden md:block space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("providers")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">{t("providersHint")}</p>
+            {result.status === "ok" ? (
+              <AdminProviders
+                initialProviders={result.providers}
+                encryptionEnabled={result.encryptionEnabled}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("stats")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("statsHint")}</p>
-          {statsResult.status === "ok" ? (
-            <AdminStats stats={statsResult.stats} />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
-          )}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("visionProviders")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">{t("visionProvidersHint")}</p>
+            {visionResult.status === "ok" ? (
+              <AdminVisionProviders
+                initialProviders={visionResult.providers}
+                encryptionEnabled={visionResult.encryptionEnabled}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("jobs")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("jobsHint")}</p>
-          {jobsResult.status === "ok" ? (
-            <AdminJobs
-              initialJobs={jobsResult.jobs}
-              schedulerAvailable={jobsResult.schedulerAvailable}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
-          )}
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("stats")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">{t("statsHint")}</p>
+            {statsResult.status === "ok" ? (
+              <AdminStats stats={statsResult.stats} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("jobs")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">{t("jobsHint")}</p>
+            {jobsResult.status === "ok" ? (
+              <AdminJobs
+                initialJobs={jobsResult.jobs}
+                schedulerAvailable={jobsResult.schedulerAvailable}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

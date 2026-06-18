@@ -82,7 +82,13 @@
     "jobQueued": "Diantrekan ✓",
     "jobTriggerFailed": "Tidak dapat mengantrekan pekerjaan. Apakah scheduler sedang berjalan?",
     "keyFromEnv": "dari .env",
-    "dragHandle": "Seret untuk mengurutkan"
+    "dragHandle": "Seret untuk mengurutkan",
+    "providerName": "Penyedia",
+    "enabledHeader": "Aktif",
+    "apiCalls": "Panggilan API",
+    "apiKey": "Kunci API",
+    "keyNone": "tidak ada",
+    "editCredential": "Edit kunci API"
   },
   "Income": {
     "title": "Pendapatan",

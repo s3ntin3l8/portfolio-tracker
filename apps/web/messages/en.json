@@ -82,7 +82,13 @@
     "jobQueued": "Queued ✓",
     "jobTriggerFailed": "Could not queue job. Is the scheduler running?",
     "keyFromEnv": "from .env",
-    "dragHandle": "Drag to reorder"
+    "dragHandle": "Drag to reorder",
+    "providerName": "Provider",
+    "enabledHeader": "Enabled",
+    "apiCalls": "API calls",
+    "apiKey": "API key",
+    "keyNone": "none",
+    "editCredential": "Edit API key"
   },
   "Income": {
     "title": "Income",

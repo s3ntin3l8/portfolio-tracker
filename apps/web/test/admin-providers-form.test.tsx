@@ -39,13 +39,17 @@ const STUB_CLIENT: AdminProvidersClient = {
   clearAdminProviderCredential: vi.fn(async () => response(PROVIDERS)),
 };
 
-function renderForm(client: AdminProvidersClient, onSuccess = vi.fn()) {
+function renderForm(
+  client: AdminProvidersClient,
+  onSuccess = vi.fn(),
+  opts?: { encryptionEnabled?: boolean; providers?: AdminProvider[] },
+) {
   render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <AdminProvidersForm
         client={client}
-        initialProviders={PROVIDERS}
-        encryptionEnabled={false}
+        initialProviders={opts?.providers ?? PROVIDERS}
+        encryptionEnabled={opts?.encryptionEnabled ?? false}
         onSuccess={onSuccess}
       />
     </NextIntlClientProvider>,
@@ -68,6 +72,14 @@ describe("AdminProvidersForm", () => {
     // no arrow buttons
     expect(screen.queryByRole("button", { name: messages.Admin.moveUp })).toBeNull();
     expect(screen.queryByRole("button", { name: messages.Admin.moveDown })).toBeNull();
+  });
+
+  it("renders a table with the expected column headers", () => {
+    renderForm(STUB_CLIENT);
+    expect(screen.getByText(messages.Admin.providerName)).toBeInTheDocument();
+    expect(screen.getByText(messages.Admin.enabledHeader)).toBeInTheDocument();
+    expect(screen.getByText(messages.Admin.apiCalls)).toBeInTheDocument();
+    expect(screen.getByText(messages.Admin.apiKey)).toBeInTheDocument();
   });
 
   it("renders an icon-only switch for each provider row", () => {
@@ -129,7 +141,7 @@ describe("AdminProvidersForm", () => {
     expect(screen.getAllByText(messages.Admin.keyFromEnv)).toHaveLength(1);
   });
 
-  it("renders a usage badge: live quota with a limit, and a local-count fallback", () => {
+  it("shows usage: live quota with a limit and a local-count fallback", () => {
     const withUsage: AdminProvider[] = [
       provider({
         id: "twelvedata",
@@ -165,8 +177,69 @@ describe("AdminProvidersForm", () => {
 
   it("shows 'encryption disabled' hint when encryptionEnabled=false", () => {
     renderForm(STUB_CLIENT);
-    // The credential editor shows the encryption-disabled hint for each provider.
+    // The credential cell shows the encryption-disabled hint for each provider.
     const hints = screen.getAllByText(messages.Admin.encryptionDisabled);
     expect(hints.length).toBeGreaterThan(0);
+  });
+
+  it("shows '—' usage cell when usage is null", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, usage: null }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers });
+    // The em-dash is the fallback for null usage
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("shows 'none' for a provider with no key and no env key when encryption is enabled", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
+    expect(screen.getByText(messages.Admin.keyNone)).toBeInTheDocument();
+  });
+
+  it("shows masked key hint for a provider with a DB key when encryption is enabled", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, hasKey: true, keyHint: "••••abcd", keySource: "db" }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
+    expect(screen.getByText("••••abcd")).toBeInTheDocument();
+  });
+
+  it("shows 'from .env' for an env-keyed provider when encryption is enabled", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: "env", hasKey: false }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
+    expect(screen.getByText(messages.Admin.keyFromEnv)).toBeInTheDocument();
+  });
+
+  it("opens the edit dialog and saves a new key via setAdminProviderCredential", async () => {
+    const setAdminProviderCredential = vi.fn(async () =>
+      ({ providers: PROVIDERS, encryptionEnabled: true }),
+    );
+    const client: AdminProvidersClient = { ...STUB_CLIENT, setAdminProviderCredential };
+    const providers: AdminProvider[] = [
+      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: null }),
+    ];
+    renderForm(client, vi.fn(), { providers, encryptionEnabled: true });
+
+    // Click the pencil to open the dialog.
+    fireEvent.click(screen.getByRole("button", { name: messages.Admin.editCredential }));
+
+    // The dialog title (an <h2>) should appear — confirms dialog opened.
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Twelve Data" })).toBeInTheDocument(),
+    );
+
+    // Type a key and save.
+    const input = screen.getByPlaceholderText(messages.Admin.credentialPlaceholder);
+    fireEvent.change(input, { target: { value: "sk-test-1234" } });
+    fireEvent.click(screen.getByRole("button", { name: messages.Admin.credentialSave }));
+
+    await waitFor(() =>
+      expect(setAdminProviderCredential).toHaveBeenCalledWith("twelvedata", { apiKey: "sk-test-1234" }),
+    );
   });
 });
