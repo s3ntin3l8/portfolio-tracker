@@ -1,4 +1,4 @@
-import type { ParserImage, ParseResult, ScreenshotParser } from "./types.js";
+import type { Logger, ParserImage, ParseResult, ScreenshotParser } from "./types.js";
 import {
   JSON_EXTRACTION_PROMPT,
   parseJsonObject,
@@ -36,10 +36,16 @@ export class GeminiVisionParser implements ScreenshotParser {
     return this.apiKey.trim().length > 0;
   }
 
-  async parse(image: ParserImage): Promise<ParseResult> {
+  async parse(image: ParserImage, log?: Logger): Promise<ParseResult> {
     if (!this.isConfigured()) {
       throw new Error("gemini_parser_not_configured");
     }
+
+    log?.debug(
+      { provider: this.name, model: this.model, mimeType: image.mimeType, bytes: image.data.length },
+      "vision request",
+    );
+    const t0 = Date.now();
 
     const url = `${this.baseUrl}/v1beta/models/${this.model}:generateContent`;
     const res = await this.doFetch(url, {
@@ -63,6 +69,10 @@ export class GeminiVisionParser implements ScreenshotParser {
     });
 
     if (!res.ok) {
+      log?.error(
+        { provider: this.name, status: res.status, statusText: res.statusText },
+        "vision http error",
+      );
       throw new Error(`gemini_vision_error_${res.status}`);
     }
 
@@ -74,9 +84,14 @@ export class GeminiVisionParser implements ScreenshotParser {
       transactions?: unknown;
       goldContracts?: unknown;
     };
-    return {
+    const result = {
       drafts: validateDrafts(obj.transactions),
       contracts: validateContracts(obj.goldContracts),
     };
+    log?.info(
+      { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },
+      "vision parse complete",
+    );
+    return result;
   }
 }

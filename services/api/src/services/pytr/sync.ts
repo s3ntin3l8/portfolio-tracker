@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { Decimal } from "decimal.js";
+import type { FastifyBaseLogger } from "fastify";
 import {
   screenshotImports,
   transactions,
@@ -115,24 +116,32 @@ export async function syncTrConnection(
   encryption: EncryptionService,
   runner: PytrRunner,
   connection: TrConnectionRow,
+  log?: FastifyBaseLogger,
 ): Promise<SyncResult> {
-  if (!connection.sessionEnc || !connection.portfolioId) return { status: "error" };
+  if (!connection.sessionEnc || !connection.portfolioId) {
+    log?.warn({ connectionId: connection.id }, "tr sync skipped: missing session/portfolio");
+    return { status: "error" };
+  }
 
   const phone = encryption.decryptString(connection.phoneEnc);
   const pin = encryption.decryptString(connection.pinEnc);
   const sessionData = encryption.decryptString(connection.sessionEnc);
   const portfolioId = connection.portfolioId;
 
+  const connectionId = connection.id;
   let result: Awaited<ReturnType<PytrRunner["export"]>>;
   try {
+    log?.debug({ connectionId }, "tr export starting");
     result = await runner.export({ phone, pin, sessionData });
   } catch (err) {
     const status = err instanceof PytrAuthError ? "expired" : "error";
+    const lastError = err instanceof Error ? err.message : "sync failed";
+    log?.warn({ connectionId, status, lastError }, "tr connection flipped");
     await db
       .update(trConnections)
       .set({
         status,
-        lastError: err instanceof Error ? err.message : "sync failed",
+        lastError,
         updatedAt: new Date(),
       })
       .where(eq(trConnections.id, connection.id));
@@ -186,6 +195,9 @@ export async function syncTrConnection(
           inArray(trResolvedEvents.eventId, [...cancelledIds]),
         ),
       );
+    if (cancelled > 0) {
+      log?.info({ connectionId, cancelled }, "tr cancelled events removed");
+    }
   }
 
   // 2. The durable "resolved" ledger — the authoritative record of events already confirmed
@@ -241,6 +253,10 @@ export async function syncTrConnection(
     return true;
   });
   const { drafts: newDrafts, errors: newErrors } = mapTrEvents(newRaw);
+  log?.debug(
+    { connectionId, exported: events.length, new: newRaw.length, drafts: newDrafts.length, errors: newErrors.length },
+    "tr events mapped",
+  );
 
   // 5. Keep staged items still pending (not resolved/cancelled/vanished/excluded), then append.
   const keptDrafts = (existing?.drafts ?? []).filter(
@@ -261,6 +277,7 @@ export async function syncTrConnection(
   // 6. Persist: update / create / close the collector.
   let importId: string | undefined = collector?.id;
   const hasContent = mergedDrafts.length > 0 || mergedErrors.length > 0;
+  let collectorAction: "updated" | "created" | "discarded" | "unchanged" = "unchanged";
   if (collector) {
     if (!hasContent) {
       await db
@@ -268,11 +285,13 @@ export async function syncTrConnection(
         .set({ status: "discarded" })
         .where(eq(screenshotImports.id, collector.id));
       importId = undefined;
+      collectorAction = "discarded";
     } else {
       await db
         .update(screenshotImports)
         .set({ parsedJson })
         .where(eq(screenshotImports.id, collector.id));
+      collectorAction = "updated";
     }
   } else if (hasContent) {
     const [imp] = await db
@@ -280,7 +299,12 @@ export async function syncTrConnection(
       .values({ userId: connection.userId, portfolioId, parser: "pytr", parsedJson, status: "draft" })
       .returning();
     importId = imp.id;
+    collectorAction = "created";
   }
+  log?.info(
+    { connectionId, importId, action: collectorAction, drafts: mergedDrafts.length, errors: mergedErrors.length },
+    "tr collector updated",
+  );
 
   // 7. Reconcile cash against TR's reported balance, then roll the session forward.
   const reconciliation = reconcileCash(events, result.summary);
@@ -295,6 +319,8 @@ export async function syncTrConnection(
       ...(reconciliation ? { lastReconciliation: reconciliation } : {}),
     })
     .where(eq(trConnections.id, connection.id));
+
+  log?.info({ connectionId, reconciled: !!reconciliation }, "tr connection synced");
 
   return {
     status: "connected",

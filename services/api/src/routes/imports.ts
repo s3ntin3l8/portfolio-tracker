@@ -109,6 +109,11 @@ export async function importsRoute(app: FastifyInstance) {
       const { content, format } = csvBodySchema.parse(request.body);
       const contentHash = shortHash(content);
 
+      request.log.info(
+        { portfolioId, requestedFormat: format, bytes: content.length },
+        "csv import started",
+      );
+
       // Re-upload guard: return the existing non-discarded import instead of creating
       // a duplicate draft row. Discarded imports with the same hash are ignored so the
       // user can re-import after deliberately discarding.
@@ -118,6 +123,10 @@ export async function importsRoute(app: FastifyInstance) {
         const parsed = isDraft
           ? ((existing.parsedJson ?? {}) as { drafts?: unknown[]; errors?: unknown[] })
           : null;
+        request.log.info(
+          { portfolioId, importId: existing.id, status: existing.status },
+          "csv import deduplicated",
+        );
         reply.code(200);
         return {
           importId: existing.id,
@@ -132,11 +141,15 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       const resolved = format === "auto" ? detectCsvFormat(content) : format;
+      request.log.debug({ resolved, parser: PARSER_TAG[resolved] ?? "csv" }, "csv format detected");
       const result = CSV_PARSERS[resolved](content);
       // Assign deterministic content-hash externalIds to drafts that don't already
       // have a stable parser-supplied id (DKB booking refs, IBKR trade ids, etc.).
       // Must happen at parse time so partial-confirm batches reproduce the same ids.
       assignContentExternalIds(result.drafts, "csv");
+      for (const e of result.errors) {
+        request.log.debug({ line: e.line, message: e.message }, "csv row rejected");
+      }
 
       const [imp] = await app.db
         .insert(screenshotImports)
@@ -150,6 +163,10 @@ export async function importsRoute(app: FastifyInstance) {
         })
         .returning();
 
+      request.log.info(
+        { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length },
+        "csv parse complete",
+      );
       reply.code(201);
       return { importId: imp.id, drafts: result.drafts, contracts: [] as unknown[], errors: result.errors };
     },
@@ -167,6 +184,10 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       if (!app.screenshotParser.isConfigured()) {
+        request.log.warn(
+          { portfolioId, provider: app.screenshotParser.name },
+          "screenshot parser not configured",
+        );
         return reply.code(503).send({ error: "screenshot_parser_not_configured" });
       }
 
@@ -174,6 +195,8 @@ export async function importsRoute(app: FastifyInstance) {
       // Hash the raw base64 bytes before parsing so we can detect re-uploads even if
       // the parser is non-deterministic (LLM responses may vary for the same image).
       const contentHash = shortHash(image);
+
+      request.log.info({ portfolioId, mimeType, bytes: image.length }, "screenshot import started");
 
       // Re-upload guard: same image already imported and not discarded → return it.
       const existing = await existingImport(portfolioId, contentHash);
@@ -186,6 +209,10 @@ export async function importsRoute(app: FastifyInstance) {
               errors?: unknown[];
             })
           : null;
+        request.log.info(
+          { portfolioId, importId: existing.id, status: existing.status },
+          "screenshot import deduplicated",
+        );
         reply.code(200);
         return {
           importId: existing.id,
@@ -208,10 +235,10 @@ export async function importsRoute(app: FastifyInstance) {
 
       let parsed;
       try {
-        parsed = await app.screenshotParser.parse({
-          data: Buffer.from(image, "base64"),
-          mimeType,
-        });
+        parsed = await app.screenshotParser.parse(
+          { data: Buffer.from(image, "base64"), mimeType },
+          request.log,
+        );
       } catch (err) {
         request.log.error({ err }, "screenshot parse failed");
         return reply.code(502).send({ error: "screenshot_parse_failed" });
@@ -247,6 +274,10 @@ export async function importsRoute(app: FastifyInstance) {
         })
         .returning();
 
+      request.log.info(
+        { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence },
+        "screenshot parse stored",
+      );
       reply.code(201);
       return {
         importId: imp.id,
@@ -306,6 +337,7 @@ export async function importsRoute(app: FastifyInstance) {
       }
       // For a pytr draft, durably record its events as discarded so the next sync doesn't
       // re-stage them (the collector would otherwise resurface them indefinitely).
+      let resolvedEventsRecorded = 0;
       if (imp.parser === "pytr" && imp.portfolioId) {
         const parsed = (imp.parsedJson ?? {}) as {
           drafts?: { externalId?: string | null }[];
@@ -326,12 +358,17 @@ export async function importsRoute(app: FastifyInstance) {
               })),
             )
             .onConflictDoNothing();
+          resolvedEventsRecorded = ids.length;
         }
       }
       await app.db
         .update(screenshotImports)
         .set({ status: "discarded" })
         .where(eq(screenshotImports.id, imp.id));
+      request.log.info(
+        { importId: imp.id, parser: imp.parser, resolvedEventsRecorded },
+        "import discarded",
+      );
       reply.code(204);
       return null;
     },
@@ -355,6 +392,7 @@ export async function importsRoute(app: FastifyInstance) {
         .update(screenshotImports)
         .set({ status: "discarded" })
         .where(eq(screenshotImports.id, imp.id));
+      request.log.info({ importId: imp.id, removedTransactions: removed.length }, "import undone");
       return { removed: removed.length };
     },
   );
@@ -374,6 +412,7 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "not_discarded" });
       }
       await app.db.delete(screenshotImports).where(eq(screenshotImports.id, imp.id));
+      request.log.info({ importId: imp.id }, "import cleared");
       reply.code(204);
       return null;
     },
@@ -445,6 +484,11 @@ export async function importsRoute(app: FastifyInstance) {
       // DKB and Trade Republic are both EU/ISIN brokers — identical instrument resolution.
       const isEu = isDkb || isPytr;
 
+      request.log.info(
+        { importId: imp.id, parser: imp.parser, source, txDrafts: drafts.length, contracts: contracts.length },
+        "confirm started",
+      );
+
       // Resolve EU broker (DKB/Trade Republic) ISINs to a ticker/market/currency once
       // each (best-effort, cached). OpenFIGI is keyless; failures and unknown ISINs fall
       // back to Xetra/ISIN/EUR.
@@ -453,7 +497,10 @@ export async function importsRoute(app: FastifyInstance) {
         { symbol: string; market: string; currency: string; assetClass: AssetClass } | null
       >();
       async function resolveEuIsin(isin: string) {
-        if (isinCache.has(isin)) return isinCache.get(isin)!;
+        if (isinCache.has(isin)) {
+          request.log.debug({ isin }, "isin cache hit");
+          return isinCache.get(isin)!;
+        }
         let resolved: {
           symbol: string;
           market: string;
@@ -466,6 +513,7 @@ export async function importsRoute(app: FastifyInstance) {
         if (crypto) {
           resolved = { ...crypto, currency: "EUR" };
         } else {
+          request.log.debug({ isin, via: "openfigi" }, "isin lookup");
           try {
             const md = await getMarketData();
             const [hit] = await md.search(isin);
@@ -477,9 +525,16 @@ export async function importsRoute(app: FastifyInstance) {
                 assetClass: hit.assetClass,
               };
             }
-          } catch {
+          } catch (err) {
             // best-effort; never block a confirm on discovery
+            request.log.warn({ isin, err }, "isin resolve failed");
           }
+        }
+        if (resolved) {
+          request.log.debug(
+            { isin, symbol: resolved.symbol, market: resolved.market, assetClass: resolved.assetClass },
+            "isin resolved",
+          );
         }
         isinCache.set(isin, resolved);
         return resolved;
@@ -530,6 +585,7 @@ export async function importsRoute(app: FastifyInstance) {
             isin: d.isin ?? null,
           });
           instrumentId = instrument.id;
+          request.log.debug({ symbol, market, instrumentId }, "instrument resolved");
         }
         resolved.push({ draft: d, instrumentId });
       }
@@ -540,10 +596,14 @@ export async function importsRoute(app: FastifyInstance) {
         errors?: { eventId?: string; severity?: string }[];
         seenEventIds?: string[];
       };
+      let attempted = 0;
+      let finalStatus: "draft" | "confirmed" = "draft";
       const created = await app.db.transaction(async (tx) => {
         const written: (typeof transactions.$inferSelect)[] = [];
         for (let i = 0; i < resolved.length; i++) {
           const { draft: d, instrumentId } = resolved[i];
+          attempted++;
+          const externalId = d.externalId ?? `import:${imp.id}:${i}`;
           const [row] = await tx
             .insert(transactions)
             .values({
@@ -566,12 +626,13 @@ export async function importsRoute(app: FastifyInstance) {
               executedAt: d.executedAt,
               source,
               importId: imp.id,
-              externalId: d.externalId ?? `import:${imp.id}:${i}`,
+              externalId,
               savingsPlanId: d.savingsPlanId ?? null,
             })
             .onConflictDoNothing()
             .returning();
           if (row) written.push(row);
+          else request.log.debug({ externalId }, "duplicate skipped");
         }
 
         // Financed gold contracts: create the gold instrument + loan, then insert
@@ -623,6 +684,8 @@ export async function importsRoute(app: FastifyInstance) {
           const legs = buildContractLegs(c, now);
           for (let li = 0; li < legs.length; li++) {
             const leg = legs[li];
+            attempted++;
+            const externalId = `import:${imp.id}:loan:${ci}:${li}`;
             const [row] = await tx
               .insert(transactions)
               .values({
@@ -637,11 +700,12 @@ export async function importsRoute(app: FastifyInstance) {
                 source,
                 importId: imp.id,
                 loanId: loan.id,
-                externalId: `import:${imp.id}:loan:${ci}:${li}`,
+                externalId,
               })
               .onConflictDoNothing()
               .returning();
             if (row) written.push(row);
+            else request.log.debug({ externalId }, "duplicate skipped");
           }
         }
 
@@ -680,6 +744,7 @@ export async function importsRoute(app: FastifyInstance) {
               .update(screenshotImports)
               .set({ parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
               .where(eq(screenshotImports.id, imp.id));
+            finalStatus = "draft";
           } else {
             // Closing: record any leftover (ignorable) issues as resolved so the next sync
             // doesn't re-surface them.
@@ -702,6 +767,7 @@ export async function importsRoute(app: FastifyInstance) {
               .update(screenshotImports)
               .set({ status: "confirmed" })
               .where(eq(screenshotImports.id, imp.id));
+            finalStatus = "confirmed";
           }
         } else {
           // Other importers (CSV/screenshot/DKB): pass-based prune when drafts carry stable
@@ -715,16 +781,28 @@ export async function importsRoute(app: FastifyInstance) {
               .update(screenshotImports)
               .set({ parsedJson: { ...parsed, drafts: remaining } })
               .where(eq(screenshotImports.id, imp.id));
+            finalStatus = "draft";
           } else {
             await tx
               .update(screenshotImports)
               .set({ status: "confirmed" })
               .where(eq(screenshotImports.id, imp.id));
+            finalStatus = "confirmed";
           }
         }
         return written;
       });
 
+      request.log.info(
+        {
+          importId: imp.id,
+          attempted,
+          written: created.length,
+          skippedDuplicates: attempted - created.length,
+          finalStatus,
+        },
+        "confirm complete",
+      );
       reply.code(201);
       return { confirmed: created.length, transactions: created };
     },
