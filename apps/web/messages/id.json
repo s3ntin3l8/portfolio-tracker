@@ -529,7 +529,10 @@
     "rights": "Rights",
     "savings_plan": "Rencana menabung",
     "deposit": "Setor",
-    "withdrawal": "Tarik"
+    "withdrawal": "Tarik",
+    "interest": "Bunga",
+    "loan_drawdown": "Pinjaman cair",
+    "loan_repayment": "Cicilan pinjaman"
   },
   "AssetClass": {
     "equity": "Saham",

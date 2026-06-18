@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import type { HoldingValuation } from "@portfolio/api-client";
 import {
@@ -24,6 +25,22 @@ const HOLDINGS_COLS: ColDef<HoldingValuation>[] = [
   { key: "pnl", get: (h) => h.unrealizedPnLDisplay ?? "0", type: "numeric" },
 ];
 
+function formatPct(pct: number): string {
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
+
+function computeRowValues(h: HoldingValuation, currency: string, locale: string) {
+  const pnl =
+    h.unrealizedPnLDisplay !== null ? Number(h.unrealizedPnLDisplay) : null;
+  const costBasis = Number(h.costBasisDisplay);
+  const pct =
+    pnl !== null && costBasis !== 0 ? (pnl / costBasis) * 100 : null;
+  const native = (n: number) =>
+    formatMoney(n, h.currency ?? currency, locale);
+  const display = (n: number) => formatMoney(n, currency, locale);
+  return { pnl, pct, native, display };
+}
+
 export interface HoldingsTableProps {
   rows: HoldingValuation[];
   currency: string;
@@ -34,71 +51,128 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
   const locale = useLocale();
   const { sortKey, sortDir, toggle, sort } = useTableSort<HoldingValuation>(HOLDINGS_COLS);
 
-  const m = (n: number) => formatMoney(n, currency, locale);
+  const sorted = sort(rows);
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-          <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("quantity")}</SortableTableHead>
-          <SortableTableHead colKey="avgCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("avgCost")}</SortableTableHead>
-          <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("price")}</SortableTableHead>
-          <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("value")}</SortableTableHead>
-          <SortableTableHead colKey="pnl" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("pnl")}</SortableTableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sort(rows).map((h) => {
-          const pnl =
-            h.unrealizedPnLDisplay !== null
-              ? Number(h.unrealizedPnLDisplay)
-              : null;
-          const native = (n: number) =>
-            formatMoney(n, h.currency ?? currency, locale);
+    <>
+      {/* ── Desktop table (md+) ── */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
+              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("quantity")}</SortableTableHead>
+              <SortableTableHead colKey="avgCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("avgCost")}</SortableTableHead>
+              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("price")}</SortableTableHead>
+              <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("value")}</SortableTableHead>
+              <SortableTableHead colKey="pnl" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("pnl")}</SortableTableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.map((h) => {
+              const { pnl, pct, native, display } = computeRowValues(h, currency, locale);
+              const pnlColor =
+                pnl === null
+                  ? "text-muted-foreground"
+                  : pnl >= 0
+                    ? "text-success"
+                    : "text-destructive";
+              return (
+                <TableRow key={h.instrumentId}>
+                  <TableCell>
+                    <Link
+                      href={`/instruments/${h.instrumentId}`}
+                      className="font-medium hover:underline"
+                    >
+                      {h.instrument?.symbol ?? "—"}
+                    </Link>
+                    <div className="text-xs text-muted-foreground">
+                      {h.instrument?.name ?? h.instrumentId}
+                    </div>
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {Number(h.quantity)} {h.instrument?.unit ?? ""}
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {native(Number(h.avgCost))}
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {h.price !== null ? native(Number(h.price)) : "—"}
+                  </TableCell>
+                  <TableCell className="tabular text-right">
+                    {h.marketValueDisplay !== null
+                      ? display(Number(h.marketValueDisplay))
+                      : "—"}
+                  </TableCell>
+                  <TableCell className={cn("tabular text-right", pnlColor)}>
+                    {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${display(pnl)}`}
+                    {pct !== null && (
+                      <div className="text-xs">
+                        {formatPct(pct)}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* ── Mobile list (< md) ── */}
+      {/* Single shared grid so all rows have identical column widths,
+          which ensures col-1 (1fr) is consistently constrained and names truncate. */}
+      <div className="md:hidden grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3">
+        {sorted.map((h, i) => {
+          const { pnl, pct, native, display } = computeRowValues(h, currency, locale);
+          const pnlColor =
+            pnl === null
+              ? "text-muted-foreground"
+              : pnl >= 0
+                ? "text-success"
+                : "text-destructive";
           return (
-            <TableRow key={h.instrumentId}>
-              <TableCell>
+            <Fragment key={h.instrumentId}>
+              {i > 0 && <div className="col-span-3 border-t border-border" />}
+
+              {/* Col 1: symbol / name */}
+              <div className="min-w-0 overflow-hidden py-3 pl-4">
                 <Link
                   href={`/instruments/${h.instrumentId}`}
-                  className="font-medium hover:underline"
+                  className="font-medium hover:underline block truncate"
                 >
                   {h.instrument?.symbol ?? "—"}
                 </Link>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-xs text-muted-foreground truncate">
                   {h.instrument?.name ?? h.instrumentId}
                 </div>
-              </TableCell>
-              <TableCell className="tabular text-right">
-                {Number(h.quantity)} {h.instrument?.unit ?? ""}
-              </TableCell>
-              <TableCell className="tabular text-right">
-                {native(Number(h.avgCost))}
-              </TableCell>
-              <TableCell className="tabular text-right">
-                {h.price !== null ? native(Number(h.price)) : "—"}
-              </TableCell>
-              <TableCell className="tabular text-right">
-                {h.marketValueDisplay !== null
-                  ? m(Number(h.marketValueDisplay))
-                  : "—"}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "tabular text-right",
-                  pnl === null
-                    ? "text-muted-foreground"
-                    : pnl >= 0
-                      ? "text-success"
-                      : "text-destructive",
-                )}
-              >
-                {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${m(pnl)}`}
-              </TableCell>
-            </TableRow>
+              </div>
+
+              {/* Col 2: avg cost / quantity */}
+              <div className="text-right tabular py-3">
+                <div className="text-sm">{native(Number(h.avgCost))}</div>
+                <div className="text-xs text-muted-foreground">
+                  {Number(h.quantity)} {h.instrument?.unit ?? ""}
+                </div>
+              </div>
+
+              {/* Col 3: value / P&L */}
+              <div className="text-right tabular py-3 pr-4">
+                <div className="text-sm">
+                  {h.marketValueDisplay !== null
+                    ? display(Number(h.marketValueDisplay))
+                    : "—"}
+                </div>
+                <div className={cn("text-xs", pnlColor)}>
+                  {pnl === null
+                    ? "—"
+                    : `${pnl >= 0 ? "+" : ""}${display(pnl)}${pct !== null ? ` ${formatPct(pct)}` : ""}`}
+                </div>
+              </div>
+            </Fragment>
           );
         })}
-      </TableBody>
-    </Table>
+      </div>
+    </>
   );
 }

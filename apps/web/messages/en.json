@@ -529,7 +529,10 @@
     "rights": "Rights",
     "savings_plan": "Savings plan",
     "deposit": "Deposit",
-    "withdrawal": "Withdrawal"
+    "withdrawal": "Withdrawal",
+    "interest": "Interest",
+    "loan_drawdown": "Loan drawdown",
+    "loan_repayment": "Loan repayment"
   },
   "AssetClass": {
     "equity": "Stocks",

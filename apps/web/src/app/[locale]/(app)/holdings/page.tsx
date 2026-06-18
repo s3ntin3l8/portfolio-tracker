@@ -39,6 +39,13 @@ export default async function HoldingsPage({
       : [];
   const currency = result.status === "ok" ? result.displayCurrency : "IDR";
 
+  // Count holdings per asset class to determine which tabs to disable.
+  const classCounts = holdings.reduce<Record<string, number>>((acc, h) => {
+    const c = h.instrument?.assetClass;
+    if (c) acc[c] = (acc[c] ?? 0) + 1;
+    return acc;
+  }, {});
+
   // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
   // value/P&L are in the display currency (the trailing Currency column).
   const exportRows: (string | number)[][] = holdings.map((h) => [
@@ -56,18 +63,19 @@ export default async function HoldingsPage({
   ]);
 
   const Heading = (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
       {result.status === "ok" && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <CostBasisToggle
             current={costBasis}
             labelPurchase={t("costBasisPurchasePrice")}
             labelTotal={t("costBasisTotalPaid")}
           />
+          <div className="flex items-center gap-2">
           {holdings.length > 0 && (
             <ExportCsvButton
               filename="holdings.csv"
@@ -94,6 +102,7 @@ export default async function HoldingsPage({
               {tca("link")}
             </Link>
           </Button>
+          </div>
         </div>
       )}
     </div>
@@ -138,13 +147,19 @@ export default async function HoldingsPage({
       {Heading}
 
       <Tabs defaultValue="all">
+        <div className="overflow-x-auto">
         <TabsList>
           {CLASS_TABS.map((key) => (
-            <TabsTrigger key={key} value={key}>
+            <TabsTrigger
+              key={key}
+              value={key}
+              disabled={key !== "all" && (classCounts[key] ?? 0) === 0}
+            >
               {key === "all" ? t("all") : tc(key)}
             </TabsTrigger>
           ))}
         </TabsList>
+        </div>
         {CLASS_TABS.map((key) => (
           <TabsContent key={key} value={key}>
             <div className="rounded-xl border border-border">
