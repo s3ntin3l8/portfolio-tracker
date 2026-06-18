@@ -371,6 +371,7 @@ export function AdminProvidersForm({
       )}
 
       <DndContext
+        id="admin-providers"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}

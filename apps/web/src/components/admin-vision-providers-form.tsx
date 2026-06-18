@@ -360,6 +360,7 @@ export function AdminVisionProvidersForm({
       )}
 
       <DndContext
+        id="admin-vision-providers"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
