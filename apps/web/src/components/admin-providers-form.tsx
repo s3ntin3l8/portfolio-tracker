@@ -2,12 +2,29 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, ArrowDown, ArrowUp, Check, Loader2 } from "lucide-react";
-import type { AdminProvider, ApiClient } from "@portfolio/api-client";
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  ShieldOff,
+  Trash2,
+} from "lucide-react";
+import type { AdminProvider, AdminProvidersResponse, ApiClient, ProviderCredentialInput } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 /** The slice of the API client this form needs (injectable for tests). */
-export type AdminProvidersClient = Pick<ApiClient, "updateAdminProviders">;
+export type AdminProvidersClient = Pick<
+  ApiClient,
+  "updateAdminProviders" | "setAdminProviderCredential" | "clearAdminProviderCredential"
+>;
 
 /** A read-only "X / Y today" (or "X this month") badge from a provider's usage figures. */
 function UsageBadge({ usage }: { usage: AdminProvider["usage"] }) {
@@ -31,6 +48,143 @@ function UsageBadge({ usage }: { usage: AdminProvider["usage"] }) {
   );
 }
 
+/** Inline key-set / clear form for one provider. */
+function CredentialEditor({
+  provider,
+  encryptionEnabled,
+  onSet,
+  onClear,
+}: {
+  provider: AdminProvider;
+  encryptionEnabled: boolean;
+  onSet: (id: string, body: ProviderCredentialInput) => Promise<void>;
+  onClear: (id: string) => Promise<void>;
+}) {
+  const t = useTranslations("Admin");
+  const [open, setOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSet(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apiKey.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSet(provider.id, { apiKey: apiKey.trim() });
+      setApiKey("");
+      setOpen(false);
+    } catch {
+      setError(t("credentialError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClear() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear(provider.id);
+    } catch {
+      setError(t("credentialError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!encryptionEnabled) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+        <ShieldOff className="size-3 shrink-0" />
+        {t("encryptionDisabled")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        {provider.hasKey ? (
+          <>
+            <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
+              <KeyRound className="size-3 shrink-0" />
+              {provider.keyHint}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+            >
+              {t("credentialRotate")}
+              {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
+              disabled={busy}
+              onClick={handleClear}
+              aria-label={t("credentialClear")}
+            >
+              {busy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-xs"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+          >
+            {t("credentialSet")}
+            {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
+          </Button>
+        )}
+      </div>
+
+      {open && (
+        <form onSubmit={handleSet} className="flex gap-2">
+          <div className="relative flex-1">
+            <Input
+              type={showKey ? "text" : "password"}
+              placeholder={t("credentialPlaceholder")}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="h-7 pr-8 text-xs font-mono"
+              autoComplete="off"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={showKey ? t("credentialHide") : t("credentialShow")}
+            >
+              {showKey ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+            </button>
+          </div>
+          <Button type="submit" size="sm" className="h-7 text-xs" disabled={busy || !apiKey.trim()}>
+            {busy ? <Loader2 className="size-3 animate-spin" /> : t("credentialSave")}
+          </Button>
+        </form>
+      )}
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+    </div>
+  );
+}
+
 // Order + enabled flags only — id/label/configured are immutable here.
 const signature = (rows: AdminProvider[]) =>
   rows.map((r) => `${r.id}:${r.enabled ? 1 : 0}`).join(",");
@@ -38,10 +192,12 @@ const signature = (rows: AdminProvider[]) =>
 export function AdminProvidersForm({
   client,
   initialProviders,
+  encryptionEnabled,
   onSuccess,
 }: {
   client: AdminProvidersClient;
   initialProviders: AdminProvider[];
+  encryptionEnabled: boolean;
   onSuccess?: () => void;
 }) {
   const t = useTranslations("Admin");
@@ -53,6 +209,12 @@ export function AdminProvidersForm({
   const [saved, setSaved] = useState(false);
 
   const dirty = signature(rows) !== signature(baseline);
+
+  function refreshFromResponse(res: AdminProvidersResponse) {
+    setRows(res.providers);
+    setBaseline(res.providers);
+    onSuccess?.();
+  }
 
   function toggle(id: string) {
     setRows((rs) =>
@@ -83,15 +245,23 @@ export function AdminProvidersForm({
       const updated = await client.updateAdminProviders(
         rows.map((r, i) => ({ id: r.id, enabled: r.enabled, priority: i + 1 })),
       );
-      setRows(updated);
-      setBaseline(updated);
+      refreshFromResponse(updated);
       setSaved(true);
-      onSuccess?.();
     } catch {
       setError(true);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleSetCredential(id: string, body: ProviderCredentialInput) {
+    const updated = await client.setAdminProviderCredential(id, body);
+    refreshFromResponse(updated);
+  }
+
+  async function handleClearCredential(id: string) {
+    const updated = await client.clearAdminProviderCredential(id);
+    refreshFromResponse(updated);
   }
 
   return (
@@ -110,55 +280,66 @@ export function AdminProvidersForm({
         {rows.map((p, i) => (
           <li
             key={p.id}
-            className="flex items-center gap-3 px-3 py-2.5 text-sm"
+            className="space-y-2 px-3 py-2.5 text-sm"
           >
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {i + 1}
-            </span>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <span className="font-medium">{p.label}</span>
-              {!p.configured ? (
-                <span className="text-xs text-muted-foreground">
-                  {t("notConfigured")}
-                </span>
-              ) : (
-                <UsageBadge usage={p.usage} />
-              )}
-            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {i + 1}
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="font-medium">{p.label}</span>
+                {!p.configured ? (
+                  <span className="text-xs text-muted-foreground">
+                    {t("notConfigured")}
+                  </span>
+                ) : (
+                  <UsageBadge usage={p.usage} />
+                )}
+              </div>
 
-            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("moveUp")}
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                >
+                  <ArrowUp className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("moveDown")}
+                  disabled={i === rows.length - 1}
+                  onClick={() => move(i, 1)}
+                >
+                  <ArrowDown className="size-4" />
+                </Button>
+              </div>
+
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={t("moveUp")}
-                disabled={i === 0}
-                onClick={() => move(i, -1)}
+                variant={p.enabled ? "default" : "outline"}
+                size="sm"
+                aria-pressed={p.enabled}
+                disabled={!p.configured}
+                onClick={() => toggle(p.id)}
               >
-                <ArrowUp className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={t("moveDown")}
-                disabled={i === rows.length - 1}
-                onClick={() => move(i, 1)}
-              >
-                <ArrowDown className="size-4" />
+                {p.enabled ? t("enabled") : t("disabled")}
               </Button>
             </div>
 
-            <Button
-              type="button"
-              variant={p.enabled ? "default" : "outline"}
-              size="sm"
-              aria-pressed={p.enabled}
-              disabled={!p.configured}
-              onClick={() => toggle(p.id)}
-            >
-              {p.enabled ? t("enabled") : t("disabled")}
-            </Button>
+            <div className="pl-6">
+              <CredentialEditor
+                provider={p}
+                encryptionEnabled={encryptionEnabled}
+                onSet={handleSetCredential}
+                onClear={handleClearCredential}
+              />
+            </div>
           </li>
         ))}
       </ul>

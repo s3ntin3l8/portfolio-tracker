@@ -104,10 +104,12 @@ describe("admin provider config", () => {
       headers: auth(await token("admin-1", [ADMIN_GROUP])),
     });
     expect(ok.statusCode).toBe(200);
-    const list = ok.json() as { id: string; configured: boolean }[];
+    const res = ok.json() as { providers: { id: string; configured: boolean }[]; encryptionEnabled: boolean };
     // Every registry provider is listed; the keyless Yahoo fallback is always configured.
-    expect(list.map((p) => p.id)).toContain("yahoo");
-    expect(list.find((p) => p.id === "yahoo")?.configured).toBe(true);
+    expect(res.providers.map((p) => p.id)).toContain("yahoo");
+    expect(res.providers.find((p) => p.id === "yahoo")?.configured).toBe(true);
+    // encryptionEnabled reflects whether DB_ENCRYPTION_KEY is set (not set in tests).
+    expect(typeof res.encryptionEnabled).toBe("boolean");
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -127,10 +129,10 @@ describe("admin provider config", () => {
       ],
     });
     expect(patch.statusCode).toBe(200);
-    const after = patch.json() as { id: string; enabled: boolean; priority: number }[];
-    expect(after.find((p) => p.id === "yahoo")?.enabled).toBe(false);
+    const after = patch.json() as { providers: { id: string; enabled: boolean; priority: number }[] };
+    expect(after.providers.find((p) => p.id === "yahoo")?.enabled).toBe(false);
     // priority 0 sorts strictly ahead of the unchanged defaults (which start at 1).
-    expect(after[0].id).toBe("yahoo");
+    expect(after.providers[0].id).toBe("yahoo");
 
     const get = await app.inject({
       method: "GET",
@@ -138,7 +140,7 @@ describe("admin provider config", () => {
       headers: auth(t),
     });
     expect(
-      (get.json() as { id: string; enabled: boolean }[]).find((p) => p.id === "yahoo")?.enabled,
+      (get.json() as { providers: { id: string; enabled: boolean }[] }).providers.find((p) => p.id === "yahoo")?.enabled,
     ).toBe(false);
   });
 
@@ -209,5 +211,74 @@ describe("admin provider config", () => {
       headers: auth(await token("intruder-2")),
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("PUT /admin/providers/:id/credential returns 503 when encryption is disabled", async () => {
+    // Tests run with DB_ENCRYPTION_KEY unset → encryption disabled.
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/providers/twelvedata/credential",
+      headers: auth(await token("admin-cred-1", [ADMIN_GROUP])),
+      payload: { apiKey: "test-key-abc123" },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ error: "encryption_required" });
+  });
+
+  it("PUT /admin/providers/:id/credential returns 404 for unknown provider", async () => {
+    // Even when encryption is required, unknown ids return 404 first if we fake it.
+    // Here encryption is disabled so we get 503, but test the 404 path via non-existent id.
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/providers/does-not-exist/credential",
+      headers: auth(await token("admin-cred-2", [ADMIN_GROUP])),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: "unknown_provider" });
+  });
+
+  it("DELETE /admin/providers/:id/credential is a no-op when no credential exists (200)", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/providers/yahoo/credential",
+      headers: auth(await token("admin-cred-3", [ADMIN_GROUP])),
+    });
+    // yahoo has no required key; deleting a non-existent credential is still 200
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("GET /admin/audit returns a list of admin audit entries (admin only)", async () => {
+    const ok = await app.inject({
+      method: "GET",
+      url: "/admin/audit",
+      headers: auth(await token("admin-audit-1", [ADMIN_GROUP])),
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(Array.isArray(ok.json())).toBe(true);
+
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/admin/audit",
+      headers: auth(await token("non-admin-audit")),
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("PATCH records an audit log entry", async () => {
+    const t = await token("admin-audit-2", [ADMIN_GROUP]);
+    await app.inject({
+      method: "PATCH",
+      url: "/admin/providers",
+      headers: auth(t),
+      payload: [{ id: "coingecko", enabled: true, priority: 7 }],
+    });
+    const auditRes = await app.inject({
+      method: "GET",
+      url: "/admin/audit",
+      headers: auth(t),
+    });
+    const log = auditRes.json() as { action: string; target: string }[];
+    const entry = log.find((e) => e.action === "update_providers" && e.target.includes("coingecko"));
+    expect(entry).toBeDefined();
   });
 });

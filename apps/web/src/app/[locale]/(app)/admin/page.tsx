@@ -17,7 +17,7 @@ export default async function AdminPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const providers = await loadAdminProviders();
+  const result = await loadAdminProviders();
 
   return (
     <div className="space-y-6">
@@ -34,8 +34,11 @@ export default async function AdminPage({
           <p className="mb-4 text-sm text-muted-foreground">
             {t("providersHint")}
           </p>
-          {providers.status === "ok" ? (
-            <AdminProviders initialProviders={providers.providers} />
+          {result.status === "ok" ? (
+            <AdminProviders
+              initialProviders={result.providers}
+              encryptionEnabled={result.encryptionEnabled}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
           )}

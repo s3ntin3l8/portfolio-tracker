@@ -12,25 +12,49 @@ import {
   type MarketDataProvider,
   type ProviderUsage,
 } from "@portfolio/market-data";
-import { providerSettings, providerUsage, type ProviderSetting } from "@portfolio/db";
+import {
+  providerSettings,
+  providerUsage,
+  providerCredentials,
+  type ProviderSetting,
+} from "@portfolio/db";
 import { eq } from "drizzle-orm";
-import { getDb } from "../db/client.js";
+import { getDb, getEncryption } from "../db/client.js";
 
 /**
- * A routable price provider, gated by an env key/url. The registry is the single source
- * of truth for both instantiation (here) and the admin UI (GET/PATCH /admin/providers).
- * `OpenFigi` (discovery-only) and `Fixture` (catch-all) are intentionally NOT here — they
- * are appended unconditionally and aren't user-configurable.
+ * Resolved secrets for a provider: the DB key/url overrides the env value.
+ * Passed to `ProviderDescriptor.configured()` and `create()` so the registry
+ * stays pure (no async DB calls) while supporting DB-stored keys.
+ */
+export interface ResolvedSecret {
+  apiKey?: string;
+  url?: string;
+}
+
+/**
+ * A routable price provider, gated by an env key/url or a DB credential.
+ * The registry is the single source of truth for both instantiation (here) and
+ * the admin UI (GET/PATCH /admin/providers). `OpenFigi` (discovery-only) and
+ * `Fixture` (catch-all) are intentionally NOT here — they are appended
+ * unconditionally and aren't user-configurable.
  */
 export interface ProviderDescriptor {
   id: string;
   label: string;
   /** Tried-first ordering when there is no DB override (registration order). */
   defaultPriority: number;
-  /** Whether the env key/url that this provider needs is present. */
-  configured: () => boolean;
-  /** Instantiate the provider. Only called when `configured()` is true. */
-  create: () => MarketDataProvider;
+  /**
+   * Whether this provider can be used given the supplied secrets.
+   * When `secrets` is provided (DB override), checks the secret's apiKey/url first;
+   * falls back to env when absent. The signature is compatible with `() => boolean`
+   * so existing test fixtures can keep the shorter form.
+   */
+  configured: (secrets?: ResolvedSecret) => boolean;
+  /**
+   * Instantiate the provider. secrets.apiKey/url take precedence over env.
+   * Only called when `configured(secrets)` is true.
+   */
+  create: (secrets?: ResolvedSecret) => MarketDataProvider;
   /**
    * The `market` constant this provider serves as a *user-selectable gold buyback source*
    * (e.g. `"ANTAM"`). Set only on providers that price physical/savings gold holdings, so
@@ -53,22 +77,22 @@ function selfBaseUrl(): string {
 }
 
 // Registration order matches the historical hardcoded chain: keyed primaries first,
-// keyless Yahoo fallback last. Keys/urls still come from env (see #106); the scraped
-// Antam/NAV sources default to this API's internal routes (see selfBaseUrl).
+// keyless Yahoo fallback last. DB credentials win over env (see resolveCredentials);
+// the scraped Antam/NAV sources default to this API's internal routes (see selfBaseUrl).
 export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
   {
     id: "twelvedata",
     label: "Twelve Data",
     defaultPriority: 1,
-    configured: () => Boolean(process.env.TWELVEDATA_API_KEY),
-    create: () => new TwelveDataProvider(process.env.TWELVEDATA_API_KEY!),
+    configured: (s) => Boolean(s?.apiKey ?? process.env.TWELVEDATA_API_KEY),
+    create: (s) => new TwelveDataProvider(s?.apiKey ?? process.env.TWELVEDATA_API_KEY!),
   },
   {
     id: "goldapi",
     label: "GoldAPI",
     defaultPriority: 2,
-    configured: () => Boolean(process.env.GOLDAPI_KEY),
-    create: () => new GoldApiProvider(process.env.GOLDAPI_KEY!),
+    configured: (s) => Boolean(s?.apiKey ?? process.env.GOLDAPI_KEY),
+    create: (s) => new GoldApiProvider(s?.apiKey ?? process.env.GOLDAPI_KEY!),
   },
   {
     id: "antam",
@@ -79,11 +103,12 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     // from the scraped_quotes cache. 404 until the first scrape, which the provider treats
     // as "no quote" (falls through to spot / fixture).
     configured: () => true,
-    create: () =>
+    create: (s) =>
       new BuybackProvider({
         name: "antam",
         market: "ANTAM",
-        baseUrl: process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
+        baseUrl:
+          s?.url ?? process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
       }),
   },
   {
@@ -94,12 +119,14 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     // Always available: defaults to the internal route fed by the Galeri24 buyback scraper.
     // Serves a disjoint market from Antam, so its priority only affects display order.
     configured: () => true,
-    create: () =>
+    create: (s) =>
       new BuybackProvider({
         name: "galeri24",
         market: "GALERI24",
         baseUrl:
-          process.env.GALERI24_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/galeri24-buyback`,
+          s?.url ??
+          process.env.GALERI24_BUYBACK_URL ??
+          `${selfBaseUrl()}/internal/gold/galeri24-buyback`,
       }),
   },
   {
@@ -108,17 +135,17 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     defaultPriority: 5,
     // Always available: defaults to the internal route fed by the Bibit NAV scraper.
     configured: () => true,
-    create: () =>
+    create: (s) =>
       new NavProvider({
-        baseUrl: process.env.NAV_BASE_URL ?? `${selfBaseUrl()}/internal/nav`,
+        baseUrl: s?.url ?? process.env.NAV_BASE_URL ?? `${selfBaseUrl()}/internal/nav`,
       }),
   },
   {
     id: "eodhd",
     label: "EODHD",
     defaultPriority: 6,
-    configured: () => Boolean(process.env.EODHD_API_KEY),
-    create: () => new EodhdProvider({ apiKey: process.env.EODHD_API_KEY! }),
+    configured: (s) => Boolean(s?.apiKey ?? process.env.EODHD_API_KEY),
+    create: (s) => new EodhdProvider({ apiKey: s?.apiKey ?? process.env.EODHD_API_KEY! }),
   },
   {
     id: "coingecko",
@@ -128,7 +155,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     // raises the rate limit. The crypto specialist, so it sorts ahead of Yahoo's crypto
     // fallback (order only matters among crypto supporters).
     configured: () => true,
-    create: () => new CoinGeckoProvider({ apiKey: process.env.COINGECKO_API_KEY }),
+    create: (s) => new CoinGeckoProvider({ apiKey: s?.apiKey ?? process.env.COINGECKO_API_KEY }),
   },
   {
     id: "yahoo",
@@ -151,21 +178,24 @@ export interface ResolvedProvider {
 /**
  * Overlay the DB `provider_settings` rows onto the registry defaults and return every
  * registry provider in effective priority order (lower first). A missing row means
- * "use the default" (enabled, registration priority). Pure — no env or network — so the
- * merge is unit-testable independently of provider instantiation.
+ * "use the default" (enabled, registration priority). When `credentials` is supplied,
+ * each provider's `configured` reflects whether a key is available via DB or env.
+ * Pure (no async, no network) — unit-testable independently of provider instantiation.
  */
 export function resolveProviderConfig(
   rows: Pick<ProviderSetting, "provider" | "enabled" | "priority">[],
   registry: ProviderDescriptor[] = PROVIDER_REGISTRY,
+  credentials?: Map<string, ResolvedSecret>,
 ): ResolvedProvider[] {
   const byId = new Map(rows.map((r) => [r.provider, r]));
   return registry
     .map((d) => {
       const row = byId.get(d.id);
+      const secret = credentials?.get(d.id);
       return {
         id: d.id,
         label: d.label,
-        configured: d.configured(),
+        configured: d.configured(secret),
         enabled: row ? row.enabled : true,
         priority: row ? row.priority : d.defaultPriority,
       };
@@ -188,11 +218,12 @@ export interface GoldSource {
 export function goldSources(
   rows: Pick<ProviderSetting, "provider" | "enabled" | "priority">[],
   registry: ProviderDescriptor[] = PROVIDER_REGISTRY,
+  credentials?: Map<string, ResolvedSecret>,
 ): GoldSource[] {
   const goldMarketById = new Map(
     registry.filter((d) => d.goldMarket).map((d) => [d.id, d.goldMarket!]),
   );
-  return resolveProviderConfig(rows, registry)
+  return resolveProviderConfig(rows, registry, credentials)
     .filter((p) => p.configured && p.enabled && goldMarketById.has(p.id))
     .map((p) => ({ market: goldMarketById.get(p.id)!, label: p.label }));
 }
@@ -209,29 +240,77 @@ function recordCall(name: string): void {
 let service: MarketDataService | null = null;
 
 /**
+ * Fetch and decrypt DB credential overrides for providers in the given registry.
+ * DB key wins over the env key; missing rows fall back to env transparently.
+ * Returns an empty Map when there are no DB rows (the common case on first boot).
+ * The EncryptionService is a passthrough when DB_ENCRYPTION_KEY is not set, so this
+ * is safe to call regardless — but the write routes refuse to store keys without it.
+ *
+ * NOTE (see #105): this is called per `getMarketData()` rebuild (on invalidation);
+ * in a multi-replica deployment, invalidation is in-process only — other replicas
+ * keep serving their cached service until they restart. LISTEN/NOTIFY is the fix,
+ * tracked as a deferred follow-up.
+ */
+export async function resolveCredentials(
+  registry: ProviderDescriptor[] = PROVIDER_REGISTRY,
+): Promise<Map<string, ResolvedSecret>> {
+  const enc = getEncryption();
+  const db = getDb();
+  const ids = new Set(registry.map((d) => d.id));
+  const rows = await db
+    .select()
+    .from(providerCredentials)
+    .then((rs) => rs.filter((r) => ids.has(r.provider)));
+
+  const out = new Map<string, ResolvedSecret>();
+  for (const row of rows) {
+    const secret: ResolvedSecret = {};
+    if (row.apiKeyEnc) {
+      try {
+        secret.apiKey = enc.decryptString(row.apiKeyEnc);
+      } catch {
+        // Decryption failure: skip this key; env will act as fallback
+      }
+    }
+    if (row.urlOverride) {
+      secret.url = row.urlOverride;
+    }
+    if (secret.apiKey !== undefined || secret.url !== undefined) {
+      out.set(row.provider, secret);
+    }
+  }
+  return out;
+}
+
+/**
  * The app's market-data service. Live providers come from the registry, ordered and
  * enabled per the DB `provider_settings` overlay (admins edit these from the UI), with
- * always-on OpenFigi discovery + a FixtureProvider catch-all. The service tries supporting
+ * DB credential overrides layered on top (from `provider_credentials`), always-on
+ * OpenFigi discovery + a FixtureProvider catch-all. The service tries supporting
  * providers in order until one returns a result. The built service is cached;
- * `invalidateMarketData()` drops the cache so a settings change is picked up on the next
- * call (every caller invokes this per request/job — see #105 for multi-replica reload).
+ * `invalidateMarketData()` drops the cache so a settings change is picked up on the
+ * next call (every caller invokes this per request/job — see #105 for multi-replica reload).
  * Tests use the fixture only (deterministic, no network).
  */
 export async function getMarketData(): Promise<MarketDataService> {
   if (service) return service;
   const providers: MarketDataProvider[] = [];
   if (process.env.NODE_ENV !== "test") {
-    const rows = await getDb()
-      .select({
-        provider: providerSettings.provider,
-        enabled: providerSettings.enabled,
-        priority: providerSettings.priority,
-      })
-      .from(providerSettings);
+    const db = getDb();
+    const [rows, credentials] = await Promise.all([
+      db
+        .select({
+          provider: providerSettings.provider,
+          enabled: providerSettings.enabled,
+          priority: providerSettings.priority,
+        })
+        .from(providerSettings),
+      resolveCredentials(),
+    ]);
     const byId = new Map(PROVIDER_REGISTRY.map((d) => [d.id, d]));
-    for (const r of resolveProviderConfig(rows)) {
+    for (const r of resolveProviderConfig(rows, PROVIDER_REGISTRY, credentials)) {
       if (!r.enabled || !r.configured) continue;
-      providers.push(byId.get(r.id)!.create());
+      providers.push(byId.get(r.id)!.create(credentials.get(r.id)));
     }
     // ISIN → instrument discovery (keyless; OPENFIGI_API_KEY raises the rate limit).
     providers.push(new OpenFigiProvider({ apiKey: process.env.OPENFIGI_API_KEY }));
@@ -322,14 +401,18 @@ export async function getProviderUsage(): Promise<Record<string, ProviderUsageVi
   const now = new Date();
   const month = monthKey(now);
 
-  const localRows = await getDb().select().from(providerUsage);
+  const [localRows, credentials] = await Promise.all([
+    getDb().select().from(providerUsage),
+    resolveCredentials(),
+  ]);
   const localById = new Map(localRows.map((r) => [r.provider, r]));
 
   for (const d of PROVIDER_REGISTRY) {
-    if (!d.configured()) continue;
+    const secret = credentials.get(d.id);
+    if (!d.configured(secret)) continue;
     let view: ProviderUsageView | null = null;
 
-    const provider = d.create();
+    const provider = d.create(secret);
     if (provider.getUsage) {
       const live = await provider.getUsage();
       if (live) view = { source: "provider", ...live };

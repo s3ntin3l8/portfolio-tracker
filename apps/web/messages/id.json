@@ -37,7 +37,7 @@
     "title": "Admin",
     "subtitle": "Konfigurasi server. Hanya terlihat oleh admin.",
     "providers": "Penyedia data",
-    "providersHint": "Aktifkan atau nonaktifkan penyedia data pasar dan atur urutan pemakaiannya (atas lebih dulu). Kunci API diatur melalui variabel lingkungan.",
+    "providersHint": "Aktifkan atau nonaktifkan penyedia data pasar, atur urutan pemakaiannya (atas lebih dulu), dan kelola kunci API.",
     "notConfigured": "Kunci API/URL belum dikonfigurasi",
     "enabled": "Aktif",
     "disabled": "Nonaktif",
@@ -53,7 +53,16 @@
     "usageMonth": "bulan ini",
     "usageUsedOfLimit": "{used} / {limit} {window}",
     "usageUsed": "{used} {window}",
-    "usageLocalHint": "hitungan lokal"
+    "usageLocalHint": "hitungan lokal",
+    "credentialSet": "Atur kunci API",
+    "credentialRotate": "Ganti kunci",
+    "credentialClear": "Hapus kunci",
+    "credentialSave": "Simpan",
+    "credentialPlaceholder": "Tempel kunci API…",
+    "credentialShow": "Tampilkan kunci",
+    "credentialHide": "Sembunyikan kunci",
+    "credentialError": "Tidak dapat menyimpan kunci. Silakan coba lagi.",
+    "encryptionDisabled": "Manajemen kunci memerlukan DB_ENCRYPTION_KEY yang dikonfigurasi"
   },
   "Income": {
     "title": "Pendapatan",

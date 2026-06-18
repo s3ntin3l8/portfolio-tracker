@@ -8,8 +8,10 @@ import { useRouter } from "@/i18n/navigation";
 /** Real-client wrapper: saves provider config, then refreshes server data. */
 export function AdminProviders({
   initialProviders,
+  encryptionEnabled,
 }: {
   initialProviders: AdminProvider[];
+  encryptionEnabled: boolean;
 }) {
   const api = useApiClient();
   const router = useRouter();
@@ -17,6 +19,7 @@ export function AdminProviders({
     <AdminProvidersForm
       client={api}
       initialProviders={initialProviders}
+      encryptionEnabled={encryptionEnabled}
       onSuccess={() => router.refresh()}
     />
   );

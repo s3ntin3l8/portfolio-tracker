@@ -2,8 +2,24 @@ import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { schema, migrationsDir } from "@portfolio/db";
+import { EncryptionService } from "../services/encryption.js";
 
 export type DB = PostgresJsDatabase<typeof schema>;
+
+// Module-level EncryptionService singleton, set by the db plugin at startup.
+// `getEncryption()` returns a disabled (passthrough) instance until `setEncryption()`
+// is called, so callers in tests / early boot get a safe no-op.
+const _disabledEncryption = new EncryptionService({ key: "" });
+let encryptionInstance: EncryptionService | null = null;
+
+export function setEncryption(enc: EncryptionService): void {
+  encryptionInstance = enc;
+}
+
+/** The app-wide encryption service. Returns a disabled passthrough before the db plugin runs. */
+export function getEncryption(): EncryptionService {
+  return encryptionInstance ?? _disabledEncryption;
+}
 
 let dbInstance: DB | null = null;
 let sql: ReturnType<typeof postgres> | null = null;

@@ -258,6 +258,42 @@ export const scrapedQuotes = pgTable("scraped_quotes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Admin-managed credentials for data providers (market-data + vision). A DB row
+// overrides the corresponding env var; the env value is the fallback when no row
+// exists. Keys are encrypted at rest (EncryptionService, enc: prefix) — never
+// plaintext. Writing a key requires app.encryption.isEnabled; the write route
+// refuses and warns in the UI when encryption is disabled.
+// The `provider` field namespaces both market-data and vision providers
+// (e.g. "twelvedata", "vision:gemini") so one table serves both registries.
+export const providerCredentials = pgTable("provider_credentials", {
+  provider: text("provider").primaryKey(),
+  apiKeyEnc: text("api_key_enc"),     // encrypted; null for url-only or keyless providers
+  urlOverride: text("url_override"),  // optional endpoint override (e.g. ANTAM_BUYBACK_URL)
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Vision screenshot-parser provider config, editable by admins. Mirrors
+// provider_settings for the market-data chain (enable/priority DB-override env defaults).
+export const visionProviderSettings = pgTable("vision_provider_settings", {
+  provider: text("provider").primaryKey(), // e.g. "claude" | "gemini" | "openrouter" | "ollama"
+  enabled: boolean("enabled").notNull().default(true),
+  priority: integer("priority").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Immutable audit trail for admin actions on provider config / credentials.
+// actor_sub = the Authentik OIDC subject (not our DB user id) so the record
+// survives user-row deletion. Secret values are NEVER logged — only the action + target.
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorSub: text("actor_sub").notNull(),
+  // "set_credential" | "clear_credential" | "update_providers" | "update_vision_providers"
+  action: text("action").notNull(),
+  target: text("target").notNull(), // provider id, e.g. "twelvedata" or "vision:gemini"
+  meta: jsonb("meta"),              // non-secret context, e.g. { keyHint: "••••abc1" }
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // The source of truth. Holdings, P&L, cash balance, XIRR and net worth are derived
 // from these rows (in @portfolio/core), never stored.
 export const transactions = pgTable(

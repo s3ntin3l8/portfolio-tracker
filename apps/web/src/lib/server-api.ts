@@ -347,12 +347,14 @@ export async function loadMe(): Promise<User | null> {
 
 /** Admin: the market-data provider config, or "unavailable" (signed out / non-admin / down). */
 export async function loadAdminProviders(): Promise<
-  { status: "ok"; providers: AdminProvider[] } | { status: "unavailable" }
+  | { status: "ok"; providers: AdminProvider[]; encryptionEnabled: boolean }
+  | { status: "unavailable" }
 > {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    return { status: "ok", providers: await api.getAdminProviders() };
+    const { providers, encryptionEnabled } = await api.getAdminProviders();
+    return { status: "ok", providers, encryptionEnabled };
   } catch {
     return { status: "unavailable" };
   }

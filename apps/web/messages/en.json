@@ -37,7 +37,7 @@
     "title": "Admin",
     "subtitle": "Server configuration. Visible to admins only.",
     "providers": "Data providers",
-    "providersHint": "Enable or disable market-data providers and set the order they're tried in (top first). API keys are configured via environment variables.",
+    "providersHint": "Enable or disable market-data providers, set their fallback order (top first), and manage API keys.",
     "notConfigured": "No API key/URL configured",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -53,7 +53,16 @@
     "usageMonth": "this month",
     "usageUsedOfLimit": "{used} / {limit} {window}",
     "usageUsed": "{used} {window}",
-    "usageLocalHint": "local count"
+    "usageLocalHint": "local count",
+    "credentialSet": "Set API key",
+    "credentialRotate": "Rotate key",
+    "credentialClear": "Clear key",
+    "credentialSave": "Save",
+    "credentialPlaceholder": "Paste API key…",
+    "credentialShow": "Show key",
+    "credentialHide": "Hide key",
+    "credentialError": "Couldn't save the key. Please try again.",
+    "encryptionDisabled": "Key management requires DB_ENCRYPTION_KEY to be set"
   },
   "Income": {
     "title": "Income",

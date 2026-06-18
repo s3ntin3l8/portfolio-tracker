@@ -112,9 +112,10 @@ export const userUpdateSchema = z.object({
 });
 export type UserUpdate = z.infer<typeof userUpdateSchema>;
 
-// Admin-editable market-data provider config (PATCH /admin/providers). The id must match
-// a known registry provider (validated server-side); `enabled` toggles it and `priority`
-// orders the fallback chain (lower = tried first). API keys are NOT set here (see #106).
+// Admin-editable market-data or vision provider config (PATCH /admin/providers or
+// PATCH /admin/vision-providers). The id must match a known registry provider
+// (validated server-side); `enabled` toggles it and `priority` orders the fallback
+// chain (lower = tried first).
 export const providerSettingUpdateSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean(),
@@ -122,6 +123,19 @@ export const providerSettingUpdateSchema = z.object({
 });
 export type ProviderSettingUpdate = z.infer<typeof providerSettingUpdateSchema>;
 export const providerSettingsUpdateSchema = z.array(providerSettingUpdateSchema);
+
+// Admin credential write body (PUT /admin/providers/:id/credential or
+// PUT /admin/vision-providers/:id/credential). At least one of apiKey or urlOverride
+// must be provided. Storing a key requires encryption to be enabled server-side.
+export const providerCredentialSchema = z
+  .object({
+    apiKey: z.string().min(1).optional(),
+    urlOverride: z.string().url().optional(),
+  })
+  .refine((v) => v.apiKey !== undefined || v.urlOverride !== undefined, {
+    message: "at least one of apiKey or urlOverride is required",
+  });
+export type ProviderCredentialInput = z.infer<typeof providerCredentialSchema>;
 
 export const corporateActionTypeSchema = z.enum(["split", "bonus", "rights"]);
 export type CorporateActionType = z.infer<typeof corporateActionTypeSchema>;

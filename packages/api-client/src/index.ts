@@ -8,9 +8,10 @@ import type {
   ImportIssue,
   UserUpdate,
   ProviderSettingUpdate,
+  ProviderCredentialInput,
 } from "@portfolio/schema";
 
-export type { ImportIssue, ParsedGoldContract } from "@portfolio/schema";
+export type { ImportIssue, ParsedGoldContract, ProviderCredentialInput } from "@portfolio/schema";
 
 // --- Response shapes (mirror the API) ------------------------------------
 
@@ -42,13 +43,36 @@ export interface AdminProviderUsage {
 export interface AdminProvider {
   id: string;
   label: string;
-  /** Whether the provider's env key/url is present (it can't be used without it). */
+  /** Whether this provider can be used (env key present or DB credential set). */
   configured: boolean;
   enabled: boolean;
   /** Fallback order; lower is tried first. */
   priority: number;
   /** API usage/quota, when available for this provider. */
   usage?: AdminProviderUsage | null;
+  /** Whether an encrypted API key is stored in the DB (overrides the env key). */
+  hasKey: boolean;
+  /** Masked display of the DB key, e.g. "••••abc1", or null when no DB key is set. */
+  keyHint: string | null;
+  /** Whether a URL override is stored in the DB (for scraper-fed providers). */
+  hasUrl: boolean;
+}
+
+/** Wrapper returned by GET/PATCH /admin/providers and credential routes. */
+export interface AdminProvidersResponse {
+  providers: AdminProvider[];
+  /** Whether server-side encryption is configured; gates the key-management UI. */
+  encryptionEnabled: boolean;
+}
+
+/** One entry from GET /admin/audit. */
+export interface AdminAuditEntry {
+  id: string;
+  actorSub: string;
+  action: string;
+  target: string;
+  meta: unknown | null;
+  at: string; // ISO timestamp
 }
 
 export interface Portfolio {
@@ -549,10 +573,15 @@ export function createApiClient(config: ApiClientConfig) {
     me: () => request<User>("GET", "/me"),
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
 
-    // Admin: market-data provider config (enable/disable + fallback priority).
-    getAdminProviders: () => request<AdminProvider[]>("GET", "/admin/providers"),
+    // Admin: market-data provider config (enable/disable + fallback priority + credentials).
+    getAdminProviders: () => request<AdminProvidersResponse>("GET", "/admin/providers"),
     updateAdminProviders: (input: ProviderSettingUpdate[]) =>
-      request<AdminProvider[]>("PATCH", "/admin/providers", input),
+      request<AdminProvidersResponse>("PATCH", "/admin/providers", input),
+    setAdminProviderCredential: (id: string, body: ProviderCredentialInput) =>
+      request<AdminProvidersResponse>("PUT", `/admin/providers/${encodeURIComponent(id)}/credential`, body),
+    clearAdminProviderCredential: (id: string) =>
+      request<AdminProvidersResponse>("DELETE", `/admin/providers/${encodeURIComponent(id)}/credential`),
+    getAdminAuditLog: () => request<AdminAuditEntry[]>("GET", "/admin/audit"),
 
     getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
       request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),

@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance } from "fastify";
-import { ensureDb, closeDb, getDb, type DB } from "../db/client.js";
+import { ensureDb, closeDb, getDb, setEncryption, type DB } from "../db/client.js";
 import { EncryptionService } from "../services/encryption.js";
 
 export const dbPlugin = fp(async (app: FastifyInstance) => {
@@ -12,6 +12,9 @@ export const dbPlugin = fp(async (app: FastifyInstance) => {
 
   app.decorate("db", db);
   app.decorate("encryption", encryption);
+  // Make encryption available to service-layer code (e.g. resolveCredentials) that
+  // doesn't have access to the Fastify app instance.
+  setEncryption(encryption);
 
   app.addHook("onClose", async () => {
     await closeDb();
