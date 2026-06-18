@@ -95,8 +95,12 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         .from(trConnections)
         .where(eq(trConnections.status, "connected"));
       for (const conn of conns) {
-        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn);
-        app.log.info({ connectionId: conn.id, result }, "tr sync complete");
+        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log);
+        if (result.status === "connected") {
+          app.log.info({ connectionId: conn.id, result }, "tr sync complete");
+        } else {
+          app.log.warn({ connectionId: conn.id, result }, "tr sync non-connected");
+        }
       }
     } catch (err) {
       app.log.error({ err }, "tr sync failed");

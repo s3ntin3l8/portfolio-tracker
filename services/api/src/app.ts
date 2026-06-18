@@ -1,4 +1,7 @@
 import Fastify from "fastify";
+import type { FastifyBaseLogger } from "fastify";
+import pino from "pino";
+import type { DestinationStream } from "pino";
 import sensible from "@fastify/sensible";
 import { ZodError } from "zod";
 import { envPlugin } from "./plugins/env.js";
@@ -28,14 +31,55 @@ export type BuildAppOptions = AuthPluginOptions & {
   screenshotParser?: ScreenshotParser;
   // Injectable so tests drive the pytr boundary without spawning Python.
   pytr?: PytrRunner;
+  /**
+   * Test capture seam: pass an in-memory writable so test assertions can read NDJSON
+   * log lines. Must NOT be used in production. Example:
+   *   const lines: object[] = [];
+   *   const logStream = { write(line: string) { lines.push(JSON.parse(line)); } };
+   *   const app = await buildApp({ logStream });
+   */
+  logStream?: DestinationStream;
 };
 
 export async function buildApp(opts: BuildAppOptions = {}) {
-  const app = Fastify({
-    logger: {
+  // Build the pino logger eagerly so we can (a) set redact paths at construction time
+  // (they can't be patched in after the fact) and (b) accept a custom stream for test
+  // log capture. The level is set from process.env here; loggingPlugin re-reconciles it
+  // from the validated app.config after envPlugin runs.
+  const loggerInstance = pino(
+    {
       level: process.env.LOG_LEVEL || "info",
+      redact: {
+        paths: [
+          // Standard HTTP fields emitted by Fastify's req/res serializers.
+          "req.headers.authorization",
+          "req.headers.cookie",
+          // Vision-provider API keys (in-process, never in req headers; defence-in-depth).
+          'req.headers["x-api-key"]',
+          // Trade Republic credentials — passed via env to Python, logged in structured objs.
+          "phone",
+          "pin",
+          "*.phone",
+          "*.pin",
+          "wafToken",
+          "sessionData",
+          // Encryption key — should never appear in logs, but guard the config object.
+          "DB_ENCRYPTION_KEY",
+          "config.DB_ENCRYPTION_KEY",
+          // Raw image/document bytes — log only `bytes` (length), never the base64 payload.
+          "image",
+          "data",
+        ],
+        censor: "[Redacted]",
+      },
     },
-  });
+    opts.logStream ?? process.stdout,
+  );
+
+  // Cast to FastifyBaseLogger: pino.Logger is a superset of FastifyBaseLogger. The cast
+  // ensures Fastify infers `FastifyInstance<..., FastifyBaseLogger, ...>` consistently
+  // with the rest of the codebase (server.ts, tests). Runtime behaviour is identical.
+  const app = Fastify({ loggerInstance: loggerInstance as FastifyBaseLogger });
 
   // Tolerate an empty application/json body. Fastify's default parser rejects a
   // request that advertises application/json with no body (FST_ERR_CTP_EMPTY_JSON_BODY
@@ -76,8 +120,19 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);
 
-  app.decorate("screenshotParser", opts.screenshotParser ?? getScreenshotParser());
-  app.decorate("pytr", opts.pytr ?? getPytrRunner(app.config));
+  const screenshotParser = opts.screenshotParser ?? getScreenshotParser();
+  app.decorate("screenshotParser", screenshotParser);
+  // Log the selected vision provider once at startup (only for the real singleton, not
+  // test-injected mocks — those are controlled by the test and shouldn't pollute logs).
+  if (!opts.screenshotParser) {
+    const pinned = !!process.env.SCREENSHOT_PARSER?.trim();
+    app.log.info(
+      { provider: screenshotParser.name, configured: screenshotParser.isConfigured(), pinned },
+      "vision provider selected",
+    );
+  }
+
+  app.decorate("pytr", opts.pytr ?? getPytrRunner(app.config, app.log));
 
   await app.register(rootRoute);
   await app.register(healthRoute);

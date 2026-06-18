@@ -16,6 +16,17 @@ export interface ParseResult {
 }
 
 /**
+ * Minimal structured logger interface — satisfied structurally by pino/fastify loggers.
+ * Defined here to keep the parser implementations free of a fastify import.
+ */
+export interface Logger {
+  debug(obj: object, msg: string): void;
+  info(obj: object, msg: string): void;
+  warn(obj: object, msg: string): void;
+  error(obj: object, msg: string): void;
+}
+
+/**
  * Turns a screenshot/PDF into draft transactions (and gold contracts).
  * Implementations: Claude vision (default), local Ollama/LM Studio, Gemini,
  * OpenRouter. The drafts are confirmed by the user before any transaction is written.
@@ -23,5 +34,6 @@ export interface ParseResult {
 export interface ScreenshotParser {
   readonly name: string;
   isConfigured(): boolean;
-  parse(image: ParserImage): Promise<ParseResult>;
+  /** Optional logger receives debug/info/error lines for the LLM call lifecycle. */
+  parse(image: ParserImage, log?: Logger): Promise<ParseResult>;
 }
