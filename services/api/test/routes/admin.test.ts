@@ -281,4 +281,117 @@ describe("admin provider config", () => {
     const entry = log.find((e) => e.action === "update_providers" && e.target.includes("coingecko"));
     expect(entry).toBeDefined();
   });
+
+  // ─── Vision LLM provider config ──────────────────────────────────────────
+
+  it("GET /admin/vision-providers lists all registry providers (admin only)", async () => {
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/admin/vision-providers",
+      headers: auth(await token("nobody-v")),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const ok = await app.inject({
+      method: "GET",
+      url: "/admin/vision-providers",
+      headers: auth(await token("admin-v1", [ADMIN_GROUP])),
+    });
+    expect(ok.statusCode).toBe(200);
+    const res = ok.json() as {
+      providers: { id: string; configured: boolean }[];
+      encryptionEnabled: boolean;
+    };
+    // All four registry providers should be listed.
+    const ids = res.providers.map((p) => p.id);
+    expect(ids).toContain("claude");
+    expect(ids).toContain("gemini");
+    expect(ids).toContain("openrouter");
+    expect(ids).toContain("ollama");
+    // Ollama is not configured by default (OLLAMA_BASE_URL not set in tests).
+    expect(res.providers.find((p) => p.id === "ollama")?.configured).toBe(false);
+    expect(typeof res.encryptionEnabled).toBe("boolean");
+  });
+
+  it("PATCH /admin/vision-providers upserts enable/priority", async () => {
+    const t = await token("admin-v2", [ADMIN_GROUP]);
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/admin/vision-providers",
+      headers: auth(t),
+      payload: [
+        { id: "gemini", enabled: false, priority: 0 },
+        { id: "ollama", enabled: true, priority: 9 },
+      ],
+    });
+    expect(patch.statusCode).toBe(200);
+    const after = patch.json() as {
+      providers: { id: string; enabled: boolean; priority: number }[];
+    };
+    expect(after.providers.find((p) => p.id === "gemini")?.enabled).toBe(false);
+    // gemini at priority 0 should sort ahead of all others.
+    expect(after.providers[0].id).toBe("gemini");
+  });
+
+  it("PATCH /admin/vision-providers rejects unknown provider ids", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/vision-providers",
+      headers: auth(await token("admin-v3", [ADMIN_GROUP])),
+      payload: [{ id: "not-a-vision-provider", enabled: true, priority: 1 }],
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: "unknown_provider" });
+  });
+
+  it("PUT /admin/vision-providers/:id/credential returns 503 when encryption disabled", async () => {
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/vision-providers/claude/credential",
+      headers: auth(await token("admin-vc1", [ADMIN_GROUP])),
+      payload: { apiKey: "test-anthropic-key" },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ error: "encryption_required" });
+  });
+
+  it("PUT /admin/vision-providers/:id/credential returns 404 for unknown provider", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/vision-providers/not-real/credential",
+      headers: auth(await token("admin-vc2", [ADMIN_GROUP])),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: "unknown_provider" });
+  });
+
+  it("DELETE /admin/vision-providers/:id/credential is a no-op when no credential exists", async () => {
+    const res = await app.inject({
+      method: "DELETE",
+      url: "/admin/vision-providers/ollama/credential",
+      headers: auth(await token("admin-vc3", [ADMIN_GROUP])),
+    });
+    // Deleting a non-existent credential is idempotent → 200.
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("PATCH /admin/vision-providers records an audit log entry", async () => {
+    const t = await token("admin-v-audit", [ADMIN_GROUP]);
+    await app.inject({
+      method: "PATCH",
+      url: "/admin/vision-providers",
+      headers: auth(t),
+      payload: [{ id: "openrouter", enabled: true, priority: 3 }],
+    });
+    const auditRes = await app.inject({
+      method: "GET",
+      url: "/admin/audit",
+      headers: auth(t),
+    });
+    const log = auditRes.json() as { action: string; target: string }[];
+    const entry = log.find(
+      (e) => e.action === "update_vision_providers" && e.target.includes("openrouter"),
+    );
+    expect(entry).toBeDefined();
+  });
 });

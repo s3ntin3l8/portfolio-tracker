@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminProviders } from "@/components/admin-providers";
-import { loadMe, loadAdminProviders } from "@/lib/server-api";
+import { AdminVisionProviders } from "@/components/admin-vision-providers";
+import { loadMe, loadAdminProviders, loadAdminVisionProviders } from "@/lib/server-api";
 
 export default async function AdminPage({
   params,
@@ -17,7 +18,10 @@ export default async function AdminPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const result = await loadAdminProviders();
+  const [result, visionResult] = await Promise.all([
+    loadAdminProviders(),
+    loadAdminVisionProviders(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -31,13 +35,28 @@ export default async function AdminPage({
           <CardTitle>{t("providers")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {t("providersHint")}
-          </p>
+          <p className="mb-4 text-sm text-muted-foreground">{t("providersHint")}</p>
           {result.status === "ok" ? (
             <AdminProviders
               initialProviders={result.providers}
               encryptionEnabled={result.encryptionEnabled}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("visionProviders")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">{t("visionProvidersHint")}</p>
+          {visionResult.status === "ok" ? (
+            <AdminVisionProviders
+              initialProviders={visionResult.providers}
+              encryptionEnabled={visionResult.encryptionEnabled}
             />
           ) : (
             <p className="text-sm text-muted-foreground">{t("unavailable")}</p>

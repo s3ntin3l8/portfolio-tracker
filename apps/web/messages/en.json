@@ -62,7 +62,11 @@
     "credentialShow": "Show key",
     "credentialHide": "Hide key",
     "credentialError": "Couldn't save the key. Please try again.",
-    "encryptionDisabled": "Key management requires DB_ENCRYPTION_KEY to be set"
+    "encryptionDisabled": "Key management requires DB_ENCRYPTION_KEY to be set",
+    "visionProviders": "Vision LLM providers",
+    "visionProvidersHint": "Configure vision models for screenshot parsing. The highest-priority enabled provider is used. Ollama requires OLLAMA_BASE_URL (or a URL set via DB) to be configured.",
+    "visionUrlPlaceholder": "http://localhost:11434",
+    "visionUrlSet": "URL set"
   },
   "Income": {
     "title": "Income",

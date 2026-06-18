@@ -75,6 +75,30 @@ export interface AdminAuditEntry {
   at: string; // ISO timestamp
 }
 
+/** A vision LLM provider's effective config (GET/PATCH /admin/vision-providers). No secrets. */
+export interface AdminVisionProvider {
+  id: string;         // "claude" | "gemini" | "openrouter" | "ollama"
+  label: string;
+  /** Whether this provider can be used (env key/url present or DB credential set). */
+  configured: boolean;
+  enabled: boolean;
+  /** Fallback order; lower is tried first. */
+  priority: number;
+  /** Whether an encrypted API key (or URL) is stored in the DB. */
+  hasKey: boolean;
+  /** Masked display of the DB key, e.g. "••••abc1", or null when no DB key is set. */
+  keyHint: string | null;
+  /** Whether a URL override is stored in the DB (for Ollama/LM Studio endpoint). */
+  hasUrl: boolean;
+}
+
+/** Wrapper returned by GET/PATCH /admin/vision-providers and credential routes. */
+export interface AdminVisionProvidersResponse {
+  providers: AdminVisionProvider[];
+  /** Whether server-side encryption is configured; gates the key-management UI. */
+  encryptionEnabled: boolean;
+}
+
 export interface Portfolio {
   id: string;
   userId: string;
@@ -582,6 +606,23 @@ export function createApiClient(config: ApiClientConfig) {
     clearAdminProviderCredential: (id: string) =>
       request<AdminProvidersResponse>("DELETE", `/admin/providers/${encodeURIComponent(id)}/credential`),
     getAdminAuditLog: () => request<AdminAuditEntry[]>("GET", "/admin/audit"),
+
+    // Admin: vision LLM provider config (enable/disable + fallback priority + credentials).
+    getAdminVisionProviders: () =>
+      request<AdminVisionProvidersResponse>("GET", "/admin/vision-providers"),
+    updateAdminVisionProviders: (input: ProviderSettingUpdate[]) =>
+      request<AdminVisionProvidersResponse>("PATCH", "/admin/vision-providers", input),
+    setAdminVisionProviderCredential: (id: string, body: ProviderCredentialInput) =>
+      request<AdminVisionProvidersResponse>(
+        "PUT",
+        `/admin/vision-providers/${encodeURIComponent(id)}/credential`,
+        body,
+      ),
+    clearAdminVisionProviderCredential: (id: string) =>
+      request<AdminVisionProvidersResponse>(
+        "DELETE",
+        `/admin/vision-providers/${encodeURIComponent(id)}/credential`,
+      ),
 
     getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
       request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),

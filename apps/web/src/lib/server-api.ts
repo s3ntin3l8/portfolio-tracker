@@ -18,6 +18,7 @@ import {
   type ContributionStats,
   type TrConnection,
   type AdminProvider,
+  type AdminVisionProvider,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -354,6 +355,21 @@ export async function loadAdminProviders(): Promise<
   if (!api) return { status: "unavailable" };
   try {
     const { providers, encryptionEnabled } = await api.getAdminProviders();
+    return { status: "ok", providers, encryptionEnabled };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+/** Admin: the vision LLM provider config, or "unavailable" (signed out / non-admin / down). */
+export async function loadAdminVisionProviders(): Promise<
+  | { status: "ok"; providers: AdminVisionProvider[]; encryptionEnabled: boolean }
+  | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const { providers, encryptionEnabled } = await api.getAdminVisionProviders();
     return { status: "ok", providers, encryptionEnabled };
   } catch {
     return { status: "unavailable" };

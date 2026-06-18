@@ -6,6 +6,7 @@ import { detectCsvFormat } from "../../src/services/parsers/detect.js";
 import { ClaudeVisionParser } from "../../src/services/parsers/claude.js";
 import { GeminiVisionParser } from "../../src/services/parsers/gemini.js";
 import { OpenRouterVisionParser } from "../../src/services/parsers/openrouter.js";
+import { OllamaVisionParser } from "../../src/services/parsers/ollama.js";
 import { buildScreenshotParser } from "../../src/services/screenshot-parser.js";
 
 const IMAGE = { data: Buffer.from("img"), mimeType: "image/png" } as const;
@@ -36,12 +37,88 @@ const CSV = `date,action,assetClass,ticker,name,quantity,unit,price,fees,currenc
 2026-01-15,buy,equity,BBCA,Bank Central Asia,100,shares,9500,0,IDR
 2026-02-08,buy,gold,GOLD,Antam Gold,5,grams,1150000,0,IDR`;
 
+describe("OllamaVisionParser", () => {
+  it("isConfigured() returns false when baseUrl is empty (default = not running)", () => {
+    expect(new OllamaVisionParser().isConfigured()).toBe(false);
+  });
+
+  it("isConfigured() returns true when an explicit baseUrl is provided", () => {
+    expect(new OllamaVisionParser({ baseUrl: "http://localhost:11434" }).isConfigured()).toBe(true);
+  });
+
+  it("throws for PDFs (local models don't support PDF natively)", async () => {
+    const p = new OllamaVisionParser({ baseUrl: "http://localhost:11434" });
+    await expect(
+      p.parse({ data: Buffer.from("pdf-data"), mimeType: "application/pdf" }),
+    ).rejects.toThrow("ollama_pdf_not_supported");
+  });
+
+  it("parse() sends the image as a data URL and validates the response", async () => {
+    const mockResponse = {
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              transactions: [
+                {
+                  assetClass: "gold",
+                  action: "buy",
+                  quantity: "5",
+                  unit: "grams",
+                  price: "1150000",
+                  currency: "IDR",
+                  executedAt: "2026-02-08T00:00:00.000Z",
+                  confidence: 0.9,
+                },
+              ],
+            }),
+          },
+        },
+      ],
+    };
+    let capturedUrl = "";
+    let capturedBody: unknown;
+    const fakeFetch: typeof fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(init?.body as string);
+      return { ok: true, status: 200, json: async () => mockResponse };
+    }) as unknown as typeof fetch;
+
+    const p = new OllamaVisionParser({
+      baseUrl: "http://ollama:11434",
+      model: "qwen2.5vl:7b",
+      fetch: fakeFetch,
+    });
+    const result = await p.parse({ data: Buffer.from("img-data"), mimeType: "image/png" });
+
+    expect(capturedUrl).toBe("http://ollama:11434/v1/chat/completions");
+    expect((capturedBody as { model: string }).model).toBe("qwen2.5vl:7b");
+    expect(result.drafts).toHaveLength(1);
+    expect(result.drafts[0].assetClass).toBe("gold");
+    expect(result.contracts).toHaveLength(0);
+  });
+
+  it("parse() throws a clear error on HTTP failure", async () => {
+    const fakeFetch: typeof fetch = (async () => ({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+    })) as unknown as typeof fetch;
+
+    const p = new OllamaVisionParser({ baseUrl: "http://ollama:11434", fetch: fakeFetch });
+    await expect(
+      p.parse({ data: Buffer.from("img"), mimeType: "image/png" }),
+    ).rejects.toThrow("ollama_vision_error_404");
+  });
+});
+
 describe("buildScreenshotParser (selection)", () => {
   const KEYS = [
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "OPENROUTER_API_KEY",
     "SCREENSHOT_PARSER",
+    "OLLAMA_BASE_URL",
   ] as const;
   const saved: Record<string, string | undefined> = {};
   for (const k of KEYS) saved[k] = process.env[k];

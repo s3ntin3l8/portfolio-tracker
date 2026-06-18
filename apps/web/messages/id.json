@@ -62,7 +62,11 @@
     "credentialShow": "Tampilkan kunci",
     "credentialHide": "Sembunyikan kunci",
     "credentialError": "Tidak dapat menyimpan kunci. Silakan coba lagi.",
-    "encryptionDisabled": "Manajemen kunci memerlukan DB_ENCRYPTION_KEY yang dikonfigurasi"
+    "encryptionDisabled": "Manajemen kunci memerlukan DB_ENCRYPTION_KEY yang dikonfigurasi",
+    "visionProviders": "Penyedia LLM Vision",
+    "visionProvidersHint": "Konfigurasi model vision untuk pemrosesan tangkapan layar. Penyedia dengan prioritas tertinggi yang aktif akan digunakan. Ollama memerlukan OLLAMA_BASE_URL (atau URL yang diatur melalui DB) untuk dikonfigurasi.",
+    "visionUrlPlaceholder": "http://localhost:11434",
+    "visionUrlSet": "URL telah diatur"
   },
   "Income": {
     "title": "Pendapatan",

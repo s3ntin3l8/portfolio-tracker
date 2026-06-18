@@ -124,7 +124,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);
 
-  const screenshotParser = opts.screenshotParser ?? getScreenshotParser();
+  const screenshotParser = opts.screenshotParser ?? await getScreenshotParser();
   app.decorate("screenshotParser", screenshotParser);
   // Log the selected vision provider once at startup (only for the real singleton, not
   // test-injected mocks — those are controlled by the test and shouldn't pollute logs).
