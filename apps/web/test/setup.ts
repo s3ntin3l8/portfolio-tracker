@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
-// Radix UI primitives (e.g. DropdownMenu) call DOM APIs that jsdom doesn't implement.
-// Stub the ones they touch so the portalled menus open under test.
+// Radix UI primitives (e.g. DropdownMenu, Switch) call DOM APIs that jsdom doesn't implement.
+// Stub the ones they touch so the portalled menus and form controls work under test.
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
@@ -13,4 +13,12 @@ if (!Element.prototype.setPointerCapture) {
 }
 if (!Element.prototype.releasePointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
+}
+// @radix-ui/react-use-size uses ResizeObserver; jsdom doesn't ship it.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 }

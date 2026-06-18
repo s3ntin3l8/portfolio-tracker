@@ -62,6 +62,12 @@ export interface ProviderDescriptor {
    * (XAU) is the live ticker, not a holding source, so the spot providers stay unset.
    */
   goldMarket?: string;
+  /**
+   * Name of the environment variable that supplies this provider's API key or URL.
+   * Used by the admin UI to show a "from .env" indicator when no DB credential is set
+   * but an env key is present. Never exposed as a value — presence only.
+   */
+  keyEnvVar?: string;
 }
 
 /**
@@ -84,6 +90,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     id: "twelvedata",
     label: "Twelve Data",
     defaultPriority: 1,
+    keyEnvVar: "TWELVEDATA_API_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.TWELVEDATA_API_KEY),
     create: (s) => new TwelveDataProvider(s?.apiKey ?? process.env.TWELVEDATA_API_KEY!),
   },
@@ -91,6 +98,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     id: "goldapi",
     label: "GoldAPI",
     defaultPriority: 2,
+    keyEnvVar: "GOLDAPI_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.GOLDAPI_KEY),
     create: (s) => new GoldApiProvider(s?.apiKey ?? process.env.GOLDAPI_KEY!),
   },
@@ -144,6 +152,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     id: "eodhd",
     label: "EODHD",
     defaultPriority: 6,
+    keyEnvVar: "EODHD_API_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.EODHD_API_KEY),
     create: (s) => new EodhdProvider({ apiKey: s?.apiKey ?? process.env.EODHD_API_KEY! }),
   },
@@ -151,6 +160,7 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     id: "coingecko",
     label: "CoinGecko",
     defaultPriority: 7,
+    keyEnvVar: "COINGECKO_API_KEY",
     // Always available: the public API works keyless; an optional Demo COINGECKO_API_KEY
     // raises the rate limit. The crypto specialist, so it sorts ahead of Yahoo's crypto
     // fallback (order only matters among crypto supporters).

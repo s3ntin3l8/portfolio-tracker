@@ -87,7 +87,14 @@ export async function adminRoute(app: FastifyInstance) {
         }
       }
       const hasUrl = Boolean(cred?.urlOverride);
-      return { ...p, hasKey, keyHint, hasUrl, usage: usage[p.id] ?? null };
+      const desc = PROVIDER_REGISTRY.find((d) => d.id === p.id);
+      const keySource: "db" | "env" | null =
+        hasKey || hasUrl
+          ? "db"
+          : desc?.keyEnvVar && process.env[desc.keyEnvVar]
+          ? "env"
+          : null;
+      return { ...p, hasKey, keyHint, hasUrl, keySource, usage: usage[p.id] ?? null };
     });
   }
 
@@ -283,7 +290,14 @@ export async function adminRoute(app: FastifyInstance) {
         }
       }
       const hasUrl = Boolean(cred?.urlOverride);
-      return { ...p, hasKey, keyHint, hasUrl };
+      const vDesc = VISION_PROVIDER_REGISTRY.find((d) => d.id === p.id);
+      const keySource: "db" | "env" | null =
+        hasKey || hasUrl
+          ? "db"
+          : vDesc?.keyEnvVar && process.env[vDesc.keyEnvVar]
+          ? "env"
+          : null;
+      return { ...p, hasKey, keyHint, hasUrl, keySource };
     });
   }
 

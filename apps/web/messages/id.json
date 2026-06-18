@@ -80,7 +80,9 @@
     "jobRunNow": "Jalankan sekarang",
     "jobRunning": "Sedang berjalan…",
     "jobQueued": "Diantrekan ✓",
-    "jobTriggerFailed": "Tidak dapat mengantrekan pekerjaan. Apakah scheduler sedang berjalan?"
+    "jobTriggerFailed": "Tidak dapat mengantrekan pekerjaan. Apakah scheduler sedang berjalan?",
+    "keyFromEnv": "dari .env",
+    "dragHandle": "Seret untuk mengurutkan"
   },
   "Income": {
     "title": "Pendapatan",

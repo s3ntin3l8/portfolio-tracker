@@ -17,6 +17,7 @@ function provider(overrides: Partial<AdminProvider> & Pick<AdminProvider, "id" |
     hasKey: false,
     keyHint: null,
     hasUrl: false,
+    keySource: null,
     ...overrides,
   };
 }
@@ -60,6 +61,26 @@ describe("AdminProvidersForm", () => {
     ).toBeDisabled();
   });
 
+  it("renders a drag handle for each provider row (replacing up/down arrows)", () => {
+    renderForm(STUB_CLIENT);
+    const handles = screen.getAllByRole("button", { name: messages.Admin.dragHandle });
+    expect(handles).toHaveLength(PROVIDERS.length);
+    // no arrow buttons
+    expect(screen.queryByRole("button", { name: messages.Admin.moveUp })).toBeNull();
+    expect(screen.queryByRole("button", { name: messages.Admin.moveDown })).toBeNull();
+  });
+
+  it("renders an icon-only switch for each provider row", () => {
+    renderForm(STUB_CLIENT);
+    // Two configured (enabled) providers → two switches with aria-label "Enabled"
+    const enabledSwitches = screen.getAllByRole("switch", { name: messages.Admin.enabled });
+    expect(enabledSwitches.length).toBeGreaterThan(0);
+    // EODHD is unconfigured → its switch is disabled
+    const allSwitches = screen.getAllByRole("switch");
+    const disabledSwitch = allSwitches.find((s) => (s as HTMLButtonElement).disabled);
+    expect(disabledSwitch).toBeDefined();
+  });
+
   it("saves toggled enable state with priorities from display order", async () => {
     const updateAdminProviders = vi.fn(async () =>
       response(PROVIDERS.map((p) => (p.id === "yahoo" ? { ...p, enabled: false } : p))),
@@ -70,9 +91,9 @@ describe("AdminProvidersForm", () => {
     };
     const onSuccess = renderForm(client);
 
-    // Disable Yahoo (second row's toggle reads "Enabled" until clicked).
-    const toggles = screen.getAllByRole("button", { name: messages.Admin.enabled });
-    fireEvent.click(toggles[1]);
+    // Disable Yahoo — its switch has aria-label "Enabled" (second enabled row).
+    const enabledSwitches = screen.getAllByRole("switch", { name: messages.Admin.enabled });
+    fireEvent.click(enabledSwitches[1]);
     fireEvent.click(screen.getByRole("button", { name: messages.Admin.save }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
@@ -83,27 +104,29 @@ describe("AdminProvidersForm", () => {
     ]);
   });
 
-  it("reorders a provider and saves the new priority order", async () => {
-    const updateAdminProviders = vi.fn(async () => response(PROVIDERS));
-    const client: AdminProvidersClient = { ...STUB_CLIENT, updateAdminProviders };
-    renderForm(client);
-
-    // Move Yahoo (row 2) up to first.
-    fireEvent.click(screen.getAllByRole("button", { name: messages.Admin.moveUp })[1]);
-    fireEvent.click(screen.getByRole("button", { name: messages.Admin.save }));
-
-    await waitFor(() => expect(updateAdminProviders).toHaveBeenCalled());
-    expect(updateAdminProviders).toHaveBeenCalledWith([
-      { id: "yahoo", enabled: true, priority: 1 },
-      { id: "twelvedata", enabled: true, priority: 2 },
-      { id: "eodhd", enabled: true, priority: 3 },
-    ]);
-  });
-
   it("disables the toggle for an unconfigured provider", () => {
     renderForm(STUB_CLIENT);
-    // EODHD is unconfigured → its enable toggle is disabled and the hint shows.
+    // EODHD is unconfigured → not-configured hint shows and its switch is disabled.
     expect(screen.getByText(messages.Admin.notConfigured)).toBeInTheDocument();
+    const allSwitches = screen.getAllByRole("switch");
+    expect(allSwitches.some((s) => (s as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it("renders a 'from .env' badge for an env-keyed provider with no DB key", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: "env" }),
+      provider({ id: "yahoo", label: "Yahoo Finance", priority: 2, keySource: null }),
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AdminProvidersForm
+          client={STUB_CLIENT}
+          initialProviders={providers}
+          encryptionEnabled={false}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getAllByText(messages.Admin.keyFromEnv)).toHaveLength(1);
   });
 
   it("renders a usage badge: live quota with a limit, and a local-count fallback", () => {
@@ -112,12 +135,14 @@ describe("AdminProvidersForm", () => {
         id: "twelvedata",
         label: "Twelve Data",
         priority: 1,
+        keySource: "env",
         usage: { source: "provider", window: "day", used: 120, limit: 800 },
       }),
       provider({
         id: "antam",
         label: "Antam buyback",
         priority: 2,
+        keySource: null,
         usage: { source: "local", window: "month", used: 5, limit: null },
       }),
     ];

@@ -56,6 +56,12 @@ export interface AdminProvider {
   keyHint: string | null;
   /** Whether a URL override is stored in the DB (for scraper-fed providers). */
   hasUrl: boolean;
+  /**
+   * Origin of the key/URL: "db" if an encrypted credential is stored in DB,
+   * "env" if only an env var is set (no DB key), null if keyless (always-available providers).
+   * Never exposes the key value — presence only.
+   */
+  keySource: "db" | "env" | null;
 }
 
 /** Wrapper returned by GET/PATCH /admin/providers and credential routes. */
@@ -90,6 +96,12 @@ export interface AdminVisionProvider {
   keyHint: string | null;
   /** Whether a URL override is stored in the DB (for Ollama/LM Studio endpoint). */
   hasUrl: boolean;
+  /**
+   * Origin of the key/URL: "db" if an encrypted credential is stored in DB,
+   * "env" if only an env var is set (no DB key), null if keyless.
+   * Never exposes the key value — presence only.
+   */
+  keySource: "db" | "env" | null;
 }
 
 /** Wrapper returned by GET/PATCH /admin/vision-providers and credential routes. */

@@ -27,6 +27,12 @@ export interface VisionProviderDescriptor {
    * Only called when `configured(secrets)` is true.
    */
   create: (secrets?: ResolvedSecret) => ScreenshotParser;
+  /**
+   * Name of the environment variable that supplies this provider's API key or URL.
+   * Used by the admin UI to show a "from .env" indicator when no DB credential is set
+   * but an env key/url is present. Never exposed as a value — presence only.
+   */
+  keyEnvVar?: string;
 }
 
 /**
@@ -40,6 +46,7 @@ export const VISION_PROVIDER_REGISTRY: VisionProviderDescriptor[] = [
     id: "claude",
     label: "Claude (Anthropic)",
     defaultPriority: 1,
+    keyEnvVar: "ANTHROPIC_API_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.ANTHROPIC_API_KEY),
     create: (s) =>
       new ClaudeVisionParser(s?.apiKey ?? process.env.ANTHROPIC_API_KEY ?? "", {
@@ -50,6 +57,7 @@ export const VISION_PROVIDER_REGISTRY: VisionProviderDescriptor[] = [
     id: "gemini",
     label: "Gemini (Google)",
     defaultPriority: 2,
+    keyEnvVar: "GEMINI_API_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.GEMINI_API_KEY),
     create: (s) =>
       new GeminiVisionParser(s?.apiKey ?? process.env.GEMINI_API_KEY ?? "", {
@@ -60,6 +68,7 @@ export const VISION_PROVIDER_REGISTRY: VisionProviderDescriptor[] = [
     id: "openrouter",
     label: "OpenRouter",
     defaultPriority: 3,
+    keyEnvVar: "OPENROUTER_API_KEY",
     configured: (s) => Boolean(s?.apiKey ?? process.env.OPENROUTER_API_KEY),
     create: (s) =>
       new OpenRouterVisionParser(s?.apiKey ?? process.env.OPENROUTER_API_KEY ?? "", {
@@ -70,6 +79,7 @@ export const VISION_PROVIDER_REGISTRY: VisionProviderDescriptor[] = [
     id: "ollama",
     label: "Ollama (local)",
     defaultPriority: 4,
+    keyEnvVar: "OLLAMA_BASE_URL",
     // Configured only when an explicit URL is set (OLLAMA_BASE_URL or DB override).
     // The http://localhost:11434 default is NOT treated as "configured" because we don't
     // know if a local Ollama is running.

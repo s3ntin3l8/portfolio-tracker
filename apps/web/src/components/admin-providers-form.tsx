@@ -4,21 +4,38 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
   Check,
   ChevronDown,
   ChevronUp,
   Eye,
   EyeOff,
+  GripVertical,
   KeyRound,
   Loader2,
   ShieldOff,
   Trash2,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { AdminProvider, AdminProvidersResponse, ApiClient, ProviderCredentialInput } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type AdminProvidersClient = Pick<
@@ -97,9 +114,16 @@ function CredentialEditor({
 
   if (!encryptionEnabled) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-        <ShieldOff className="size-3 shrink-0" />
-        {t("encryptionDisabled")}
+      <div className="flex flex-wrap items-center gap-2">
+        {provider.keySource === "env" && (
+          <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {t("keyFromEnv")}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <ShieldOff className="size-3 shrink-0" />
+          {t("encryptionDisabled")}
+        </div>
       </div>
     );
   }
@@ -137,17 +161,24 @@ function CredentialEditor({
             </Button>
           </>
         ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-xs"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-          >
-            {t("credentialSet")}
-            {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
-          </Button>
+          <>
+            {provider.keySource === "env" && (
+              <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {t("keyFromEnv")}
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+            >
+              {t("credentialSet")}
+              {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
+            </Button>
+          </>
         )}
       </div>
 
@@ -185,6 +216,47 @@ function CredentialEditor({
   );
 }
 
+/** Drag-sortable list item wrapping one provider row. */
+function SortableRow({
+  id,
+  dragHandleLabel,
+  children,
+}: {
+  id: string;
+  dragHandleLabel: string;
+  children: (handle: React.ReactNode) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const handle = (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      aria-label={dragHandleLabel}
+      className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+    >
+      <GripVertical className="size-4" />
+    </button>
+  );
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`space-y-2 px-3 py-2.5 text-sm${isDragging ? " opacity-50" : ""}`}
+    >
+      {children(handle)}
+    </li>
+  );
+}
+
 // Order + enabled flags only — id/label/configured are immutable here.
 const signature = (rows: AdminProvider[]) =>
   rows.map((r) => `${r.id}:${r.enabled ? 1 : 0}`).join(",");
@@ -208,6 +280,11 @@ export function AdminProvidersForm({
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const dirty = signature(rows) !== signature(baseline);
 
   function refreshFromResponse(res: AdminProvidersResponse) {
@@ -223,15 +300,16 @@ export function AdminProvidersForm({
     setSaved(false);
   }
 
-  function move(index: number, dir: -1 | 1) {
-    setRows((rs) => {
-      const j = index + dir;
-      if (j < 0 || j >= rs.length) return rs;
-      const next = [...rs];
-      [next[index], next[j]] = [next[j], next[index]];
-      return next;
-    });
-    setSaved(false);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setRows((rs) => {
+        const oldIndex = rs.findIndex((r) => r.id === active.id);
+        const newIndex = rs.findIndex((r) => r.id === over.id);
+        return arrayMove(rs, oldIndex, newIndex);
+      });
+      setSaved(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -276,73 +354,56 @@ export function AdminProvidersForm({
         </div>
       )}
 
-      <ul className="divide-y divide-border rounded-md border border-border">
-        {rows.map((p, i) => (
-          <li
-            key={p.id}
-            className="space-y-2 px-3 py-2.5 text-sm"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {i + 1}
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="font-medium">{p.label}</span>
-                {!p.configured ? (
-                  <span className="text-xs text-muted-foreground">
-                    {t("notConfigured")}
-                  </span>
-                ) : (
-                  <UsageBadge usage={p.usage} />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <ul className="divide-y divide-border rounded-md border border-border">
+          <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+            {rows.map((p, i) => (
+              <SortableRow key={p.id} id={p.id} dragHandleLabel={t("dragHandle")}>
+                {(handle) => (
+                  <>
+                    <div className="flex items-center gap-3">
+                      {handle}
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="font-medium">{p.label}</span>
+                        {!p.configured ? (
+                          <span className="text-xs text-muted-foreground">
+                            {t("notConfigured")}
+                          </span>
+                        ) : (
+                          <UsageBadge usage={p.usage} />
+                        )}
+                      </div>
+
+                      <Switch
+                        checked={p.enabled}
+                        disabled={!p.configured}
+                        onCheckedChange={() => toggle(p.id)}
+                        aria-label={p.enabled ? t("enabled") : t("disabled")}
+                      />
+                    </div>
+
+                    <div className="pl-6">
+                      <CredentialEditor
+                        provider={p}
+                        encryptionEnabled={encryptionEnabled}
+                        onSet={handleSetCredential}
+                        onClear={handleClearCredential}
+                      />
+                    </div>
+                  </>
                 )}
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("moveUp")}
-                  disabled={i === 0}
-                  onClick={() => move(i, -1)}
-                >
-                  <ArrowUp className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("moveDown")}
-                  disabled={i === rows.length - 1}
-                  onClick={() => move(i, 1)}
-                >
-                  <ArrowDown className="size-4" />
-                </Button>
-              </div>
-
-              <Button
-                type="button"
-                variant={p.enabled ? "default" : "outline"}
-                size="sm"
-                aria-pressed={p.enabled}
-                disabled={!p.configured}
-                onClick={() => toggle(p.id)}
-              >
-                {p.enabled ? t("enabled") : t("disabled")}
-              </Button>
-            </div>
-
-            <div className="pl-6">
-              <CredentialEditor
-                provider={p}
-                encryptionEnabled={encryptionEnabled}
-                onSet={handleSetCredential}
-                onClear={handleClearCredential}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
+              </SortableRow>
+            ))}
+          </SortableContext>
+        </ul>
+      </DndContext>
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={busy || !dirty}>

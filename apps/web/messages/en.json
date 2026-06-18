@@ -80,7 +80,9 @@
     "jobRunNow": "Run now",
     "jobRunning": "Running…",
     "jobQueued": "Queued ✓",
-    "jobTriggerFailed": "Could not queue job. Is the scheduler running?"
+    "jobTriggerFailed": "Could not queue job. Is the scheduler running?",
+    "keyFromEnv": "from .env",
+    "dragHandle": "Drag to reorder"
   },
   "Income": {
     "title": "Income",
