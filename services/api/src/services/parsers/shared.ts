@@ -12,6 +12,12 @@ import {
 export const TRANSACTIONS_TOOL_SCHEMA = {
   type: "object",
   properties: {
+    accountNumber: {
+      type: "string",
+      description:
+        "The account number shown on the document (e.g. SID, IBAN, broker account ID). " +
+        "Extract verbatim; null if not present.",
+    },
     transactions: {
       type: "array",
       items: {
@@ -109,6 +115,8 @@ export const EXTRACTION_PROMPT =
   "Extract every transaction shown in this screenshot (broker order, gold app, or bank " +
   "confirmation). Use decimal strings for all amounts, grams for gold, the Indonesian " +
   "locale for parsing numbers, and a confidence between 0 and 1. Return the transactions.\n" +
+  "Also extract the account number (SID, IBAN, broker account ID, or similar) if one " +
+  "appears on the document — set accountNumber to the verbatim value, or omit it if absent.\n" +
   "A document may span multiple pages forming ONE financed gold-purchase contract " +
   "(Pegadaian / Galeri 24 'MULIA' cicilan emas): a loan-calculation page (Perhitungan " +
   "Pinjaman), a purchase receipt (Bukti Pembelian Emas), and an amortization schedule " +
@@ -122,7 +130,7 @@ export const TOOL_NAME = "record_transactions";
 // tool call — spells out the exact object shape so the model emits parseable JSON.
 export const JSON_EXTRACTION_PROMPT = `${EXTRACTION_PROMPT}
 Respond with ONLY a JSON object of the form:
-{"transactions":[{
+{"accountNumber":"string or omit if absent","transactions":[{
   "assetClass":"equity|gold|bond|mutual_fund|etf|crypto|derivative",
   "action":"buy|sell|dividend|coupon",
   "ticker":"string (optional)","isin":"string (optional)","name":"string (optional)",

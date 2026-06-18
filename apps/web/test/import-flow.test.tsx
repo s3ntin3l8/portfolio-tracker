@@ -81,7 +81,6 @@ describe("ImportFlow", () => {
       expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
     );
     expect(client.importScreenshot).toHaveBeenCalledWith(
-      "p1",
       expect.any(String),
       "image/png",
     );
@@ -91,7 +90,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1");
   });
 
   it("edits a draft in the dialog and confirms the edited value", async () => {
@@ -134,6 +133,7 @@ describe("ImportFlow", () => {
       "imp1",
       [{ ...DRAFT, name: "Antam Gold 2" }],
       [],
+      "p1",
     );
   });
 
@@ -150,8 +150,8 @@ describe("ImportFlow", () => {
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
-    // Format defaults to auto-detect.
-    expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "auto");
+    // Format defaults to auto-detect. No portfolioId in upload (upload-first flow).
+    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto");
     expect(client.importScreenshot).not.toHaveBeenCalled();
   });
 
@@ -171,31 +171,44 @@ describe("ImportFlow", () => {
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
     await waitFor(() =>
-      expect(client.importCsv).toHaveBeenCalledWith("p1", expect.any(String), "dkb"),
+      expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "dkb"),
     );
   });
 
-  it("routes the import to the chosen target portfolio", async () => {
+  it("routes the import to the chosen target portfolio (selected on review step)", async () => {
     const client: ImportClient = {
       importScreenshot: vi.fn(),
       importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
-      confirmImport: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
     };
     const { container } = renderFlow(client, [
       { id: "p1", name: "Main" },
       { id: "p2", name: "DKB" },
     ]);
 
-    fireEvent.change(screen.getByLabelText(messages.Import.targetPortfolio), {
-      target: { value: "p2" },
-    });
+    // Portfolio is NOT selected before upload — picker is now on the review step.
     fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
     const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
+    // Wait for the review step to render with the portfolio picker.
     await waitFor(() =>
-      expect(client.importCsv).toHaveBeenCalledWith("p2", expect.any(String), "auto"),
+      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
     );
+    // Upload call has NO portfolioId in the new upload-first flow.
+    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto");
+
+    // The portfolio picker is now shown on the review step.
+    fireEvent.change(screen.getByLabelText(messages.Import.targetPortfolio), {
+      target: { value: "p2" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    // Confirm carries the selected portfolio.
+    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2");
   });
 
   it("auto-parses a screenshot handed in via initialFile (share target)", async () => {
@@ -224,7 +237,6 @@ describe("ImportFlow", () => {
     );
     expect(client.importScreenshot).toHaveBeenCalledTimes(1);
     expect(client.importScreenshot).toHaveBeenCalledWith(
-      "p1",
       expect.any(String),
       "image/png",
     );
@@ -295,7 +307,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract]);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1");
   });
 
   // ── Multi-file CSV tests ────────────────────────────────────────────────────
@@ -331,10 +343,10 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
 
-    // One confirmImport call per import id.
+    // One confirmImport call per import id, each with the default portfolio.
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], []);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1");
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
@@ -378,8 +390,8 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], []);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1");
   });
 
   it("all files empty/duplicate → stays on upload with error notice", async () => {
@@ -439,6 +451,6 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], []);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1");
   });
 });

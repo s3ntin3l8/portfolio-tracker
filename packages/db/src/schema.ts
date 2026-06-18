@@ -116,6 +116,9 @@ export const portfolios = pgTable(
     // Optional free-text name of the person the portfolio belongs to (e.g. a child,
     // spouse, or other family member managed on their behalf).
     accountHolder: text("account_holder"),
+    // Optional brokerage/bank account number (e.g. SID, IBAN). Used for auto-detecting
+    // which portfolio a screenshot belongs to when the account number appears in the document.
+    accountNumber: text("account_number"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

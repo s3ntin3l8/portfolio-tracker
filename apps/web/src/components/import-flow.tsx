@@ -80,6 +80,8 @@ export interface ImportResult {
   alreadyExists?: boolean;
   /** Server detected this exact file was already uploaded and confirmed. */
   alreadyConfirmed?: boolean;
+  /** Portfolio whose accountNumber matched the detected account number in the document, if any. */
+  matchedPortfolioId?: string | null;
 }
 
 /**
@@ -110,12 +112,10 @@ export function stripUid(draft: ReviewDraft): ImportDraft {
 /** The slice of the API client the import flow needs (injectable for tests). */
 export interface ImportClient {
   importScreenshot(
-    portfolioId: string,
     image: string,
     mimeType?: string,
   ): Promise<ImportResult>;
   importCsv(
-    portfolioId: string,
     content: string,
     format?: CsvFormat,
   ): Promise<ImportResult>;
@@ -123,6 +123,7 @@ export interface ImportClient {
     importId: string,
     drafts: ImportDraft[],
     contracts?: ImportContract[],
+    portfolioId?: string,
   ): Promise<{ confirmed: number }>;
 }
 
@@ -168,6 +169,9 @@ const demoClient: ImportClient = {
     confirmed: drafts.length + (contracts?.length ?? 0),
   }),
 };
+
+/** Type map for per-import-group portfolio selection (importId → portfolioId). */
+type PortfolioByImportMap = Map<string, string>;
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -220,9 +224,9 @@ export function ImportFlow({
   const [step, setStep] = useState<Step>("upload");
   const [mode, setMode] = useState<Mode>("screenshot");
   const [csvFormat, setCsvFormat] = useState<CsvFormat>("auto");
-  const [portfolioId, setPortfolioId] = useState<string>(
-    defaultPortfolioId ?? portfolios[0]?.id ?? "demo",
-  );
+  // Per-group portfolio selection: importId → portfolioId. Populated in handleFiles,
+  // updated by the per-group pickers on the review step.
+  const [portfolioByImport, setPortfolioByImport] = useState<PortfolioByImportMap>(new Map());
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [contracts, setContracts] = useState<ImportContract[]>([]);
   // For the single-file/screenshot path: the one import id.
@@ -263,15 +267,17 @@ export function ImportFlow({
     setSkipped([]);
     setStep("parsing");
 
+    // Default portfolio for all groups: first from the portfolios list.
+    const defaultPid = defaultPortfolioId ?? portfolios[0]?.id ?? "";
+
     if (files.length === 1) {
-      // ── Single-file path (identical behaviour to before) ─────────────────
+      // ── Single-file path ──────────────────────────────────────────────────
       const file = files[0]!;
       try {
         const result =
           mode === "csv"
-            ? await client.importCsv(portfolioId, await fileToText(file), csvFormat)
+            ? await client.importCsv(await fileToText(file), csvFormat)
             : await client.importScreenshot(
-                portfolioId,
                 await fileToBase64(file),
                 file.type || "image/png",
               );
@@ -292,6 +298,7 @@ export function ImportFlow({
         setContracts(resultContracts);
         setGroups(new Map([[result.importId, file.name]]));
         setIssueMap(new Map([[result.importId, result.errors]]));
+        setPortfolioByImport(new Map([[result.importId, result.matchedPortfolioId ?? defaultPid]]));
         setStep("review");
       } catch (err) {
         setError(errorMessage(err));
@@ -300,18 +307,21 @@ export function ImportFlow({
       return;
     }
 
-    // ── Multi-file CSV path ───────────────────────────────────────────────
+    // ── Multi-file path ───────────────────────────────────────────────────
     const mergedDrafts: ReviewDraft[] = [];
     const newGroups: GroupMap = new Map();
     const newIssueMap: IssueMap = new Map();
     const newSkipped: SkippedFile[] = [];
+    const newPortfolioByImport: PortfolioByImportMap = new Map();
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]!;
       setParseProgress({ current: i + 1, total: files.length });
       try {
-        const content = await fileToText(file);
-        const result = await client.importCsv(portfolioId, content, csvFormat);
+        const result =
+          mode === "csv"
+            ? await client.importCsv(await fileToText(file), csvFormat)
+            : await client.importScreenshot(await fileToBase64(file), file.type || "image/png");
 
         if (result.alreadyConfirmed) {
           newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
@@ -323,6 +333,7 @@ export function ImportFlow({
         }
         newGroups.set(result.importId, file.name);
         newIssueMap.set(result.importId, result.errors);
+        newPortfolioByImport.set(result.importId, result.matchedPortfolioId ?? defaultPid);
         for (const d of result.drafts) {
           mergedDrafts.push(withUid(d, result.importId));
         }
@@ -359,6 +370,7 @@ export function ImportFlow({
     setDrafts(mergedDrafts);
     setGroups(newGroups);
     setIssueMap(newIssueMap);
+    setPortfolioByImport(newPortfolioByImport);
     // Use the first group's importId as the "primary" import id for back-compat.
     const firstId = newGroups.keys().next().value ?? "";
     setImportId(firstId);
@@ -419,6 +431,7 @@ export function ImportFlow({
           importId,
           subset.map(stripUid),
           contracts,
+          portfolioByImport.get(importId),
         );
         setConfirmedCount(confirmed);
       } else {
@@ -434,13 +447,14 @@ export function ImportFlow({
         for (const iid of groups.keys()) {
           if (!byImport.has(iid)) byImport.set(iid, []);
         }
-        // Fire all confirms concurrently.
+        // Fire all confirms concurrently, passing the per-group portfolio selection.
         const results = await Promise.all(
           Array.from(byImport.entries()).map(([iid, ds]) =>
             client.confirmImport(
               iid,
               ds.map(stripUid),
               iid === contractImportId ? contracts : [],
+              portfolioByImport.get(iid),
             ),
           ),
         );
@@ -461,6 +475,7 @@ export function ImportFlow({
     setGroups(new Map());
     setIssueMap(new Map());
     setSkipped([]);
+    setPortfolioByImport(new Map());
     setError(null);
     setStep("upload");
   }
@@ -522,24 +537,6 @@ export function ImportFlow({
 
       {step === "upload" && (
         <div className="space-y-4">
-          {/* Target portfolio — which portfolio the confirmed transactions land in */}
-          {portfolios.length > 1 && (
-            <div className="space-y-1.5">
-              <Label htmlFor="import-portfolio">{t("targetPortfolio")}</Label>
-              <Select
-                id="import-portfolio"
-                value={portfolioId}
-                onChange={(e) => setPortfolioId(e.target.value)}
-              >
-                {portfolios.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
           {/* Mode tabs */}
           <div className="inline-flex rounded-lg border border-border p-1 text-sm">
             <button
@@ -615,7 +612,7 @@ export function ImportFlow({
             ref={fileRef}
             type="file"
             accept={mode === "csv" ? ".csv,text/csv" : "image/*,application/pdf"}
-            multiple={mode === "csv"}
+            multiple
             className="sr-only"
             aria-label={t("dropzone.cta")}
             onChange={onPick}
@@ -662,16 +659,36 @@ export function ImportFlow({
           )}
 
           {drafts.length > 0 && !isMultiGroup && (
-            // ── Single-group: render ImportReview with its own footer (unchanged) ──
-            <ImportReview
-              drafts={drafts}
-              onUpdate={updateDraft}
-              onRemove={removeDraft}
-              onRemoveMany={removeMany}
-              onConfirm={confirm}
-              onDiscard={reset}
-              issues={issueMap.get(importId) ?? []}
-            />
+            // ── Single-group: portfolio picker + ImportReview with its own footer ──
+            <>
+              {portfolios.length > 1 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="import-portfolio">{t("targetPortfolio")}</Label>
+                  <Select
+                    id="import-portfolio"
+                    value={portfolioByImport.get(importId) ?? portfolios[0]?.id ?? ""}
+                    onChange={(e) =>
+                      setPortfolioByImport(new Map([[importId, e.target.value]]))
+                    }
+                  >
+                    {portfolios.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <ImportReview
+                drafts={drafts}
+                onUpdate={updateDraft}
+                onRemove={removeDraft}
+                onRemoveMany={removeMany}
+                onConfirm={confirm}
+                onDiscard={reset}
+                issues={issueMap.get(importId) ?? []}
+              />
+            </>
           )}
 
           {drafts.length > 0 && isMultiGroup && (
@@ -679,7 +696,25 @@ export function ImportFlow({
             <>
               {groupEntries.map(([iid, filename, groupDrafts]) => (
                 <div key={iid} className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">{filename}</h3>
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">{filename}</h3>
+                    {portfolios.length > 1 && (
+                      <Select
+                        value={portfolioByImport.get(iid) ?? portfolios[0]?.id ?? ""}
+                        onChange={(e) =>
+                          setPortfolioByImport((m) => new Map(m).set(iid, e.target.value))
+                        }
+                        className="h-8 w-auto"
+                        aria-label={t("targetPortfolio")}
+                      >
+                        {portfolios.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
                   <ImportReview
                     drafts={groupDrafts}
                     onUpdate={updateDraft}

@@ -13,6 +13,8 @@ export interface ParserImage {
 export interface ParseResult {
   drafts: ParsedTransaction[];
   contracts: ParsedGoldContract[];
+  /** Account number found on the document (e.g. SID, IBAN), used for portfolio auto-detect. */
+  accountNumber?: string | null;
 }
 
 /**

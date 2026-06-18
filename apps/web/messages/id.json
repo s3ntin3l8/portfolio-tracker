@@ -144,6 +144,8 @@
     "brokeragePlaceholder": "mis. Trade Republic",
     "accountHolder": "Pemilik akun",
     "accountHolderPlaceholder": "mis. Emma",
+    "accountNumber": "Nomor rekening",
+    "accountNumberPlaceholder": "mis. SID12345678 atau IBAN",
     "currency": "Mata uang dasar",
     "type": "Jenis portofolio",
     "typeStandard": "Standar",

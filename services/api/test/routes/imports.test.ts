@@ -100,7 +100,7 @@ describe("CSV import → confirm flow", () => {
 
     const imp = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: CSV },
     });
@@ -120,7 +120,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: drafts },
+      payload: { portfolioId, transactions: drafts },
     });
     expect(confirm.statusCode).toBe(201);
     expect(confirm.json().confirmed).toBe(1);
@@ -136,7 +136,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: drafts },
+      payload: { portfolioId, transactions: drafts },
     });
     expect(again.statusCode).toBe(409);
   });
@@ -154,7 +154,7 @@ describe("CSV import → confirm flow", () => {
 
     const imp = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: DKB_GIRO_CSV, format: "dkb" },
     });
@@ -173,7 +173,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: drafts },
+      payload: { portfolioId, transactions: drafts },
     });
     expect(confirm.statusCode).toBe(201);
     const txns = confirm.json().transactions as Array<{
@@ -197,7 +197,7 @@ describe("CSV import → confirm flow", () => {
     // level before a new draft would be spawned.
     const reImp = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: DKB_GIRO_CSV, format: "dkb" },
     });
@@ -207,7 +207,7 @@ describe("CSV import → confirm flow", () => {
 
   it("auto-detects the parser when format is omitted (DKB vs generic)", async () => {
     const t = await token("auto-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -219,7 +219,7 @@ describe("CSV import → confirm flow", () => {
     // No format → the DKB Girokonto export is recognised and parsed as DKB.
     const dkb = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: DKB_GIRO_CSV },
     });
@@ -236,7 +236,7 @@ describe("CSV import → confirm flow", () => {
     // No format → the generic column CSV falls through to the generic parser.
     const generic = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: CSV },
     });
@@ -264,7 +264,7 @@ describe("CSV import → confirm flow", () => {
     const draftImp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -272,7 +272,7 @@ describe("CSV import → confirm flow", () => {
     const confirmImp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV_BMRI },
       })
@@ -281,7 +281,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${confirmImp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: confirmImp.drafts },
+      payload: { portfolioId, transactions: confirmImp.drafts },
     });
 
     // List: newest first, with status + count.
@@ -332,7 +332,7 @@ describe("CSV import → confirm flow", () => {
 
   it("clears a discarded import (hard-delete)", async () => {
     const t = await token("clear-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -345,7 +345,7 @@ describe("CSV import → confirm flow", () => {
     const imp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -388,7 +388,7 @@ describe("CSV import → confirm flow", () => {
     const draftImp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -408,7 +408,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${draftImp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: draftImp.drafts },
+      payload: { portfolioId, transactions: draftImp.drafts },
     });
     expect(
       (
@@ -423,7 +423,7 @@ describe("CSV import → confirm flow", () => {
 
   it("rejects clear from another user (404)", async () => {
     const owner = await token("clear-owner");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -435,7 +435,7 @@ describe("CSV import → confirm flow", () => {
     const imp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(owner),
         payload: { content: CSV },
       })
@@ -460,7 +460,7 @@ describe("CSV import → confirm flow", () => {
 
   it("returns existing draft import on re-upload of identical CSV", async () => {
     const t = await token("fingerprint-draft-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -472,7 +472,7 @@ describe("CSV import → confirm flow", () => {
     const first = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -483,7 +483,7 @@ describe("CSV import → confirm flow", () => {
     const second = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -492,9 +492,9 @@ describe("CSV import → confirm flow", () => {
     expect(second.alreadyExists).toBe(true);
     expect(second.alreadyConfirmed).toBeFalsy();
 
-    // Only one row in the import list.
+    // Only one row in the import list (per-user dedup prevents a second row).
     const list = await app.inject({ method: "GET", url: "/imports", headers: auth(t) });
-    expect(list.json().filter((r: { portfolioId: string }) => r.portfolioId === portfolioId)).toHaveLength(1);
+    expect(list.json()).toHaveLength(1);
   });
 
   it("returns alreadyConfirmed when re-uploading a confirmed CSV", async () => {
@@ -511,7 +511,7 @@ describe("CSV import → confirm flow", () => {
     const imp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -520,13 +520,13 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: imp.drafts },
+      payload: { portfolioId, transactions: imp.drafts },
     });
 
     const second = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -539,7 +539,7 @@ describe("CSV import → confirm flow", () => {
 
   it("allows re-import after discarding (discarded imports do not block)", async () => {
     const t = await token("fingerprint-discard-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -551,7 +551,7 @@ describe("CSV import → confirm flow", () => {
     const first = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -566,7 +566,7 @@ describe("CSV import → confirm flow", () => {
     const second = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -578,7 +578,7 @@ describe("CSV import → confirm flow", () => {
 
   it("different CSV content creates a new import (hash is content-sensitive)", async () => {
     const t = await token("fingerprint-diff-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -590,7 +590,7 @@ describe("CSV import → confirm flow", () => {
     const first = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -600,7 +600,7 @@ describe("CSV import → confirm flow", () => {
     const second = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV2 },
       })
@@ -611,7 +611,7 @@ describe("CSV import → confirm flow", () => {
 
   it("assigns deterministic content-hash externalIds to generic CSV drafts", async () => {
     const t = await token("hash-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -624,7 +624,7 @@ describe("CSV import → confirm flow", () => {
     const imp1 = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -636,7 +636,7 @@ describe("CSV import → confirm flow", () => {
     const imp2 = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -646,7 +646,7 @@ describe("CSV import → confirm flow", () => {
 
   it("assigns distinct occ-suffixed ids to N identical rows in the same CSV", async () => {
     const t = await token("occ-user");
-    const portfolioId = (
+    const _portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -663,7 +663,7 @@ describe("CSV import → confirm flow", () => {
     const imp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: tripleCSV },
       })
@@ -696,7 +696,7 @@ describe("CSV import → confirm flow", () => {
     const imp1 = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -705,7 +705,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp1.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: imp1.drafts },
+      payload: { portfolioId, transactions: imp1.drafts },
     });
     expect(confirm1.json().confirmed).toBe(1);
 
@@ -714,7 +714,7 @@ describe("CSV import → confirm flow", () => {
     const imp2 = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: CSV },
       })
@@ -753,7 +753,7 @@ describe("CSV import → confirm flow", () => {
     const imp = (
       await app.inject({
         method: "POST",
-        url: `/portfolios/${portfolioId}/imports/csv`,
+        url: `/imports/csv`,
         headers: auth(t),
         payload: { content: twoRowCSV },
       })
@@ -764,7 +764,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: [imp.drafts[0]] },
+      payload: { portfolioId, transactions: [imp.drafts[0]] },
     });
     expect(c1.json().confirmed).toBe(1);
 
@@ -773,7 +773,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: [imp.drafts[1]] },
+      payload: { portfolioId, transactions: [imp.drafts[1]] },
     });
     expect(c2.json().confirmed).toBe(1);
 
@@ -782,7 +782,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp.importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: [imp.drafts[0]] },
+      payload: { portfolioId, transactions: [imp.drafts[0]] },
     });
     expect(c3.statusCode).toBe(409);
 
@@ -814,7 +814,7 @@ describe("CSV import → confirm flow", () => {
 
     const imp = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(t),
       payload: { content: ibkr }, // format omitted → auto
     });
@@ -825,7 +825,7 @@ describe("CSV import → confirm flow", () => {
       method: "POST",
       url: `/imports/${imp.json().importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: imp.json().drafts },
+      payload: { portfolioId, transactions: imp.json().drafts },
     });
     expect(confirm.statusCode).toBe(201);
     const txns = confirm.json().transactions as Array<{ type: string; source: string }>;
@@ -833,10 +833,10 @@ describe("CSV import → confirm flow", () => {
     expect(txns.every((x) => x.source === "csv")).toBe(true);
   });
 
-  it("rejects importing into another user's portfolio", async () => {
+  it("rejects confirming into another user's portfolio (ownership check at confirm)", async () => {
     const tA = await token("imp-a");
     const tB = await token("imp-b");
-    const portfolioId = (
+    const portfolioIdA = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
@@ -845,13 +845,93 @@ describe("CSV import → confirm flow", () => {
       })
     ).json().id;
 
-    const res = await app.inject({
+    // User B can upload without a portfolio (uploads are now portfolio-agnostic).
+    const imp = await app.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/csv`,
+      url: `/imports/csv`,
       headers: auth(tB),
       payload: { content: CSV },
     });
+    expect(imp.statusCode).toBe(201);
+    const { importId, drafts } = imp.json();
+
+    // But B cannot confirm into A's portfolio.
+    const res = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(tB),
+      payload: { portfolioId: portfolioIdA, transactions: drafts },
+    });
     expect(res.statusCode).toBe(404);
+  });
+
+  it("rejects confirm when no portfolioId in body and none stored on import (400)", async () => {
+    const t = await token("no-pid-user");
+    const imp = await app.inject({
+      method: "POST",
+      url: `/imports/csv`,
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    expect(imp.statusCode).toBe(201);
+    const { importId, drafts } = imp.json();
+    // No portfolioId in body, none stored (new-style upload).
+    const res = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { transactions: drafts },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("portfolio_required");
+  });
+
+  it("same CSV uploaded to two different portfolios is deduped per-user (blocked)", async () => {
+    const t = await token("cross-portfolio-dedup-user");
+    const p1 = (
+      await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P1" } })
+    ).json().id;
+    const p2 = (
+      await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P2" } })
+    ).json().id;
+
+    // First upload — creates a draft.
+    const first = (
+      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+    ).json();
+    expect(first.importId).toBeDefined();
+
+    // Second upload of the same content — blocked, returns same importId.
+    const second = (
+      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+    ).json();
+    expect(second.importId).toBe(first.importId);
+    expect(second.alreadyExists).toBe(true);
+
+    // Confirm first import into portfolio 1.
+    await app.inject({
+      method: "POST",
+      url: `/imports/${first.importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: p1, transactions: first.drafts },
+    });
+
+    // Third upload of the same content — now blocked as already confirmed.
+    const third = (
+      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+    ).json();
+    expect(third.alreadyConfirmed).toBe(true);
+    expect(third.importId).toBe(first.importId);
+
+    // Different user — same content is NOT deduped against user 1.
+    const other = await token("cross-portfolio-other");
+    const otherImp = (
+      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(other), payload: { content: CSV } })
+    ).json();
+    expect(otherImp.importId).not.toBe(first.importId);
+    expect(otherImp.alreadyExists).toBeFalsy();
+
+    void p2; // both portfolios were created
   });
 });
 
@@ -901,7 +981,7 @@ describe("screenshot import → confirm flow", () => {
 
     const imp = await ssApp.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      url: `/imports/screenshot`,
       headers: auth(t),
       payload: { image: Buffer.from("fake-png").toString("base64"), mimeType: "image/png" },
     });
@@ -914,7 +994,7 @@ describe("screenshot import → confirm flow", () => {
       method: "POST",
       url: `/imports/${importId}/confirm`,
       headers: auth(t),
-      payload: { transactions: drafts },
+      payload: { portfolioId, transactions: drafts },
     });
     expect(confirm.statusCode).toBe(201);
     expect(confirm.json().confirmed).toBe(1);
@@ -923,7 +1003,7 @@ describe("screenshot import → confirm flow", () => {
 
   it("accepts a PDF document and rejects an unsupported media type", async () => {
     const t = await ssToken("ss-pdf-user");
-    const portfolioId = (
+    const _portfolioId = (
       await ssApp.inject({
         method: "POST",
         url: "/portfolios",
@@ -934,7 +1014,7 @@ describe("screenshot import → confirm flow", () => {
 
     const pdf = await ssApp.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      url: `/imports/screenshot`,
       headers: auth(t),
       payload: {
         image: Buffer.from("%PDF-1.4 fake").toString("base64"),
@@ -946,7 +1026,7 @@ describe("screenshot import → confirm flow", () => {
 
     const bad = await ssApp.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      url: `/imports/screenshot`,
       headers: auth(t),
       payload: { image: "abc", mimeType: "text/plain" },
     });
@@ -968,23 +1048,107 @@ describe("screenshot import → confirm flow", () => {
       .setExpirationTime("1h")
       .sign(kp.privateKey);
 
-    const portfolioId = (
-      await inertApp.inject({
-        method: "POST",
-        url: "/portfolios",
-        headers: auth(t),
-        payload: { name: "P", baseCurrency: "IDR" },
-      })
-    ).json().id;
-
     const res = await inertApp.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      url: `/imports/screenshot`,
       headers: auth(t),
       payload: { image: "abc" },
     });
     expect(res.statusCode).toBe(503);
     await inertApp.close();
+  });
+
+  it("returns matchedPortfolioId when the parsed account number matches a portfolio", async () => {
+    const kp = await generateKeyPair("ES256");
+    const detectApp = await buildApp({
+      authKey: kp.publicKey,
+      screenshotParser: {
+        name: "mock-detect",
+        isConfigured: () => true,
+        parse: async () => ({
+          drafts: [GOLD_DRAFT],
+          contracts: [],
+          accountNumber: "SID-12345678",
+        }),
+      },
+    });
+    const t = await new SignJWT({})
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject("detect-user")
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    // Create two portfolios; only one has the matching account number.
+    const pid1 = (
+      await detectApp.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Matched", baseCurrency: "IDR", accountNumber: "SID12345678" },
+      })
+    ).json().id;
+    await detectApp.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Other", baseCurrency: "IDR" },
+    });
+
+    const res = await detectApp.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: auth(t),
+      payload: { image: Buffer.from("detect-img").toString("base64"), mimeType: "image/png" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().matchedPortfolioId).toBe(pid1);
+
+    await detectApp.close();
+  });
+
+  it("returns null matchedPortfolioId when no portfolio account number matches", async () => {
+    const kp = await generateKeyPair("ES256");
+    const noMatchApp = await buildApp({
+      authKey: kp.publicKey,
+      screenshotParser: {
+        name: "mock-no-match",
+        isConfigured: () => true,
+        parse: async () => ({
+          drafts: [GOLD_DRAFT],
+          contracts: [],
+          accountNumber: "UNKNOWN9999",
+        }),
+      },
+    });
+    const t = await new SignJWT({})
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject("no-match-user")
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    await noMatchApp.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Portfolio A", baseCurrency: "IDR", accountNumber: "SID11111111" },
+    });
+
+    const res = await noMatchApp.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: auth(t),
+      payload: { image: Buffer.from("no-match-img").toString("base64"), mimeType: "image/png" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().matchedPortfolioId).toBeNull();
+
+    await noMatchApp.close();
   });
 });
 
@@ -1063,7 +1227,7 @@ describe("gold installment contract import → confirm → undo", () => {
 
     const imp = await gApp.inject({
       method: "POST",
-      url: `/portfolios/${portfolioId}/imports/screenshot`,
+      url: `/imports/screenshot`,
       headers: auth(t),
       payload: { image: Buffer.from("fake-pdf").toString("base64"), mimeType: "application/pdf" },
     });
@@ -1078,7 +1242,7 @@ describe("gold installment contract import → confirm → undo", () => {
       method: "POST",
       url: `/imports/${importId}/confirm`,
       headers: auth(t),
-      payload: { contracts },
+      payload: { portfolioId, contracts },
     });
     expect(confirm.statusCode).toBe(201);
     // 4 booking legs (buy, drawdown, admin, discount); no installments due yet.

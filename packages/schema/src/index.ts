@@ -80,6 +80,9 @@ export const portfolioInputSchema = z.object({
   // Optional name of the person the portfolio belongs to (free text). Nullable so a
   // PATCH can clear it.
   accountHolder: z.string().trim().nullable().optional(),
+  // Optional account number (SID, IBAN, broker account ID). Used for auto-detecting
+  // which portfolio a screenshot belongs to. Nullable so a PATCH can clear it.
+  accountNumber: z.string().trim().nullable().optional(),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
@@ -93,6 +96,7 @@ export const portfolioPatchSchema = z.object({
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
   brokerage: z.string().trim().nullable().optional(),
   accountHolder: z.string().trim().nullable().optional(),
+  accountNumber: z.string().trim().nullable().optional(),
 });
 export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 

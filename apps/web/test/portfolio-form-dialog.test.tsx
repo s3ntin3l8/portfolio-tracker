@@ -12,7 +12,7 @@ const createPortfolio = vi.fn(async () => ({
   portfolioType: "standard",
   birthYear: null,
   brokerage: null,
-  accountHolder: null,
+  accountHolder: null, accountNumber: null,
   userId: "u1",
 }) as unknown as Portfolio);
 const updatePortfolio = vi.fn(async () => ({}) as never);
@@ -54,7 +54,7 @@ function renderEdit(
     portfolioType: "standard",
     birthYear: null,
     brokerage: null,
-    accountHolder: null,
+    accountHolder: null, accountNumber: null,
   },
 ) {
   return render(
@@ -92,7 +92,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: null,
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     expect(refresh).toHaveBeenCalled();
   });
@@ -114,7 +114,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Interactive Brokers",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
   });
 
@@ -134,6 +134,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: null,
       accountHolder: "Emma",
+      accountNumber: null,
     });
   });
 
@@ -163,7 +164,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "child",
       birthYear: 2017,
       brokerage: null,
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
   });
 
@@ -181,7 +182,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: null,
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     expect(refresh).toHaveBeenCalled();
   });
@@ -226,7 +227,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     }));
     // Dialog stays open — TR section appears with Done button (no create button anymore)
     await waitFor(() =>
@@ -246,7 +247,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -267,7 +268,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Stockbit",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -283,7 +284,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     // Dialog is closed on mount — the fetch must be gated on `open`.
     expect(getTrConnection).not.toHaveBeenCalled();
@@ -308,7 +309,7 @@ describe("PortfolioFormDialog", () => {
       portfolioType: "standard",
       birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null,
+      accountHolder: null, accountNumber: null,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
