@@ -144,7 +144,7 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
@@ -162,7 +162,7 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(screen.getByLabelText(messages.Import.csvFormat.label), {
       target: { value: "dkb" },
     });
@@ -186,7 +186,7 @@ describe("ImportFlow", () => {
     ]);
 
     // Portfolio is NOT selected before upload — picker is now on the review step.
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
@@ -321,18 +321,19 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     const fileA = csvFile("broker-a.csv", "a");
     const fileB = csvFile("broker-b.csv", "b");
     fireEvent.change(fileInput(container), { target: { files: [fileA, fileB] } });
 
-    // Both filenames should appear as section headings.
-    await waitFor(() => expect(screen.getByText("broker-a.csv")).toBeInTheDocument());
-    expect(screen.getByText("broker-b.csv")).toBeInTheDocument();
-
-    // Both draft names should appear.
-    expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0);
+    // Wait for the review step: both draft names appear (unique to review; filenames also
+    // appear in the parsing-step status list so they're not a reliable wait condition).
+    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
     expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+
+    // Both filenames should appear as group-header rows (appear twice: desktop table + mobile cards).
+    expect(screen.getAllByText("broker-a.csv").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("broker-b.csv").length).toBeGreaterThan(0);
 
     // Global confirm button (from the shared footer).
     fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
@@ -364,18 +365,22 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), {
       target: {
         files: [csvFile("good-a.csv", "a"), csvFile("dup.csv", "b"), csvFile("good-c.csv", "c")],
       },
     });
 
-    // Two good sections appear.
-    await waitFor(() => expect(screen.getByText("good-a.csv")).toBeInTheDocument());
-    expect(screen.getByText("good-c.csv")).toBeInTheDocument();
+    // Wait for the review step using draft names (filenames also appear in the
+    // parsing-step status list and are not a reliable wait condition).
+    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
 
-    // Skip notice for the confirmed file.
+    // Good section group headers appear in the review table (appear twice: desktop table + mobile cards).
+    expect(screen.getAllByText("good-a.csv").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("good-c.csv").length).toBeGreaterThan(0);
+
+    // Skip notice for the confirmed file (inside the collapsible error banner).
     expect(
       screen.getByText(
         messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.csv"),
@@ -408,7 +413,7 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), {
       target: { files: [csvFile("a.csv", "a"), csvFile("b.csv", "b")] },
     });
@@ -469,7 +474,7 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.tabs.csv }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), { target: { files: [csvFile("single.csv")] } });
 
     await waitFor(() =>

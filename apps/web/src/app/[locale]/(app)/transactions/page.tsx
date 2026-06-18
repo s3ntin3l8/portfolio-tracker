@@ -7,6 +7,7 @@ import {
   type TxRow,
 } from "@/components/transactions-table";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { Link } from "@/i18n/navigation";
 import {
   getSelectedPortfolioId,
@@ -78,12 +79,7 @@ export default async function TransactionsPage({
         rows={exportRows}
         label={t("exportCsv")}
       />
-      <Button asChild>
-        <Link href="/transactions/new">
-          <Plus className="size-4" />
-          {tm("addTransaction")}
-        </Link>
-      </Button>
+      <AddTransactionMenu />
     </div>
   );
 

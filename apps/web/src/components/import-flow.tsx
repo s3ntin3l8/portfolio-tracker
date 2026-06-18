@@ -9,12 +9,13 @@ import {
   Upload,
   FileText,
   AlertCircle,
-  Info,
+  ChevronDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ImportIssue } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
@@ -153,7 +154,7 @@ const SAMPLE_DRAFT: ImportDraft = {
 
 // Used when no real (authenticated) client is wired yet — keeps the page a live demo.
 const demoClient: ImportClient = {
-  importScreenshot: async (_file: File | Blob) => ({
+  importScreenshot: async () => ({
     importId: "demo",
     drafts: [SAMPLE_DRAFT],
     contracts: [],
@@ -186,6 +187,12 @@ function fileToText(file: File): Promise<string> {
 interface SkippedFile {
   file: string;
   reason: ImportSkipReason;
+}
+
+/** Per-file parse status (shown during multi-file parsing). */
+interface FileStatus {
+  filename: string;
+  status: "pending" | "parsing" | "done" | "failed";
 }
 
 /** Per-import parse issues keyed by importId. */
@@ -229,8 +236,10 @@ export function ImportFlow({
   const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [confirmedCount, setConfirmedCount] = useState(0);
-  // Progress hint for multi-file: "Parsing file X of Y…"
-  const [parseProgress, setParseProgress] = useState<{ current: number; total: number } | null>(null);
+  // Per-file status list (shown when parsing multiple files).
+  const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
+  // Drag-and-drop hover state for the dropzone.
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const activeIndex = step === "parsing" ? 0 : STEPS.indexOf(step);
@@ -246,9 +255,26 @@ export function ImportFlow({
    * transitions). For multiple CSV files we collect all results, skip bad ones
    * with a notice, and only abort to upload if everything failed.
    */
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(true);
+  }
+
+  function onDragLeave() {
+    setDragActive(false);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) void handleFiles(files);
+  }
+
   async function handleFiles(files: File[]) {
     setError(null);
     setSkipped([]);
+    setFileStatuses([]);
     setStep("parsing");
 
     // Default portfolio for all groups: first from the portfolios list.
@@ -295,9 +321,13 @@ export function ImportFlow({
     const newSkipped: SkippedFile[] = [];
     const newPortfolioByImport: PortfolioByImportMap = new Map();
 
+    setFileStatuses(files.map((f) => ({ filename: f.name, status: "pending" })));
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i]!;
-      setParseProgress({ current: i + 1, total: files.length });
+      setFileStatuses((prev) =>
+        prev.map((s, idx) => (idx === i ? { ...s, status: "parsing" } : s)),
+      );
       try {
         const result =
           mode === "csv"
@@ -306,12 +336,21 @@ export function ImportFlow({
 
         if (result.alreadyConfirmed) {
           newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
+          setFileStatuses((prev) =>
+            prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
+          );
           continue;
         }
         if (result.drafts.length === 0 && (result.contracts ?? []).length === 0) {
           newSkipped.push({ file: file.name, reason: "noDrafts" });
+          setFileStatuses((prev) =>
+            prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
+          );
           continue;
         }
+        setFileStatuses((prev) =>
+          prev.map((s, idx) => (idx === i ? { ...s, status: "done" } : s)),
+        );
         newGroups.set(result.importId, file.name);
         newIssueMap.set(result.importId, result.errors);
         newPortfolioByImport.set(result.importId, result.matchedPortfolioId ?? defaultPid);
@@ -328,10 +367,12 @@ export function ImportFlow({
         // Classify the error so multi-file failures show distinct per-file reasons
         // instead of all collapsing to the same "couldn't be read" message (was a bug).
         newSkipped.push({ file: file.name, reason: importSkipReason(err) });
+        setFileStatuses((prev) =>
+          prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
+        );
       }
     }
 
-    setParseProgress(null);
     setSkipped(newSkipped);
 
     if (mergedDrafts.length === 0 && contracts.length === 0) {
@@ -456,19 +497,16 @@ export function ImportFlow({
     setIssueMap(new Map());
     setSkipped([]);
     setPortfolioByImport(new Map());
+    setFileStatuses([]);
     setError(null);
     setStep("upload");
   }
 
-  // ── Derived: group drafts for the multi-file review layout ──────────────────
+  // ── Derived: groups array for the unified ImportReview groups prop ──────────
   const isMultiGroup = groups.size > 1;
-  const groupEntries: [string, string, ReviewDraft[]][] = isMultiGroup
-    ? Array.from(groups.entries()).map(([iid, filename]) => [
-        iid,
-        filename,
-        drafts.filter((d) => d.importId === iid),
-      ])
-    : [];
+  const reviewGroups = isMultiGroup
+    ? Array.from(groups.entries()).map(([iid, filename]) => ({ importId: iid, filename }))
+    : undefined;
 
   return (
     <div
@@ -518,34 +556,18 @@ export function ImportFlow({
       {step === "upload" && (
         <div className="space-y-4">
           {/* Mode tabs */}
-          <div className="inline-flex rounded-lg border border-border p-1 text-sm">
-            <button
-              type="button"
-              onClick={() => setMode("screenshot")}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-colors",
-                mode === "screenshot"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              <ScanLine className="size-4" />
-              {t("tabs.screenshot")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("csv")}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-1.5 font-medium transition-colors",
-                mode === "csv"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              <FileText className="size-4" />
-              {t("tabs.csv")}
-            </button>
-          </div>
+          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+            <TabsList>
+              <TabsTrigger value="screenshot">
+                <ScanLine className="size-4" />
+                {t("tabs.screenshot")}
+              </TabsTrigger>
+              <TabsTrigger value="csv">
+                <FileText className="size-4" />
+                {t("tabs.csv")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           {/* CSV source format — auto-detected by default; override for edge cases */}
           {mode === "csv" && (
@@ -569,10 +591,19 @@ export function ImportFlow({
             </div>
           )}
 
+          {/* Dropzone: real drag-and-drop + click-to-pick fallback */}
           <button
             type="button"
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
             onClick={() => fileRef.current?.click()}
-            className="flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-6 py-12 text-center transition-colors hover:border-primary/50 hover:bg-card"
+            className={cn(
+              "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-6 py-12 text-center transition-colors",
+              dragActive
+                ? "border-primary bg-primary/5"
+                : "hover:border-primary/50 hover:bg-card",
+            )}
           >
             <span className="flex size-12 items-center justify-center rounded-full bg-secondary">
               {mode === "csv" ? (
@@ -581,12 +612,18 @@ export function ImportFlow({
                 <ScanLine className="size-6 text-primary" />
               )}
             </span>
-            <span className="font-medium">{t("dropzone.title")}</span>
-            <span className="text-sm text-muted-foreground">{t("dropzone.hint")}</span>
-            <span className="mt-1 inline-flex items-center gap-2 text-sm text-primary">
-              <Upload className="size-4" />
-              {mode === "csv" ? t("dropzone.csvCta") : t("dropzone.cta")}
-            </span>
+            {dragActive ? (
+              <span className="font-medium text-primary">{t("dropzone.dropHere")}</span>
+            ) : (
+              <>
+                <span className="font-medium">{t("dropzone.title")}</span>
+                <span className="text-sm text-muted-foreground">{t("dropzone.hint")}</span>
+                <span className="mt-1 inline-flex items-center gap-2 text-sm text-primary">
+                  <Upload className="size-4" />
+                  {mode === "csv" ? t("dropzone.csvCta") : t("dropzone.cta")}
+                </span>
+              </>
+            )}
           </button>
           <input
             ref={fileRef}
@@ -602,29 +639,64 @@ export function ImportFlow({
 
       {step === "parsing" && (
         <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {parseProgress
-                ? t("parsingFile", { current: parseProgress.current, total: parseProgress.total })
-                : t("parsing")}
-            </p>
+          <CardContent className="py-8">
+            {fileStatuses.length > 1 ? (
+              <ul className="space-y-2">
+                {fileStatuses.map((fs) => (
+                  <li key={fs.filename} className="flex items-center gap-3 text-sm">
+                    {fs.status === "parsing" && (
+                      <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                    )}
+                    {fs.status === "done" && (
+                      <CheckCircle2 className="size-4 shrink-0 text-success" />
+                    )}
+                    {fs.status === "failed" && (
+                      <AlertCircle className="size-4 shrink-0 text-destructive" />
+                    )}
+                    {fs.status === "pending" && (
+                      <span className="size-4 shrink-0 rounded-full border border-border" />
+                    )}
+                    <span
+                      className={cn(
+                        "truncate",
+                        fs.status === "failed" && "text-muted-foreground line-through",
+                        fs.status === "pending" && "text-muted-foreground",
+                      )}
+                    >
+                      {fs.filename}
+                    </span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                      {t(`fileStatus.${fs.status}`)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">{t("parsing")}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
       {step === "review" && (
         <div className="space-y-6">
-          {/* Skip notices — files that were excluded from the review */}
+          {/* Collapsible skip-notice banner — collapsed by default so it doesn't dominate */}
           {skipped.length > 0 && (
-            <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-              {skipped.map((s) => (
-                <span key={s.file} className="flex items-start gap-2">
-                  <Info className="mt-0.5 size-3.5 shrink-0" />
-                  {t(`skipped.${s.reason}`, { file: s.file })}
-                </span>
-              ))}
-            </div>
+            <details className="rounded-md border border-border bg-muted/40 text-sm text-muted-foreground">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span className="flex-1">{t("errorBanner.summary", { count: skipped.length })}</span>
+                <ChevronDown className="size-3.5 shrink-0 transition-transform [[open]_&]:rotate-180" />
+              </summary>
+              <ul className="border-t border-border px-3 pb-2.5 pt-2 space-y-1">
+                {skipped.map((s) => (
+                  <li key={s.file}>{t(`skipped.${s.reason}`, { file: s.file })}</li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {contracts.length > 0 && (
@@ -639,7 +711,7 @@ export function ImportFlow({
           )}
 
           {drafts.length > 0 && !isMultiGroup && (
-            // ── Single-group: portfolio picker + ImportReview with its own footer ──
+            // ── Single-group: portfolio picker above + unified ImportReview footer ──
             <>
               {portfolios.length > 1 && (
                 <div className="space-y-1.5">
@@ -672,51 +744,22 @@ export function ImportFlow({
           )}
 
           {drafts.length > 0 && isMultiGroup && (
-            // ── Multi-group: one embedded section per file, shared global footer ──
-            <>
-              {groupEntries.map(([iid, filename, groupDrafts]) => (
-                <div key={iid} className="space-y-2">
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-sm font-medium text-muted-foreground">{filename}</h3>
-                    {portfolios.length > 1 && (
-                      <Select
-                        value={portfolioByImport.get(iid) ?? portfolios[0]?.id ?? ""}
-                        onChange={(e) =>
-                          setPortfolioByImport((m) => new Map(m).set(iid, e.target.value))
-                        }
-                        className="h-8 w-auto"
-                        aria-label={t("targetPortfolio")}
-                      >
-                        {portfolios.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </div>
-                  <ImportReview
-                    drafts={groupDrafts}
-                    onUpdate={updateDraft}
-                    onRemove={removeDraft}
-                    onRemoveMany={removeMany}
-                    onConfirm={confirm}
-                    onDiscard={reset}
-                    issues={issueMap.get(iid) ?? []}
-                    embedded
-                  />
-                </div>
-              ))}
-              {/* Global footer */}
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={reset}>
-                  {t("discard")}
-                </Button>
-                <Button onClick={() => confirm()} disabled={drafts.length === 0}>
-                  {t("confirm")}
-                </Button>
-              </div>
-            </>
+            // ── Multi-group: single unified ImportReview with group-header rows ──
+            <ImportReview
+              drafts={drafts}
+              onUpdate={updateDraft}
+              onRemove={removeDraft}
+              onRemoveMany={removeMany}
+              onConfirm={confirm}
+              onDiscard={reset}
+              groups={reviewGroups}
+              portfolios={portfolios.length > 1 ? portfolios : undefined}
+              portfolioByImport={portfolioByImport}
+              onPortfolioChange={(iid, pid) =>
+                setPortfolioByImport((m) => new Map(m).set(iid, pid))
+              }
+              issuesByImport={issueMap}
+            />
           )}
         </div>
       )}

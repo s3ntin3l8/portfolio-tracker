@@ -187,11 +187,32 @@
       "ibkr": "Interactive Brokers",
       "coinbase": "Coinbase"
     },
+    "menu": {
+      "manual": "Input manual",
+      "import": "Impor berkas"
+    },
     "dropzone": {
       "title": "Tambah transaksi",
       "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
       "cta": "Pilih tangkapan layar atau PDF",
-      "csvCta": "Pilih satu atau beberapa berkas CSV"
+      "csvCta": "Pilih satu atau beberapa berkas CSV",
+      "dropHere": "Jatuhkan berkas di sini"
+    },
+    "fileStatus": {
+      "pending": "Menunggu",
+      "parsing": "Memproses…",
+      "done": "Selesai",
+      "failed": "Gagal"
+    },
+    "group": {
+      "collapse": "Lipat",
+      "expand": "Buka",
+      "portfolio": "Portofolio"
+    },
+    "errorBanner": {
+      "summary": "{count, plural, one {# berkas gagal diimpor} other {# berkas gagal diimpor}}",
+      "expand": "Tampilkan detail",
+      "collapse": "Sembunyikan detail"
     },
     "parsing": "Membaca transaksi Anda…",
     "parsingFile": "Membaca berkas {current} dari {total}…",

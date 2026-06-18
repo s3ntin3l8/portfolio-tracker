@@ -187,11 +187,32 @@
       "ibkr": "Interactive Brokers",
       "coinbase": "Coinbase"
     },
+    "menu": {
+      "manual": "Manual entry",
+      "import": "Import file"
+    },
     "dropzone": {
       "title": "Add a transaction",
       "hint": "From a broker, gold app or bank confirmation",
       "cta": "Choose a screenshot or PDF",
-      "csvCta": "Choose one or more CSV files"
+      "csvCta": "Choose one or more CSV files",
+      "dropHere": "Drop files here"
+    },
+    "fileStatus": {
+      "pending": "Pending",
+      "parsing": "Parsing…",
+      "done": "Done",
+      "failed": "Failed"
+    },
+    "group": {
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "portfolio": "Portfolio"
+    },
+    "errorBanner": {
+      "summary": "{count, plural, one {# file couldn't be imported} other {# files couldn't be imported}}",
+      "expand": "Show details",
+      "collapse": "Hide details"
     },
     "parsing": "Reading your transactions…",
     "parsingFile": "Parsing file {current} of {total}…",

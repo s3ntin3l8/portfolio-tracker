@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Pencil, Trash2, X } from "lucide-react";
+import { ChevronDown, Loader2, Pencil, Trash2, X } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import type { ImportDraft, ImportIssue, ReviewDraft } from "@/components/import-flow";
 
 const REVIEW_COLS: ColDef<ReviewDraft>[] = [
@@ -74,6 +75,16 @@ function fmtAmt(s: string): string {
 // Confidence below this reads as "needs review" — same threshold as the badge colour.
 const NEEDS_REVIEW_BELOW = 0.9;
 
+export interface ImportReviewGroup {
+  importId: string;
+  filename: string;
+}
+
+export interface ImportTargetPortfolio {
+  id: string;
+  name: string;
+}
+
 export interface ImportReviewProps {
   drafts: ReviewDraft[];
   onUpdate: (uid: string, patch: Partial<ImportDraft>) => void;
@@ -87,11 +98,19 @@ export interface ImportReviewProps {
   /** Turn an "attention" issue into a draft (user completed it in the map dialog). */
   onMapIssue?: (eventId: string, draft: ImportDraft) => void;
   /**
-   * When true the component is embedded inside a multi-file container that owns
-   * the global Confirm / Discard footer. Hides the footer and the "Confirm selected"
-   * batch button so the parent provides a single shared action bar.
+   * When provided with more than one entry, renders collapsible group-header rows
+   * in the table so each source document is clearly delineated. Single-entry or
+   * absent = flat list (current behaviour).
    */
-  embedded?: boolean;
+  groups?: ImportReviewGroup[];
+  /** Available portfolios for per-group portfolio selection. */
+  portfolios?: ImportTargetPortfolio[];
+  /** Current portfolio id per importId (controlled by the parent). */
+  portfolioByImport?: Map<string, string>;
+  /** Called when the user changes the portfolio for a group. */
+  onPortfolioChange?: (importId: string, portfolioId: string) => void;
+  /** Per-import issues for multi-file review (overrides the flat `issues` prop per group). */
+  issuesByImport?: Map<string, ImportIssue[]>;
 }
 
 /**
@@ -110,15 +129,41 @@ export function ImportReview({
   onDiscard,
   issues = [],
   onMapIssue,
-  embedded = false,
+  groups,
+  portfolios,
+  portfolioByImport,
+  onPortfolioChange,
+  issuesByImport,
 }: ImportReviewProps) {
+  // When more than one group is passed, render group-header rows in the table.
+  const isGrouped = (groups?.length ?? 0) > 1;
   const t = useTranslations("Import");
   const tm = useTranslations("Manage");
 
   const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<ReviewDraft>(REVIEW_COLS);
 
-  const attention = issues.filter((i) => i.severity === "attention" && i.eventId);
-  const ignorable = issues.filter((i) => !(i.severity === "attention" && i.eventId));
+  // When issuesByImport is provided, flatten all per-group issues into a single list
+  // for the attention/ignorable banners (same as the single-import `issues` prop).
+  const allIssues = useMemo(() => {
+    if (issuesByImport) {
+      return Array.from(issuesByImport.values()).flat();
+    }
+    return issues;
+  }, [issues, issuesByImport]);
+
+  const attention = allIssues.filter((i) => i.severity === "attention" && i.eventId);
+  const ignorable = allIssues.filter((i) => !(i.severity === "attention" && i.eventId));
+
+  // Group collapse state — empty set means all groups are expanded (default).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  function toggleCollapse(importId: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(importId)) next.delete(importId);
+      else next.add(importId);
+      return next;
+    });
+  }
   // The issue currently open in the map dialog, plus its in-progress draft fields.
   const [mapping, setMapping] = useState<ImportIssue | null>(null);
   const [mapForm, setMapForm] = useState<ImportDraft | null>(null);
@@ -302,6 +347,191 @@ export function ImportReview({
   const pct = (c: number) => t("confidence", { pct: Math.round(c * 100) });
   const dateOf = (d: ReviewDraft) => d.executedAt.slice(0, 10);
 
+  function draftCells(d: ReviewDraft, isSelected: boolean) {
+    return (
+      <>
+        <TableCell>
+          <input
+            type="checkbox"
+            className="size-4 align-middle accent-primary"
+            aria-label={t("review.selectRow")}
+            checked={isSelected}
+            onChange={() => toggle(d.uid)}
+          />
+        </TableCell>
+        <TableCell>
+          <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
+            {pct(d.confidence)}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline">{d.assetClass}</Badge>
+        </TableCell>
+        <TableCell>
+          <Badge
+            variant={
+              d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"
+            }
+          >
+            {d.action}
+          </Badge>
+        </TableCell>
+        <TableCell className="font-medium">{d.name ?? "—"}</TableCell>
+        <TableCell className="tabular text-xs text-muted-foreground">{d.isin ?? "—"}</TableCell>
+        <TableCell className="tabular whitespace-nowrap text-muted-foreground">
+          {dateOf(d)}
+        </TableCell>
+        <TableCell className="tabular text-right">{fmtQty(d.quantity)}</TableCell>
+        <TableCell className="tabular text-right">{fmtAmt(d.price)}</TableCell>
+        <TableCell className="tabular text-right text-muted-foreground">
+          {d.total ? fmtAmt(d.total) : "—"}
+        </TableCell>
+        <TableCell className="tabular text-right text-muted-foreground">
+          {d.fees ? fmtAmt(d.fees) : "—"}
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground">{d.currency}</TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("review.edit.open")}
+              onClick={() => setEditingUid(d.uid)}
+            >
+              <Pencil className="size-4" />
+            </Button>
+            {drafts.length > 1 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("remove")}
+                onClick={() => handleRemove(d.uid)}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </>
+    );
+  }
+
+  function issueCells(issue: ImportIssue) {
+    return (
+      <>
+        <TableCell>
+          <input
+            type="checkbox"
+            className="size-4 align-middle opacity-40"
+            disabled
+            aria-label={t("review.selectRow")}
+            checked={false}
+            onChange={() => undefined}
+          />
+        </TableCell>
+        <TableCell>
+          <Badge variant="warning">{pct(0)}</Badge>
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline">—</Badge>
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline">—</Badge>
+        </TableCell>
+        <TableCell className="font-medium">
+          {issue.raw?.name ?? issue.eventType ?? "—"}
+        </TableCell>
+        <TableCell className="tabular text-xs text-muted-foreground">
+          {issue.raw?.isin ?? "—"}
+        </TableCell>
+        <TableCell className="tabular whitespace-nowrap text-muted-foreground">
+          {issue.raw?.executedAt?.slice(0, 10) ?? "—"}
+        </TableCell>
+        <TableCell className="tabular text-right text-muted-foreground">
+          {issue.raw?.shares != null ? fmtQty(String(issue.raw.shares)) : "—"}
+        </TableCell>
+        <TableCell className="tabular text-right text-muted-foreground">
+          {issue.raw?.amount != null ? fmtAmt(String(Math.abs(issue.raw.amount))) : "—"}
+        </TableCell>
+        <TableCell />
+        <TableCell />
+        <TableCell className="text-xs text-muted-foreground">
+          {issue.raw?.currency ?? "—"}
+        </TableCell>
+        <TableCell className="text-right">
+          {onMapIssue && (
+            <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
+              {t("review.issues.map")}
+            </Button>
+          )}
+        </TableCell>
+      </>
+    );
+  }
+
+  function mobileDraftCard(d: ReviewDraft) {
+    return (
+      <div key={d.uid} className="rounded-lg border border-border p-3">
+        <div className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            className="mt-1 size-4 shrink-0 align-middle accent-primary"
+            aria-label={t("review.selectRow")}
+            checked={selected.has(d.uid)}
+            onChange={() => toggle(d.uid)}
+          />
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => setEditingUid(d.uid)}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-medium">{d.name ?? "—"}</span>
+              <Badge
+                variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}
+              >
+                {pct(d.confidence)}
+              </Badge>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+              <Badge variant="outline">{d.assetClass}</Badge>
+              <Badge
+                variant={
+                  d.action === "sell" || d.action === "withdrawal"
+                    ? "destructive"
+                    : "success"
+                }
+              >
+                {d.action}
+              </Badge>
+              <span className="text-muted-foreground">{dateOf(d)}</span>
+              {d.isin && (
+                <span className="font-mono text-muted-foreground">{d.isin}</span>
+              )}
+            </div>
+            <div className="mt-1 tabular text-sm text-muted-foreground">
+              {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
+              {d.total && <span className="ml-2">= {fmtAmt(d.total)}</span>}
+              {d.fees && d.fees !== "0" && (
+                <span className="ml-1">(+{fmtAmt(d.fees)} fees)</span>
+              )}
+            </div>
+          </button>
+          {drafts.length > 1 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("remove")}
+              onClick={() => handleRemove(d.uid)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
@@ -392,18 +622,16 @@ export function ImportReview({
             {t("review.batch.selected", { count: selectedIds.length })}
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            {!embedded && (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => runConfirm("confirmSelected", selectedIds)}
-              >
-                {pending === "confirmSelected" && (
-                  <Loader2 className="size-3.5 animate-spin" />
-                )}
-                {t("review.batch.confirmSelected")}
-              </Button>
-            )}
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => runConfirm("confirmSelected", selectedIds)}
+            >
+              {pending === "confirmSelected" && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {t("review.batch.confirmSelected")}
+            </Button>
             {confirming ? (
               <span className="flex items-center gap-2">
                 <span className="text-muted-foreground">
@@ -465,118 +693,111 @@ export function ImportReview({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {view.map((d) => {
-              const isSelected = selected.has(d.uid);
-              return (
-                <TableRow key={d.uid} data-state={isSelected ? "selected" : undefined}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      className="size-4 align-middle accent-primary"
-                      aria-label={t("review.selectRow")}
-                      checked={isSelected}
-                      onChange={() => toggle(d.uid)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
-                      {pct(d.confidence)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{d.assetClass}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"}>{d.action}</Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">{d.name ?? "—"}</TableCell>
-                  <TableCell className="tabular text-xs text-muted-foreground">{d.isin ?? "—"}</TableCell>
-                  <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                    {dateOf(d)}
-                  </TableCell>
-                  <TableCell className="tabular text-right">{fmtQty(d.quantity)}</TableCell>
-                  <TableCell className="tabular text-right">{fmtAmt(d.price)}</TableCell>
-                  <TableCell className="tabular text-right text-muted-foreground">{d.total ? fmtAmt(d.total) : "—"}</TableCell>
-                  <TableCell className="tabular text-right text-muted-foreground">{d.fees ? fmtAmt(d.fees) : "—"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{d.currency}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("review.edit.open")}
-                        onClick={() => setEditingUid(d.uid)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      {drafts.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("remove")}
-                          onClick={() => handleRemove(d.uid)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+            {isGrouped
+              ? groups!.map((g) => {
+                  const isCollapsed = collapsed.has(g.importId);
+                  const groupView = view.filter((d) => d.importId === g.importId);
+                  const groupAttn = (issuesByImport?.get(g.importId) ?? []).filter(
+                    (i) => i.severity === "attention" && i.eventId,
+                  );
+                  const q = query.trim().toLowerCase();
+                  const groupIssueRows =
+                    assetClassFilter.size > 0 || actionFilter.size > 0
+                      ? []
+                      : groupAttn.filter(
+                          (i) =>
+                            !q ||
+                            (i.raw?.name ?? i.eventType ?? "").toLowerCase().includes(q),
+                        );
+                  return (
+                    <React.Fragment key={g.importId}>
+                      <TableRow className="bg-muted/30 hover:bg-muted/40">
+                        <TableCell colSpan={TABLE_COL_COUNT} className="py-2">
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              aria-label={
+                                isCollapsed ? t("group.expand") : t("group.collapse")
+                              }
+                              onClick={() => toggleCollapse(g.importId)}
+                              className="flex items-center gap-1.5 text-sm font-medium text-foreground"
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  "size-4 shrink-0 transition-transform",
+                                  isCollapsed && "-rotate-90",
+                                )}
+                              />
+                              {g.filename}
+                            </button>
+                            <span className="text-xs text-muted-foreground">
+                              ({groupView.length + groupIssueRows.length})
+                            </span>
+                            {portfolios && portfolios.length > 1 && onPortfolioChange && (
+                              <Select
+                                aria-label={t("group.portfolio")}
+                                value={
+                                  portfolioByImport?.get(g.importId) ??
+                                  portfolios[0]?.id ??
+                                  ""
+                                }
+                                onChange={(e) =>
+                                  onPortfolioChange(g.importId, e.target.value)
+                                }
+                                className="ml-auto h-7 w-auto text-xs"
+                              >
+                                {portfolios.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {!isCollapsed &&
+                        groupView.map((d) => {
+                          const isSelected = selected.has(d.uid);
+                          return (
+                            <TableRow
+                              key={d.uid}
+                              data-state={isSelected ? "selected" : undefined}
+                            >
+                              {draftCells(d, isSelected)}
+                            </TableRow>
+                          );
+                        })}
+                      {!isCollapsed &&
+                        groupIssueRows.map((issue) => (
+                          <TableRow
+                            key={issue.eventId ?? issue.eventType}
+                            className="opacity-80"
+                          >
+                            {issueCells(issue)}
+                          </TableRow>
+                        ))}
+                    </React.Fragment>
+                  );
+                })
+              : view.map((d) => {
+                  const isSelected = selected.has(d.uid);
+                  return (
+                    <TableRow
+                      key={d.uid}
+                      data-state={isSelected ? "selected" : undefined}
+                    >
+                      {draftCells(d, isSelected)}
+                    </TableRow>
+                  );
+                })}
+            {/* Attention issue rows (flat mode only — grouped mode inlines them per group) */}
+            {!isGrouped &&
+              visibleIssueRows.map((issue) => (
+                <TableRow key={issue.eventId ?? issue.eventType} className="opacity-80">
+                  {issueCells(issue)}
                 </TableRow>
-              );
-            })}
-            {/* Attention issue rows: shown as 0% confidence entries so they appear when
-                the "needs review" filter is active. Cannot be selected or confirmed
-                directly — Map first to turn them into a confirmable draft. */}
-            {visibleIssueRows.map((issue) => (
-              <TableRow key={issue.eventId ?? issue.eventType} className="opacity-80">
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    className="size-4 align-middle opacity-40"
-                    disabled
-                    aria-label={t("review.selectRow")}
-                    checked={false}
-                    onChange={() => undefined}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Badge variant="warning">{pct(0)}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">—</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline">—</Badge>
-                </TableCell>
-                <TableCell className="font-medium">
-                  {issue.raw?.name ?? issue.eventType ?? "—"}
-                </TableCell>
-                <TableCell className="tabular text-xs text-muted-foreground">
-                  {issue.raw?.isin ?? "—"}
-                </TableCell>
-                <TableCell className="tabular whitespace-nowrap text-muted-foreground">
-                  {issue.raw?.executedAt?.slice(0, 10) ?? "—"}
-                </TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">
-                  {issue.raw?.shares != null ? fmtQty(String(issue.raw.shares)) : "—"}
-                </TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">
-                  {issue.raw?.amount != null ? fmtAmt(String(Math.abs(issue.raw.amount))) : "—"}
-                </TableCell>
-                <TableCell />
-                <TableCell />
-                <TableCell className="text-xs text-muted-foreground">
-                  {issue.raw?.currency ?? "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  {onMapIssue && (
-                    <Button size="sm" variant="secondary" onClick={() => openMap(issue)}>
-                      {t("review.issues.map")}
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+              ))}
             {view.length === 0 && visibleIssueRows.length === 0 && (
               <TableRow>
                 <TableCell
@@ -593,52 +814,52 @@ export function ImportReview({
 
       {/* Mobile: stacked cards */}
       <div className="space-y-2 md:hidden">
-        {view.map((d) => (
-          <div key={d.uid} className="rounded-lg border border-border p-3">
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-1 size-4 shrink-0 align-middle accent-primary"
-                aria-label={t("review.selectRow")}
-                checked={selected.has(d.uid)}
-                onChange={() => toggle(d.uid)}
-              />
-              <button
-                type="button"
-                className="min-w-0 flex-1 text-left"
-                onClick={() => setEditingUid(d.uid)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium">{d.name ?? "—"}</span>
-                  <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
-                    {pct(d.confidence)}
-                  </Badge>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                  <Badge variant="outline">{d.assetClass}</Badge>
-                  <Badge variant={d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"}>{d.action}</Badge>
-                  <span className="text-muted-foreground">{dateOf(d)}</span>
-                  {d.isin && <span className="font-mono text-muted-foreground">{d.isin}</span>}
-                </div>
-                <div className="mt-1 tabular text-sm text-muted-foreground">
-                  {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
-                  {d.total && <span className="ml-2">= {fmtAmt(d.total)}</span>}
-                  {d.fees && d.fees !== "0" && <span className="ml-1">(+{fmtAmt(d.fees)} fees)</span>}
-                </div>
-              </button>
-              {drafts.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("remove")}
-                  onClick={() => handleRemove(d.uid)}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+        {isGrouped
+          ? groups!.map((g) => {
+              const isCollapsed = collapsed.has(g.importId);
+              const groupView = view.filter((d) => d.importId === g.importId);
+              return (
+                <React.Fragment key={g.importId}>
+                  <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                    <button
+                      type="button"
+                      aria-label={isCollapsed ? t("group.expand") : t("group.collapse")}
+                      onClick={() => toggleCollapse(g.importId)}
+                      className="flex flex-1 items-center gap-1.5 text-sm font-medium"
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "size-4 shrink-0 transition-transform",
+                          isCollapsed && "-rotate-90",
+                        )}
+                      />
+                      <span className="truncate">{g.filename}</span>
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({groupView.length})
+                      </span>
+                    </button>
+                    {portfolios && portfolios.length > 1 && onPortfolioChange && (
+                      <Select
+                        aria-label={t("group.portfolio")}
+                        value={
+                          portfolioByImport?.get(g.importId) ?? portfolios[0]?.id ?? ""
+                        }
+                        onChange={(e) => onPortfolioChange(g.importId, e.target.value)}
+                        className="h-7 w-auto text-xs"
+                      >
+                        {portfolios.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
+                  {!isCollapsed && groupView.map((d) => mobileDraftCard(d))}
+                </React.Fragment>
+              );
+            })
+          : view.map((d) => mobileDraftCard(d))}
         {view.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {t("review.empty")}
@@ -646,22 +867,20 @@ export function ImportReview({
         )}
       </div>
 
-      {/* Footer — hidden when the parent multi-file container provides its own. */}
-      {!embedded && (
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={runDiscard} disabled={busy}>
-            {pending === "discard" && <Loader2 className="size-4 animate-spin" />}
-            {t("discard")}
-          </Button>
-          <Button
-            onClick={() => runConfirm("confirm")}
-            disabled={busy || drafts.length === 0}
-          >
-            {pending === "confirm" && <Loader2 className="size-4 animate-spin" />}
-            {t("confirm")}
-          </Button>
-        </div>
-      )}
+      {/* Footer — always rendered; the parent no longer provides a separate one. */}
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={runDiscard} disabled={busy}>
+          {pending === "discard" && <Loader2 className="size-4 animate-spin" />}
+          {t("discard")}
+        </Button>
+        <Button
+          onClick={() => runConfirm("confirm")}
+          disabled={busy || drafts.length === 0}
+        >
+          {pending === "confirm" && <Loader2 className="size-4 animate-spin" />}
+          {t("confirm")}
+        </Button>
+      </div>
 
       {/* Edit dialog */}
       <Dialog
