@@ -9,6 +9,26 @@ import {
 } from "@portfolio/schema";
 import type { ScreenshotParser } from "../../src/services/parsers/types.js";
 
+/**
+ * Build a raw multipart/form-data Buffer for a screenshot/PDF import.
+ * Returns `{ headers, payload }` compatible with `app.inject()`.
+ * Avoids the `form-auto-content` ESM/CJS interop issue under NodeNext resolution.
+ */
+function screenshotPart(buf: Buffer, contentType: string, filename = "upload") {
+  const boundary = "----PortfolioTestBoundary";
+  const payload = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
+    ),
+    buf,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  return {
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    payload,
+  };
+}
+
 // Mock parser so the screenshot flow is hermetic (no Anthropic/Gemini/OpenRouter call).
 function mockParser(
   drafts: ParsedTransaction[],
@@ -979,11 +999,12 @@ describe("screenshot import → confirm flow", () => {
       })
     ).json().id;
 
+    const form = screenshotPart(Buffer.from("fake-png"), "image/png", "fake.png");
     const imp = await ssApp.inject({
       method: "POST",
       url: `/imports/screenshot`,
-      headers: auth(t),
-      payload: { image: Buffer.from("fake-png").toString("base64"), mimeType: "image/png" },
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
     });
     expect(imp.statusCode).toBe(201);
     const { importId, drafts } = imp.json();
@@ -1012,27 +1033,45 @@ describe("screenshot import → confirm flow", () => {
       })
     ).json().id;
 
+    const pdfForm = screenshotPart(Buffer.from("%PDF-1.4 fake"), "application/pdf", "stmt.pdf");
     const pdf = await ssApp.inject({
       method: "POST",
       url: `/imports/screenshot`,
-      headers: auth(t),
-      payload: {
-        image: Buffer.from("%PDF-1.4 fake").toString("base64"),
-        mimeType: "application/pdf",
-      },
+      headers: { ...auth(t), ...pdfForm.headers },
+      payload: pdfForm.payload,
     });
     expect(pdf.statusCode).toBe(201);
     expect(pdf.json().drafts).toHaveLength(1);
 
+    const badForm = screenshotPart(Buffer.from("not-an-image"), "text/plain", "bad.txt");
     const bad = await ssApp.inject({
       method: "POST",
       url: `/imports/screenshot`,
-      headers: auth(t),
-      payload: { image: "abc", mimeType: "text/plain" },
+      headers: { ...auth(t), ...badForm.headers },
+      payload: badForm.payload,
     });
-    expect(bad.statusCode).toBe(400);
+    expect(bad.statusCode).toBe(415);
   });
 
+  it("413s when the uploaded file exceeds the 25 MB limit", async () => {
+    const t = await ssToken("ss-size-user");
+    // Build a buffer just over the 25 MB limit (after form encoding).
+    const bigBuf = Buffer.alloc(26 * 1024 * 1024, 0x41); // 26 MB of 'A'
+    const form = screenshotPart(bigBuf, "image/png", "big.png");
+    const res = await ssApp.inject({
+      method: "POST",
+      url: `/imports/screenshot`,
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
+    expect(res.statusCode).toBe(413);
+    expect(res.json().error).toBe("file_too_large");
+  });
+
+  // NOTE: This test creates and closes its own app instance. Closing it fires the
+  // dbPlugin.onClose hook → closeDb(), destroying the shared PGlite singleton. Any
+  // subsequent test that uses ssApp (from beforeAll) will fail with "PGlite is closed".
+  // Keep all ssApp-dependent tests ABOVE this one.
   it("503s when the configured parser has no key", async () => {
     const kp = await generateKeyPair("ES256");
     const inertApp = await buildApp({
@@ -1048,14 +1087,52 @@ describe("screenshot import → confirm flow", () => {
       .setExpirationTime("1h")
       .sign(kp.privateKey);
 
+    const form503 = screenshotPart(Buffer.from("abc"), "image/png");
     const res = await inertApp.inject({
       method: "POST",
       url: `/imports/screenshot`,
-      headers: auth(t),
-      payload: { image: "abc" },
+      headers: { ...auth(t), ...form503.headers },
+      payload: form503.payload,
     });
     expect(res.statusCode).toBe(503);
     await inertApp.close();
+  });
+
+  it("502s with provider reason when the parser throws a vision error", async () => {
+    const kp = await generateKeyPair("ES256");
+    const failApp = await buildApp({
+      authKey: kp.publicKey,
+      screenshotParser: {
+        name: "mock-fail",
+        isConfigured: () => true,
+        parse: async () => {
+          throw new Error("mock_fail_vision_error_429");
+        },
+      },
+    });
+    const t = await new SignJWT({})
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject("ss-fail-user")
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    const form = screenshotPart(Buffer.from("fake"), "image/png");
+    const res = await failApp.inject({
+      method: "POST",
+      url: `/imports/screenshot`,
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error).toBe("screenshot_parse_failed");
+    expect(res.json().reason).toBe("provider_error");
+    expect(res.json().provider).toBe("mock-fail");
+    expect(res.json().providerStatus).toBe(429);
+
+    await failApp.close();
   });
 
   it("returns matchedPortfolioId when the parsed account number matches a portfolio", async () => {
@@ -1097,11 +1174,12 @@ describe("screenshot import → confirm flow", () => {
       payload: { name: "Other", baseCurrency: "IDR" },
     });
 
+    const detectForm = screenshotPart(Buffer.from("detect-img"), "image/png", "detect.png");
     const res = await detectApp.inject({
       method: "POST",
       url: "/imports/screenshot",
-      headers: auth(t),
-      payload: { image: Buffer.from("detect-img").toString("base64"), mimeType: "image/png" },
+      headers: { ...auth(t), ...detectForm.headers },
+      payload: detectForm.payload,
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().matchedPortfolioId).toBe(pid1);
@@ -1139,11 +1217,12 @@ describe("screenshot import → confirm flow", () => {
       payload: { name: "Portfolio A", baseCurrency: "IDR", accountNumber: "SID11111111" },
     });
 
+    const noMatchForm = screenshotPart(Buffer.from("no-match-img"), "image/png", "stmt.png");
     const res = await noMatchApp.inject({
       method: "POST",
       url: "/imports/screenshot",
-      headers: auth(t),
-      payload: { image: Buffer.from("no-match-img").toString("base64"), mimeType: "image/png" },
+      headers: { ...auth(t), ...noMatchForm.headers },
+      payload: noMatchForm.payload,
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().matchedPortfolioId).toBeNull();
@@ -1225,11 +1304,12 @@ describe("gold installment contract import → confirm → undo", () => {
       })
     ).json().id;
 
+    const contractForm = screenshotPart(Buffer.from("fake-pdf"), "application/pdf", "contract.pdf");
     const imp = await gApp.inject({
       method: "POST",
       url: `/imports/screenshot`,
-      headers: auth(t),
-      payload: { image: Buffer.from("fake-pdf").toString("base64"), mimeType: "application/pdf" },
+      headers: { ...auth(t), ...contractForm.headers },
+      payload: contractForm.payload,
     });
     expect(imp.statusCode).toBe(201);
     const { importId, drafts, contracts } = imp.json();

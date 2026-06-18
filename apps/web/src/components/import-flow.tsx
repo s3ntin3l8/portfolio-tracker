@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import type { ImportIssue } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
+import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
 import { ImportReview } from "@/components/import-review";
 import { ContractReview } from "@/components/contract-review";
 
@@ -112,8 +113,7 @@ export function stripUid(draft: ReviewDraft): ImportDraft {
 /** The slice of the API client the import flow needs (injectable for tests). */
 export interface ImportClient {
   importScreenshot(
-    image: string,
-    mimeType?: string,
+    file: File | Blob,
   ): Promise<ImportResult>;
   importCsv(
     content: string,
@@ -153,7 +153,7 @@ const SAMPLE_DRAFT: ImportDraft = {
 
 // Used when no real (authenticated) client is wired yet — keeps the page a live demo.
 const demoClient: ImportClient = {
-  importScreenshot: async () => ({
+  importScreenshot: async (_file: File | Blob) => ({
     importId: "demo",
     drafts: [SAMPLE_DRAFT],
     contracts: [],
@@ -173,19 +173,6 @@ const demoClient: ImportClient = {
 /** Type map for per-import-group portfolio selection (importId → portfolioId). */
 type PortfolioByImportMap = Map<string, string>;
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("file_read_error"));
-    reader.onload = () => {
-      const result = String(reader.result);
-      // Strip the `data:<mime>;base64,` prefix.
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 function fileToText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -198,7 +185,7 @@ function fileToText(file: File): Promise<string> {
 /** A file that was skipped during the multi-file parse pass. */
 interface SkippedFile {
   file: string;
-  reason: "alreadyConfirmed" | "parseError" | "noDrafts";
+  reason: ImportSkipReason;
 }
 
 /** Per-import parse issues keyed by importId. */
@@ -249,11 +236,8 @@ export function ImportFlow({
   const activeIndex = step === "parsing" ? 0 : STEPS.indexOf(step);
 
   function errorMessage(err: unknown): string {
-    const status = (err as { status?: number })?.status;
-    if (status === 503) return t("errors.notConfigured");
-    if (status === 502) return t("errors.parseFailed");
-    if ((err as Error)?.message === "file_read_error") return t("errors.fileRead");
-    return t("errors.generic");
+    const reason = importSkipReason(err);
+    return t(`errors.${reason}`);
   }
 
   /**
@@ -277,10 +261,7 @@ export function ImportFlow({
         const result =
           mode === "csv"
             ? await client.importCsv(await fileToText(file), csvFormat)
-            : await client.importScreenshot(
-                await fileToBase64(file),
-                file.type || "image/png",
-              );
+            : await client.importScreenshot(file);
         if (result.alreadyConfirmed) {
           setError(t("errors.alreadyConfirmed"));
           setStep("upload");
@@ -321,7 +302,7 @@ export function ImportFlow({
         const result =
           mode === "csv"
             ? await client.importCsv(await fileToText(file), csvFormat)
-            : await client.importScreenshot(await fileToBase64(file), file.type || "image/png");
+            : await client.importScreenshot(file);
 
         if (result.alreadyConfirmed) {
           newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
@@ -344,9 +325,9 @@ export function ImportFlow({
           setContracts(result.contracts ?? []);
         }
       } catch (err) {
-        const reason =
-          (err as Error)?.message === "file_read_error" ? "parseError" : "parseError";
-        newSkipped.push({ file: file.name, reason });
+        // Classify the error so multi-file failures show distinct per-file reasons
+        // instead of all collapsing to the same "couldn't be read" message (was a bug).
+        newSkipped.push({ file: file.name, reason: importSkipReason(err) });
       }
     }
 
@@ -357,9 +338,8 @@ export function ImportFlow({
       // Everything failed / was skipped — show a combined notice and stay on upload.
       if (newSkipped.length === 1) {
         const s = newSkipped[0]!;
-        if (s.reason === "alreadyConfirmed") setError(t("errors.alreadyConfirmed"));
-        else if (s.reason === "noDrafts") setError(t("errors.noDrafts"));
-        else setError(t("errors.fileRead"));
+        // Show the specific reason for the one file; multi-file mixed failures → generic.
+        setError(t(`errors.${s.reason}`));
       } else {
         setError(t("errors.generic"));
       }

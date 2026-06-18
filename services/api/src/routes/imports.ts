@@ -52,16 +52,10 @@ const CSV_PARSERS = {
 // How a resolved format maps to the stored `parser` tag (DKB keeps its own; the
 // broker presets are all CSV-sourced).
 const PARSER_TAG: Record<string, "dkb" | "csv"> = { dkb: "dkb" };
-const screenshotBodySchema = z.object({
-  image: z.string().min(1), // base64-encoded document bytes (image or PDF)
-  mimeType: z
-    .string()
-    .default("image/png")
-    .refine(
-      (m) => m.startsWith("image/") || m === "application/pdf",
-      "unsupported_media_type",
-    ),
-});
+/** Accepted MIME types for screenshot/PDF imports. */
+function isAcceptedMime(mimeType: string): boolean {
+  return mimeType.startsWith("image/") || mimeType === "application/pdf";
+}
 const confirmBodySchema = z.object({
   // Target portfolio — required when the import was uploaded without one (upload-first
   // flow). Falls back to `imp.portfolioId` for pytr and legacy uploads that stored one.
@@ -135,7 +129,7 @@ export async function importsRoute(app: FastifyInstance) {
   // Portfolio is NOT required at upload time — it is supplied at confirm time.
   app.post(
     "/imports/csv",
-    { preHandler: app.authenticate },
+    { preHandler: app.authenticate, bodyLimit: 5 * 1024 * 1024 },
     async (request, reply) => {
       const { id } = requireUser(request);
       const { content, format } = csvBodySchema.parse(request.body);
@@ -204,9 +198,9 @@ export async function importsRoute(app: FastifyInstance) {
     },
   );
 
-  // Parse a screenshot into draft transactions and store them as a draft import.
-  // The raw image is parsed then discarded (never persisted) — privacy by default.
-  // Portfolio is NOT required at upload time — it is supplied at confirm time.
+  // Parse a screenshot or PDF into draft transactions and store them as a draft import.
+  // The raw file is read from a multipart upload, parsed, then discarded (never persisted)
+  // — privacy by default. Portfolio is NOT required at upload time; supplied at confirm time.
   app.post(
     "/imports/screenshot",
     { preHandler: app.authenticate },
@@ -220,12 +214,38 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(503).send({ error: "screenshot_parser_not_configured" });
       }
 
-      const { image, mimeType } = screenshotBodySchema.parse(request.body);
-      // Hash the raw base64 bytes before parsing so we can detect re-uploads even if
-      // the parser is non-deterministic (LLM responses may vary for the same image).
-      const contentHash = shortHash(image);
+      // Read the uploaded file part from the multipart body.
+      let part;
+      try {
+        part = await request.file();
+      } catch {
+        // Not a multipart request at all.
+        return reply.code(400).send({ error: "no_file" });
+      }
+      if (!part) return reply.code(400).send({ error: "no_file" });
 
-      request.log.info({ mimeType, bytes: image.length }, "screenshot import started");
+      const mimeType = part.mimetype || "image/png";
+      if (!isAcceptedMime(mimeType)) {
+        // Drain the stream to avoid ECONNRESET before we send the error.
+        await part.toBuffer().catch(() => {});
+        return reply.code(415).send({ error: "unsupported_media_type" });
+      }
+
+      let buf: Buffer;
+      try {
+        buf = await part.toBuffer();
+      } catch (err) {
+        if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+          return reply.code(413).send({ error: "file_too_large", limitMb: 25 });
+        }
+        throw err;
+      }
+
+      // Hash the base64 representation so dedup semantics are preserved across both the
+      // old JSON path and the new multipart path (existing draft rows used base64 hashes).
+      const contentHash = shortHash(buf.toString("base64"));
+
+      request.log.info({ mimeType, bytes: buf.length }, "screenshot import started");
 
       // Re-upload guard: same image already imported and not discarded → return it.
       // Scoped per-user so the same document can't be re-parsed into a different portfolio.
@@ -270,13 +290,19 @@ export async function importsRoute(app: FastifyInstance) {
 
       let parsed;
       try {
-        parsed = await app.screenshotParser.parse(
-          { data: Buffer.from(image, "base64"), mimeType },
-          request.log,
-        );
+        parsed = await app.screenshotParser.parse({ data: buf, mimeType }, request.log);
       } catch (err) {
+        // Extract the provider HTTP status from the thrown message (e.g. "claude_vision_error_429")
+        // and surface it in the response so the client can display a meaningful per-file reason.
+        const message = (err as Error)?.message ?? "";
+        const m = /vision_error_(\d+)$/.exec(message);
         request.log.error({ err }, "screenshot parse failed");
-        return reply.code(502).send({ error: "screenshot_parse_failed" });
+        return reply.code(502).send({
+          error: "screenshot_parse_failed",
+          reason: "provider_error",
+          provider: app.screenshotParser.name,
+          providerStatus: m ? Number(m[1]) : null,
+        });
       }
 
       const { drafts, contracts, accountNumber: detectedAccountNumber } = parsed;
