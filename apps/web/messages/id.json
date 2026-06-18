@@ -197,8 +197,12 @@
     "parsingFile": "Membaca berkas {current} dari {total}…",
     "skipped": {
       "alreadyConfirmed": "{file}: sudah diimpor — dilewati.",
-      "parseError": "{file}: tidak dapat dibaca — dilewati.",
-      "noDrafts": "{file}: tidak ada transaksi ditemukan."
+      "parseFailed": "{file}: tidak dapat dibaca (kesalahan provider) — dilewati.",
+      "tooLarge": "{file}: terlalu besar (maks 25 MB) — dilewati.",
+      "notConfigured": "{file}: parser visi belum dikonfigurasi — dilewati.",
+      "fileRead": "{file}: tidak dapat dibaca — dilewati.",
+      "noDrafts": "{file}: tidak ada transaksi ditemukan.",
+      "generic": "{file}: terjadi kesalahan — dilewati."
     },
     "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
     "contract": {
@@ -282,7 +286,8 @@
     },
     "errors": {
       "notConfigured": "Belum ada pembaca visi yang dikonfigurasi. Tambahkan kunci API untuk mengaktifkan impor tangkapan layar.",
-      "parseFailed": "Tidak dapat membaca tangkapan layar itu. Coba gambar yang lebih jelas atau masukkan manual.",
+      "parseFailed": "Tidak dapat membaca berkas itu. Coba gambar yang lebih jelas atau masukkan manual.",
+      "tooLarge": "Berkas terlalu besar (maks 25 MB). Kompresi berkas lalu coba lagi.",
       "fileRead": "Tidak dapat membaca berkas itu. Silakan coba lagi.",
       "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
       "alreadyConfirmed": "Berkas ini sudah diimpor dan dikonfirmasi.",

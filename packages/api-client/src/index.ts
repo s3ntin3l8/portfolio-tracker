@@ -508,14 +508,17 @@ export function createApiClient(config: ApiClientConfig) {
     // Only declare a JSON content-type when we actually send a body. A bodyless
     // request (e.g. DELETE) that still advertises application/json trips Fastify's
     // FST_ERR_CTP_EMPTY_JSON_BODY → 400 before the route handler runs.
+    // For FormData (multipart/form-data) do NOT set the content-type header — the browser
+    // must set it with the multipart boundary; setting it manually breaks the boundary.
     const hasBody = body !== undefined;
+    const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     const res = await doFetch(`${config.baseUrl}${path}`, {
       method,
       headers: {
-        ...(hasBody ? { "content-type": "application/json" } : {}),
+        ...(hasBody && !isForm ? { "content-type": "application/json" } : {}),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
-      body: hasBody ? JSON.stringify(body) : undefined,
+      body: isForm ? (body as FormData) : hasBody ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
       throw new ApiError(res.status, await res.text());
@@ -623,11 +626,12 @@ export function createApiClient(config: ApiClientConfig) {
         content,
         format,
       }),
-    importScreenshot: (image: string, mimeType = "image/png") =>
-      request<ScreenshotImportResult>("POST", `/imports/screenshot`, {
-        image,
-        mimeType,
-      }),
+    importScreenshot: (file: File | Blob) => {
+      const form = new FormData();
+      // name hint for filename preservation; mime comes from the file part itself.
+      form.append("file", file, (file as File).name ?? "upload");
+      return request<ScreenshotImportResult>("POST", `/imports/screenshot`, form);
+    },
     confirmImport: (
       importId: string,
       transactions: ParsedTransaction[],

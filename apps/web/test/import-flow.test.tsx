@@ -81,8 +81,7 @@ describe("ImportFlow", () => {
       expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
     );
     expect(client.importScreenshot).toHaveBeenCalledWith(
-      expect.any(String),
-      "image/png",
+      expect.any(File),
     );
 
     fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
@@ -237,8 +236,7 @@ describe("ImportFlow", () => {
     );
     expect(client.importScreenshot).toHaveBeenCalledTimes(1);
     expect(client.importScreenshot).toHaveBeenCalledWith(
-      expect.any(String),
-      "image/png",
+      expect.any(File),
     );
     expect(client.importCsv).not.toHaveBeenCalled();
   });
@@ -421,6 +419,41 @@ describe("ImportFlow", () => {
     );
     expect(screen.queryByText("a.csv")).not.toBeInTheDocument();
     expect(client.confirmImport).not.toHaveBeenCalled();
+  });
+
+  it("multi-file: distinct skip reasons for each failed file (regression: tautological ternary)", async () => {
+    // Regression guard: every multi-file failure used to collapse to "parseError"
+    // ("couldn't be read") because of a tautological ternary bug. Now each error
+    // maps to its own reason via importSkipReason().
+    const client: ImportClient = {
+      importScreenshot: vi
+        .fn()
+        // File 1: succeeds (so we reach the review step and can see the skip notices)
+        .mockResolvedValueOnce({ importId: "imp-ok", drafts: [DRAFT], errors: [] })
+        // File 2: provider error → parseFailed (502)
+        .mockRejectedValueOnce(Object.assign(new Error("parse"), { status: 502 }))
+        // File 3: file too large → tooLarge (413)
+        .mockRejectedValueOnce(Object.assign(new Error("large"), { status: 413 })),
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    const file1 = pngFile();
+    const file2 = new File([new Uint8Array([4, 5])], "bad1.png", { type: "image/png" });
+    const file3 = new File([new Uint8Array([6, 7])], "big.png", { type: "image/png" });
+    fireEvent.change(fileInput(container), { target: { files: [file1, file2, file3] } });
+
+    // We should reach the review step (file1 succeeded).
+    await waitFor(() =>
+      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
+    );
+
+    // The two failed files must show DIFFERENT skip messages, not both "couldn't be read".
+    const parseFailed = messages.Import.skipped.parseFailed.replace("{file}", "bad1.png");
+    const tooLarge = messages.Import.skipped.tooLarge.replace("{file}", "big.png");
+    expect(screen.getByText(parseFailed)).toBeInTheDocument();
+    expect(screen.getByText(tooLarge)).toBeInTheDocument();
   });
 
   it("single CSV file uses single-group path with ImportReview's own footer", async () => {

@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import pino from "pino";
 import type { DestinationStream } from "pino";
 import sensible from "@fastify/sensible";
+import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import { envPlugin } from "./plugins/env.js";
 import { loggingPlugin } from "./plugins/logging.js";
@@ -116,6 +117,9 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(envPlugin);
   await app.register(loggingPlugin);
   await app.register(sensible);
+  // Allow multipart/form-data uploads (screenshot imports). 25 MB per file; single file
+  // per request. The limit is caught in-route (→ 413) to avoid leaking FST_* error codes.
+  await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
   await app.register(securityPlugin);
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);

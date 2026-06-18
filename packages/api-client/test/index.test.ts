@@ -85,7 +85,7 @@ describe("createApiClient", () => {
     );
   });
 
-  it("posts a base64 image + mimeType to the screenshot import endpoint", async () => {
+  it("sends a File to the screenshot import endpoint as multipart FormData", async () => {
     let seen: { url: string; init: RequestInit } | undefined;
     const fetchImpl = mockFetch((url, init) => {
       seen = { url, init };
@@ -97,19 +97,23 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    const result = await client.importScreenshot("ZmFrZQ==", "image/jpeg");
+    const file = new Blob(["fake-image"], { type: "image/jpeg" });
+    const result = await client.importScreenshot(file);
     expect(result).toMatchObject({ importId: "imp1" });
     expect(seen?.url).toBe("http://api.test/imports/screenshot");
-    expect(JSON.parse(seen?.init.body as string)).toEqual({
-      image: "ZmFrZQ==",
-      mimeType: "image/jpeg",
-    });
+    // Body must be FormData, NOT a JSON string.
+    expect(seen?.init.body).toBeInstanceOf(FormData);
+    // FormData uploads must NOT set a content-type header — the browser/fetch runtime
+    // sets it with the multipart boundary automatically.
+    expect(
+      (seen?.init.headers as Record<string, string>)["content-type"],
+    ).toBeUndefined();
   });
 
-  it("defaults the screenshot mimeType to image/png", async () => {
-    let sentBody: string | undefined;
+  it("omits the JSON content-type and sends FormData for screenshot uploads", async () => {
+    let sentBody: unknown;
     const fetchImpl = mockFetch((_url, init) => {
-      sentBody = init.body as string;
+      sentBody = init.body;
       return { status: 201, body: { importId: "imp2", drafts: [], errors: [] } };
     });
     const client = createApiClient({
@@ -117,8 +121,10 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await client.importScreenshot("ZmFrZQ==");
-    expect(JSON.parse(sentBody!).mimeType).toBe("image/png");
+    const file = new File(["data"], "screenshot.png", { type: "image/png" });
+    await client.importScreenshot(file);
+    // Both File and Blob inputs must produce a FormData body, not JSON.
+    expect(sentBody).toBeInstanceOf(FormData);
   });
 
   it("throws ApiError on non-2xx", async () => {

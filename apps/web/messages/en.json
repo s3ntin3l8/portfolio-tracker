@@ -197,8 +197,12 @@
     "parsingFile": "Parsing file {current} of {total}…",
     "skipped": {
       "alreadyConfirmed": "{file}: already imported — skipped.",
-      "parseError": "{file}: couldn't be read — skipped.",
-      "noDrafts": "{file}: no transactions found."
+      "parseFailed": "{file}: couldn't be read (provider error) — skipped.",
+      "tooLarge": "{file}: too large (max 25 MB) — skipped.",
+      "notConfigured": "{file}: no vision parser configured — skipped.",
+      "fileRead": "{file}: couldn't be read — skipped.",
+      "noDrafts": "{file}: no transactions found.",
+      "generic": "{file}: something went wrong — skipped."
     },
     "reviewHint": "Check the details before confirming — nothing is saved until you do.",
     "contract": {
@@ -282,7 +286,8 @@
     },
     "errors": {
       "notConfigured": "No vision parser is configured yet. Add an API key to enable screenshot import.",
-      "parseFailed": "Couldn't read that screenshot. Try a clearer image or enter it manually.",
+      "parseFailed": "Couldn't read that file. Try a clearer image or enter it manually.",
+      "tooLarge": "That file is too large (max 25 MB). Please compress it and try again.",
       "fileRead": "Couldn't read that file. Please try again.",
       "noDrafts": "No transactions were found in that file.",
       "alreadyConfirmed": "This file was already imported and confirmed.",
