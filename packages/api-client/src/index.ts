@@ -64,6 +64,8 @@ export interface Portfolio {
   brokerage: string | null;
   /** Name of the person the portfolio belongs to (free text), or null. */
   accountHolder: string | null;
+  /** Brokerage/bank account number used for screenshot auto-detect, or null. */
+  accountNumber: string | null;
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */
@@ -382,6 +384,8 @@ export interface ScreenshotImportResult {
   alreadyExists?: boolean;
   /** True when the exact image was already uploaded and fully confirmed. */
   alreadyConfirmed?: boolean;
+  /** Portfolio whose accountNumber matched the document's detected account, if any. */
+  matchedPortfolioId?: string | null;
 }
 
 /** A past import in the user's history (draft, confirmed, or discarded). */
@@ -612,16 +616,15 @@ export function createApiClient(config: ApiClientConfig) {
       request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
 
     importCsv: (
-      portfolioId: string,
       content: string,
       format: "auto" | "generic" | "dkb" | "ibkr" | "coinbase" = "auto",
     ) =>
-      request<CsvImportResult>("POST", `/portfolios/${portfolioId}/imports/csv`, {
+      request<CsvImportResult>("POST", `/imports/csv`, {
         content,
         format,
       }),
-    importScreenshot: (portfolioId: string, image: string, mimeType = "image/png") =>
-      request<ScreenshotImportResult>("POST", `/portfolios/${portfolioId}/imports/screenshot`, {
+    importScreenshot: (image: string, mimeType = "image/png") =>
+      request<ScreenshotImportResult>("POST", `/imports/screenshot`, {
         image,
         mimeType,
       }),
@@ -629,11 +632,12 @@ export function createApiClient(config: ApiClientConfig) {
       importId: string,
       transactions: ParsedTransaction[],
       contracts: ParsedGoldContract[] = [],
+      portfolioId?: string,
     ) =>
       request<{ confirmed: number; transactions: Transaction[] }>(
         "POST",
         `/imports/${importId}/confirm`,
-        { transactions, contracts },
+        { portfolioId, transactions, contracts },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */

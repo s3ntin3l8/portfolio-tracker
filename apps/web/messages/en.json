@@ -144,6 +144,8 @@
     "brokeragePlaceholder": "e.g. Trade Republic",
     "accountHolder": "Account holder",
     "accountHolderPlaceholder": "e.g. Emma",
+    "accountNumber": "Account number",
+    "accountNumberPlaceholder": "e.g. SID12345678 or IBAN",
     "currency": "Base currency",
     "type": "Portfolio type",
     "typeStandard": "Standard",

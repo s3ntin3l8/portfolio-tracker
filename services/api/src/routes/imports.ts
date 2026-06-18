@@ -63,6 +63,9 @@ const screenshotBodySchema = z.object({
     ),
 });
 const confirmBodySchema = z.object({
+  // Target portfolio — required when the import was uploaded without one (upload-first
+  // flow). Falls back to `imp.portfolioId` for pytr and legacy uploads that stored one.
+  portfolioId: z.string().uuid().optional(),
   // At least one of `transactions` / `contracts` must be present.
   transactions: z.array(parsedTransactionSchema).default([]),
   // Financed gold-purchase contracts (Pegadaian/Galeri24 cicilan). Each becomes a
@@ -80,14 +83,15 @@ export async function importsRoute(app: FastifyInstance) {
     return p ?? null;
   }
 
-  /** Look up a non-discarded import for the same (portfolioId, contentHash). */
-  async function existingImport(portfolioId: string, contentHash: string) {
+  /** Look up a non-discarded import for the same (userId, contentHash). Scoped per-user
+   * so the same file cannot be re-imported across different portfolios. */
+  async function existingImport(userId: string, contentHash: string) {
     const [row] = await app.db
       .select()
       .from(screenshotImports)
       .where(
         and(
-          eq(screenshotImports.portfolioId, portfolioId),
+          eq(screenshotImports.userId, userId),
           eq(screenshotImports.contentHash, contentHash),
           ne(screenshotImports.status, "discarded"),
         ),
@@ -96,35 +100,63 @@ export async function importsRoute(app: FastifyInstance) {
     return row ?? null;
   }
 
+  /**
+   * Normalize an account number for comparison: strip non-alphanumerics, lowercase.
+   * Returns null when the input is empty/null so two blank values never match.
+   */
+  function normalizeAccountNumber(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    const n = raw.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    return n || null;
+  }
+
+  /**
+   * Find the portfolio whose accountNumber matches the detected value (exact normalized
+   * match). Returns null when no account number was detected, no portfolio has one, or
+   * more than one portfolio matches (ambiguous → no prefill).
+   */
+  async function matchAccountNumber(
+    userId: string,
+    detected: string | null | undefined,
+  ): Promise<string | null> {
+    const normalizedDetected = normalizeAccountNumber(detected);
+    if (!normalizedDetected) return null;
+    const rows = await app.db
+      .select({ id: portfolios.id, accountNumber: portfolios.accountNumber })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
+    const matches = rows.filter(
+      (p) => normalizeAccountNumber(p.accountNumber) === normalizedDetected,
+    );
+    return matches.length === 1 ? (matches[0]?.id ?? null) : null;
+  }
+
   // Parse a CSV into draft transactions and store them as a draft import.
-  app.post<{ Params: { portfolioId: string } }>(
-    "/portfolios/:portfolioId/imports/csv",
+  // Portfolio is NOT required at upload time — it is supplied at confirm time.
+  app.post(
+    "/imports/csv",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
-      const { portfolioId } = request.params;
-      if (!(await ownedPortfolio(id, portfolioId))) {
-        return reply.code(404).send({ error: "portfolio_not_found" });
-      }
       const { content, format } = csvBodySchema.parse(request.body);
       const contentHash = shortHash(content);
 
       request.log.info(
-        { portfolioId, requestedFormat: format, bytes: content.length },
+        { requestedFormat: format, bytes: content.length },
         "csv import started",
       );
 
       // Re-upload guard: return the existing non-discarded import instead of creating
-      // a duplicate draft row. Discarded imports with the same hash are ignored so the
-      // user can re-import after deliberately discarding.
-      const existing = await existingImport(portfolioId, contentHash);
+      // a duplicate draft row. Scoped per-user so the same file is blocked regardless
+      // of which portfolio it was previously imported into. Discarded imports are ignored.
+      const existing = await existingImport(id, contentHash);
       if (existing) {
         const isDraft = existing.status === "draft";
         const parsed = isDraft
           ? ((existing.parsedJson ?? {}) as { drafts?: unknown[]; errors?: unknown[] })
           : null;
         request.log.info(
-          { portfolioId, importId: existing.id, status: existing.status },
+          { importId: existing.id, status: existing.status },
           "csv import deduplicated",
         );
         reply.code(200);
@@ -155,7 +187,7 @@ export async function importsRoute(app: FastifyInstance) {
         .insert(screenshotImports)
         .values({
           userId: id,
-          portfolioId,
+          // portfolioId is deliberately omitted — resolved at confirm time.
           parser: PARSER_TAG[resolved] ?? "csv",
           parsedJson: result,
           contentHash,
@@ -174,18 +206,15 @@ export async function importsRoute(app: FastifyInstance) {
 
   // Parse a screenshot into draft transactions and store them as a draft import.
   // The raw image is parsed then discarded (never persisted) — privacy by default.
-  app.post<{ Params: { portfolioId: string } }>(
-    "/portfolios/:portfolioId/imports/screenshot",
+  // Portfolio is NOT required at upload time — it is supplied at confirm time.
+  app.post(
+    "/imports/screenshot",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
-      const { portfolioId } = request.params;
-      if (!(await ownedPortfolio(id, portfolioId))) {
-        return reply.code(404).send({ error: "portfolio_not_found" });
-      }
       if (!app.screenshotParser.isConfigured()) {
         request.log.warn(
-          { portfolioId, provider: app.screenshotParser.name },
+          { provider: app.screenshotParser.name },
           "screenshot parser not configured",
         );
         return reply.code(503).send({ error: "screenshot_parser_not_configured" });
@@ -196,10 +225,11 @@ export async function importsRoute(app: FastifyInstance) {
       // the parser is non-deterministic (LLM responses may vary for the same image).
       const contentHash = shortHash(image);
 
-      request.log.info({ portfolioId, mimeType, bytes: image.length }, "screenshot import started");
+      request.log.info({ mimeType, bytes: image.length }, "screenshot import started");
 
       // Re-upload guard: same image already imported and not discarded → return it.
-      const existing = await existingImport(portfolioId, contentHash);
+      // Scoped per-user so the same document can't be re-parsed into a different portfolio.
+      const existing = await existingImport(id, contentHash);
       if (existing) {
         const isDraft = existing.status === "draft";
         const storedParsed = isDraft
@@ -207,10 +237,14 @@ export async function importsRoute(app: FastifyInstance) {
               drafts?: unknown[];
               contracts?: unknown[];
               errors?: unknown[];
+              accountNumber?: string | null;
             })
           : null;
+        const matchedPortfolioId = isDraft
+          ? await matchAccountNumber(id, storedParsed?.accountNumber)
+          : null;
         request.log.info(
-          { portfolioId, importId: existing.id, status: existing.status },
+          { importId: existing.id, status: existing.status },
           "screenshot import deduplicated",
         );
         reply.code(200);
@@ -230,6 +264,7 @@ export async function importsRoute(app: FastifyInstance) {
               : [],
           alreadyExists: isDraft,
           alreadyConfirmed: !isDraft,
+          matchedPortfolioId,
         };
       }
 
@@ -244,7 +279,7 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(502).send({ error: "screenshot_parse_failed" });
       }
 
-      const { drafts, contracts } = parsed;
+      const { drafts, contracts, accountNumber: detectedAccountNumber } = parsed;
       const scored = [
         ...drafts.map((d) => d.confidence),
         ...contracts.map((c) => c.confidence),
@@ -255,17 +290,21 @@ export async function importsRoute(app: FastifyInstance) {
           : null;
       // Assign content-hash externalIds before storing so subset-confirm is safe.
       assignContentExternalIds(drafts, "screenshot");
+      // Store accountNumber inside parsedJson so the dedup branch can also match on re-upload.
       const result = {
         drafts,
         contracts,
         errors: [] as { line: number; message: string }[],
+        accountNumber: detectedAccountNumber ?? null,
       };
+
+      const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
 
       const [imp] = await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
-          portfolioId,
+          // portfolioId is deliberately omitted — resolved at confirm time.
           parser: app.screenshotParser.name,
           parsedJson: result,
           confidence,
@@ -275,7 +314,7 @@ export async function importsRoute(app: FastifyInstance) {
         .returning();
 
       request.log.info(
-        { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence },
+        { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence, matchedPortfolioId },
         "screenshot parse stored",
       );
       reply.code(201);
@@ -284,6 +323,7 @@ export async function importsRoute(app: FastifyInstance) {
         drafts: result.drafts,
         contracts: result.contracts,
         errors: result.errors,
+        matchedPortfolioId,
       };
     },
   );
@@ -460,18 +500,28 @@ export async function importsRoute(app: FastifyInstance) {
           ),
         )
         .limit(1);
-      if (!imp || !imp.portfolioId) {
+      if (!imp) {
         return reply.code(404).send({ error: "import_not_found" });
       }
       if (imp.status === "confirmed") {
         return reply.code(409).send({ error: "already_confirmed" });
       }
 
-      const { transactions: drafts, contracts } = confirmBodySchema.parse(
+      const { transactions: drafts, contracts, portfolioId: bodyPortfolioId } = confirmBodySchema.parse(
         request.body,
       );
       if (drafts.length === 0 && contracts.length === 0) {
         return reply.code(400).send({ error: "nothing_to_confirm" });
+      }
+      // Resolve the target portfolio: prefer the request body, fall back to what was
+      // stored on the import (pytr always has one; legacy uploads may too). New-style
+      // uploads have no stored portfolio so body is required.
+      const targetPortfolioId = bodyPortfolioId ?? imp.portfolioId;
+      if (!targetPortfolioId) {
+        return reply.code(400).send({ error: "portfolio_required" });
+      }
+      if (!(await ownedPortfolio(id, targetPortfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const isDkb = imp.parser === "dkb";
       const isPytr = imp.parser === "pytr";
@@ -607,7 +657,7 @@ export async function importsRoute(app: FastifyInstance) {
           const [row] = await tx
             .insert(transactions)
             .values({
-              portfolioId: imp.portfolioId!,
+              portfolioId: targetPortfolioId,
               instrumentId,
               type: d.action,
               quantity: d.quantity,
@@ -654,7 +704,7 @@ export async function importsRoute(app: FastifyInstance) {
           const [loan] = await tx
             .insert(loans)
             .values({
-              portfolioId: imp.portfolioId!,
+              portfolioId: targetPortfolioId,
               instrumentId: instrument.id,
               importId: imp.id,
               contractNo: c.contractNo ?? null,
@@ -689,7 +739,7 @@ export async function importsRoute(app: FastifyInstance) {
             const [row] = await tx
               .insert(transactions)
               .values({
-                portfolioId: imp.portfolioId!,
+                portfolioId: targetPortfolioId,
                 instrumentId: leg.role === "gold_buy" ? instrument.id : null,
                 type: leg.type,
                 quantity: leg.quantity,
@@ -722,7 +772,7 @@ export async function importsRoute(app: FastifyInstance) {
               .insert(trResolvedEvents)
               .values(
                 [...confirmedExtIds].map((eventId) => ({
-                  portfolioId: imp.portfolioId!,
+                  portfolioId: targetPortfolioId,
                   eventId,
                   resolution: "confirmed",
                 })),
@@ -742,7 +792,7 @@ export async function importsRoute(app: FastifyInstance) {
           if (remaining.length > 0 || remainingAttention.length > 0) {
             await tx
               .update(screenshotImports)
-              .set({ parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
+              .set({ portfolioId: targetPortfolioId, parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
               .where(eq(screenshotImports.id, imp.id));
             finalStatus = "draft";
           } else {
@@ -756,7 +806,7 @@ export async function importsRoute(app: FastifyInstance) {
                 .insert(trResolvedEvents)
                 .values(
                   leftover.map((eventId) => ({
-                    portfolioId: imp.portfolioId!,
+                    portfolioId: targetPortfolioId,
                     eventId,
                     resolution: "discarded",
                   })),
@@ -765,7 +815,7 @@ export async function importsRoute(app: FastifyInstance) {
             }
             await tx
               .update(screenshotImports)
-              .set({ status: "confirmed" })
+              .set({ portfolioId: targetPortfolioId, status: "confirmed" })
               .where(eq(screenshotImports.id, imp.id));
             finalStatus = "confirmed";
           }
@@ -779,13 +829,13 @@ export async function importsRoute(app: FastifyInstance) {
           if (everyHasId && remaining.length > 0) {
             await tx
               .update(screenshotImports)
-              .set({ parsedJson: { ...parsed, drafts: remaining } })
+              .set({ portfolioId: targetPortfolioId, parsedJson: { ...parsed, drafts: remaining } })
               .where(eq(screenshotImports.id, imp.id));
             finalStatus = "draft";
           } else {
             await tx
               .update(screenshotImports)
-              .set({ status: "confirmed" })
+              .set({ portfolioId: targetPortfolioId, status: "confirmed" })
               .where(eq(screenshotImports.id, imp.id));
             finalStatus = "confirmed";
           }

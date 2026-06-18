@@ -97,9 +97,9 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    const result = await client.importScreenshot("port1", "ZmFrZQ==", "image/jpeg");
+    const result = await client.importScreenshot("ZmFrZQ==", "image/jpeg");
     expect(result).toMatchObject({ importId: "imp1" });
-    expect(seen?.url).toBe("http://api.test/portfolios/port1/imports/screenshot");
+    expect(seen?.url).toBe("http://api.test/imports/screenshot");
     expect(JSON.parse(seen?.init.body as string)).toEqual({
       image: "ZmFrZQ==",
       mimeType: "image/jpeg",
@@ -117,7 +117,7 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await client.importScreenshot("port1", "ZmFrZQ==");
+    await client.importScreenshot("ZmFrZQ==");
     expect(JSON.parse(sentBody!).mimeType).toBe("image/png");
   });
 
@@ -202,8 +202,8 @@ describe("createApiClient request methods", () => {
     { name: "getSummary", call: (c) => c.getSummary("p1"), method: "GET", url: "/portfolios/p1/summary" },
     { name: "getSummary total_paid", call: (c) => c.getSummary("p1", "total_paid"), method: "GET", url: "/portfolios/p1/summary?costBasis=total_paid" },
     { name: "getPerformance", call: (c) => c.getPerformance("p1"), method: "GET", url: "/portfolios/p1/performance" },
-    { name: "importCsv default auto", call: (c) => c.importCsv("p1", "x"), method: "POST", url: "/portfolios/p1/imports/csv", body: { content: "x", format: "auto" } },
-    { name: "importCsv dkb", call: (c) => c.importCsv("p1", "x", "dkb"), method: "POST", url: "/portfolios/p1/imports/csv", body: { content: "x", format: "dkb" } },
+    { name: "importCsv default auto", call: (c) => c.importCsv("x"), method: "POST", url: "/imports/csv", body: { content: "x", format: "auto" } },
+    { name: "importCsv dkb", call: (c) => c.importCsv("x", "dkb"), method: "POST", url: "/imports/csv", body: { content: "x", format: "dkb" } },
     { name: "confirmImport", call: (c) => c.confirmImport("imp1", []), method: "POST", url: "/imports/imp1/confirm", body: { transactions: [], contracts: [] } },
     { name: "getImport", call: (c) => c.getImport("imp1"), method: "GET", url: "/imports/imp1" },
   ];

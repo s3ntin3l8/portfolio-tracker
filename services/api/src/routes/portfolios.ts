@@ -26,6 +26,7 @@ export async function portfoliosRoute(app: FastifyInstance) {
         birthYear: input.portfolioType === "child" ? (input.birthYear ?? null) : null,
         brokerage: input.brokerage ?? null,
         accountHolder: input.accountHolder ?? null,
+        accountNumber: input.accountNumber ?? null,
       })
       .returning();
     reply.code(201);

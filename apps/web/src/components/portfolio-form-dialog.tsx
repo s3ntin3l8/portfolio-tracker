@@ -29,7 +29,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 /** The portfolio fields the edit form pre-fills. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder"
+  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber"
 >;
 
 /**
@@ -72,6 +72,7 @@ export function PortfolioFormDialog({
   );
   const [brokerage, setBrokerage] = useState(portfolio?.brokerage ?? "");
   const [accountHolder, setAccountHolder] = useState(portfolio?.accountHolder ?? "");
+  const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -125,6 +126,7 @@ export function PortfolioFormDialog({
       setBirthYear(portfolio?.birthYear != null ? String(portfolio.birthYear) : "");
       setBrokerage(portfolio?.brokerage ?? "");
       setAccountHolder(portfolio?.accountHolder ?? "");
+      setAccountNumber(portfolio?.accountNumber ?? "");
       setError(false);
       setConfirmDelete(false);
       setCreatedPortfolio(null);
@@ -149,6 +151,7 @@ export function PortfolioFormDialog({
       birthYear: parsedBirthYear,
       brokerage: brokerage.trim() || null,
       accountHolder: accountHolder.trim() || null,
+      accountNumber: accountNumber.trim() || null,
     };
     try {
       if (mode === "edit" && portfolio) {
@@ -273,6 +276,16 @@ export function PortfolioFormDialog({
               value={accountHolder}
               onChange={(e) => setAccountHolder(e.target.value)}
               placeholder={t("accountHolderPlaceholder")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="portfolio-account-number">{t("accountNumber")}</Label>
+            <Input
+              id="portfolio-account-number"
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder={t("accountNumberPlaceholder")}
             />
           </div>
 
