@@ -5,13 +5,11 @@ import { useTranslations } from "next-intl";
 import {
   AlertCircle,
   Check,
-  ChevronDown,
-  ChevronUp,
   Eye,
   EyeOff,
   GripVertical,
-  KeyRound,
   Loader2,
+  Pencil,
   ShieldOff,
   Trash2,
 } from "lucide-react";
@@ -41,6 +39,13 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type AdminVisionProvidersClient = Pick<
@@ -50,8 +55,8 @@ export type AdminVisionProvidersClient = Pick<
   | "clearAdminVisionProviderCredential"
 >;
 
-/** Inline key-set / clear form for one vision provider. */
-function VisionCredentialEditor({
+/** Cell showing the current credential state + pencil edit button (Dialog) + inline clear. */
+function VisionCredentialCell({
   provider,
   encryptionEnabled,
   onSet,
@@ -63,14 +68,24 @@ function VisionCredentialEditor({
   onClear: (id: string) => Promise<void>;
 }) {
   const t = useTranslations("Admin");
-  const [open, setOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Ollama is a URL-based provider — expose a URL field, not an API key field.
+  // Ollama is a URL-based provider — edit a URL, not an API key.
   const isUrlProvider = provider.id === "ollama";
+  const hasCredential = isUrlProvider ? provider.hasUrl : provider.hasKey;
+
+  function handleDialogChange(open: boolean) {
+    setDialogOpen(open);
+    if (!open) {
+      setApiKey("");
+      setError(null);
+      setShowKey(false);
+    }
+  }
 
   async function handleSet(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +98,7 @@ function VisionCredentialEditor({
         : { apiKey: apiKey.trim() };
       await onSet(provider.id, body);
       setApiKey("");
-      setOpen(false);
+      setDialogOpen(false);
     } catch {
       setError(t("credentialError"));
     } finally {
@@ -103,6 +118,7 @@ function VisionCredentialEditor({
     }
   }
 
+  // Encryption disabled — only key-based (non-URL) providers need encryption.
   if (!encryptionEnabled && !isUrlProvider) {
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -119,107 +135,95 @@ function VisionCredentialEditor({
     );
   }
 
-  const hasCredential = isUrlProvider ? provider.hasUrl : provider.hasKey;
-  const placeholder = isUrlProvider
-    ? t("visionUrlPlaceholder")
-    : t("credentialPlaceholder");
-  const setLabel = t("credentialSet");
-  const rotateLabel = t("credentialRotate");
+  // Inline credential state display.
+  let display: React.ReactNode;
+  if (hasCredential) {
+    display = (
+      <span className="font-mono text-xs text-muted-foreground">
+        {provider.keyHint ?? (isUrlProvider ? t("visionUrlSet") : "••••")}
+      </span>
+    );
+  } else if (provider.keySource === "env") {
+    display = (
+      <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        {t("keyFromEnv")}
+      </span>
+    );
+  } else {
+    display = (
+      <span className="text-xs text-muted-foreground">{t("keyNone")}</span>
+    );
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        {hasCredential ? (
-          <>
-            <span className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
-              <KeyRound className="size-3 shrink-0" />
-              {provider.keyHint ?? (isUrlProvider ? t("visionUrlSet") : "••••")}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs"
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open}
-            >
-              {rotateLabel}
-              {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs text-destructive hover:text-destructive"
-              disabled={busy}
-              onClick={handleClear}
-              aria-label={t("credentialClear")}
-            >
-              {busy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
-            </Button>
-          </>
-        ) : (
-          <>
-            {provider.keySource === "env" && (
-              <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                {t("keyFromEnv")}
-              </span>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs"
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open}
-            >
-              {setLabel}
-              {open ? <ChevronUp className="ml-1 size-3" /> : <ChevronDown className="ml-1 size-3" />}
-            </Button>
-          </>
-        )}
-      </div>
+    <div className="flex items-center gap-1">
+      {display}
+      {error && <span className="text-xs text-destructive">{error}</span>}
 
-      {open && (
-        <form onSubmit={handleSet} className="flex gap-2">
-          <div className="relative flex-1">
-            <Input
-              type={isUrlProvider ? "url" : showKey ? "text" : "password"}
-              placeholder={placeholder}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="h-7 pr-8 text-xs font-mono"
-              autoComplete="off"
-              autoFocus
-            />
-            {!isUrlProvider && (
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label={showKey ? t("credentialHide") : t("credentialShow")}
-              >
-                {showKey ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-              </button>
-            )}
-          </div>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
+        <DialogTrigger asChild>
           <Button
-            type="submit"
+            type="button"
+            variant="ghost"
             size="sm"
-            className="h-7 text-xs"
-            disabled={busy || !apiKey.trim()}
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            aria-label={t("editCredential")}
           >
-            {busy ? <Loader2 className="size-3 animate-spin" /> : t("credentialSave")}
+            <Pencil className="size-3" />
           </Button>
-        </form>
-      )}
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{provider.label}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSet} className="space-y-3">
+            <div className="relative">
+              <Input
+                type={isUrlProvider ? "url" : showKey ? "text" : "password"}
+                placeholder={isUrlProvider ? t("visionUrlPlaceholder") : t("credentialPlaceholder")}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="pr-8 font-mono"
+                autoComplete="off"
+                autoFocus
+              />
+              {!isUrlProvider && (
+                <button
+                  type="button"
+                  onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showKey ? t("credentialHide") : t("credentialShow")}
+                >
+                  {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              )}
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" disabled={busy || !apiKey.trim()}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : t("credentialSave")}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {hasCredential && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+          disabled={busy}
+          onClick={handleClear}
+          aria-label={t("credentialClear")}
+        >
+          {busy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+        </Button>
+      )}
     </div>
   );
 }
 
-/** Drag-sortable list item wrapping one vision provider row. */
+/** Drag-sortable table row wrapping one vision provider. */
 function SortableRow({
   id,
   dragHandleLabel,
@@ -250,13 +254,13 @@ function SortableRow({
   );
 
   return (
-    <li
+    <tr
       ref={setNodeRef}
       style={style}
-      className={`space-y-2 px-3 py-2.5 text-sm${isDragging ? " opacity-50" : ""}`}
+      className={`border-b border-border last:border-0${isDragging ? " opacity-50" : ""}`}
     >
       {children(handle)}
-    </li>
+    </tr>
   );
 }
 
@@ -357,44 +361,67 @@ export function AdminVisionProvidersForm({
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <ul className="divide-y divide-border rounded-md border border-border">
-          <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
-            {rows.map((p, i) => (
-              <SortableRow key={p.id} id={p.id} dragHandleLabel={t("dragHandle")}>
-                {(handle) => (
-                  <>
-                    <div className="flex items-center gap-3">
-                      {handle}
-                      <span className="text-xs tabular-nums text-muted-foreground">{i + 1}</span>
-                      <div className="flex min-w-0 flex-1 flex-col">
-                        <span className="font-medium">{p.label}</span>
-                        {!p.configured && (
-                          <span className="text-xs text-muted-foreground">{t("notConfigured")}</span>
-                        )}
-                      </div>
-
-                      <Switch
-                        checked={p.enabled}
-                        disabled={!p.configured}
-                        onCheckedChange={() => toggle(p.id)}
-                        aria-label={p.enabled ? t("enabled") : t("disabled")}
-                      />
-                    </div>
-
-                    <div className="pl-6">
-                      <VisionCredentialEditor
-                        provider={p}
-                        encryptionEnabled={encryptionEnabled}
-                        onSet={handleSetCredential}
-                        onClear={handleClearCredential}
-                      />
-                    </div>
-                  </>
-                )}
-              </SortableRow>
-            ))}
-          </SortableContext>
-        </ul>
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="w-8 px-3 py-2" aria-label={t("dragHandle")} />
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground hidden sm:table-cell">
+                  #
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  {t("providerName")}
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  {t("enabledHeader")}
+                </th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                  {t("apiKey")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+                {rows.map((p, i) => (
+                  <SortableRow key={p.id} id={p.id} dragHandleLabel={t("dragHandle")}>
+                    {(handle) => (
+                      <>
+                        <td className="px-3 py-2">{handle}</td>
+                        <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground hidden sm:table-cell">
+                          {i + 1}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{p.label}</div>
+                          {!p.configured && (
+                            <div className="text-xs text-muted-foreground">
+                              {t("notConfigured")}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Switch
+                            checked={p.enabled}
+                            disabled={!p.configured}
+                            onCheckedChange={() => toggle(p.id)}
+                            aria-label={p.enabled ? t("enabled") : t("disabled")}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <VisionCredentialCell
+                            provider={p}
+                            encryptionEnabled={encryptionEnabled}
+                            onSet={handleSetCredential}
+                            onClear={handleClearCredential}
+                          />
+                        </td>
+                      </>
+                    )}
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </tbody>
+          </table>
+        </div>
       </DndContext>
 
       <div className="flex items-center gap-3">
