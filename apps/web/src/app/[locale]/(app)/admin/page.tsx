@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminProviders } from "@/components/admin-providers";
 import { AdminVisionProviders } from "@/components/admin-vision-providers";
 import { AdminStats } from "@/components/admin-stats";
-import { loadMe, loadAdminProviders, loadAdminVisionProviders, loadAdminStats } from "@/lib/server-api";
+import { AdminJobs } from "@/components/admin-jobs";
+import { loadMe, loadAdminProviders, loadAdminVisionProviders, loadAdminStats, loadAdminJobs } from "@/lib/server-api";
 
 export default async function AdminPage({
   params,
@@ -19,10 +20,11 @@ export default async function AdminPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const [result, visionResult, statsResult] = await Promise.all([
+  const [result, visionResult, statsResult, jobsResult] = await Promise.all([
     loadAdminProviders(),
     loadAdminVisionProviders(),
     loadAdminStats(),
+    loadAdminJobs(),
   ]);
 
   return (
@@ -74,6 +76,23 @@ export default async function AdminPage({
           <p className="mb-4 text-sm text-muted-foreground">{t("statsHint")}</p>
           {statsResult.status === "ok" ? (
             <AdminStats stats={statsResult.stats} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("jobs")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">{t("jobsHint")}</p>
+          {jobsResult.status === "ok" ? (
+            <AdminJobs
+              initialJobs={jobsResult.jobs}
+              schedulerAvailable={jobsResult.schedulerAvailable}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
           )}

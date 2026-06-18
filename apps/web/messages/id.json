@@ -68,7 +68,19 @@
     "visionUrlPlaceholder": "http://localhost:11434",
     "visionUrlSet": "URL telah diatur",
     "stats": "Statistik server",
-    "statsHint": "Ukuran database dan jumlah baris. Penyimpanan objek tidak digunakan — tangkapan layar diproses dalam memori dan dibuang."
+    "statsHint": "Ukuran database dan jumlah baris. Penyimpanan objek tidak digunakan — tangkapan layar diproses dalam memori dan dibuang.",
+    "jobs": "Pekerjaan latar belakang",
+    "jobsHint": "Tugas terjadwal yang berjalan di latar belakang. Gunakan \"Jalankan sekarang\" untuk memicu pekerjaan secara langsung tanpa menunggu jadwal cron berikutnya. Catatan: invalidasi cache hanya berlaku untuk replika ini.",
+    "schedulerUnavailable": "Scheduler tidak berjalan (pg-boss memerlukan Postgres eksternal; tidak tersedia di lingkungan ini).",
+    "jobName": "Pekerjaan",
+    "jobSchedule": "Jadwal",
+    "jobLastRun": "Terakhir dijalankan",
+    "jobStatus": "Status",
+    "jobAction": "Aksi",
+    "jobRunNow": "Jalankan sekarang",
+    "jobRunning": "Sedang berjalan…",
+    "jobQueued": "Diantrekan ✓",
+    "jobTriggerFailed": "Tidak dapat mengantrekan pekerjaan. Apakah scheduler sedang berjalan?"
   },
   "Income": {
     "title": "Pendapatan",

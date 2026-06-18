@@ -29,6 +29,11 @@ import {
   refreshGaleri24Buyback,
   refreshNav,
 } from "../services/scrapers/store.js";
+import {
+  JOB_DESCRIPTORS,
+  getActiveBoss,
+  triggerJob,
+} from "../services/scheduler.js";
 
 /**
  * Admin-only server configuration (requires the Authentik admin group via
@@ -487,4 +492,103 @@ export async function adminRoute(app: FastifyInstance) {
       },
     };
   });
+
+  // ─── Background jobs panel (#105 + Slice 5) ──────────────────────────────
+
+  /**
+   * List all known background job queues with their schedule and last-run status.
+   *
+   * When pg-boss is unavailable (PGlite / test env / pre-boot) the live fields
+   * are null and `schedulerAvailable: false` is set — the UI shows a note instead
+   * of error.
+   *
+   * #105 multi-replica note: last-run data is read from the shared Postgres `pgboss`
+   * schema, so it reflects all replicas. However, in-process cache invalidation
+   * (invalidateMarketData / invalidateScreenshotParser) only fires on the replica
+   * that handles the trigger request. LISTEN/NOTIFY fan-out is the fix; deferred
+   * until the deployment scales past one replica.
+   */
+  app.get("/admin/jobs", { preHandler: app.requireAdmin }, async () => {
+    const boss = getActiveBoss();
+    const schedulerAvailable = boss !== null;
+
+    type JobRow = {
+      name: string;
+      lastRunAt: string | null;
+      lastStatus: "completed" | "failed" | null;
+    };
+
+    let liveRows: JobRow[] = [];
+    if (schedulerAvailable) {
+      try {
+        const queueNames: string[] = JOB_DESCRIPTORS.map((j) => j.name);
+        const rows = await app.db.execute<{
+          name: string;
+          last_completed: string | null;
+          last_failed: string | null;
+        }>(sql`
+          SELECT
+            name,
+            MAX(completedon) FILTER (WHERE state = 'completed') AS last_completed,
+            MAX(completedon) FILTER (WHERE state = 'failed')    AS last_failed
+          FROM pgboss.job
+          WHERE name = ANY(${queueNames})
+            AND completedon > NOW() - INTERVAL '30 days'
+          GROUP BY name
+        `);
+        liveRows = rows.map((r) => {
+          const c = r.last_completed ? new Date(r.last_completed).toISOString() : null;
+          const f = r.last_failed ? new Date(r.last_failed).toISOString() : null;
+          // Whichever is more recent determines the display status.
+          if (!c && !f) return { name: r.name, lastRunAt: null, lastStatus: null };
+          const lastRunAt = c && f ? (c > f ? c : f) : (c ?? f);
+          const lastStatus: "completed" | "failed" = c && (!f || c >= f) ? "completed" : "failed";
+          return { name: r.name, lastRunAt, lastStatus };
+        });
+      } catch {
+        // pgboss schema may not exist yet (first boot before scheduler started).
+        // Fall through with empty liveRows.
+      }
+    }
+
+    const liveMap = new Map(liveRows.map((r) => [r.name, r]));
+
+    const jobs = JOB_DESCRIPTORS.map((d) => ({
+      name: d.name,
+      label: d.label,
+      description: d.description,
+      cron: d.cron,
+      lastRunAt: liveMap.get(d.name)?.lastRunAt ?? null,
+      lastStatus: liveMap.get(d.name)?.lastStatus ?? null,
+    }));
+
+    return { schedulerAvailable, jobs };
+  });
+
+  // Manually enqueue a job immediately (admin "run now" button).
+  app.post(
+    "/admin/jobs/:name/trigger",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      const { name } = request.params as { name: string };
+      const knownNames = new Set<string>(JOB_DESCRIPTORS.map((j) => j.name));
+      if (!knownNames.has(name)) {
+        return reply.code(404).send({ error: "unknown_job" });
+      }
+
+      const result = await triggerJob(name);
+      if (!result.queued) {
+        return reply.code(503).send({ error: "scheduler_unavailable" });
+      }
+
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "trigger_job",
+        target: name,
+        meta: null,
+      });
+
+      return { queued: true, name };
+    },
+  );
 }

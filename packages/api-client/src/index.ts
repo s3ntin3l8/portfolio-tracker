@@ -108,6 +108,26 @@ export interface AdminStatsTable {
   sizeBytes: number | null;
 }
 
+/** One background job as returned by GET /admin/jobs. */
+export interface AdminJob {
+  name: string;
+  label: string;
+  description: string;
+  /** cron expression, or null for on-demand queues. */
+  cron: string | null;
+  /** ISO timestamp of the most recent completed or failed run, null = never run. */
+  lastRunAt: string | null;
+  /** Status of the last run, null = never run. */
+  lastStatus: "completed" | "failed" | null;
+}
+
+/** Response from GET /admin/jobs. */
+export interface AdminJobsResponse {
+  /** false when pg-boss is not running (PGlite / test env). */
+  schedulerAvailable: boolean;
+  jobs: AdminJob[];
+}
+
 /** Server stats surfaced by GET /admin/stats (see #140). */
 export interface AdminStats {
   db: {
@@ -650,6 +670,14 @@ export function createApiClient(config: ApiClientConfig) {
 
     // Admin: server statistics (#140).
     getAdminStats: () => request<AdminStats>("GET", "/admin/stats"),
+
+    // Admin: background jobs panel (#105 + Slice 5).
+    getAdminJobs: () => request<AdminJobsResponse>("GET", "/admin/jobs"),
+    triggerAdminJob: (name: string) =>
+      request<{ queued: boolean; name: string }>(
+        "POST",
+        `/admin/jobs/${encodeURIComponent(name)}/trigger`,
+      ),
 
     getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
       request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),

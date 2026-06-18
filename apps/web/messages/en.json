@@ -68,7 +68,19 @@
     "visionUrlPlaceholder": "http://localhost:11434",
     "visionUrlSet": "URL set",
     "stats": "Server statistics",
-    "statsHint": "Database size and row counts. Object storage is not used — screenshots are parsed in-memory and discarded."
+    "statsHint": "Database size and row counts. Object storage is not used — screenshots are parsed in-memory and discarded.",
+    "jobs": "Background jobs",
+    "jobsHint": "Scheduled background tasks. Use \"Run now\" to trigger a job immediately instead of waiting for its next cron tick. Note: cache invalidation only applies to this replica.",
+    "schedulerUnavailable": "Scheduler not running (pg-boss requires an external Postgres; not available in this environment).",
+    "jobName": "Job",
+    "jobSchedule": "Schedule",
+    "jobLastRun": "Last run",
+    "jobStatus": "Status",
+    "jobAction": "Action",
+    "jobRunNow": "Run now",
+    "jobRunning": "Running…",
+    "jobQueued": "Queued ✓",
+    "jobTriggerFailed": "Could not queue job. Is the scheduler running?"
   },
   "Income": {
     "title": "Income",

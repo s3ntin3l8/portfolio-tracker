@@ -403,6 +403,76 @@ describe("admin provider config", () => {
     expect(typeof body.objectStorage.note).toBe("string");
   });
 
+  // ─── Background jobs panel (#105 + Slice 5) ──────────────────────────────
+
+  it("GET /admin/jobs is admin-gated and returns the expected shape", async () => {
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/admin/jobs",
+      headers: auth(await token("nobody-jobs")),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const ok = await app.inject({
+      method: "GET",
+      url: "/admin/jobs",
+      headers: auth(await token("admin-jobs-1", [ADMIN_GROUP])),
+    });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json() as {
+      schedulerAvailable: boolean;
+      jobs: { name: string; label: string; cron: string | null; lastRunAt: null; lastStatus: null }[];
+    };
+    // pg-boss is not running in PGlite/test env.
+    expect(body.schedulerAvailable).toBe(false);
+    // All six known job descriptors should be listed.
+    expect(body.jobs).toHaveLength(6);
+    const names = body.jobs.map((j) => j.name);
+    expect(names).toContain("refresh-prices");
+    expect(names).toContain("daily-snapshot");
+    expect(names).toContain("tr-sync");
+    expect(names).toContain("scrape-antam");
+    expect(names).toContain("scrape-nav");
+    expect(names).toContain("refresh-dividends");
+    // With scheduler unavailable, last-run fields are all null.
+    for (const job of body.jobs) {
+      expect(job.lastRunAt).toBeNull();
+      expect(job.lastStatus).toBeNull();
+      expect(typeof job.label).toBe("string");
+      expect(typeof job.cron).toBe("string"); // all known jobs have a cron
+    }
+  });
+
+  it("POST /admin/jobs/:name/trigger returns 404 for unknown job names", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/jobs/not-a-job/trigger",
+      headers: auth(await token("admin-jobs-2", [ADMIN_GROUP])),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: "unknown_job" });
+  });
+
+  it("POST /admin/jobs/:name/trigger returns 503 when scheduler is unavailable", async () => {
+    // In PGlite/test env, activeBoss is null → scheduler_unavailable.
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/jobs/refresh-prices/trigger",
+      headers: auth(await token("admin-jobs-3", [ADMIN_GROUP])),
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ error: "scheduler_unavailable" });
+  });
+
+  it("POST /admin/jobs/:name/trigger is forbidden for non-admins", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/jobs/refresh-prices/trigger",
+      headers: auth(await token("intruder-jobs")),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it("PATCH /admin/vision-providers records an audit log entry", async () => {
     const t = await token("admin-v-audit", [ADMIN_GROUP]);
     await app.inject({

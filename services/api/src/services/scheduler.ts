@@ -40,6 +40,70 @@ const RECOMPUTE_SINGLETON_SECONDS = 30; // collapse rapid edits per portfolio
 let activeBoss: PgBoss | null = null;
 
 /**
+ * The full descriptor for each scheduled queue, used by the admin jobs panel.
+ * `cron: null` means the queue is triggered on-demand (no fixed schedule).
+ *
+ * #105 note: `triggerJob()` only affects the replica that receives the request.
+ *  In a multi-replica setup the pg-boss job is still enqueued in Postgres so any
+ *  idle worker replica can pick it up, but `invalidateMarketData()` /
+ *  `invalidateScreenshotParser()` (in-process cache only) are NOT propagated.
+ *  A LISTEN/NOTIFY fan-out is the proper fix; deferred until >1 replica is in use.
+ */
+export const JOB_DESCRIPTORS = [
+  {
+    name: QUEUE,
+    label: "Price refresh",
+    description: "Refresh last prices for all held instruments during market hours.",
+    cron: SCHEDULE_CRON,
+  },
+  {
+    name: SNAPSHOT_QUEUE,
+    label: "Daily snapshot",
+    description: "Record daily net-worth snapshots for the dashboard chart.",
+    cron: SNAPSHOT_CRON,
+  },
+  {
+    name: TR_SYNC_QUEUE,
+    label: "Trade Republic sync",
+    description: "Pull the latest Trade Republic timeline events and stage as draft imports.",
+    cron: TR_SYNC_CRON,
+  },
+  {
+    name: ANTAM_QUEUE,
+    label: "Gold buyback scrape",
+    description: "Scrape Antam and Galeri24 buyback rates into the scraped-quotes cache.",
+    cron: ANTAM_CRON,
+  },
+  {
+    name: NAV_QUEUE,
+    label: "Reksa dana NAV scrape",
+    description: "Scrape the Bibit NAV catalogue for all tracked mutual funds.",
+    cron: NAV_CRON,
+  },
+  {
+    name: DIVIDEND_QUEUE,
+    label: "Dividend refresh",
+    description: "Pull announced and historical dividend events from market-data providers.",
+    cron: DIVIDEND_CRON,
+  },
+] as const;
+
+/** Return the active pg-boss instance, or null when the scheduler is not running. */
+export function getActiveBoss(): PgBoss | null {
+  return activeBoss;
+}
+
+/**
+ * Enqueue a manual run of a named job queue.
+ * Returns `{ queued: true }` on success, `{ queued: false }` when pg-boss is unavailable.
+ */
+export async function triggerJob(name: string): Promise<{ queued: boolean }> {
+  if (!activeBoss) return { queued: false };
+  await activeBoss.send(name, {});
+  return { queued: true };
+}
+
+/**
  * Enqueue a history recompute for a portfolio, collapsed (debounced) via singletonKey so
  * rapid bulk-edits (multi-file import, TR sync) collapse to one job. fromDate bounds the
  * recompute to transactions on or after that date (pass min(changed executedAt)).

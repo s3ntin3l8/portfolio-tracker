@@ -20,6 +20,7 @@ import {
   type AdminProvider,
   type AdminVisionProvider,
   type AdminStats,
+  type AdminJobsResponse,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -371,6 +372,20 @@ export async function loadAdminStats(): Promise<
   try {
     const stats = await api.getAdminStats();
     return { status: "ok", stats };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+/** Admin: background job list, or "unavailable" (signed out / non-admin / down). */
+export async function loadAdminJobs(): Promise<
+  { status: "ok" } & AdminJobsResponse | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const data = await api.getAdminJobs();
+    return { status: "ok", ...data };
   } catch {
     return { status: "unavailable" };
   }
