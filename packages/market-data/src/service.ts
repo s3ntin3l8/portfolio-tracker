@@ -59,6 +59,17 @@ export class MarketDataService {
     return [];
   }
 
+  async getHistoryFrom(ref: InstrumentRef, fromDate: string): Promise<Candle[]> {
+    for (const provider of this.providersFor(ref.assetClass, ref.market)) {
+      if (!provider.getHistoryFrom) continue;
+      this.opts.onCall?.(provider.name);
+      const candles = (await provider.getHistoryFrom(ref, fromDate)) ?? [];
+      if (candles.length > 0) return candles;
+    }
+    // Fallback: try getHistory with max range if no provider supports getHistoryFrom
+    return this.getHistory(ref, "max");
+  }
+
   async getDividends(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]> {
     for (const provider of this.providersFor(ref.assetClass, ref.market)) {
       if (!provider.getDividends) continue;

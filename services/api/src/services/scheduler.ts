@@ -9,6 +9,7 @@ import { refreshDividends } from "./dividends.js";
 import { recordDailySnapshots } from "./snapshots.js";
 import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
+import { backfillPortfolioHistory } from "./backfill.js";
 
 const QUEUE = "refresh-prices";
 const SCHEDULE_CRON = "*/5 * * * *"; // every 5 minutes; the job self-gates on market hours
@@ -33,6 +34,30 @@ const DIVIDEND_QUEUE = "refresh-dividends";
 // API quota for no practical gain. Runs early before the IDX open.
 const DIVIDEND_CRON = "0 6 * * 1";
 
+const RECOMPUTE_QUEUE = "recompute-history";
+const RECOMPUTE_SINGLETON_SECONDS = 30; // collapse rapid edits per portfolio
+
+let activeBoss: PgBoss | null = null;
+
+/**
+ * Enqueue a history recompute for a portfolio, collapsed (debounced) via singletonKey so
+ * rapid bulk-edits (multi-file import, TR sync) collapse to one job. fromDate bounds the
+ * recompute to transactions on or after that date (pass min(changed executedAt)).
+ * No-op when pg-boss is unavailable (PGlite / tests).
+ */
+export async function enqueueRecompute(portfolioId: string, fromDate: string): Promise<void> {
+  if (!activeBoss) return;
+  try {
+    await activeBoss.send(
+      RECOMPUTE_QUEUE,
+      { portfolioId, fromDate },
+      { singletonKey: portfolioId, singletonSeconds: RECOMPUTE_SINGLETON_SECONDS },
+    );
+  } catch {
+    // non-fatal
+  }
+}
+
 function usesPglite(url: string): boolean {
   return !url || url.startsWith("pglite://");
 }
@@ -51,6 +76,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   }
 
   const boss = new PgBoss(url);
+  activeBoss = boss;
   boss.on("error", (err) => app.log.error({ err }, "pg-boss error"));
   await boss.start();
   await boss.createQueue(QUEUE);
@@ -150,6 +176,30 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(DIVIDEND_QUEUE, DIVIDEND_CRON);
 
+  // On-demand recompute after transaction mutations. Debounced per portfolio so bulk
+  // imports collapse to one job; fromDate bounds the work to the affected window.
+  await boss.createQueue(RECOMPUTE_QUEUE);
+  await boss.work(
+    RECOMPUTE_QUEUE,
+    async (jobs) => {
+      for (const job of jobs) {
+        try {
+          const { portfolioId, fromDate } = job.data as { portfolioId: string; fromDate: string };
+          const result = await backfillPortfolioHistory(
+            getDb(),
+            await getMarketData(),
+            app.config.MARKET_DATA_TTL_MS,
+            portfolioId,
+            { fromDate },
+          );
+          app.log.info({ portfolioId, fromDate, ...result }, "history recompute complete");
+        } catch (err) {
+          app.log.error({ err }, "history recompute failed");
+        }
+      }
+    },
+  );
+
   app.log.info(
     {
       priceCron: SCHEDULE_CRON,
@@ -158,11 +208,13 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
       antamCron: ANTAM_CRON,
       navCron: NAV_CRON,
       dividendCron: DIVIDEND_CRON,
+      recomputeQueue: RECOMPUTE_QUEUE,
     },
     "Schedulers started",
   );
 
   app.addHook("onClose", async () => {
     await boss.stop();
+    activeBoss = null;
   });
 }

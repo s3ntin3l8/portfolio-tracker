@@ -16,9 +16,11 @@ import { formatMoney } from "@/lib/utils";
 export function PriceChart({
   data,
   currency,
+  unit = "currency",
 }: {
   data: Candle[];
   currency: string;
+  unit?: "currency" | "percent";
 }) {
   const locale = useLocale();
   const points = data.map((d) => ({ date: d.date, close: Number(d.close) }));
@@ -45,10 +47,18 @@ export function PriceChart({
             tickLine={false}
             axisLine={false}
             width={72}
-            tickFormatter={(v: number) => formatMoney(v, currency, locale)}
+            tickFormatter={(v: number) =>
+              unit === "percent"
+                ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`
+                : formatMoney(v, currency, locale)
+            }
           />
           <Tooltip
-            formatter={(v) => formatMoney(Number(v), currency, locale)}
+            formatter={(v) =>
+              unit === "percent"
+                ? `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(2)}%`
+                : formatMoney(Number(v), currency, locale)
+            }
             contentStyle={{
               background: "var(--color-card)",
               border: "1px solid var(--color-border)",

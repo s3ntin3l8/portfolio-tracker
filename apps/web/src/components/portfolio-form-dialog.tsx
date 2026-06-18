@@ -29,7 +29,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 /** The portfolio fields the edit form pre-fills. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber"
+  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber" | "includeInAggregate"
 >;
 
 /**
@@ -73,6 +73,7 @@ export function PortfolioFormDialog({
   const [brokerage, setBrokerage] = useState(portfolio?.brokerage ?? "");
   const [accountHolder, setAccountHolder] = useState(portfolio?.accountHolder ?? "");
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
+  const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -127,6 +128,7 @@ export function PortfolioFormDialog({
       setBrokerage(portfolio?.brokerage ?? "");
       setAccountHolder(portfolio?.accountHolder ?? "");
       setAccountNumber(portfolio?.accountNumber ?? "");
+      setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
       setError(false);
       setConfirmDelete(false);
       setCreatedPortfolio(null);
@@ -152,6 +154,7 @@ export function PortfolioFormDialog({
       brokerage: brokerage.trim() || null,
       accountHolder: accountHolder.trim() || null,
       accountNumber: accountNumber.trim() || null,
+      includeInAggregate,
     };
     try {
       if (mode === "edit" && portfolio) {
@@ -330,6 +333,22 @@ export function PortfolioFormDialog({
               <p className="text-xs text-muted-foreground">{t("birthYearHint")}</p>
             </div>
           )}
+
+          <div className="flex items-center gap-3">
+            <input
+              id="portfolio-include-in-aggregate"
+              type="checkbox"
+              checked={includeInAggregate}
+              onChange={(e) => setIncludeInAggregate(e.target.checked)}
+              className="size-4 rounded border-input accent-primary"
+            />
+            <div>
+              <Label htmlFor="portfolio-include-in-aggregate">
+                {t("includeInAggregate")}
+              </Label>
+              <p className="text-xs text-muted-foreground">{t("includeInAggregateHint")}</p>
+            </div>
+          </div>
 
           <DialogFooter className="pt-2">
             {mode === "edit" &&

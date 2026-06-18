@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 /** Snapshot-history ranges understood by the API's `rangeStart` (+ `all` → full). */
-export const RANGES = ["1m", "3m", "6m", "1y", "all"] as const;
+export const RANGES = ["1m", "3m", "ytd", "1y", "all"] as const;
 export type ChartRange = (typeof RANGES)[number];
 
 export function RangeToggle({

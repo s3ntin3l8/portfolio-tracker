@@ -22,6 +22,8 @@ import {
   aggregateIncome,
   convert,
   contributionStats,
+  chainIndex,
+  aggregateValueFlows,
   type CoreTransaction,
   type CostBasisMode,
   type CorporateAction,
@@ -31,8 +33,9 @@ import {
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
 import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
-import { rangeStart, aggregateByDate } from "../services/snapshots.js";
+import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
+import { enqueueRecompute } from "../services/scheduler.js";
 
 interface PortfolioParams {
   portfolioId: string;
@@ -478,6 +481,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           externalId: input.externalId,
         })
         .returning();
+      await enqueueRecompute(portfolioId, new Date(input.executedAt).toISOString().slice(0, 10));
       reply.code(201);
       return created;
     },
@@ -500,6 +504,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!deleted) {
         return reply.code(404).send({ error: "transaction_not_found" });
       }
+      await enqueueRecompute(portfolioId, deleted.executedAt.toISOString().slice(0, 10));
       return reply.code(204).send();
     },
   );
@@ -560,6 +565,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!updated) {
         return reply.code(404).send({ error: "transaction_not_found" });
       }
+      await enqueueRecompute(portfolioId, updated.executedAt.toISOString().slice(0, 10));
       return updated;
     },
   );
@@ -636,7 +642,23 @@ export async function transactionsRoute(app: FastifyInstance) {
         .from(portfolioSnapshots)
         .where(and(...conds))
         .orderBy(asc(portfolioSnapshots.date));
-      return rows.map((r) => ({ date: r.date, netWorth: r.netWorth }));
+
+      // Compute TWR chain from stored (marketValue, effectiveFlow) pairs.
+      const series = rows.map((r) => ({
+        date: r.date,
+        marketValue: r.marketValue ?? "0",
+        effectiveFlow: r.effectiveFlow ?? "0",
+      }));
+      const indexed = chainIndex(series);
+      const indexById = new Map(indexed.map((p) => [p.date, p]));
+
+      return rows.map((r) => ({
+        date: r.date,
+        netWorth: r.netWorth,
+        marketValue: r.marketValue ?? "0",
+        index: indexById.get(r.date)?.index ?? "100",
+        pct: indexById.get(r.date)?.pct ?? "0",
+      }));
     },
   );
 
@@ -811,7 +833,7 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
   // day's snapshots converted to the display currency.
-  app.get<{ Querystring: { range?: string } }>(
+  app.get<{ Querystring: { range?: string; include?: string; exclude?: string } }>(
     "/networth/history",
     { preHandler: app.authenticate },
     async (request) => {
@@ -824,10 +846,24 @@ export async function transactionsRoute(app: FastifyInstance) {
       const display = u?.displayCurrency ?? "IDR";
 
       const pfs = await app.db
-        .select({ id: portfolios.id })
+        .select({ id: portfolios.id, includeInAggregate: portfolios.includeInAggregate })
         .from(portfolios)
         .where(eq(portfolios.userId, id));
-      const pfIds = pfs.map((p) => p.id);
+      if (pfs.length === 0) return [];
+
+      // Resolve which portfolios to include.
+      // ?include=id1,id2 overrides default; ?exclude=id1,id2 removes from default.
+      const includeParam = (request.query.include ?? "").split(",").filter(Boolean);
+      const excludeParam = (request.query.exclude ?? "").split(",").filter(Boolean);
+
+      let pfIds: string[];
+      if (includeParam.length > 0) {
+        pfIds = pfs.filter((p) => includeParam.includes(p.id)).map((p) => p.id);
+      } else {
+        pfIds = pfs
+          .filter((p) => p.includeInAggregate && !excludeParam.includes(p.id))
+          .map((p) => p.id);
+      }
       if (pfIds.length === 0) return [];
 
       const start = rangeStart(request.query.range ?? "1y");
@@ -836,20 +872,55 @@ export async function transactionsRoute(app: FastifyInstance) {
       const rows = await app.db
         .select()
         .from(portfolioSnapshots)
-        .where(and(...conds));
+        .where(and(...conds))
+        .orderBy(asc(portfolioSnapshots.date));
 
+      // FX-convert each row's (marketValue, effectiveFlow, netWorth) to display currency.
       const currencies = [...new Set(rows.map((r) => r.currency))];
       const dates = [...new Set(rows.map((r) => r.date))];
       const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
-      return aggregateByDate(
-        rows.map((r) => ({
-          date: r.date,
-          netWorth: r.netWorth,
-          currency: r.currency,
-        })),
-        (date) => makeFxRateFn(ratesByDate.get(date) ?? {}, display),
-        display,
-      );
+
+      // Group by portfolio then aggregate before chaining (cannot average per-portfolio indices).
+      const perPortfolio = new Map<string, { date: string; marketValue: string; effectiveFlow: string; netWorth: string; currency: string }[]>();
+      for (const r of rows) {
+        const list = perPortfolio.get(r.portfolioId) ?? [];
+        list.push(r);
+        perPortfolio.set(r.portfolioId, list);
+      }
+
+      // FX-convert per-portfolio flows to display currency, then aggregate.
+      const allFlows: { date: string; marketValue: string; effectiveFlow: string }[][] = [];
+      for (const [, pfRows] of perPortfolio) {
+        const converted = pfRows.map((r) => {
+          const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+          return {
+            date: r.date,
+            marketValue: convert(r.marketValue ?? "0", r.currency, display, fx),
+            effectiveFlow: convert(r.effectiveFlow ?? "0", r.currency, display, fx),
+          };
+        });
+        allFlows.push(converted);
+      }
+
+      const aggregated = aggregateValueFlows(allFlows);
+      const indexed = chainIndex(aggregated);
+      const indexById = new Map(indexed.map((p) => [p.date, p]));
+
+      // Also compute aggregated netWorth per date for the Value toggle.
+      const nwByDate = new Map<string, number>();
+      for (const r of rows) {
+        const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+        const nw = Number(convert(r.netWorth, r.currency, display, fx));
+        nwByDate.set(r.date, (nwByDate.get(r.date) ?? 0) + nw);
+      }
+
+      return aggregated.map((p) => ({
+        date: p.date,
+        netWorth: String(nwByDate.get(p.date) ?? 0),
+        marketValue: p.marketValue,
+        index: indexById.get(p.date)?.index ?? "100",
+        pct: indexById.get(p.date)?.pct ?? "0",
+      }));
     },
   );
 }

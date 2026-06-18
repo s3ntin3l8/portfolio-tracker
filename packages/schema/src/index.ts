@@ -83,6 +83,9 @@ export const portfolioInputSchema = z.object({
   // Optional account number (SID, IBAN, broker account ID). Used for auto-detecting
   // which portfolio a screenshot belongs to. Nullable so a PATCH can clear it.
   accountNumber: z.string().trim().nullable().optional(),
+  // Whether this portfolio is included in the net-worth aggregate. Defaults to true
+  // so new portfolios are counted without any explicit action.
+  includeInAggregate: z.boolean().default(true),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
@@ -97,6 +100,7 @@ export const portfolioPatchSchema = z.object({
   brokerage: z.string().trim().nullable().optional(),
   accountHolder: z.string().trim().nullable().optional(),
   accountNumber: z.string().trim().nullable().optional(),
+  includeInAggregate: z.boolean().optional(),
 });
 export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 

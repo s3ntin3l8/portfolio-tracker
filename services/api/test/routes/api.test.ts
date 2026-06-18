@@ -1723,7 +1723,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(h1.statusCode).toBe(200);
-    expect(h1.json()).toEqual([
+    expect(h1.json()).toMatchObject([
       { date: "2026-02-01", netWorth: "1000000" },
       { date: "2026-02-02", netWorth: "1100000" },
     ]);
@@ -1735,7 +1735,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(agg.statusCode).toBe(200);
-    expect(agg.json()).toEqual([
+    expect(agg.json()).toMatchObject([
       { date: "2026-02-01", netWorth: "1000000" },
       { date: "2026-02-02", netWorth: "1600000" }, // 1,100,000 + 500,000
     ]);

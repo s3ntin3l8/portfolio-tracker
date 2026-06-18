@@ -75,6 +75,12 @@ export interface MarketDataProvider {
   supports(assetClass: AssetClass, market: string): boolean;
   getQuote(ref: InstrumentRef): Promise<Quote | null>;
   getHistory?(ref: InstrumentRef, range: string): Promise<Candle[]>;
+  /**
+   * Fetch daily closes from `fromDate` (YYYY-MM-DD, inclusive) to today.
+   * Used for inception-bounded backfill so the prices table only stores
+   * [firstHeld, today] per instrument. Returns empty when not supported.
+   */
+  getHistoryFrom?(ref: InstrumentRef, fromDate: string): Promise<Candle[]>;
   /** Free-text ticker/name discovery (not `supports`-gated; cross-market). */
   search?(query: string): Promise<InstrumentSearchResult[]>;
   /** Resolve an ISIN to a symbol + exchange (+ optional name/type for enrichment). */

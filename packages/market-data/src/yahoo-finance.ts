@@ -102,6 +102,20 @@ export class YahooFinanceProvider implements MarketDataProvider {
     return data.chart?.result?.[0] ?? null;
   }
 
+  private async chartFromDate(symbol: string, fromDate: string): Promise<ChartResult | null> {
+    const period1 = Math.floor(new Date(fromDate).getTime() / 1000);
+    const period2 = Math.floor(Date.now() / 1000);
+    const res = await this.doFetch(
+      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`,
+      { headers: this.defaultHeaders },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      chart?: { result?: ChartResult[] | null; error?: unknown };
+    };
+    return data.chart?.result?.[0] ?? null;
+  }
+
   private chart(ref: InstrumentRef, range: string): Promise<ChartResult | null> {
     return this.chartBySymbol(this.yahooSymbol(ref), range);
   }
@@ -242,6 +256,23 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const timestamps = result?.timestamp ?? [];
     const closes = result?.indicators?.quote?.[0]?.close ?? [];
     // Gold pairs quote per troy ounce; convert each close to per-gram like the quote path.
+    const factor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
+    const candles: Candle[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const close = closes[i];
+      if (close === null || close === undefined) continue;
+      candles.push({
+        date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
+        close: factor === 1 ? String(close) : String(close / factor),
+      });
+    }
+    return candles;
+  }
+
+  async getHistoryFrom(ref: InstrumentRef, fromDate: string): Promise<Candle[]> {
+    const result = await this.chartFromDate(this.yahooSymbol(ref), fromDate);
+    const timestamps = result?.timestamp ?? [];
+    const closes = result?.indicators?.quote?.[0]?.close ?? [];
     const factor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {

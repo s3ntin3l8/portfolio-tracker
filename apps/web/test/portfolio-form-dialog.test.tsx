@@ -55,6 +55,7 @@ function renderEdit(
     birthYear: null,
     brokerage: null,
     accountHolder: null, accountNumber: null,
+    includeInAggregate: true,
   },
 ) {
   return render(
@@ -93,6 +94,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: null,
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     expect(refresh).toHaveBeenCalled();
   });
@@ -115,6 +117,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Interactive Brokers",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
   });
 
@@ -135,6 +138,7 @@ describe("PortfolioFormDialog", () => {
       brokerage: null,
       accountHolder: "Emma",
       accountNumber: null,
+      includeInAggregate: true,
     });
   });
 
@@ -165,6 +169,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: 2017,
       brokerage: null,
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
   });
 
@@ -183,6 +188,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: null,
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     expect(refresh).toHaveBeenCalled();
   });
@@ -228,6 +234,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Trade Republic",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     }));
     // Dialog stays open — TR section appears with Done button (no create button anymore)
     await waitFor(() =>
@@ -248,6 +255,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Trade Republic",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -269,6 +277,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Stockbit",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -285,6 +294,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Trade Republic",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     // Dialog is closed on mount — the fetch must be gated on `open`.
     expect(getTrConnection).not.toHaveBeenCalled();
@@ -310,6 +320,7 @@ describe("PortfolioFormDialog", () => {
       birthYear: null,
       brokerage: "Trade Republic",
       accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 

@@ -66,6 +66,8 @@ export interface Portfolio {
   accountHolder: string | null;
   /** Brokerage/bank account number used for screenshot auto-detect, or null. */
   accountNumber: string | null;
+  /** When false, this portfolio is excluded from the aggregate net-worth/performance view. */
+  includeInAggregate: boolean;
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */
@@ -226,6 +228,22 @@ export interface NetWorth {
 export interface NetWorthPoint {
   date: string; // YYYY-MM-DD
   netWorth: string;
+}
+
+/**
+ * A point on a TWR performance series. Superset of NetWorthPoint — existing callers
+ * that only read `netWorth` continue to work.
+ */
+export interface PerformancePoint {
+  date: string; // YYYY-MM-DD
+  /** Net worth in display currency (incl. cash + liabilities). */
+  netWorth: string;
+  /** Holdings market value only (excl. cash), in display/base currency. Optional for back-compat. */
+  marketValue?: string;
+  /** TWR index level (base 100). Optional for back-compat. */
+  index?: string;
+  /** Percentage return since inception: (index/100 − 1) × 100. Optional for back-compat. */
+  pct?: string;
 }
 
 /** A projected future coupon payment for a held bond (instrument currency). */
@@ -544,10 +562,14 @@ export function createApiClient(config: ApiClientConfig) {
     getContributions: () => request<ContributionStats>("GET", "/networth/contributions"),
     getPortfolioContributions: (portfolioId: string) =>
       request<ContributionStats>("GET", `/portfolios/${portfolioId}/contributions`),
-    getNetWorthHistory: (range = "1y") =>
-      request<NetWorthPoint[]>("GET", `/networth/history?range=${encodeURIComponent(range)}`),
+    getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[] }) => {
+      const params = new URLSearchParams({ range });
+      if (opts?.include?.length) params.set("include", opts.include.join(","));
+      if (opts?.exclude?.length) params.set("exclude", opts.exclude.join(","));
+      return request<PerformancePoint[]>("GET", `/networth/history?${params.toString()}`);
+    },
     getPortfolioHistory: (portfolioId: string, range = "1y") =>
-      request<NetWorthPoint[]>(
+      request<PerformancePoint[]>(
         "GET",
         `/portfolios/${portfolioId}/history?range=${encodeURIComponent(range)}`,
       ),

@@ -155,6 +155,13 @@
       "when": 1781785894900,
       "tag": "0021_long_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781813372698,
+      "tag": "0022_worried_paibok",
+      "breakpoints": true
     }
   ]
 }

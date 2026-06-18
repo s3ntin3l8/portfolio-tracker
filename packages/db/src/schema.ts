@@ -119,6 +119,7 @@ export const portfolios = pgTable(
     // Optional brokerage/bank account number (e.g. SID, IBAN). Used for auto-detecting
     // which portfolio a screenshot belongs to when the account number appears in the document.
     accountNumber: text("account_number"),
+    includeInAggregate: boolean("include_in_aggregate").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -445,6 +446,10 @@ export const portfolioSnapshots = pgTable(
       .references(() => portfolios.id, { onDelete: "cascade" }),
     date: date("date").notNull(),
     netWorth: numeric("net_worth").notNull(),
+    /** Holdings market value (excl. cash), in the portfolio's base currency. Used for TWR. */
+    marketValue: numeric("market_value").notNull().default("0"),
+    /** Effective capital flow on this day (buys − sells − income for realSeries), base currency. */
+    effectiveFlow: numeric("effective_flow").notNull().default("0"),
     currency: text("currency").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

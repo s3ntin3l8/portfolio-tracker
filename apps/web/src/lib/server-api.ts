@@ -6,7 +6,7 @@ import {
   type Portfolio,
   type User,
   type NetWorth,
-  type NetWorthPoint,
+  type PerformancePoint,
   type Instrument,
   type Candle,
   type CorporateAction,
@@ -92,7 +92,7 @@ export async function loadNetWorth(
  */
 export async function loadNetWorthHistory(
   range = "1y",
-): Promise<NetWorthPoint[]> {
+): Promise<PerformancePoint[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {

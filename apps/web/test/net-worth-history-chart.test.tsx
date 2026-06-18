@@ -2,18 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
-import type { NetWorthPoint } from "@portfolio/api-client";
+import type { PerformancePoint } from "@portfolio/api-client";
 
 // Stub the recharts-backed chart so the test stays light and deterministic.
 vi.mock("@/components/charts/price-chart", () => ({
   PriceChart: () => <div data-testid="chart" />,
 }));
-const getNetWorthHistory = vi.fn(async (): Promise<NetWorthPoint[]> => [
+const getNetWorthHistory = vi.fn(async (): Promise<PerformancePoint[]> => [
   { date: "2026-01-01", netWorth: "100" },
   { date: "2026-02-01", netWorth: "200" },
   { date: "2026-03-01", netWorth: "300" },
 ]);
-const getPortfolioHistory = vi.fn(async (): Promise<NetWorthPoint[]> => [
+const getPortfolioHistory = vi.fn(async (): Promise<PerformancePoint[]> => [
   { date: "2026-01-01", netWorth: "50" },
   { date: "2026-02-01", netWorth: "75" },
 ]);
@@ -23,7 +23,7 @@ vi.mock("@/lib/api", () => ({
 
 import { NetWorthHistoryChart } from "../src/components/charts/net-worth-history-chart";
 
-const initial: NetWorthPoint[] = [
+const initial: PerformancePoint[] = [
   { date: "2026-01-01", netWorth: "100" },
   { date: "2026-02-01", netWorth: "200" },
 ];

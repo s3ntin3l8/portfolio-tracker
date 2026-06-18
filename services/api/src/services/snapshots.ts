@@ -1,4 +1,4 @@
-import { convert, type FxRateFn } from "@portfolio/core";
+import { cashFlow, convert, type FxRateFn, type PriceSeriesKind } from "@portfolio/core";
 import { portfolios, portfolioSnapshots } from "@portfolio/db";
 import type { MarketDataService } from "@portfolio/market-data";
 import type { DB } from "../db/client.js";
@@ -25,24 +25,59 @@ export async function recordDailySnapshots(
   const pfs = await db.select().from(portfolios);
   let count = 0;
   for (const p of pfs) {
-    const { summary } = await valuePortfolio(
+    const { summary, coreTxns, metaById } = await valuePortfolio(
       db,
       marketData,
       ttlMs,
       p.id,
       p.baseCurrency,
     );
+
+    // Compute today's effectiveFlow: -Σ cashFlow(tx) for qualifying txns executed today.
+    // PriceSeriesKind for each instrument: equity/etf/crypto/gold → realSeries; bond/nav → flatProxy.
+    function kindOf(instrId: string): PriceSeriesKind {
+      const meta = instrId ? metaById.get(instrId) : undefined;
+      if (!meta) return "none";
+      if (meta.assetClass === "bond" || meta.assetClass === "mutual_fund") return "flatProxy";
+      return "realSeries";
+    }
+
+    const todayMs = new Date(`${date}T00:00:00.000Z`).getTime();
+    const tomorrowMs = todayMs + 86_400_000;
+    let effectiveFlow = new (await import("decimal.js")).Decimal(0);
+    for (const tx of coreTxns) {
+      const exMs = tx.executedAt.getTime();
+      if (exMs < todayMs || exMs >= tomorrowMs) continue;
+      const { type } = tx;
+      if (type === "buy" || type === "savings_plan" || type === "sell") {
+        const cf = cashFlow(tx);
+        effectiveFlow = effectiveFlow.sub(cf);
+      } else if ((type === "dividend" || type === "coupon") && tx.instrumentId) {
+        if (kindOf(tx.instrumentId) === "realSeries") {
+          const cf = cashFlow(tx);
+          effectiveFlow = effectiveFlow.sub(cf);
+        }
+      }
+    }
+
     await db
       .insert(portfolioSnapshots)
       .values({
         portfolioId: p.id,
         date,
         netWorth: summary.netWorth,
+        marketValue: summary.totalMarketValue,
+        effectiveFlow: effectiveFlow.toString(),
         currency: p.baseCurrency,
       })
       .onConflictDoUpdate({
         target: [portfolioSnapshots.portfolioId, portfolioSnapshots.date],
-        set: { netWorth: summary.netWorth, currency: p.baseCurrency },
+        set: {
+          netWorth: summary.netWorth,
+          marketValue: summary.totalMarketValue,
+          effectiveFlow: effectiveFlow.toString(),
+          currency: p.baseCurrency,
+        },
       });
     count++;
   }
@@ -54,6 +89,9 @@ export async function recordDailySnapshots(
  * (no bound). Mirrors the ranges the instrument-history endpoint accepts.
  */
 export function rangeStart(range: string, now: Date = new Date()): string | null {
+  if (range === "ytd") {
+    return `${now.getUTCFullYear()}-01-01`;
+  }
   const days: Record<string, number> = {
     "1m": 30,
     "3m": 90,

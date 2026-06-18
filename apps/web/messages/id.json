@@ -161,6 +161,8 @@
     "delete": "Hapus portofolio",
     "deleteWarning": "Ini menghapus portofolio beserta semua transaksinya secara permanen.",
     "confirmDelete": "Hapus",
+    "includeInAggregate": "Sertakan dalam agregat kekayaan bersih",
+    "includeInAggregateHint": "Hilangkan centang untuk mengecualikan portofolio ini dari perhitungan total kekayaan bersih.",
     "trSectionTitle": "Koneksi Trade Republic",
     "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
     "trLoading": "Memuat koneksi…",
@@ -439,11 +441,14 @@
     "costBasisTotalPaid": "Total dibayar"
   },
   "Chart": {
+    "modeLabel": "Mode grafik",
+    "modePerformance": "Kinerja",
+    "modeValue": "Nilai",
     "range": {
       "label": "Rentang waktu",
       "1m": "1B",
       "3m": "3B",
-      "6m": "6B",
+      "ytd": "TTB",
       "1y": "1T",
       "all": "Semua"
     }
