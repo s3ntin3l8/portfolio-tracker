@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { FastifyBaseLogger } from "fastify";
 
 // The injectable spawn seam — tests pass a fake so CI never launches real Python.
 export type SpawnFn = typeof nodeSpawn;
@@ -20,6 +21,15 @@ export interface PytrRunnerOptions {
   pairingTimeoutMs?: number;
   // How long an export may run before being killed (ms).
   exportTimeoutMs?: number;
+  // Injectable logger — pass app.log so subprocess lifecycle events are observable.
+  // Optional: if absent (e.g. in tests that inject a mock runner), logs are suppressed.
+  log?: FastifyBaseLogger;
+}
+
+/** Return the first non-empty line of a multi-line string, trimmed. */
+function firstLine(s: string): string {
+  const idx = s.indexOf("\n");
+  return (idx === -1 ? s : s.slice(0, idx)).trim();
 }
 
 export class PytrUnavailableError extends Error {
@@ -89,10 +99,12 @@ interface PendingPairing {
  * finally.
  */
 export class PytrRunner {
-  private readonly opts: Required<Omit<PytrRunnerOptions, "spawn">> & { spawn: SpawnFn };
+  private readonly opts: Required<Omit<PytrRunnerOptions, "spawn" | "log">> & { spawn: SpawnFn };
+  private readonly log: FastifyBaseLogger | null;
   private readonly pending = new Map<string, PendingPairing>();
 
   constructor(options: PytrRunnerOptions) {
+    this.log = options.log ?? null;
     this.opts = {
       pythonBin: options.pythonBin,
       scriptDir: options.scriptDir,
@@ -151,11 +163,16 @@ export class PytrRunner {
         },
       );
     } catch (err) {
+      this.log?.error({ err }, "pytr spawn failed");
       await rm(tmpDir, { recursive: true, force: true });
       throw new PytrUnavailableError(
         err instanceof Error ? err.message : "failed to spawn python",
       );
     }
+    this.log?.info(
+      { userId, pythonBin: this.opts.pythonBin, wafStrategy: input.wafToken ? "token" : this.opts.wafStrategy },
+      "pytr pairing spawned",
+    );
 
     return new Promise<{ processId: string }>((resolve, reject) => {
       const entry: PendingPairing = {
@@ -207,6 +224,7 @@ export class PytrRunner {
     const finalize = async () => {
       try {
         if (code === 0) {
+          this.log?.info({ userId }, "pytr pairing approved");
           const sessionData = await readFile(entry.cookiesFile, "utf8");
           if (entry.onApproval) {
             entry.onApproval.resolve(sessionData);
@@ -216,6 +234,7 @@ export class PytrRunner {
             entry.settled = { sessionData };
           }
         } else {
+          this.log?.warn({ userId, code, stderr: firstLine(entry.stderr) }, "pytr pairing exited nonzero");
           const msg = entry.stderr.trim() || `pytr login exited with code ${code}`;
           const err = code === 3 ? new PytrApprovalError(msg) : new PytrError(msg);
           // A failure before the init line means startPairing() is still pending.
@@ -255,8 +274,8 @@ export class PytrRunner {
     entry.onApproval = null;
     try {
       entry.child.kill("SIGKILL");
-    } catch {
-      // already gone
+    } catch (killErr) {
+      this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
     void rm(entry.tmpDir, { recursive: true, force: true });
@@ -296,8 +315,8 @@ export class PytrRunner {
     clearTimeout(entry.timer);
     try {
       entry.child.kill("SIGKILL");
-    } catch {
-      // already gone
+    } catch (killErr) {
+      this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
     void rm(entry.tmpDir, { recursive: true, force: true });
@@ -315,6 +334,7 @@ export class PytrRunner {
     sessionData: string;
   }): Promise<{ events: RawTrEvent[]; sessionData: string; summary?: TrExportSummary }> {
     if (!this.opts.enabled) throw new PytrUnavailableError();
+    this.log?.info({ exportTimeoutMs: this.opts.exportTimeoutMs }, "pytr export started");
     const tmpDir = await mkdtemp(join(tmpdir(), "pytr-export-"));
     const cookiesFile = join(tmpDir, "cookies.txt");
     try {
@@ -325,8 +345,12 @@ export class PytrRunner {
         this.opts.exportTimeoutMs,
         { TR_PHONE: input.phone, TR_PIN: input.pin },
       );
-      if (code === 2) throw new PytrAuthError(stderr.trim() || undefined);
+      if (code === 2) {
+        this.log?.warn({}, "pytr session expired");
+        throw new PytrAuthError(stderr.trim() || undefined);
+      }
       if (code !== 0) {
+        this.log?.error({ code, stderr: firstLine(stderr) }, "pytr export failed");
         throw new PytrError(stderr.trim() || `pytr export exited with code ${code}`);
       }
       const lines = stdout
@@ -362,7 +386,8 @@ export class PytrRunner {
     try {
       const { code } = await this.run("-c", ["import pytr"], 10_000);
       return code === 0;
-    } catch {
+    } catch (err) {
+      this.log?.warn({ pythonBin: this.opts.pythonBin, err }, "pytr unavailable");
       return false;
     }
   }
@@ -393,19 +418,22 @@ export class PytrRunner {
       const timer = setTimeout(() => {
         try {
           child.kill("SIGKILL");
-        } catch {
-          // already gone
+        } catch (killErr) {
+          this.log?.debug({ first, err: killErr }, "pytr timeout kill failed");
         }
+        this.log?.warn({ first, timeoutMs }, "pytr process timed out");
         reject(new PytrError("pytr process timed out"));
       }, timeoutMs);
       child.stdout?.on("data", (d: Buffer) => (stdout += d.toString()));
       child.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
       child.on("error", (err) => {
         clearTimeout(timer);
+        this.log?.error({ first, err }, "pytr process error");
         reject(new PytrUnavailableError(err.message));
       });
-      child.on("exit", (code) => {
+      child.on("exit", (code, signal) => {
         clearTimeout(timer);
+        this.log?.debug({ first, code, signal }, "pytr subprocess exited");
         resolve({ code, stdout, stderr });
       });
     });
@@ -418,18 +446,26 @@ let runner: PytrRunner | null = null;
  * The app's pytr runner, built from config. The vendored Python entrypoints live in
  * services/api/python (copied next to dist in the runtime image); resolve that dir
  * relative to this module so it works in both dev (src) and prod (dist).
+ *
+ * Pass `log` (the Fastify app logger) to enable subprocess lifecycle logging.
+ * Tests always inject a mock runner via BuildAppOptions, so this factory is never
+ * called in tests — the log param is test-safe.
  */
-export function getPytrRunner(config: {
-  PYTR_PYTHON_BIN: string;
-  PYTR_WAF_STRATEGY: "awswaf" | "playwright";
-  PYTR_ENABLED: boolean;
-}): PytrRunner {
+export function getPytrRunner(
+  config: {
+    PYTR_PYTHON_BIN: string;
+    PYTR_WAF_STRATEGY: "awswaf" | "playwright";
+    PYTR_ENABLED: boolean;
+  },
+  log?: FastifyBaseLogger,
+): PytrRunner {
   if (!runner) {
     runner = new PytrRunner({
       pythonBin: config.PYTR_PYTHON_BIN,
       wafStrategy: config.PYTR_WAF_STRATEGY,
       enabled: config.PYTR_ENABLED,
       scriptDir: fileURLToPath(new URL("../../../python", import.meta.url)),
+      log,
     });
   }
   return runner;

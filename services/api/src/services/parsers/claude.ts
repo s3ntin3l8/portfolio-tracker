@@ -1,4 +1,4 @@
-import type { ParserImage, ParseResult, ScreenshotParser } from "./types.js";
+import type { Logger, ParserImage, ParseResult, ScreenshotParser } from "./types.js";
 import {
   EXTRACTION_PROMPT,
   TOOL_NAME,
@@ -37,10 +37,16 @@ export class ClaudeVisionParser implements ScreenshotParser {
     return this.apiKey.trim().length > 0;
   }
 
-  async parse(image: ParserImage): Promise<ParseResult> {
+  async parse(image: ParserImage, log?: Logger): Promise<ParseResult> {
     if (!this.isConfigured()) {
       throw new Error("claude_parser_not_configured");
     }
+
+    log?.debug(
+      { provider: this.name, model: this.model, mimeType: image.mimeType, bytes: image.data.length },
+      "vision request",
+    );
+    const t0 = Date.now();
 
     // PDFs go in a `document` block; screenshots in an `image` block. Both carry
     // base64 data + media type and are read by the same vision model.
@@ -82,6 +88,10 @@ export class ClaudeVisionParser implements ScreenshotParser {
     });
 
     if (!res.ok) {
+      log?.error(
+        { provider: this.name, status: res.status, statusText: res.statusText },
+        "vision http error",
+      );
       throw new Error(`claude_vision_error_${res.status}`);
     }
 
@@ -92,9 +102,14 @@ export class ClaudeVisionParser implements ScreenshotParser {
       }[];
     };
     const toolUse = data.content?.find((c) => c.type === "tool_use");
-    return {
+    const result = {
       drafts: validateDrafts(toolUse?.input?.transactions),
       contracts: validateContracts(toolUse?.input?.goldContracts),
     };
+    log?.info(
+      { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },
+      "vision parse complete",
+    );
+    return result;
   }
 }

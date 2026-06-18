@@ -95,6 +95,10 @@ export async function trRoute(app: FastifyInstance) {
       return reply.code(404).send({ error: "portfolio_not_found" });
     }
 
+    request.log.info(
+      { userId: id, portfolioId: body.portfolioId, wafStrategy: body.wafToken ? "token" : "default" },
+      "tr pairing started",
+    );
     try {
       await app.pytr.startPairing(id, {
         phone: body.phone,
@@ -151,6 +155,7 @@ export async function trRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "no_pairing_in_progress" });
       }
 
+      request.log.info({ userId: id }, "tr approval awaiting");
       let sessionData: string;
       try {
         sessionData = await app.pytr.awaitApproval(id);
@@ -179,6 +184,7 @@ export async function trRoute(app: FastifyInstance) {
         })
         .where(eq(trConnections.userId, id));
 
+      request.log.info({ userId: id }, "tr connected");
       return { status: "connected" };
     },
   );
@@ -195,7 +201,12 @@ export async function trRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "not_connected" });
       }
       try {
-        return await syncTrConnection(app.db, app.encryption, app.pytr, conn);
+        const result = await syncTrConnection(app.db, app.encryption, app.pytr, conn, request.log);
+        request.log.info(
+          { userId: id, status: result.status, importId: result.importId, drafts: result.drafts, errors: result.errors, cancelled: result.cancelled },
+          "tr manual sync done",
+        );
+        return result;
       } catch (err) {
         request.log.error({ err }, "tr sync failed");
         return reply.code(502).send({ error: "tr_sync_failed" });
@@ -232,6 +243,7 @@ export async function trRoute(app: FastifyInstance) {
             eq(screenshotImports.status, "draft"),
           ),
         );
+      request.log.info({ userId: id, portfolioId, removed: removed.length }, "tr reimport");
       return { removed: removed.length };
     });
   });
@@ -244,6 +256,7 @@ export async function trRoute(app: FastifyInstance) {
       const { id } = requireUser(request);
       app.pytr.cancelPairing(id);
       await app.db.delete(trConnections).where(eq(trConnections.userId, id));
+      request.log.info({ userId: id }, "tr disconnected");
       reply.code(204);
       return null;
     },
