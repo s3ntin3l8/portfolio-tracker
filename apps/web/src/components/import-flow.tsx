@@ -487,16 +487,21 @@ export function ImportFlow({
           if (!byImport.has(iid)) byImport.set(iid, []);
         }
         // Fire all confirms concurrently, passing the per-group portfolio selection.
+        // Skip groups with nothing to write (all drafts removed or excluded as duplicates,
+        // and no contracts) — the confirm endpoint 400s on an empty body, which would reject
+        // the whole Promise.all and fail the other groups too.
         const results = await Promise.all(
-          Array.from(byImport.entries()).map(([iid, ds]) =>
-            client.confirmImport(
-              iid,
-              ds.map(stripUid),
-              iid === contractImportId ? contracts : [],
-              portfolioByImport.get(iid),
-              acknowledgeMismatch,
+          Array.from(byImport.entries())
+            .filter(([iid, ds]) => ds.length > 0 || iid === contractImportId)
+            .map(([iid, ds]) =>
+              client.confirmImport(
+                iid,
+                ds.map(stripUid),
+                iid === contractImportId ? contracts : [],
+                portfolioByImport.get(iid),
+                acknowledgeMismatch,
+              ),
             ),
-          ),
         );
         setConfirmedCount(results.reduce((s, r) => s + r.confirmed, 0));
       }
