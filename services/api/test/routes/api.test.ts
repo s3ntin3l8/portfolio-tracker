@@ -438,6 +438,50 @@ describe("auth + portfolios + transactions", () => {
     expect(blank.statusCode).toBe(400);
   });
 
+  it("patches an instrument's ISIN and WKN", async () => {
+    const t = await token("user-a");
+    const create = await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: { symbol: "SIE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Siemens AG" },
+    });
+    const inst = create.json();
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/instruments/${inst.id}`,
+      headers: auth(t),
+      payload: { isin: "DE0007236101", wkn: "723610" },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json()).toMatchObject({ id: inst.id, isin: "DE0007236101", wkn: "723610" });
+  });
+
+  it("returns 409 when patching an instrument with an ISIN already owned by another row", async () => {
+    const t = await token("user-a");
+    const isin = "DE000SAP0011";
+    await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: { symbol: "SAP", market: "XETRA", assetClass: "equity", currency: "EUR", name: "SAP SE", isin },
+    });
+    const row2 = await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: { symbol: "SAP2", market: "XETRA", assetClass: "equity", currency: "EUR", name: "SAP Clone" },
+    });
+    const conflict = await app.inject({
+      method: "PATCH",
+      url: `/instruments/${row2.json().id}`,
+      headers: auth(t),
+      payload: { isin },
+    });
+    expect(conflict.statusCode).toBe(409);
+  });
+
   it("deletes a transaction (owner only)", async () => {
     const t = await token("user-a");
     const portfolioId = (

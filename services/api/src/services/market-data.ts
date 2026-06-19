@@ -12,6 +12,7 @@ import {
   type MarketDataProvider,
   type ProviderUsage,
 } from "@portfolio/market-data";
+import { BorseFrankfurtProvider } from "./borse-frankfurt.js";
 import {
   providerSettings,
   providerUsage,
@@ -328,6 +329,15 @@ export async function getMarketData(): Promise<MarketDataService> {
   providers.push(new FixtureProvider());
   service = new MarketDataService(providers, { onCall: recordCall });
   return service;
+}
+
+/**
+ * Return the Börse Frankfurt enrichment provider when enabled via BORSE_FRANKFURT_ENABLED=true.
+ * NOT added to the MarketDataService typeahead chain — used only for explicit on-demand lookups.
+ */
+export function getBorseFrankfurt(): BorseFrankfurtProvider | null {
+  if (process.env.BORSE_FRANKFURT_ENABLED !== "true") return null;
+  return new BorseFrankfurtProvider();
 }
 
 /** Drop the cached service so the next `getMarketData()` rebuilds from current settings. */

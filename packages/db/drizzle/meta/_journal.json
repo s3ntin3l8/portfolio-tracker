@@ -169,6 +169,13 @@
       "when": 1781816136354,
       "tag": "0023_freezing_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781867844601,
+      "tag": "0024_awesome_wild_pack",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import type { AssetClass, InstrumentRef, MarketDataProvider, Quote } from "./types.js";
-import { isIsin } from "./types.js";
+import { isIsin, isWkn } from "./types.js";
 
 export interface OpenFigiOptions {
   baseUrl?: string;
@@ -78,6 +78,38 @@ export class OpenFigiProvider implements MarketDataProvider {
       // as securityType "ETP" but securityType2 "Mutual Fund", so preferring the latter
       // misclassifies them. assetClassFromType checks etf/etp first, so the combined
       // string resolves ETPs to `etf` while genuine open-end funds stay `mutual_fund`.
+      type: [match.securityType, match.securityType2, match.marketSector]
+        .filter(Boolean)
+        .join(" "),
+    };
+  }
+
+  async resolveWKN(
+    wkn: string,
+  ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null> {
+    if (!isWkn(wkn)) return null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.apiKey) headers["X-OPENFIGI-APIKEY"] = this.apiKey;
+
+    const res = await this.doFetch(`${this.baseUrl}/v3/mapping`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify([{ idType: "ID_WERTPAPIER", idValue: wkn.trim().toUpperCase() }]),
+    });
+    if (!res.ok) return null;
+
+    const payload = (await res.json()) as { data?: FigiRecord[]; error?: string }[];
+    const records = payload?.[0]?.data ?? [];
+    const match =
+      records.find((r) => r.exchCode === "US" && r.ticker) ??
+      records.find((r) => r.ticker) ??
+      records[0];
+    if (!match?.ticker) return null;
+
+    return {
+      symbol: match.ticker,
+      exchange: match.exchCode ?? "",
+      name: match.name,
       type: [match.securityType, match.securityType2, match.marketSector]
         .filter(Boolean)
         .join(" "),

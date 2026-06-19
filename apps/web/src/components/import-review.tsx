@@ -35,6 +35,7 @@ const REVIEW_COLS: ColDef<ReviewDraft>[] = [
   { key: "action", get: (d) => d.action, type: "text" },
   { key: "name", get: (d) => d.name ?? "", type: "text" },
   { key: "isin", get: (d) => d.isin ?? "", type: "text" },
+  { key: "wkn", get: (d) => d.wkn ?? "", type: "text" },
   { key: "executedAt", get: (d) => d.executedAt, type: "date" },
   { key: "quantity", get: (d) => d.quantity, type: "numeric" },
   { key: "price", get: (d) => d.price, type: "numeric" },
@@ -56,7 +57,7 @@ const MAP_ACTIONS = [
 ] as const;
 
 // Number of columns in the desktop table (used for empty / issue row colSpan).
-const TABLE_COL_COUNT = 13; // checkbox + conf + class + action + name + isin + date + qty + price + total + fees + currency + actions
+const TABLE_COL_COUNT = 14; // checkbox + conf + class + action + name + isin + wkn + date + qty + price + total + fees + currency + actions
 
 /** Format a quantity string to up to 4 decimal places, stripping trailing zeros. */
 function fmtQty(s: string): string {
@@ -378,6 +379,7 @@ export function ImportReview({
         </TableCell>
         <TableCell className="font-medium">{d.name ?? "—"}</TableCell>
         <TableCell className="tabular text-xs text-muted-foreground">{d.isin ?? "—"}</TableCell>
+        <TableCell className="tabular text-xs text-muted-foreground">{d.wkn ?? "—"}</TableCell>
         <TableCell className="tabular whitespace-nowrap text-muted-foreground">
           {dateOf(d)}
         </TableCell>
@@ -444,6 +446,9 @@ export function ImportReview({
         <TableCell className="tabular text-xs text-muted-foreground">
           {issue.raw?.isin ?? "—"}
         </TableCell>
+        <TableCell className="tabular text-xs text-muted-foreground">
+          {issue.raw?.wkn ?? "—"}
+        </TableCell>
         <TableCell className="tabular whitespace-nowrap text-muted-foreground">
           {issue.raw?.executedAt?.slice(0, 10) ?? "—"}
         </TableCell>
@@ -507,6 +512,9 @@ export function ImportReview({
               <span className="text-muted-foreground">{dateOf(d)}</span>
               {d.isin && (
                 <span className="font-mono text-muted-foreground">{d.isin}</span>
+              )}
+              {d.wkn && (
+                <span className="font-mono text-muted-foreground">{d.wkn}</span>
               )}
             </div>
             <div className="mt-1 tabular text-sm text-muted-foreground">
@@ -681,6 +689,7 @@ export function ImportReview({
               <SortableTableHead colKey="action" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.action")}</SortableTableHead>
               <SortableTableHead colKey="name" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.name")}</SortableTableHead>
               <SortableTableHead colKey="isin" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.isin")}</SortableTableHead>
+              <SortableTableHead colKey="wkn" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.wkn")}</SortableTableHead>
               <SortableTableHead colKey="executedAt" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.executedAt")}</SortableTableHead>
               <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.quantity")}</SortableTableHead>
               <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.price")}</SortableTableHead>
@@ -903,6 +912,22 @@ export function ImportReview({
                   }
                 />
               </Field>
+              <Field label="ISIN">
+                <Input
+                  value={editingDraft.isin ?? ""}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { isin: e.target.value || null })
+                  }
+                />
+              </Field>
+              <Field label="WKN">
+                <Input
+                  value={editingDraft.wkn ?? ""}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { wkn: e.target.value || null })
+                  }
+                />
+              </Field>
               <Field label={t("fields.executedAt")}>
                 <Input
                   type="date"
@@ -977,6 +1002,12 @@ export function ImportReview({
                 <Input
                   value={mapForm.isin ?? ""}
                   onChange={(e) => setMapForm({ ...mapForm, isin: e.target.value })}
+                />
+              </Field>
+              <Field label="WKN">
+                <Input
+                  value={mapForm.wkn ?? ""}
+                  onChange={(e) => setMapForm({ ...mapForm, wkn: e.target.value })}
                 />
               </Field>
               <Field label={t("fields.executedAt")}>

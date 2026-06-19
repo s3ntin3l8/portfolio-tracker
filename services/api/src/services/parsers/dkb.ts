@@ -139,6 +139,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
   const idx = headerIndex(header);
   const cName = idx("Wertpapierbezeichnung");
   const cIsin = idx("ISIN");
+  const cWkn = idx("WKN");
   const cEntry = idx("Einstiegskurs");
   const cQty = idx("Stückzahl");
   const cAsset = idx("Assetklasse");
@@ -151,6 +152,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
       assetClass,
       action: "buy" as const,
       isin: cols[cIsin] || undefined,
+      wkn: cWkn >= 0 ? cols[cWkn] || undefined : undefined,
       name: collapse(cols[cName] ?? "") || undefined,
       quantity: parseEuroDecimal(cols[cQty]) ?? "",
       unit: assetClass === "bond" ? ("units" as const) : ("shares" as const),
@@ -171,6 +173,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
 // --- B. Girokonto Umsatzliste -------------------------------------------
 
 const ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b/;
+const WKN_RE = /\bWKN\s+([0-9A-HJ-NP-Z]{6})\b/;
 const PRICE_RE = /Preis\s+([\d.,]+)/;
 const QTY_RE = /Stück\s+([\d.,]+)/; // "Stück <qty>"
 const BOOKING_REF_RE = /\b(\d{15,})\b/;
@@ -217,6 +220,7 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       const execDate =
         parseDkbDate(vz.match(/Wertp\.Abrechn\.\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? date;
       const isin = vz.match(ISIN_RE)?.[1];
+      const wkn = vz.match(WKN_RE)?.[1];
       const price = parseEuroDecimal(vz.match(PRICE_RE)?.[1]);
       const quantity = parseEuroDecimal(vz.match(QTY_RE)?.[1]);
       const name = collapse(vz.match(/Gesch\.Art\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
@@ -226,6 +230,7 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
         assetClass: "equity",
         action,
         isin,
+        wkn,
         name: name || undefined,
         quantity: quantity ?? "",
         unit: "shares",
@@ -241,11 +246,13 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       const execDate =
         parseDkbDate(vz.match(/Wertpapierertrag\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? date;
       const isin = vz.match(ISIN_RE)?.[1];
+      const wkn = vz.match(WKN_RE)?.[1];
       const name = collapse(vz.match(/WKN\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
       draft = {
         assetClass: "equity",
         action: "dividend",
         isin,
+        wkn,
         name: name || undefined,
         quantity: "0",
         price: amount, // lump sum recorded in price (see core/cash.ts cashFlow)

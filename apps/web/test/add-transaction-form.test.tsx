@@ -13,6 +13,7 @@ const m = messages.Manage.tx;
 const INSTRUMENT: Instrument = {
   id: "i1",
   isin: null,
+  wkn: null,
   symbol: "BBCA",
   market: "IDX",
   assetClass: "equity",

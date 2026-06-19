@@ -30,6 +30,7 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
           action: { type: "string", enum: ["buy", "sell", "dividend", "coupon"] },
           ticker: { type: "string" },
           isin: { type: "string" },
+          wkn: { type: "string" },
           name: { type: "string" },
           quantity: { type: "string", description: "Decimal string. Grams for gold." },
           unit: { type: "string", enum: ["shares", "grams", "units"] },
@@ -133,7 +134,7 @@ Respond with ONLY a JSON object of the form:
 {"accountNumber":"string or omit if absent","transactions":[{
   "assetClass":"equity|gold|bond|mutual_fund|etf|crypto|derivative",
   "action":"buy|sell|dividend|coupon",
-  "ticker":"string (optional)","isin":"string (optional)","name":"string (optional)",
+  "ticker":"string (optional)","isin":"string (optional)","wkn":"string (optional)","name":"string (optional)",
   "quantity":"decimal string (grams for gold)","unit":"shares|grams|units",
   "price":"decimal string per unit","fees":"decimal string (optional, default 0)",
   "total":"decimal string (optional)","currency":"ISO 4217 e.g. IDR",

@@ -185,6 +185,7 @@ export interface InstrumentMeta {
 export interface Instrument {
   id: string;
   isin: string | null;
+  wkn: string | null;
   symbol: string;
   market: string;
   assetClass: string;
@@ -201,6 +202,7 @@ export interface InstrumentSearchResult {
   assetClass: string;
   currency: string;
   isin?: string;
+  wkn?: string;
   source: string;
 }
 
@@ -754,6 +756,14 @@ export function createApiClient(config: ApiClientConfig) {
       request<Candle[]>("GET", `/instruments/${id}/history?range=${encodeURIComponent(range)}`),
     createInstrument: (input: InstrumentInput) =>
       request<Instrument>("POST", "/instruments", input),
+    /** Update an instrument's identifiers (ISIN, WKN, symbol, name, assetClass). */
+    updateInstrument: (
+      id: string,
+      patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string },
+    ) => request<Instrument>("PATCH", `/instruments/${id}`, patch),
+    /** On-demand Börse Frankfurt enrichment — returns results with ISIN + WKN. */
+    enrichInstruments: (q: string) =>
+      request<InstrumentSearchResult[]>("GET", `/instruments/enrich?q=${encodeURIComponent(q)}`),
     /** Configured gold buyback sources for the manual-entry gold flow. */
     getGoldSources: () => request<GoldSource[]>("GET", "/instruments/gold-sources"),
 

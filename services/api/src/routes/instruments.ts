@@ -3,8 +3,8 @@ import { z } from "zod";
 import { asc, eq, ilike, or } from "drizzle-orm";
 import { instruments, providerSettings } from "@portfolio/db";
 import { instrumentInputSchema } from "@portfolio/schema";
-import { findOrCreateInstrument } from "../services/instruments.js";
-import { getMarketData, goldSources } from "../services/market-data.js";
+import { findOrCreateInstrument, updateInstrument } from "../services/instruments.js";
+import { getMarketData, goldSources, getBorseFrankfurt } from "../services/market-data.js";
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
@@ -12,6 +12,14 @@ const searchQuerySchema = z.object({
 });
 const lookupQuerySchema = z.object({ q: z.string().trim().min(1) });
 const historyQuerySchema = z.object({ range: z.string().default("1y") });
+const patchInstrumentSchema = z.object({
+  isin: z.string().nullable().optional(),
+  wkn: z.string().nullable().optional(),
+  symbol: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  assetClass: z.string().optional(),
+});
+const enrichQuerySchema = z.object({ q: z.string().trim().min(1) });
 
 export async function instrumentsRoute(app: FastifyInstance) {
   // Search instruments (shared reference data) for the manual-entry picker.
@@ -103,4 +111,36 @@ export async function instrumentsRoute(app: FastifyInstance) {
     reply.code(201);
     return instrument;
   });
+
+  // Update an instrument's editable identifiers (ISIN, WKN, symbol, name, assetClass).
+  // Returns 409 when the new ISIN or WKN is already taken by another row.
+  app.patch<{ Params: { id: string } }>(
+    "/instruments/:id",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const patch = patchInstrumentSchema.parse(request.body);
+      const result = await updateInstrument(app.db, request.params.id, patch);
+      if (result === "not_found") return reply.code(404).send({ error: "instrument_not_found" });
+      if (result === "conflict") return reply.code(409).send({ error: "identifier_conflict" });
+      return result;
+    },
+  );
+
+  // On-demand enrichment via Börse Frankfurt. Returns ISIN + WKN + ticker together for a
+  // given query. Only available when BORSE_FRANKFURT_ENABLED=true. Not on the typeahead.
+  app.get(
+    "/instruments/enrich",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { q } = enrichQuerySchema.parse(request.query);
+      const bf = getBorseFrankfurt();
+      if (!bf) return reply.code(503).send({ error: "enrichment_unavailable" });
+      try {
+        return await bf.search(q);
+      } catch (err) {
+        request.log.warn({ err }, "BF enrichment failed");
+        return [];
+      }
+    },
+  );
 }

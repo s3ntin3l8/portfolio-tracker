@@ -127,6 +127,7 @@ export function AddTransactionForm({
       ? {
           id: initial.instrumentId,
           isin: null,
+          wkn: null,
           symbol: initial.instrument.symbol,
           market: marketForAssetClass(initial.instrument.assetClass),
           assetClass: initial.instrument.assetClass,
@@ -140,9 +141,10 @@ export function AddTransactionForm({
   const [name, setName] = useState("");
   const [assetClass, setAssetClass] = useState<(typeof ASSET_CLASSES)[number]>("equity");
   const [unit, setUnit] = useState<(typeof UNITS)[number]>("shares");
-  // Set when fields were auto-filled from a discovery match: carries the ISIN +
+  // Set when fields were auto-filled from a discovery match: carries the ISIN + WKN +
   // resolved market so they persist on create. Cleared once the user edits the symbol.
   const [isin, setIsin] = useState<string | null>(null);
+  const [wkn, setWkn] = useState<string | null>(null);
   const [discoveredMarket, setDiscoveredMarket] = useState<string | null>(null);
 
   // Gold buyback sources (registry-driven), with the currently selected source's market.
@@ -208,6 +210,7 @@ export function AddTransactionForm({
     setUnit(unitForClass(ac));
     setCurrency(match.currency);
     setIsin(match.isin ?? null);
+    setWkn(match.wkn ?? null);
     setDiscoveredMarket(match.market || null);
     setQuery("");
     setResults([]);
@@ -239,6 +242,7 @@ export function AddTransactionForm({
       currency,
       name: name.trim() || symbol.trim(),
       isin: isin ?? undefined,
+      wkn: wkn ?? undefined,
     });
     return created.id;
   }

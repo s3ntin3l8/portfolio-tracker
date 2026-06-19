@@ -291,6 +291,7 @@
       "quantity": "Quantity",
       "price": "Price",
       "isin": "ISIN",
+      "wkn": "WKN",
       "total": "Total",
       "fees": "Fees",
       "currency": "Currency"

@@ -291,6 +291,7 @@
       "quantity": "Jumlah",
       "price": "Harga",
       "isin": "ISIN",
+      "wkn": "WKN",
       "total": "Total",
       "fees": "Biaya",
       "currency": "Mata Uang"

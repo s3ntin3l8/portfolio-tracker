@@ -14,9 +14,9 @@ type Instrument = typeof instruments.$inferSelect;
  */
 function instrumentUpgrade(
   existing: Instrument,
-  input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
-): Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency">> {
-  const set: Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency">> = {};
+  input: Omit<InstrumentInput, "isin" | "wkn"> & { isin?: string | null; wkn?: string | null },
+): Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency" | "isin" | "wkn">> {
+  const set: Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency" | "isin" | "wkn">> = {};
   // Replace an ISIN-as-symbol with a real ticker (but never the reverse).
   if (isIsin(existing.symbol) && !isIsin(input.symbol)) set.symbol = input.symbol;
   // Refine the generic defaults (`equity`, `mutual_fund`) to a more specific class —
@@ -38,6 +38,9 @@ function instrumentUpgrade(
     set.market = input.market;
     set.currency = input.currency;
   }
+  // Back-fill missing ISIN/WKN when the input carries one.
+  if (!existing.isin && input.isin) set.isin = input.isin;
+  if (!existing.wkn && input.wkn) set.wkn = input.wkn;
   return set;
 }
 
@@ -45,7 +48,7 @@ function instrumentUpgrade(
 async function healInstrument(
   db: DB,
   existing: Instrument,
-  input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
+  input: Omit<InstrumentInput, "isin" | "wkn"> & { isin?: string | null; wkn?: string | null },
 ): Promise<Instrument> {
   const set = instrumentUpgrade(existing, input);
   if (Object.keys(set).length === 0) return existing;
@@ -76,14 +79,13 @@ export function marketForEuInstrument(_assetClass?: string | null): string {
 }
 
 /**
- * Find an instrument by its ISIN (when given) or its (market, symbol) identity, creating
- * it if absent. Matching ISIN first means rows that reference the same security by ISIN
- * but a different symbol (e.g. a DKB buy resolved to a ticker and its later dividend) map
- * to a single instrument. Instruments are shared reference data (not user-scoped).
+ * Find an instrument by ISIN, then WKN, then (market, symbol) identity, creating it if
+ * absent. ISIN and WKN matches also back-fill the missing identifier on existing rows so
+ * imports that arrive in any order converge to a single fully-identified row.
  */
 export async function findOrCreateInstrument(
   db: DB,
-  input: Omit<InstrumentInput, "isin"> & { isin?: string | null },
+  input: Omit<InstrumentInput, "isin" | "wkn"> & { isin?: string | null; wkn?: string | null },
 ): Promise<Instrument> {
   if (input.isin) {
     const [byIsin] = await db
@@ -92,6 +94,15 @@ export async function findOrCreateInstrument(
       .where(eq(instruments.isin, input.isin))
       .limit(1);
     if (byIsin) return healInstrument(db, byIsin, input);
+  }
+
+  if (input.wkn) {
+    const [byWkn] = await db
+      .select()
+      .from(instruments)
+      .where(eq(instruments.wkn, input.wkn))
+      .limit(1);
+    if (byWkn) return healInstrument(db, byWkn, input);
   }
 
   const [existing] = await db
@@ -113,7 +124,55 @@ export async function findOrCreateInstrument(
       currency: input.currency,
       name: input.name,
       isin: input.isin ?? null,
+      wkn: input.wkn ?? null,
     })
     .returning();
   return created;
+}
+
+/**
+ * Update a subset of an instrument's editable fields. Rejects with "conflict" when
+ * an ISIN or WKN would collide with another existing row.
+ */
+export async function updateInstrument(
+  db: DB,
+  id: string,
+  patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string },
+): Promise<Instrument | "conflict" | "not_found"> {
+  const [existing] = await db.select().from(instruments).where(eq(instruments.id, id)).limit(1);
+  if (!existing) return "not_found";
+
+  // Guard uniqueness manually so we can return a typed error instead of a DB exception.
+  if (patch.isin && patch.isin !== existing.isin) {
+    const [clash] = await db
+      .select()
+      .from(instruments)
+      .where(and(eq(instruments.isin, patch.isin)))
+      .limit(1);
+    if (clash && clash.id !== id) return "conflict";
+  }
+  if (patch.wkn && patch.wkn !== existing.wkn) {
+    const [clash] = await db
+      .select()
+      .from(instruments)
+      .where(and(eq(instruments.wkn, patch.wkn)))
+      .limit(1);
+    if (clash && clash.id !== id) return "conflict";
+  }
+
+  const set: Record<string, unknown> = {};
+  if ("isin" in patch) set.isin = patch.isin ?? null;
+  if ("wkn" in patch) set.wkn = patch.wkn ?? null;
+  if (patch.symbol !== undefined) set.symbol = patch.symbol;
+  if (patch.name !== undefined) set.name = patch.name;
+  if (patch.assetClass !== undefined) set.assetClass = patch.assetClass;
+
+  if (Object.keys(set).length === 0) return existing;
+
+  const [updated] = await db
+    .update(instruments)
+    .set(set)
+    .where(eq(instruments.id, id))
+    .returning();
+  return updated ?? existing;
 }

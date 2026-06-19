@@ -31,6 +31,7 @@ export interface ImportDraft {
   action: string;
   ticker?: string | null;
   isin?: string | null;
+  wkn?: string | null;
   name?: string | null;
   quantity: string;
   unit: string;

@@ -151,6 +151,7 @@ export type CorporateActionInput = z.infer<typeof corporateActionInputSchema>;
 
 export const instrumentInputSchema = z.object({
   isin: z.string().optional(),
+  wkn: z.string().optional(),
   symbol: z.string().min(1),
   market: z.string().min(1),
   assetClass: assetClassSchema,
@@ -211,6 +212,7 @@ export const parsedTransactionSchema = z.object({
   action: parsedActionSchema,
   ticker: z.string().nullish(),
   isin: z.string().nullish(),
+  wkn: z.string().nullish(),
   name: z.string().nullish(),
   quantity: decimalString,
   unit: unitSchema.nullish(),
@@ -297,6 +299,7 @@ export const importIssueSchema = z.object({
   raw: z
     .object({
       isin: z.string().nullish(),
+      wkn: z.string().nullish(),
       name: z.string().nullish(),
       currency: z.string().nullish(),
       executedAt: z.string().nullish(),

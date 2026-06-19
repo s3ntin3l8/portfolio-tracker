@@ -133,6 +133,7 @@ export const instruments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     isin: text("isin").unique(),
+    wkn: text("wkn").unique(),
     symbol: text("symbol").notNull(),
     market: text("market").notNull(), // 'IDX' | 'XAU' | 'XETRA' | ...
     exchangeCode: text("exchange_code"), // cached for EU/ISIN resolution

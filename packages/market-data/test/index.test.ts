@@ -3,6 +3,7 @@ import {
   ASSET_CLASSES,
   isAssetClass,
   isIsin,
+  isWkn,
   FixtureProvider,
   MarketDataService,
   TwelveDataProvider,
@@ -1771,5 +1772,101 @@ describe("YahooFinanceProvider.getDividends", () => {
       })),
     });
     expect(await provider.getDividends(bbca)).toEqual([]);
+  });
+});
+
+describe("isWkn", () => {
+  it("matches pure-numeric-6 (pre-2003) and alphanumeric-6 WKNs", () => {
+    expect(isWkn("A1T8FV")).toBe(true); // Deutsche Post
+    expect(isWkn("840400")).toBe(true); // pure-numeric
+    expect(isWkn("a1t8fv")).toBe(true); // case-insensitive
+    expect(isWkn("A2H9Q0")).toBe(true);
+  });
+
+  it("rejects strings containing I or O (excluded by BaFin)", () => {
+    expect(isWkn("A1I8FV")).toBe(false); // contains I
+    expect(isWkn("A1O8FV")).toBe(false); // contains O
+  });
+
+  it("rejects too-short, too-long, or clearly-ISIN strings", () => {
+    expect(isWkn("A1T8F")).toBe(false); // 5 chars
+    expect(isWkn("A1T8FVX")).toBe(false); // 7 chars
+    expect(isWkn("DE000A1T8FV0")).toBe(false); // is an ISIN
+  });
+});
+
+describe("OpenFigiProvider.resolveWKN", () => {
+  it("posts ID_WERTPAPIER and maps the result", async () => {
+    let capturedBody: unknown;
+    const provider = new OpenFigiProvider({
+      fetch: mockFetch((_url, init) => {
+        capturedBody = JSON.parse(init?.body as string);
+        return {
+          body: [
+            {
+              data: [
+                {
+                  ticker: "DPW",
+                  exchCode: "GER",
+                  name: "Deutsche Post AG",
+                  securityType: "Common Stock",
+                },
+              ],
+            },
+          ],
+        };
+      }),
+    });
+    const result = await provider.resolveWKN("A1T8FV");
+    expect(capturedBody).toEqual([{ idType: "ID_WERTPAPIER", idValue: "A1T8FV" }]);
+    expect(result).toMatchObject({ symbol: "DPW", exchange: "GER", name: "Deutsche Post AG" });
+  });
+
+  it("returns null for an invalid WKN or empty response", async () => {
+    const provider = new OpenFigiProvider({
+      fetch: mockFetch(() => ({ body: [{ data: [] }] })),
+    });
+    expect(await provider.resolveWKN("NOT-WKN")).toBeNull(); // fails isWkn guard
+    expect(await provider.resolveWKN("A1T8FV")).toBeNull(); // empty records
+  });
+});
+
+describe("MarketDataService WKN branch", () => {
+  const wknProvider: MarketDataProvider = {
+    name: "figi",
+    supports: () => false,
+    getQuote: async () => null,
+    resolveWKN: async (wkn) =>
+      wkn === "A1T8FV"
+        ? { symbol: "DPW", exchange: "GER", name: "Deutsche Post AG" }
+        : null,
+  };
+
+  it("routes a 6-char WKN query to resolveWKN and echoes wkn into the result", async () => {
+    const svc = new MarketDataService([wknProvider]);
+    const out = await svc.search("A1T8FV");
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ symbol: "DPW", wkn: "A1T8FV", source: "figi" });
+  });
+
+  it("falls through to name/ticker search when an alphanumeric WKN resolves nothing", async () => {
+    const searchProvider: MarketDataProvider = {
+      name: "search",
+      supports: () => false,
+      getQuote: async () => null,
+      search: async () => [
+        { symbol: "XYZ", name: "Some Stock", market: "IDX", assetClass: "equity", currency: "IDR", source: "search" },
+      ],
+    };
+    const emptyWkn: MarketDataProvider = {
+      name: "figi",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveWKN: async () => null, // resolves nothing
+    };
+    const svc = new MarketDataService([emptyWkn, searchProvider]);
+    // "A1T8FV" looks like a WKN but doesn't resolve; should fall through to search
+    const out = await svc.search("A1T8FV");
+    expect(out[0]).toMatchObject({ symbol: "XYZ" });
   });
 });

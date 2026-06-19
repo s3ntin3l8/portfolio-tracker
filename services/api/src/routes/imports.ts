@@ -666,6 +666,7 @@ export async function importsRoute(app: FastifyInstance) {
             currency: instrumentCurrency,
             name: d.name ?? symbol,
             isin: d.isin ?? null,
+            wkn: d.wkn ?? null,
           });
           instrumentId = instrument.id;
           request.log.debug({ symbol, market, instrumentId }, "instrument resolved");

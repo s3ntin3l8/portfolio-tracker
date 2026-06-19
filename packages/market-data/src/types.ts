@@ -44,6 +44,7 @@ export interface InstrumentSearchResult {
   assetClass: AssetClass;
   currency: string;
   isin?: string;
+  wkn?: string;
   source: string; // the provider that surfaced it (display/debug)
 }
 
@@ -87,6 +88,10 @@ export interface MarketDataProvider {
   resolveISIN?(
     isin: string,
   ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
+  /** Resolve a WKN to a symbol + exchange (+ optional name/type for enrichment). */
+  resolveWKN?(
+    wkn: string,
+  ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
   /** Live API quota/usage from the provider, when it exposes a usage endpoint. */
   getUsage?(): Promise<ProviderUsage | null>;
   /**
@@ -101,4 +106,15 @@ export const ISIN_PATTERN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 
 export function isIsin(value: string): boolean {
   return ISIN_PATTERN.test(value.trim().toUpperCase());
+}
+
+/**
+ * WKN: 6-char alphanumeric, capitals only, no I or O (BaFin format since July 2003).
+ * Pure-numeric WKNs (pre-2003) are unambiguous; alphanumeric WKNs can look like tickers,
+ * so treat isWkn() as a hint and fall through to name/ticker search when resolution fails.
+ */
+export const WKN_PATTERN = /^[0-9A-HJ-NP-Z]{6}$/;
+
+export function isWkn(value: string): boolean {
+  return WKN_PATTERN.test(value.trim().toUpperCase());
 }

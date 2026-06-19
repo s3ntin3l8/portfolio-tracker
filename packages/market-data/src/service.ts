@@ -8,7 +8,7 @@ import type {
   Quote,
 } from "./types.js";
 import { assetClassFromType, mapExchange } from "./instrument-mapping.js";
-import { isIsin } from "./types.js";
+import { isIsin, isWkn } from "./types.js";
 
 const MAX_SEARCH_RESULTS = 10;
 
@@ -92,6 +92,8 @@ export class MarketDataService {
     if (!q) return [];
 
     const collected: InstrumentSearchResult[] = [];
+    // Track whether a WKN query resolved anything, so we can fall through to name search.
+    let wknResolved = false;
     for (const provider of this.providers) {
       try {
         if (isIsin(q)) {
@@ -101,7 +103,16 @@ export class MarketDataService {
           if (resolved) {
             collected.push(this.fromResolvedIsin(provider, q, resolved));
           }
-        } else {
+        } else if (isWkn(q) && provider.resolveWKN) {
+          this.opts.onCall?.(provider.name);
+          const resolved = await provider.resolveWKN(q);
+          if (resolved) {
+            collected.push(this.fromResolvedWkn(provider, q, resolved));
+            wknResolved = true;
+          }
+        } else if (!isWkn(q) || !wknResolved) {
+          // Fall through to name/ticker search for non-WKN queries, or for alphanumeric
+          // queries that looked like WKNs but resolved nothing (leniency).
           if (!provider.search) continue;
           this.opts.onCall?.(provider.name);
           const results = (await provider.search(q)) ?? [];
@@ -129,6 +140,24 @@ export class MarketDataService {
       assetClass: assetClassFromType(resolved.type, { symbol: resolved.symbol, market: info?.market }),
       currency: info?.currency ?? "USD",
       isin,
+      source: provider.name,
+    };
+  }
+
+  /** Turn a bare WKN resolution (symbol + exchange) into a full search result. */
+  private fromResolvedWkn(
+    provider: MarketDataProvider,
+    wkn: string,
+    resolved: { symbol: string; exchange: string; name?: string; type?: string },
+  ): InstrumentSearchResult {
+    const info = mapExchange(resolved.exchange);
+    return {
+      symbol: resolved.symbol,
+      name: resolved.name ?? resolved.symbol,
+      market: info?.market ?? resolved.exchange,
+      assetClass: assetClassFromType(resolved.type, { symbol: resolved.symbol, market: info?.market }),
+      currency: info?.currency ?? "USD",
+      wkn,
       source: provider.name,
     };
   }

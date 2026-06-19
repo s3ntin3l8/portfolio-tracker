@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { instruments } from "@portfolio/db";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
-import { findOrCreateInstrument } from "../../src/services/instruments.js";
+import { findOrCreateInstrument, updateInstrument } from "../../src/services/instruments.js";
 
 describe("findOrCreateInstrument", () => {
   beforeAll(async () => {
@@ -136,6 +136,41 @@ describe("findOrCreateInstrument", () => {
     expect(unchanged.currency).toBe("EUR");
   });
 
+  it("finds an existing instrument by WKN when no ISIN is provided", async () => {
+    const wkn = "A1T8FV";
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "DPW", name: "Deutsche Post", wkn });
+
+    const found = await findOrCreateInstrument(getDb(), {
+      ...base,
+      symbol: "DPW",
+      name: "Deutsche Post AG",
+      wkn,
+    });
+    expect(found.wkn).toBe(wkn);
+    // Confirm no duplicate row was created.
+    const rows = await getDb().select().from(instruments).where(eq(instruments.wkn, wkn));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("back-fills a missing WKN onto an ISIN-matched row", async () => {
+    const isin = "DE0005552004";
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "DTE", name: "Deutsche Telekom", isin });
+
+    const healed = await findOrCreateInstrument(getDb(), {
+      ...base,
+      symbol: "DTE",
+      name: "Deutsche Telekom AG",
+      isin,
+      wkn: "555200",
+    });
+    expect(healed.wkn).toBe("555200");
+    expect(healed.isin).toBe(isin);
+  });
+
   it("heals a row matched by (symbol, market) when no ISIN is supplied", async () => {
     await getDb()
       .insert(instruments)
@@ -154,5 +189,60 @@ describe("findOrCreateInstrument", () => {
       .from(instruments)
       .where(eq(instruments.symbol, "EUNL"));
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("updateInstrument", () => {
+  beforeAll(async () => {
+    await ensureDb();
+  });
+  afterAll(async () => {
+    await closeDb();
+  });
+
+  const base = {
+    market: "XETRA",
+    assetClass: "equity" as const,
+    unit: "shares" as const,
+    currency: "EUR",
+  };
+
+  it("updates ISIN and WKN on an existing row", async () => {
+    const [row] = await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "ENR", name: "Siemens Energy" })
+      .returning();
+
+    const updated = await updateInstrument(getDb(), row.id, {
+      isin: "DE000ENER6Y0",
+      wkn: "ENER6Y",
+    });
+    expect(updated).not.toBe("not_found");
+    expect(updated).not.toBe("conflict");
+    if (typeof updated !== "string") {
+      expect(updated.isin).toBe("DE000ENER6Y0");
+      expect(updated.wkn).toBe("ENER6Y");
+    }
+  });
+
+  it("returns conflict when ISIN already belongs to another row", async () => {
+    const isin = "DE000ENRDUP0";
+    await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "OTHER", name: "Other Instrument", isin });
+    const [row] = await getDb()
+      .insert(instruments)
+      .values({ ...base, symbol: "ENR2", name: "Siemens Energy 2" })
+      .returning();
+
+    const result = await updateInstrument(getDb(), row.id, { isin });
+    expect(result).toBe("conflict");
+  });
+
+  it("returns not_found for an unknown id", async () => {
+    const result = await updateInstrument(getDb(), "00000000-0000-0000-0000-000000000000", {
+      wkn: "A1T8FV",
+    });
+    expect(result).toBe("not_found");
   });
 });
