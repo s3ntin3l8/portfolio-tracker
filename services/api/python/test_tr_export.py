@@ -156,6 +156,24 @@ class TestFieldExtractors:
         assert tx._extract_documents(DIV_DETAIL) is None
 
 
+class TestExtractSavingsPlanId:
+    def test_from_nested_action_payload(self):
+        # The id lives only in the detail (nested under the Sparplan section), never on
+        # the top-level event — exactly as seen on a real TRADING_SAVINGSPLAN_EXECUTED.
+        details = {
+            "sections": [
+                {"type": "table", "title": "Sparplan", "data": [
+                    {"detail": {"action": {"payload": {"savingsPlanId": "sp-abc"}}}},
+                ]},
+            ],
+        }
+        assert tx._extract_savings_plan_id(details) == "sp-abc"
+
+    def test_none_when_absent(self):
+        assert tx._extract_savings_plan_id(BUY_DETAIL) is None
+        assert tx._extract_savings_plan_id({}) is None
+
+
 class TestExtractIsin:
     def test_from_icon(self):
         assert tx._extract_isin({"icon": "logos/DE0007164600/v2"}) == "DE0007164600"
@@ -249,10 +267,65 @@ class TestCollectWkns:
 
 # --- real-payload reconciliation (acceptance criterion) -------------------------------
 
-# Paste ONE captured `timelineDetailV2` response here during live validation, alongside
-# the values you read off it by eye. Until then this stays None and the test xfails,
-# making the "we have not yet validated against reality" state visible rather than silent.
-REAL_DETAIL_SAMPLE = None  # e.g. {"event": {...}, "expect": {"shares": ..., "fees": ...}}
+# A REAL TRADING_SAVINGSPLAN_EXECUTED captured via `--probe-timeline` (2026-06-16),
+# sanitised: the AWS-signed S3 document URLs and the account/support identifiers are
+# stripped, but every row that drives extraction is verbatim from the live payload —
+# the nested Transaktion infoPage (Aktienkurs/Aktien/Summe), "Gebühr: Kostenlos", and the
+# savingsPlanId buried in the Sparplan section's action payload. This is the row shape the
+# heuristics must keep working against; it is what caught the savingsPlanId silent-loss.
+REAL_DETAIL_SAMPLE = {
+    "event": {
+        "id": "9a09f7fe-4e2e-452c-87a9-4aa69415a228",
+        "timestamp": "2026-06-16T14:13:36.079+0000",
+        "eventType": "TRADING_SAVINGSPLAN_EXECUTED",
+        "title": "Core S&P 500 USD (Acc)",
+        "icon": "",  # ISIN is not on the top-level icon here — it comes from the detail
+        "amount": {"value": -50.0, "currency": "EUR"},
+        "status": "EXECUTED",
+        "details": {
+            "id": "9a09f7fe-4e2e-452c-87a9-4aa69415a228",
+            "sections": [
+                {"type": "header", "title": "Du hast 50,00 € gespart", "data": {
+                    "icon": {"asset": "logos/IE00B5BMR087/v2"}, "status": "executed"}},
+                {"type": "table", "title": "Übersicht", "data": [
+                    {"title": "Sparplan", "detail": {"text": "Ausgeführt", "type": "status"}},
+                    {"title": "Transaktion", "detail": {
+                        "text": "0,071387 ×  700,40 €",
+                        "action": {"payload": {"sections": [
+                            {"title": "Transaktion", "type": "title"},
+                            {"type": "table", "data": [
+                                {"title": "Aktienkurs", "detail": {"text": "700,40 €"}},
+                                {"title": "Aktien", "detail": {"text": "0,071387"}},
+                                {"title": "Summe", "detail": {"text": "50,00 €"}},
+                            ]},
+                        ]}}, "type": "text"}},
+                    {"title": "Gebühr", "detail": {"text": "Kostenlos", "type": "text"}},
+                    {"title": "Summe", "detail": {"text": "50,00 €", "type": "text"}},
+                ]},
+                {"type": "table", "title": "Sparplan", "data": [
+                    {"detail": {
+                        "amount": "50,00 €",
+                        "action": {"payload": {"savingsPlanId": "REDACTED-PLAN-ID"},
+                                   "type": "openSavingsPlanOverview"},
+                        "type": "embeddedTimelineItem"}},
+                ]},
+                {"type": "documents", "title": "Dokumente", "data": [
+                    {"title": "Abrechnungsausführung", "id": "d1c98a74-083f-4a4f-b70f-2dedbed49139",
+                     "postboxType": "SECURITIES_SETTLEMENT_SAVINGS_PLAN"},
+                ]},
+            ],
+        },
+    },
+    "expect": {
+        "isin": "IE00B5BMR087",
+        "shares": 0.071387,
+        "executedPrice": 700.4,
+        "fees": None,  # "Kostenlos" → no number → null → mapper renders "0"
+        "savingsPlanId": "REDACTED-PLAN-ID",  # the bug: nested in detail, was dropped
+        "amount": -50.0,
+        "currency": "EUR",
+    },
+}
 
 
 import pytest  # noqa: E402

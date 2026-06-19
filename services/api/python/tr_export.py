@@ -253,11 +253,39 @@ def _extract_documents(details):
 
 
 def _extract_isin(event):
+    # The JSON-blob fallback can grab an UNRELATED ISIN embedded in the detail — e.g. a
+    # CARD_TRANSACTION whose "Vorteile" preview the saveback/round-up of some ETF will
+    # surface that ETF's ISIN. Benign downstream: the mapper books card spend as a
+    # withdrawal (cash), which carries no instrument, so the stray ISIN is ignored.
     match = ISIN_RE.search(event.get("icon") or "")
     if match:
         return match.group(1)
     match = ISIN_RE.search(json.dumps(event.get("details") or {}))
     return match.group(1) if match else None
+
+
+def _extract_savings_plan_id(details):
+    """The savings-plan id is carried only in the detail payload (a nested
+    `openSavingsPlanOverview` action under the Sparplan section), NOT on the top-level
+    timeline event — so read the first `savingsPlanId` value found anywhere in the detail.
+    """
+    def walk(obj):
+        if isinstance(obj, dict):
+            spid = obj.get("savingsPlanId")
+            if isinstance(spid, str) and spid:
+                return spid
+            for value in obj.values():
+                found = walk(value)
+                if found:
+                    return found
+        elif isinstance(obj, list):
+            for item in obj:
+                found = walk(item)
+                if found:
+                    return found
+        return None
+
+    return walk(details or {})
 
 
 def _normalize(event, wkn_by_isin=None):
@@ -282,7 +310,8 @@ def _normalize(event, wkn_by_isin=None):
         "wkn": (wkn_by_isin or {}).get(isin) if isin else None,
         "shares": _extract_shares(details),
         "fees": _field(details, ["fee", "gebühr", "provision"]),
-        "savingsPlanId": event.get("savingsPlanId"),
+        # Top-level first (older event shapes), else dig it out of the detail payload.
+        "savingsPlanId": event.get("savingsPlanId") or _extract_savings_plan_id(details),
         # Enrichment from the timeline detail (best-effort; absent fields stay null).
         "executedPrice": _extract_price(details),
         "tax": _extract_tax(details),
