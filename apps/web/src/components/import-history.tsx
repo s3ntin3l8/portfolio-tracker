@@ -152,7 +152,10 @@ export function ImportHistory({ items }: { items: ImportRecord[] }) {
                   <TableCell className="text-muted-foreground">
                     {t("items", { count: imp.count })}
                   </TableCell>
-                  <TableCell className="tabular whitespace-nowrap text-muted-foreground">
+                  <TableCell
+                    className="tabular whitespace-nowrap text-muted-foreground"
+                    suppressHydrationWarning
+                  >
                     {df.format(new Date(imp.createdAt))}
                   </TableCell>
                   <TableCell className="text-right">

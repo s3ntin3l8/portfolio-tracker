@@ -53,6 +53,13 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 > emit (usually within a few seconds). If the API stays unreachable, check for a
 > stale `tsx watch` process holding the port before re-running.
 
+> **Known console warning:** Next.js logs `Encountered a script tag while rendering
+> React component` from `ThemeProvider`. This is an upstream bug in `next-themes`
+> (issue #387) caused by its inline FOUC-prevention `<script>` conflicting with React
+> 19's new script-handling rules. Cosmetic only — themes work correctly. Track
+> [pacocoursey/next-themes#387](https://github.com/pacocoursey/next-themes/issues/387)
+> for a fix.
+
 ## Conventions
 
 - **ESM throughout** (`"type": "module"`); `.ts` sources import with `.js` specifiers
