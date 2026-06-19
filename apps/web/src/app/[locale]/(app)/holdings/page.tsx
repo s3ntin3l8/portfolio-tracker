@@ -1,12 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Layers, GitBranch } from "lucide-react";
+import { Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { HoldingsTable } from "@/components/holdings-table";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
-import { Link } from "@/i18n/navigation";
 import { loadHoldings } from "@/lib/server-api";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
@@ -28,7 +26,6 @@ export default async function HoldingsPage({
   const t = await getTranslations("Holdings");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
-  const tca = await getTranslations("CorpAction");
 
   const result = await loadHoldings(costBasis);
 
@@ -75,7 +72,6 @@ export default async function HoldingsPage({
             labelPurchase={t("costBasisPurchasePrice")}
             labelTotal={t("costBasisTotalPaid")}
           />
-          <div className="flex items-center gap-2">
           {holdings.length > 0 && (
             <ExportCsvButton
               filename="holdings.csv"
@@ -96,13 +92,6 @@ export default async function HoldingsPage({
               label={t("exportCsv")}
             />
           )}
-          <Button variant="outline" asChild>
-            <Link href="/corporate-actions/new">
-              <GitBranch className="size-4" />
-              {tca("link")}
-            </Link>
-          </Button>
-          </div>
         </div>
       )}
     </div>

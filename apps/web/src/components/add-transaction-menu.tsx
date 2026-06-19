@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, PenLine, FileUp } from "lucide-react";
+import { Plus, PenLine, FileUp, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ import type { ImportTargetPortfolio } from "@/components/import-flow";
 export function AddTransactionMenu() {
   const tm = useTranslations("Manage");
   const ti = useTranslations("Import");
+  const tca = useTranslations("CorpAction");
   const api = useApiClient();
 
   const [importOpen, setImportOpen] = useState(false);
@@ -59,6 +60,12 @@ export function AddTransactionMenu() {
           <DropdownMenuItem onSelect={() => void openImport()}>
             <FileUp className="size-4" />
             {ti("menu.import")}
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/corporate-actions/new">
+              <GitBranch className="size-4" />
+              {tca("link")}
+            </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
