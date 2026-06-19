@@ -8,6 +8,7 @@ import { GeminiVisionParser } from "../../src/services/parsers/gemini.js";
 import { OpenRouterVisionParser } from "../../src/services/parsers/openrouter.js";
 import { OllamaVisionParser } from "../../src/services/parsers/ollama.js";
 import { buildScreenshotParser } from "../../src/services/screenshot-parser.js";
+import { TRANSACTIONS_TOOL_SCHEMA } from "../../src/services/parsers/shared.js";
 
 const IMAGE = { data: Buffer.from("img"), mimeType: "image/png" } as const;
 
@@ -323,6 +324,68 @@ describe("ClaudeVisionParser", () => {
 
     await parser.parse(IMAGE);
     expect(body!.messages[0].content[0].type).toBe("image");
+  });
+});
+
+describe("TRANSACTIONS_TOOL_SCHEMA", () => {
+  const props = TRANSACTIONS_TOOL_SCHEMA.properties.transactions.items.properties;
+
+  it("exposes the broker-document enrichment fields the DB persists", () => {
+    for (const key of [
+      "tax",
+      "externalId",
+      "fxRate",
+      "executedPrice",
+      "venue",
+      "exchangeCode",
+      "savingsPlanId",
+      "kind",
+    ]) {
+      expect(props).toHaveProperty(key);
+    }
+  });
+
+  it("widens the action enum to the document-reachable parsed actions", () => {
+    expect(props.action.enum).toEqual(
+      expect.arrayContaining(["savings_plan", "interest", "bonus"]),
+    );
+  });
+});
+
+describe("ClaudeVisionParser — DKB enrichment round-trip", () => {
+  it("passes tax / externalId / venue / savings_plan through validation", async () => {
+    const enriched = {
+      assetClass: "etf",
+      action: "savings_plan",
+      isin: "LU1737652237",
+      wkn: "A2H9QY",
+      name: "AIS-AMUNDI INDEX MSCI WORLD UCITS ETF",
+      quantity: "1.3358",
+      unit: "shares",
+      price: "72.614",
+      fees: "0.49",
+      total: "97.49",
+      tax: "0",
+      venue: "Tradegate",
+      externalId: "1785786700",
+      currency: "EUR",
+      executedAt: "2021-07-05T00:00:00.000Z",
+      confidence: 0.95,
+    };
+    const parser = new ClaudeVisionParser("sk-test", {
+      fetch: mockFetch({
+        content: [{ type: "tool_use", input: { transactions: [enriched] } }],
+      }),
+    });
+    const { drafts } = await parser.parse(IMAGE);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({
+      action: "savings_plan",
+      externalId: "1785786700",
+      venue: "Tradegate",
+      tax: "0",
+      total: "97.49",
+    });
   });
 });
 

@@ -26,6 +26,7 @@ const GIRO_CSV = [
   '"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"IBAN";"Betrag (€)";"Gläubiger-ID";"Mandatsreferenz";"Kundenreferenz"',
   '"15.06.26";"12.06.26";"Gebucht";"DKB AG";"Max Mustermann";"Depot 0506740786 Wertpapierertrag 12.06.2026 000066336002660 WKN 870747 MICROSOFT    DL-,00000625 ISIN US5949181045";"Eingang";"0000000000";"0,67";"";"";""',
   '"08.06.26";"09.06.26";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786 Wertp.Abrechn. 05.06.2026 000006520078300 WKN A2H9Q0 Gesch.Art KV AIS-A.CO.MSCI E.M.UETFDRD ISIN LU1737652583 Ihr Wertpapier-Sparplan Preis       74,50600000 EUR Stück           0,3355";"Ausgang";"0000000000";"-25";"";"";""',
+  '"10.02.26";"14.02.26";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786 Wertp.Abrechn. 10.02.2026 000004744649900 WKN 870747 Gesch.Art KD MICROSOFT CORP ISIN US5949181045 Preis      270,55000000 EUR Stück           1";"Ausgang";"0000000000";"-280,55";"";"";""',
   '"01.06.26";"01.06.26";"Gebucht";"Erika Mustermann";"FRAU MAX MUSTERMANN";"Sparplan";"Eingang";"DE69120300001053487276";"75";"";"";""',
   '"13.04.26";"11.04.26";"Gebucht";"Max Mustermann";"Erika Mustermann";"Übertrag TR Max für Einmalanlage";"Ausgang";"DE15100123450587698301";"-509,59";"";"";""',
   '"01.04.26";"01.04.26";"Gebucht";"DKB AG";"DKB AG";"Abrechnung 31.03.2026 siehe Anlage Kontostand am 31.03.2026 459,59 +";"Eingang";"1066505387";"0";"";"";""',
@@ -113,8 +114,8 @@ describe("parseDkb — Girokonto Umsatzliste", () => {
 
   it("skips the preamble and the zero-amount Abrechnung row", () => {
     expect(errors).toEqual([]);
-    // dividend + savings-plan buy + deposit + withdrawal (Abrechnung Betrag 0 dropped)
-    expect(drafts).toHaveLength(4);
+    // dividend + savings-plan buy + one-off buy + deposit + withdrawal (Abrechnung Betrag 0 dropped)
+    expect(drafts).toHaveLength(5);
   });
 
   it("extracts a savings-plan buy from the free-text Verwendungszweck", () => {
@@ -127,8 +128,28 @@ describe("parseDkb — Girokonto Umsatzliste", () => {
       price: "74.50600000",
       currency: "EUR",
       externalId: "dkb:000006520078300",
+      // The cash leg is kept as `total`; price·qty rounds to the cash amount → fee-free.
+      total: "25",
+      fees: "0",
     });
     expect(buy?.executedAt.toISOString()).toBe("2026-06-05T00:00:00.000Z");
+  });
+
+  it("keeps the settlement amount as total and backs out the Provision as fees", () => {
+    const buy = drafts.find((d) => d.action === "buy");
+    expect(buy).toMatchObject({
+      action: "buy",
+      isin: "US5949181045",
+      wkn: "870747",
+      name: "MICROSOFT CORP",
+      quantity: "1",
+      price: "270.55000000",
+      // Betrag 280,55 = Kurswert 270,55 + Provision 10,00.
+      total: "280.55",
+      fees: "10",
+      externalId: "dkb:000004744649900",
+    });
+    expect(buy?.executedAt.toISOString()).toBe("2026-02-10T00:00:00.000Z");
   });
 
   it("maps Wertpapierertrag to a dividend with the payout in price", () => {

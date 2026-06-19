@@ -226,6 +226,18 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       const name = collapse(vz.match(/Gesch\.Art\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
       const isSavingsPlan = vz.includes("Wertpapier-Sparplan");
       const action = isSavingsPlan ? "savings_plan" : amountNum > 0 ? "sell" : "buy";
+      // The cash `Betrag` is the actual settlement amount (DKB "Auszumachender Betrag")
+      // — keep it as `total` (lossless, strip the sign) and back out the Provision as
+      // `fees`: a buy debits price·qty + fee, a sell credits price·qty − fee. Round to
+      // cents and clamp at 0 so fee-free Sparplan rows (qty rounded to 4dp) stay "0".
+      const total = amount.replace(/^-/, "");
+      let fees = "0";
+      if (price != null && quantity != null) {
+        const gross = Number(price) * Number(quantity);
+        const diff = amountNum > 0 ? gross - Math.abs(amountNum) : Math.abs(amountNum) - gross;
+        const rounded = Math.max(0, Math.round(diff * 100) / 100);
+        fees = rounded.toString();
+      }
       draft = {
         assetClass: "equity",
         action,
@@ -235,7 +247,8 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
         quantity: quantity ?? "",
         unit: "shares",
         price: price ?? "",
-        fees: "0",
+        fees,
+        total,
         currency: "EUR",
         executedAt: execDate,
         externalId: booking ? `dkb:${booking}` : undefined,

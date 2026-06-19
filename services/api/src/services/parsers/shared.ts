@@ -27,7 +27,10 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
             type: "string",
             enum: ["equity", "gold", "bond", "mutual_fund", "etf", "crypto", "derivative"],
           },
-          action: { type: "string", enum: ["buy", "sell", "dividend", "coupon"] },
+          action: {
+            type: "string",
+            enum: ["buy", "sell", "dividend", "coupon", "interest", "savings_plan", "bonus"],
+          },
           ticker: { type: "string" },
           isin: { type: "string" },
           wkn: { type: "string" },
@@ -37,6 +40,33 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
           price: { type: "string", description: "Decimal string, price per unit." },
           fees: { type: "string", description: "Decimal string, default 0." },
           total: { type: "string", description: "Decimal string, optional gross total." },
+          tax: {
+            type: "string",
+            description:
+              "Decimal string. Total withholding/capital-gains tax deducted " +
+              "(e.g. German Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer, summed).",
+          },
+          executedPrice: {
+            type: "string",
+            description: "Decimal string. The actual execution price if it differs from price.",
+          },
+          fxRate: {
+            type: "string",
+            description: "Decimal string. FX rate (e.g. Devisenkurs) when the trade involves a currency conversion.",
+          },
+          exchangeCode: { type: "string", description: "Exchange/market code if shown." },
+          venue: {
+            type: "string",
+            description: "Trading venue or counterparty (e.g. Handelsplatz / Ausführungsplatz / Gegenpartei).",
+          },
+          savingsPlanId: { type: "string", description: "Savings-plan identifier if the row is a plan execution." },
+          kind: { type: "string", description: "Sub-type label (e.g. saveback, roundup)." },
+          externalId: {
+            type: "string",
+            description:
+              "Broker/bank document or order reference (e.g. Ordernr/Auftragsnummer, " +
+              "Belegnr/Abrechnungsnr, booking ref). Extract verbatim.",
+          },
           currency: { type: "string", description: "ISO 4217, e.g. IDR." },
           executedAt: { type: "string", description: "ISO 8601 date/time." },
           confidence: { type: "number", description: "0–1 extraction confidence." },
@@ -113,9 +143,17 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
 } as const;
 
 export const EXTRACTION_PROMPT =
-  "Extract every transaction shown in this screenshot (broker order, gold app, or bank " +
-  "confirmation). Use decimal strings for all amounts, grams for gold, the Indonesian " +
-  "locale for parsing numbers, and a confidence between 0 and 1. Return the transactions.\n" +
+  "Extract every transaction shown in this document (broker order, gold app, bank " +
+  "confirmation, or a German bank securities settlement / fund distribution — DKB " +
+  "'Wertpapier Abrechnung' / 'Ausschüttung'). Use decimal strings for all amounts, grams " +
+  "for gold, parse numbers in the document's own locale (German and Indonesian both write " +
+  "'1.234,56'), and a confidence between 0 and 1. Return the transactions.\n" +
+  "Capture these enrichments when present: the order/document reference " +
+  "(Ordernr/Auftragsnummer, Belegnr/Abrechnungsnr, booking ref) → externalId; withholding " +
+  "tax (Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer, summed) → tax; the " +
+  "trading venue/counterparty (Handels-/Ausführungsplatz, Gegenpartei) → venue; an FX rate " +
+  "(Devisenkurs) → fxRate. For a savings-plan execution (Sparplan / ETF-Sparplan) set " +
+  "action to 'savings_plan'.\n" +
   "Also extract the account number (SID, IBAN, broker account ID, or similar) if one " +
   "appears on the document — set accountNumber to the verbatim value, or omit it if absent.\n" +
   "A document may span multiple pages forming ONE financed gold-purchase contract " +
@@ -133,11 +171,15 @@ export const JSON_EXTRACTION_PROMPT = `${EXTRACTION_PROMPT}
 Respond with ONLY a JSON object of the form:
 {"accountNumber":"string or omit if absent","transactions":[{
   "assetClass":"equity|gold|bond|mutual_fund|etf|crypto|derivative",
-  "action":"buy|sell|dividend|coupon",
+  "action":"buy|sell|dividend|coupon|interest|savings_plan|bonus",
   "ticker":"string (optional)","isin":"string (optional)","wkn":"string (optional)","name":"string (optional)",
   "quantity":"decimal string (grams for gold)","unit":"shares|grams|units",
   "price":"decimal string per unit","fees":"decimal string (optional, default 0)",
-  "total":"decimal string (optional)","currency":"ISO 4217 e.g. IDR",
+  "total":"decimal string (optional)","tax":"decimal string (optional)",
+  "executedPrice":"decimal string (optional)","fxRate":"decimal string (optional)",
+  "exchangeCode":"string (optional)","venue":"string (optional)",
+  "savingsPlanId":"string (optional)","kind":"string (optional)",
+  "externalId":"string (optional, order/document reference)","currency":"ISO 4217 e.g. IDR",
   "executedAt":"ISO 8601 date","confidence":0.0
 }]}
 For a financed gold contract (Pegadaian/Galeri 24 cicilan), instead add a "goldContracts"
