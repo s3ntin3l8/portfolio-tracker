@@ -222,9 +222,27 @@ export async function transactionsRoute(app: FastifyInstance) {
     flows: CashFlowPoint[],
     birthYear: number | null = null,
     portfolioType: "standard" | "child" = "standard",
+    opts: { totalReturn?: boolean } = {},
   ) {
     const net = Number(stats.netContributed);
     const simpleGainPct = net > 0 ? (Number(currentValue) - net) / net : null;
+
+    // Cumulative total return: unrealized P&L + realized gains + received security income
+    // (dividends/coupons), over GROSS contributed capital. Derived from the same boundary
+    // flows that feed XIRR (positive = sells/dividends/coupons; cash `interest` stays out),
+    // so it's consistent with `xirr` by construction. Gross `totalContributed` is the base —
+    // realized gains came from capital no longer held, so `netContributed` would inflate it.
+    // (Heavy churn re-counts re-bought capital in the base; XIRR remains the "real" figure.)
+    // `null` for a single cash-inside portfolio, whose `simpleGainPct` is already total return.
+    const gross = Number(stats.totalContributed);
+    const positiveFlows = flows.reduce((s, f) => {
+      const amt = Number(f.amount);
+      return amt > 0 ? s + amt : s;
+    }, 0);
+    const totalReturnPct =
+      (opts.totalReturn ?? true) && gross > 0
+        ? (Number(currentValue) + positiveFlows - gross) / gross
+        : null;
 
     // Money-weighted return from the boundary flows against the current value —
     // also used to seed the forecast's return rate.
@@ -242,6 +260,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       ...stats,
       currentValue,
       simpleGainPct,
+      totalReturnPct,
       xirr: xirrVal,
       seedAnnualReturn,
       birthYear,
@@ -266,7 +285,10 @@ export async function transactionsRoute(app: FastifyInstance) {
     const fx = makeFxRateFn(rates, display);
     const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx, boundary });
     const flows = await boundaryFlows(coreTxns, boundary, display);
-    return enrichContributions(stats, summary.netWorth, flows, birthYear, portfolioType);
+    // Cash-inside `simpleGainPct` is already total return, so a separate figure is redundant.
+    return enrichContributions(stats, summary.netWorth, flows, birthYear, portfolioType, {
+      totalReturn: boundary === "outside",
+    });
   }
 
   // Income analytics for a set of valued transactions: per-year/-month totals, TTM,

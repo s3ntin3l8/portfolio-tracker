@@ -511,6 +511,13 @@ export interface ContributionStats {
   currentValue: string;
   /** (currentValue − netContributed) / netContributed, or null when no basis. */
   simpleGainPct: number | null;
+  /**
+   * Cumulative total return — adds received security income (dividends/coupons) and
+   * realized gains to the unrealized headline, over gross contributed capital:
+   * (currentValue + Σ positive boundary flows − totalContributed) / totalContributed.
+   * `null` for a single cash-inside portfolio (its `simpleGainPct` is already total return).
+   */
+  totalReturnPct: number | null;
   xirr: number | null;
   /** Default annual return to seed the forecast (xirr clamped, else "0.07"). */
   seedAnnualReturn: string;

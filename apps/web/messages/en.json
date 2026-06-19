@@ -151,6 +151,8 @@
     "monthsActive": "{count, plural, one {# month} other {# months}}",
     "currentValue": "Current value",
     "simpleGain": "gain",
+    "totalReturn": "Total return",
+    "totalReturnHint": "Incl. dividends, coupons & realized gains",
     "xirr": "Annualised return",
     "contributionsOverTime": "Contributions over time",
     "forecastTitle": "Forecast",

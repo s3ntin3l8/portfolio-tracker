@@ -114,6 +114,9 @@ describe("contribution analytics", () => {
     // 2 BBCA priced at 9500 by the fixture (cash nets to 0) → value 19000.
     expect(c.currentValue).toBe("19000");
     expect(c.simpleGainPct).toBe(0);
+    // No income or realized gains, value == cost → total return is also flat (computed
+    // for cash-outside, not null).
+    expect(c.totalReturnPct).toBe(0);
     expect(typeof c.seedAnnualReturn).toBe("string");
   });
 
@@ -335,6 +338,127 @@ describe("contribution analytics", () => {
       { month: "2026-01", contributed: "5000" },
       { month: "2026-02", contributed: "3000" },
     ]);
+  });
+
+  it("total return adds realized gains + dividends over the unrealized headline (cash-outside)", async () => {
+    const t = await token("totalreturn");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    // Price the held instrument above cost so there's an unrealized gain too.
+    overrideMarketData(
+      new MarketDataService([new FixtureProvider({ BBCA: "9500", DIVI: "120" })]),
+    );
+    const [divi] = await app.db
+      .insert(instruments)
+      .values({ symbol: "DIVI", market: "IDX", assetClass: "equity", currency: "IDR", name: "Dividend Co" })
+      .returning();
+
+    const pf = await createPortfolio(t, "Income"); // cash-outside (default)
+    // Buy 10 @ 100 (cost 1000); sell 4 @ 150 (proceeds 600, cost-of-sold 400 → realized 200);
+    // 80 cash dividend; 6 left @ fixture 120 → MV 720 (unrealized 120).
+    await postTx(t, pf, {
+      type: "buy",
+      instrumentId: divi.id,
+      quantity: "10",
+      price: "100",
+      currency: "IDR",
+      executedAt: "2026-01-15T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "sell",
+      instrumentId: divi.id,
+      quantity: "4",
+      price: "150",
+      currency: "IDR",
+      executedAt: "2026-02-15T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "dividend",
+      instrumentId: divi.id,
+      quantity: "0",
+      price: "80",
+      currency: "IDR",
+      executedAt: "2026-03-15T00:00:00.000Z",
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pf}/contributions`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const c = res.json();
+    // Gross contributed = 1000; net = 1000 − 400 (cost-of-sold) = 600; value (securities) = 720.
+    expect(c.totalContributed).toBe("1000");
+    expect(c.netContributed).toBe("600");
+    expect(c.currentValue).toBe("720");
+    // Headline stays unrealized-only: (720 − 600) / 600 = 0.2.
+    expect(c.simpleGainPct).toBeCloseTo(0.2, 10);
+    // Total return adds realized (200) + dividend (80): (720 + 600 + 80 − 1000) / 1000 = 0.4.
+    expect(c.totalReturnPct).toBeCloseTo(0.4, 10);
+  });
+
+  it("total return excludes cash interest (flow-derived, not totalIncome); null for cash-inside", async () => {
+    const t = await token("interest");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    overrideMarketData(
+      new MarketDataService([new FixtureProvider({ BBCA: "9500", INTR: "100" })]),
+    );
+    const [intr] = await app.db
+      .insert(instruments)
+      .values({ symbol: "INTR", market: "IDX", assetClass: "equity", currency: "IDR", name: "Interest Co" })
+      .returning();
+
+    // Cash-outside: buy 10 @ 100 (value stays 1000 at fixture 100) + a 50 interest payout.
+    // Interest is outside the securities boundary → must NOT lift total return.
+    const outside = await createPortfolio(t, "With interest"); // cash-outside
+    await postTx(t, outside, {
+      type: "buy",
+      instrumentId: intr.id,
+      quantity: "10",
+      price: "100",
+      currency: "IDR",
+      executedAt: "2026-01-15T00:00:00.000Z",
+    });
+    await postTx(t, outside, {
+      type: "interest",
+      quantity: "0",
+      price: "50",
+      currency: "IDR",
+      executedAt: "2026-02-15T00:00:00.000Z",
+    });
+    const oc = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${outside}/contributions`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(oc.totalContributed).toBe("1000");
+    expect(oc.currentValue).toBe("1000");
+    expect(oc.totalReturnPct).toBe(0); // interest excluded → flat, not +5%
+
+    // Cash-inside portfolio: total return is suppressed (headline already IS total return).
+    const inside = await createPortfolio(t, "Cash inside", true);
+    await postTx(t, inside, {
+      type: "deposit",
+      price: "5000",
+      currency: "IDR",
+      executedAt: "2026-01-05T00:00:00.000Z",
+    });
+    const ic = (
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${inside}/contributions`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(ic.totalReturnPct).toBeNull();
+
+    // The aggregate (mixed boundaries) computes a blended total return (a finite number).
+    const agg = (
+      await app.inject({ method: "GET", url: "/networth/contributions", headers: auth(t) })
+    ).json();
+    expect(typeof agg.totalReturnPct).toBe("number");
   });
 
   it("404s a portfolio the user does not own; 401s without a token", async () => {

@@ -73,6 +73,14 @@ export default async function SavingsPage({
           }
           deltaTone={gainTone}
         />
+        {c.totalReturnPct !== null && (
+          <StatCard
+            label={t("totalReturn")}
+            value={formatPercent(c.totalReturnPct, locale)}
+            delta={t("totalReturnHint")}
+            deltaTone={c.totalReturnPct >= 0 ? "up" : "down"}
+          />
+        )}
         <StatCard
           label={t("xirr")}
           value={c.xirr !== null ? formatPercent(c.xirr, locale) : "—"}

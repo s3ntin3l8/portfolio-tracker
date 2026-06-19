@@ -151,6 +151,8 @@
     "monthsActive": "{count, plural, other {# bulan}}",
     "currentValue": "Nilai saat ini",
     "simpleGain": "keuntungan",
+    "totalReturn": "Total imbal hasil",
+    "totalReturnHint": "Termasuk dividen, kupon & keuntungan terealisasi",
     "xirr": "Imbal hasil tahunan",
     "contributionsOverTime": "Setoran dari waktu ke waktu",
     "forecastTitle": "Proyeksi",
