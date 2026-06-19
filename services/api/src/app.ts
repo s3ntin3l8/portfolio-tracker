@@ -14,6 +14,7 @@ import { rootRoute } from "./routes/root.js";
 import { healthRoute } from "./routes/health.js";
 import { meRoute } from "./routes/me.js";
 import { portfoliosRoute } from "./routes/portfolios.js";
+import { accountHoldersRoute } from "./routes/account-holders.js";
 import { transactionsRoute } from "./routes/transactions.js";
 import { instrumentsRoute } from "./routes/instruments.js";
 import { quotesRoute } from "./routes/quotes.js";
@@ -142,6 +143,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(healthRoute);
   await app.register(meRoute);
   await app.register(portfoliosRoute);
+  await app.register(accountHoldersRoute);
   await app.register(transactionsRoute);
   await app.register(instrumentsRoute);
   await app.register(quotesRoute);

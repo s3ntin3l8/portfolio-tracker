@@ -156,11 +156,17 @@ describe("Trade Republic connection (encryption enabled)", () => {
 
   it("422s when pairing into a Trade Republic child account (Kinderdepot)", async () => {
     const t = await token("tr-child");
+    const holder = await app.inject({
+      method: "POST",
+      url: "/account-holders",
+      headers: auth(t),
+      payload: { name: "Kid", type: "child", birthYear: 2020 },
+    });
     const created = await app.inject({
       method: "POST",
       url: "/portfolios",
       headers: auth(t),
-      payload: { name: "Kid", baseCurrency: "EUR", portfolioType: "child", birthYear: 2020 },
+      payload: { name: "Kid", baseCurrency: "EUR", accountHolderId: holder.json().id },
     });
     const portfolioId = created.json().id;
     const res = await app.inject({

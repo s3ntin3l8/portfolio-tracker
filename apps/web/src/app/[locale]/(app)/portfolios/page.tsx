@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
+import { AccountHoldersManager } from "@/components/account-holders-manager";
 import { BrokerageIcon } from "@/components/brokerage-icon";
 import { TrSyncButton } from "@/components/tr-sync-button";
-import { loadPortfolios, loadTrConnection } from "@/lib/server-api";
+import { loadAccountHolders, loadPortfolios, loadTrConnection } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 
 export default async function PortfoliosPage({
@@ -22,7 +23,11 @@ export default async function PortfoliosPage({
   const te = await getTranslations("Empty");
   const ttr = await getTranslations("TradeRepublic");
 
-  const [result, connection] = await Promise.all([loadPortfolios(), loadTrConnection()]);
+  const [result, connection, holders] = await Promise.all([
+    loadPortfolios(),
+    loadTrConnection(),
+    loadAccountHolders(),
+  ]);
 
   // Determine which portfolio (if any) the TR connection is bound to.
   const trPortfolioId =
@@ -111,6 +116,8 @@ export default async function PortfoliosPage({
       ) : (
         <p className="text-sm text-muted-foreground">{t("empty")}</p>
       )}
+
+      {result.status !== "unavailable" && <AccountHoldersManager holders={holders} />}
     </div>
   );
 }

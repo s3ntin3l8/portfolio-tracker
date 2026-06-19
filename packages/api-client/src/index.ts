@@ -162,18 +162,41 @@ export interface AdminStats {
   };
 }
 
+/** "self" | "child" | "other". A portfolio whose holder is "child" is a Kinderdepot. */
+export type AccountHolderType = "self" | "child" | "other";
+
+/** A person an investment account belongs to. Linked from any number of portfolios so
+ * birth year + child-ness are entered once and shared (see issue #207). */
+export interface AccountHolder {
+  id: string;
+  userId: string;
+  name: string;
+  type: AccountHolderType;
+  /** Birth year — powers the "to age 18" forecast for a child. Null if unknown. */
+  birthYear: number | null;
+  createdAt: string;
+}
+
+export interface AccountHolderInput {
+  name: string;
+  type: AccountHolderType;
+  birthYear?: number | null;
+}
+
 export interface Portfolio {
   id: string;
   userId: string;
   name: string;
   baseCurrency: string;
-  /** "standard" | "child". Child portfolios expose the birth year + age-18 target. */
+  /** The person this portfolio belongs to, or null when unassigned. */
+  accountHolderId: string | null;
+  /** "standard" | "child". Derived: "child" iff the linked holder is type "child". */
   portfolioType: "standard" | "child";
-  /** Beneficiary birth year (e.g. a child's account), or null. */
+  /** Beneficiary birth year, derived from the linked holder, or null. */
   birthYear: number | null;
   /** Brokerage/custodian the portfolio is held at (free text), or null. */
   brokerage: string | null;
-  /** Name of the person the portfolio belongs to (free text), or null. */
+  /** Name of the person the portfolio belongs to, derived from the linked holder, or null. */
   accountHolder: string | null;
   /** Brokerage/bank account number used for screenshot auto-detect, or null. */
   accountNumber: string | null;
@@ -788,6 +811,14 @@ export function createApiClient(config: ApiClientConfig) {
     updatePortfolio: (portfolioId: string, input: Partial<PortfolioInput>) =>
       request<Portfolio>("PATCH", `/portfolios/${portfolioId}`, input),
     deletePortfolio: (portfolioId: string) => request<void>("DELETE", `/portfolios/${portfolioId}`),
+
+    listAccountHolders: () => request<AccountHolder[]>("GET", "/account-holders"),
+    createAccountHolder: (input: AccountHolderInput) =>
+      request<AccountHolder>("POST", "/account-holders", input),
+    updateAccountHolder: (holderId: string, input: Partial<AccountHolderInput>) =>
+      request<AccountHolder>("PATCH", `/account-holders/${holderId}`, input),
+    deleteAccountHolder: (holderId: string) =>
+      request<void>("DELETE", `/account-holders/${holderId}`),
 
     listTransactions: (portfolioId: string) =>
       request<Transaction[]>("GET", `/portfolios/${portfolioId}/transactions`),

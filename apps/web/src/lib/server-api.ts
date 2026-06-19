@@ -4,6 +4,7 @@ import {
   createApiClient,
   type ApiClient,
   type Portfolio,
+  type AccountHolder,
   type User,
   type NetWorth,
   type PerformancePoint,
@@ -263,6 +264,17 @@ export async function loadTrConnection(): Promise<TrConnection | null> {
     return await api.getTrConnection();
   } catch {
     return null;
+  }
+}
+
+/** The user's account holders, or an empty list when the API is unavailable. */
+export async function loadAccountHolders(): Promise<AccountHolder[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.listAccountHolders();
+  } catch {
+    return [];
   }
 }
 

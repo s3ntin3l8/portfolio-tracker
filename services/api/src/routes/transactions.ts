@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import {
+  accountHolders,
   corporateActions,
   dividendEvents,
   instruments,
@@ -39,6 +40,7 @@ import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js"
 import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 import { enqueueRecompute } from "../services/scheduler.js";
+import { flattenJoinRow } from "../lib/portfolio.js";
 
 interface PortfolioParams {
   portfolioId: string;
@@ -49,14 +51,16 @@ const bulkDeleteSchema = z.object({
 });
 
 export async function transactionsRoute(app: FastifyInstance) {
-  // Confirm the portfolio exists and belongs to the user.
+  // Confirm the portfolio exists and belongs to the user. Joins the account holder so
+  // callers can read the derived birthYear/portfolioType (see lib/portfolio).
   async function ownedPortfolio(userId: string, portfolioId: string) {
-    const [p] = await app.db
+    const [row] = await app.db
       .select()
       .from(portfolios)
+      .leftJoin(accountHolders, eq(portfolios.accountHolderId, accountHolders.id))
       .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, userId)))
       .limit(1);
-    return p ?? null;
+    return row ? flattenJoinRow(row) : null;
   }
 
   // Load corporate actions for the given instruments, shaped for @portfolio/core.

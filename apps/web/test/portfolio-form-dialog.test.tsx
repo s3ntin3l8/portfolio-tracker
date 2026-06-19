@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { Portfolio, TrConnection } from "@portfolio/api-client";
+import type { AccountHolder, Portfolio, TrConnection } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
@@ -9,14 +9,28 @@ const createPortfolio = vi.fn(async () => ({
   id: "p-new",
   name: "Test",
   baseCurrency: "IDR",
+  accountHolderId: null,
   portfolioType: "standard",
   birthYear: null,
   brokerage: null,
-  accountHolder: null, accountNumber: null,
+  accountHolder: null,
+  accountNumber: null,
   userId: "u1",
 }) as unknown as Portfolio);
 const updatePortfolio = vi.fn(async () => ({}) as never);
 const deletePortfolio = vi.fn(async () => undefined);
+// Holders the picker offers, and the holder created when the user adds one inline.
+const listAccountHolders = vi.fn(async (): Promise<AccountHolder[]> => []);
+const createAccountHolder = vi.fn(
+  async (input: { name: string; type: string; birthYear: number | null }): Promise<AccountHolder> => ({
+    id: "h-new",
+    userId: "u1",
+    name: input.name,
+    type: input.type as AccountHolder["type"],
+    birthYear: input.birthYear,
+    createdAt: "2026-01-01T00:00:00.000Z",
+  }),
+);
 const getTrConnection = vi.fn(
   async (): Promise<TrConnection> => ({
     status: "disconnected",
@@ -30,13 +44,30 @@ const getTrConnection = vi.fn(
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ createPortfolio, updatePortfolio, deletePortfolio, getTrConnection }),
+  useApiClient: () => ({
+    createPortfolio,
+    updatePortfolio,
+    deletePortfolio,
+    getTrConnection,
+    listAccountHolders,
+    createAccountHolder,
+  }),
 }));
 
 import { PortfolioFormDialog, type EditablePortfolio } from "../src/components/portfolio-form-dialog";
 import { Button } from "../src/components/ui/button";
 
 const m = messages.PortfolioForm;
+
+// The standard create payload the form sends (no holder picked).
+const baseInput = {
+  baseCurrency: "IDR",
+  accountHolderId: null,
+  brokerage: null,
+  accountNumber: null,
+  includeInAggregate: true,
+  cashCounted: false,
+};
 
 function renderCreate() {
   return render(
@@ -51,10 +82,10 @@ function renderEdit(
     id: "p1",
     name: "Main",
     baseCurrency: "IDR",
+    accountHolderId: null,
     portfolioType: "standard",
-    birthYear: null,
     brokerage: null,
-    accountHolder: null, accountNumber: null,
+    accountNumber: null,
     includeInAggregate: true,
     cashCounted: false,
   },
@@ -77,6 +108,9 @@ describe("PortfolioFormDialog", () => {
     updatePortfolio.mockClear();
     deletePortfolio.mockClear();
     getTrConnection.mockClear();
+    listAccountHolders.mockClear();
+    listAccountHolders.mockResolvedValue([]);
+    createAccountHolder.mockClear();
     document.cookie = "pf=; max-age=0; path=/";
   });
 
@@ -88,16 +122,7 @@ describe("PortfolioFormDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
     await waitFor(() => expect(createPortfolio).toHaveBeenCalled());
-    expect(createPortfolio).toHaveBeenCalledWith({
-      name: "Stockbit",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-      birthYear: null,
-      brokerage: null,
-      accountHolder: null, accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
-    });
+    expect(createPortfolio).toHaveBeenCalledWith({ name: "Stockbit", ...baseInput });
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -114,68 +139,70 @@ describe("PortfolioFormDialog", () => {
     await waitFor(() => expect(createPortfolio).toHaveBeenCalled());
     expect(createPortfolio).toHaveBeenCalledWith({
       name: "Euro",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-      birthYear: null,
+      ...baseInput,
       brokerage: "Interactive Brokers",
-      accountHolder: null, accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
     });
   });
 
-  it("captures the entered account holder name", async () => {
+  it("links an existing account holder when one is picked", async () => {
+    listAccountHolders.mockResolvedValue([
+      { id: "h1", userId: "u1", name: "Emma", type: "child", birthYear: 2017, createdAt: "x" },
+    ]);
     renderCreate();
     fireEvent.click(screen.getByRole("button", { name: m.new }));
+    // Wait for the picker to be populated from listAccountHolders.
+    await screen.findByRole("option", { name: /Emma/ });
 
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Kids Savings" } });
-    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "Emma" } });
+    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "h1" } });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
     await waitFor(() => expect(createPortfolio).toHaveBeenCalled());
     expect(createPortfolio).toHaveBeenCalledWith({
       name: "Kids Savings",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-      birthYear: null,
-      brokerage: null,
-      accountHolder: "Emma",
-      accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
+      ...baseInput,
+      accountHolderId: "h1",
     });
+    expect(createAccountHolder).not.toHaveBeenCalled();
   });
 
-  it("hides the birth-year field until the type is set to child", async () => {
+  it("reveals the birth-year field only when a new child holder is being added", async () => {
     renderCreate();
     fireEvent.click(screen.getByRole("button", { name: m.new }));
 
+    expect(screen.queryByLabelText(m.holderName)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(m.birthYear)).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "child" } });
+    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "__new__" } });
+    expect(screen.getByLabelText(m.holderName)).toBeInTheDocument();
+    // Default type is "self" → no birth year yet.
+    expect(screen.queryByLabelText(m.birthYear)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(m.holderType), { target: { value: "child" } });
     expect(screen.getByLabelText(m.birthYear)).toBeInTheDocument();
   });
 
-  it("creates a child portfolio carrying its birth year", async () => {
+  it("creates a new child holder inline and links it to the portfolio", async () => {
     renderCreate();
     fireEvent.click(screen.getByRole("button", { name: m.new }));
 
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Kid" } });
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "child" } });
+    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "__new__" } });
+    fireEvent.change(screen.getByLabelText(m.holderName), { target: { value: "Luca" } });
+    fireEvent.change(screen.getByLabelText(m.holderType), { target: { value: "child" } });
     fireEvent.change(screen.getByLabelText(m.birthYear), { target: { value: "2017" } });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
-    await waitFor(() => expect(createPortfolio).toHaveBeenCalled());
-    expect(createPortfolio).toHaveBeenCalledWith({
-      name: "Kid",
-      baseCurrency: "IDR",
-      portfolioType: "child",
+    await waitFor(() => expect(createAccountHolder).toHaveBeenCalledWith({
+      name: "Luca",
+      type: "child",
       birthYear: 2017,
-      brokerage: null,
-      accountHolder: null, accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
-    });
+    }));
+    await waitFor(() => expect(createPortfolio).toHaveBeenCalledWith({
+      name: "Kid",
+      ...baseInput,
+      accountHolderId: "h-new",
+    }));
   });
 
   it("edits an existing portfolio via PATCH", async () => {
@@ -186,16 +213,7 @@ describe("PortfolioFormDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: m.save }));
 
     await waitFor(() => expect(updatePortfolio).toHaveBeenCalled());
-    expect(updatePortfolio).toHaveBeenCalledWith("p1", {
-      name: "Growth",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-      birthYear: null,
-      brokerage: null,
-      accountHolder: null, accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
-    });
+    expect(updatePortfolio).toHaveBeenCalledWith("p1", { name: "Growth", ...baseInput });
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -235,13 +253,8 @@ describe("PortfolioFormDialog", () => {
 
     await waitFor(() => expect(createPortfolio).toHaveBeenCalledWith({
       name: "TR Portfolio",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-      birthYear: null,
+      ...baseInput,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
-      includeInAggregate: true,
-      cashCounted: false,
     }));
     // Dialog stays open — TR section appears with Done button (no create button anymore)
     await waitFor(() =>
@@ -258,10 +271,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr",
       name: "TR Portfolio",
       baseCurrency: "EUR",
+      accountHolderId: null,
       portfolioType: "standard",
-      birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -281,10 +294,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr-kid",
       name: "TR Kinderdepot",
       baseCurrency: "EUR",
+      accountHolderId: "h-kid",
       portfolioType: "child",
-      birthYear: 2020,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -301,10 +314,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr-kid",
       name: "TR Kinderdepot",
       baseCurrency: "EUR",
+      accountHolderId: "h-kid",
       portfolioType: "child",
-      birthYear: 2020,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -323,10 +336,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr",
       name: "TR Portfolio",
       baseCurrency: "EUR",
+      accountHolderId: null,
       portfolioType: "standard",
       brokerage: "Trade Republic",
-      birthYear: null,
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -345,10 +358,10 @@ describe("PortfolioFormDialog", () => {
       id: "p1",
       name: "Stockbit",
       baseCurrency: "IDR",
+      accountHolderId: null,
       portfolioType: "standard",
-      birthYear: null,
       brokerage: "Stockbit",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -363,10 +376,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr",
       name: "TR Portfolio",
       baseCurrency: "EUR",
+      accountHolderId: null,
       portfolioType: "standard",
-      birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
@@ -390,10 +403,10 @@ describe("PortfolioFormDialog", () => {
       id: "p-tr",
       name: "TR Portfolio",
       baseCurrency: "EUR",
+      accountHolderId: null,
       portfolioType: "standard",
-      birthYear: null,
       brokerage: "Trade Republic",
-      accountHolder: null, accountNumber: null,
+      accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
     });
