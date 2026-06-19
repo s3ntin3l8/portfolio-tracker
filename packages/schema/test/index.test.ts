@@ -5,6 +5,7 @@ import {
   transactionInputSchema,
   parsedTransactionSchema,
   portfolioInputSchema,
+  accountHolderInputSchema,
 } from "../src/index.js";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
@@ -33,23 +34,22 @@ describe("currencyCode", () => {
 });
 
 describe("portfolioInputSchema", () => {
-  it("defaults the type to standard and the currency to IDR", () => {
+  it("defaults the currency to IDR and leaves the holder unset", () => {
     const parsed = portfolioInputSchema.parse({ name: "Main" });
-    expect(parsed.portfolioType).toBe("standard");
     expect(parsed.baseCurrency).toBe("IDR");
+    expect(parsed.accountHolderId).toBeUndefined();
   });
-  it("accepts a child portfolio with a birth year", () => {
-    const parsed = portfolioInputSchema.parse({
-      name: "Kid",
-      portfolioType: "child",
-      birthYear: 2017,
-    });
-    expect(parsed.portfolioType).toBe("child");
-    expect(parsed.birthYear).toBe(2017);
+  it("accepts an account holder id and allows clearing it with null", () => {
+    expect(portfolioInputSchema.parse({ name: "Kid", accountHolderId: UUID }).accountHolderId).toBe(
+      UUID,
+    );
+    expect(portfolioInputSchema.parse({ name: "Kid", accountHolderId: null }).accountHolderId).toBe(
+      null,
+    );
   });
-  it("rejects an unknown portfolio type", () => {
+  it("rejects a non-uuid account holder id", () => {
     expect(() =>
-      portfolioInputSchema.parse({ name: "X", portfolioType: "grandparent" }),
+      portfolioInputSchema.parse({ name: "X", accountHolderId: "not-a-uuid" }),
     ).toThrow();
   });
   it("trims an optional brokerage and leaves it undefined when omitted", () => {
@@ -58,6 +58,23 @@ describe("portfolioInputSchema", () => {
       portfolioInputSchema.parse({ name: "X", brokerage: "  Trade Republic  " })
         .brokerage,
     ).toBe("Trade Republic");
+  });
+});
+
+describe("accountHolderInputSchema", () => {
+  it("defaults the type to 'other' and trims the name", () => {
+    const parsed = accountHolderInputSchema.parse({ name: "  Emma  " });
+    expect(parsed.name).toBe("Emma");
+    expect(parsed.type).toBe("other");
+    expect(parsed.birthYear).toBeUndefined();
+  });
+  it("accepts a child holder with a birth year", () => {
+    const parsed = accountHolderInputSchema.parse({ name: "Kid", type: "child", birthYear: 2017 });
+    expect(parsed).toMatchObject({ name: "Kid", type: "child", birthYear: 2017 });
+  });
+  it("rejects an empty name and an unknown type", () => {
+    expect(() => accountHolderInputSchema.parse({ name: "" })).toThrow();
+    expect(() => accountHolderInputSchema.parse({ name: "X", type: "pet" })).toThrow();
   });
 });
 

@@ -47,11 +47,7 @@ describe("createApiClient", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     });
 
-    await client.createPortfolio({
-      name: "Stockbit",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-    });
+    await client.createPortfolio({ name: "Stockbit", baseCurrency: "IDR" });
     expect(JSON.parse(sentBody!)).toMatchObject({ name: "Stockbit" });
   });
 
@@ -75,11 +71,7 @@ describe("createApiClient", () => {
     expect(seen?.body).toBeUndefined();
 
     // A write still carries the header so the server parses it.
-    await client.createPortfolio({
-      name: "Stockbit",
-      baseCurrency: "IDR",
-      portfolioType: "standard",
-    });
+    await client.createPortfolio({ name: "Stockbit", baseCurrency: "IDR" });
     expect((seen?.headers as Record<string, string>)["content-type"]).toBe(
       "application/json",
     );
@@ -189,8 +181,12 @@ describe("createApiClient request methods", () => {
     { name: "getNetWorthHistory range", call: (c) => c.getNetWorthHistory("3m"), method: "GET", url: "/networth/history?range=3m" },
     { name: "getPortfolioHistory", call: (c) => c.getPortfolioHistory("p1", "6m"), method: "GET", url: "/portfolios/p1/history?range=6m" },
     { name: "listPortfolios", call: (c) => c.listPortfolios(), method: "GET", url: "/portfolios" },
-    { name: "createPortfolio", call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR", portfolioType: "standard" }), method: "POST", url: "/portfolios", body: { name: "X", baseCurrency: "IDR", portfolioType: "standard" } },
+    { name: "createPortfolio", call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR", accountHolderId: null }), method: "POST", url: "/portfolios", body: { name: "X", baseCurrency: "IDR", accountHolderId: null } },
     { name: "updatePortfolio", call: (c) => c.updatePortfolio("p1", { name: "Y" }), method: "PATCH", url: "/portfolios/p1", body: { name: "Y" } },
+    { name: "listAccountHolders", call: (c) => c.listAccountHolders(), method: "GET", url: "/account-holders" },
+    { name: "createAccountHolder", call: (c) => c.createAccountHolder({ name: "Kid", type: "child", birthYear: 2017 }), method: "POST", url: "/account-holders", body: { name: "Kid", type: "child", birthYear: 2017 } },
+    { name: "updateAccountHolder", call: (c) => c.updateAccountHolder("h1", { name: "Kid R." }), method: "PATCH", url: "/account-holders/h1", body: { name: "Kid R." } },
+    { name: "deleteAccountHolder", call: (c) => c.deleteAccountHolder("h1"), method: "DELETE", url: "/account-holders/h1" },
     { name: "listTransactions", call: (c) => c.listTransactions("p1"), method: "GET", url: "/portfolios/p1/transactions" },
     { name: "createTransaction", call: (c) => c.createTransaction("p1", txInput), method: "POST", url: "/portfolios/p1/transactions", body: txInput },
     { name: "updateTransaction", call: (c) => c.updateTransaction("p1", "t1", txInput), method: "PATCH", url: "/portfolios/p1/transactions/t1", body: txInput },

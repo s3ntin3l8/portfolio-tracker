@@ -95,6 +95,29 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// A person an investment account belongs to (the user themselves, a child, a
+// spouse, …). Defined once per user and linked from any number of portfolios so
+// shared details — birth year today, a per-person tax allowance later — live in one
+// place instead of being re-entered per portfolio. See issue #207 and CLAUDE.md.
+export const accountHolders = pgTable(
+  "account_holders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // "self" | "child" | "other". A portfolio is a child/Kinderdepot iff its holder
+    // is "child" — the single source of child-ness (drives the "to age 18" forecast
+    // target and the Trade Republic Kinderdepot guard).
+    type: text("type").notNull().default("other"),
+    // Optional birth year — powers the "to age 18" savings forecast for a child.
+    birthYear: integer("birth_year"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("account_holders_user_id_idx").on(t.userId)],
+);
+
 export const portfolios = pgTable(
   "portfolios",
   {
@@ -104,18 +127,15 @@ export const portfolios = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     baseCurrency: text("base_currency").notNull().default("IDR"),
-    // "standard" | "child". Child portfolios expose a beneficiary birth year and
-    // the "to age 18" forecast target; standard portfolios hide both.
-    portfolioType: text("portfolio_type").notNull().default("standard"),
-    // Optional birth year of the account's beneficiary (e.g. a child's savings
-    // account) — powers the "to age 18" forecast target.
-    birthYear: integer("birth_year"),
+    // The person this portfolio belongs to. Nullable — an unassigned portfolio is
+    // treated as "standard" with no beneficiary. Child-ness, beneficiary birth year
+    // and the display name all derive from the linked holder (see accountHolders).
+    accountHolderId: uuid("account_holder_id").references(() => accountHolders.id, {
+      onDelete: "set null",
+    }),
     // Optional brokerage/custodian the portfolio is held at (e.g. Trade Republic,
     // DKB, Stockbit). Free text; powers the brokerage logo on the dashboard.
     brokerage: text("brokerage"),
-    // Optional free-text name of the person the portfolio belongs to (e.g. a child,
-    // spouse, or other family member managed on their behalf).
-    accountHolder: text("account_holder"),
     // Optional brokerage/bank account number (e.g. SID, IBAN). Used for auto-detecting
     // which portfolio a screenshot belongs to when the account number appears in the document.
     accountNumber: text("account_number"),
@@ -539,14 +559,24 @@ export const fxRates = pgTable(
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   portfolios: many(portfolios),
+  accountHolders: many(accountHolders),
   trConnection: one(trConnections, {
     fields: [users.id],
     references: [trConnections.userId],
   }),
 }));
 
+export const accountHoldersRelations = relations(accountHolders, ({ one, many }) => ({
+  user: one(users, { fields: [accountHolders.userId], references: [users.id] }),
+  portfolios: many(portfolios),
+}));
+
 export const portfoliosRelations = relations(portfolios, ({ one, many }) => ({
   user: one(users, { fields: [portfolios.userId], references: [users.id] }),
+  accountHolder: one(accountHolders, {
+    fields: [portfolios.accountHolderId],
+    references: [accountHolders.id],
+  }),
   transactions: many(transactions),
   loans: many(loans),
 }));

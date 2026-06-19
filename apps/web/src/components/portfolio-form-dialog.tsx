@@ -3,7 +3,12 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2 } from "lucide-react";
-import type { Portfolio, TrConnection } from "@portfolio/api-client";
+import type {
+  AccountHolder,
+  AccountHolderType,
+  Portfolio,
+  TrConnection,
+} from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,11 +31,15 @@ import { TrConnectFlow } from "@/components/tr-connect-flow";
 
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 
-/** The portfolio fields the edit form pre-fills. */
+/** The portfolio fields the edit form pre-fills. `portfolioType` is read-only here
+ * (derived from the holder) and only used to gate the TR connection section. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber" | "includeInAggregate" | "cashCounted"
+  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "includeInAggregate" | "cashCounted"
 >;
+
+// Sentinel select value for "create a new holder inline".
+const NEW_HOLDER = "__new__";
 
 /**
  * Create/edit a portfolio in a modal. One form serves both flows: in "create" mode
@@ -38,8 +47,9 @@ export type EditablePortfolio = Pick<
  * a two-step delete in the footer (the delete cascades to the portfolio's
  * transactions, and resets the global switcher if it pointed at this portfolio).
  *
- * The birth year only applies to "child" portfolios, so its input is shown only when
- * the type is set to child — matching the backend, which clears it otherwise.
+ * Whom the portfolio belongs to (and therefore its child status + beneficiary birth
+ * year) is chosen via the account-holder picker: pick an existing holder or create one
+ * inline. Child-ness and the "to age 18" forecast derive from the selected holder.
  *
  * When the portfolio's brokerage is Trade Republic, a TR connection section is shown
  * below the form fields. In create mode, it appears after the portfolio is saved
@@ -64,14 +74,14 @@ export function PortfolioFormDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(portfolio?.name ?? "");
   const [currency, setCurrency] = useState(portfolio?.baseCurrency ?? "IDR");
-  const [type, setType] = useState<"standard" | "child">(
-    portfolio?.portfolioType ?? "standard",
-  );
-  const [birthYear, setBirthYear] = useState(
-    portfolio?.birthYear != null ? String(portfolio.birthYear) : "",
-  );
+  // The user's holders (fetched on open) and the selected one. "" = no holder,
+  // NEW_HOLDER = create one inline using the fields below.
+  const [holders, setHolders] = useState<AccountHolder[]>([]);
+  const [accountHolderId, setAccountHolderId] = useState(portfolio?.accountHolderId ?? "");
+  const [newHolderName, setNewHolderName] = useState("");
+  const [newHolderType, setNewHolderType] = useState<AccountHolderType>("self");
+  const [newHolderBirthYear, setNewHolderBirthYear] = useState("");
   const [brokerage, setBrokerage] = useState(portfolio?.brokerage ?? "");
-  const [accountHolder, setAccountHolder] = useState(portfolio?.accountHolder ?? "");
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
   const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
   const [cashCounted, setCashCounted] = useState(portfolio?.cashCounted ?? false);
@@ -89,12 +99,22 @@ export function PortfolioFormDialog({
   const isTr = resolveBrokerage(brokerage)?.key === "trade-republic";
   // In edit mode the portfolio already exists; in create mode it exists after creation.
   const effectivePortfolio = mode === "edit" ? portfolio : createdPortfolio;
+  // Whether the portfolio is (or would be) a child depot, derived from the chosen
+  // holder: the inline new-holder's type, or an existing holder's type.
+  const selectedHolder = holders.find((h) => h.id === accountHolderId) ?? null;
+  const liveIsChild =
+    accountHolderId === NEW_HOLDER
+      ? newHolderType === "child"
+      : selectedHolder?.type === "child";
   // Trade Republic can't sync child accounts (Kinderdepot). Gate the connect section on the
   // *saved* type so the offer never disagrees with the backend guard that rejects such
-  // bindings (#199); use the live form `type` only for the explanatory note, which is
+  // bindings (#199); use the live child status only for the explanatory note, which is
   // cosmetic and should also be right while creating a child portfolio before its first save.
   const isTrChildSaved = isTr && effectivePortfolio?.portfolioType === "child";
-  const showTrChildNote = isTr && type === "child";
+  // Show the explanatory note when the saved portfolio is already a child depot, or
+  // when the holder currently chosen would make it one (covers create-before-save and
+  // the holders list still loading).
+  const showTrChildNote = isTrChildSaved || (isTr && Boolean(liveIsChild));
   // Show the TR section only once we have a real portfolio id to bind against, and never
   // for a TR child account.
   const showTrSection = effectivePortfolio != null && isTr && !isTrChildSaved;
@@ -125,16 +145,37 @@ export function PortfolioFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, showTrSection, trFetchSeq]);
 
+  // Load the user's account holders when the dialog opens, so the picker can offer
+  // them. Mirrors the TR-connection fetch (all setState inside the async callback).
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    api
+      .listAccountHolders()
+      .then((hs) => {
+        if (active) setHolders(hs);
+      })
+      .catch(() => {
+        if (active) setHolders([]);
+      });
+    return () => {
+      active = false;
+    };
+    // api is stable (context); open is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   // Reset the form to the portfolio's current values whenever the dialog opens, so a
   // cancelled edit never leaks stale drafts into the next open.
   function onOpenChange(next: boolean) {
     if (next) {
       setName(portfolio?.name ?? "");
       setCurrency(portfolio?.baseCurrency ?? "IDR");
-      setType(portfolio?.portfolioType ?? "standard");
-      setBirthYear(portfolio?.birthYear != null ? String(portfolio.birthYear) : "");
+      setAccountHolderId(portfolio?.accountHolderId ?? "");
+      setNewHolderName("");
+      setNewHolderType("self");
+      setNewHolderBirthYear("");
       setBrokerage(portfolio?.brokerage ?? "");
-      setAccountHolder(portfolio?.accountHolder ?? "");
       setAccountNumber(portfolio?.accountNumber ?? "");
       setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
       setCashCounted(portfolio?.cashCounted ?? false);
@@ -151,22 +192,38 @@ export function PortfolioFormDialog({
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || busy) return;
+    // Creating a new holder inline requires a name.
+    if (accountHolderId === NEW_HOLDER && !newHolderName.trim()) return;
     setBusy(true);
     setError(false);
-    const raw = birthYear.trim();
-    const parsedBirthYear = type === "child" && raw !== "" ? Number(raw) : null;
-    const input = {
-      name: trimmed,
-      baseCurrency: currency,
-      portfolioType: type,
-      birthYear: parsedBirthYear,
-      brokerage: brokerage.trim() || null,
-      accountHolder: accountHolder.trim() || null,
-      accountNumber: accountNumber.trim() || null,
-      includeInAggregate,
-      cashCounted,
-    };
     try {
+      // Resolve the holder id: create the inline holder first when requested, so the
+      // portfolio links to a real id. Keep local state consistent if the dialog stays
+      // open afterwards (TR create-then-connect).
+      let holderId: string | null = accountHolderId || null;
+      if (accountHolderId === NEW_HOLDER) {
+        const by =
+          newHolderType === "child" && newHolderBirthYear.trim() !== ""
+            ? Number(newHolderBirthYear)
+            : null;
+        const createdHolder = await api.createAccountHolder({
+          name: newHolderName.trim(),
+          type: newHolderType,
+          birthYear: by,
+        });
+        holderId = createdHolder.id;
+        setHolders((prev) => [...prev, createdHolder]);
+        setAccountHolderId(createdHolder.id);
+      }
+      const input = {
+        name: trimmed,
+        baseCurrency: currency,
+        accountHolderId: holderId,
+        brokerage: brokerage.trim() || null,
+        accountNumber: accountNumber.trim() || null,
+        includeInAggregate,
+        cashCounted,
+      };
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
         router.refresh();
@@ -290,12 +347,62 @@ export function PortfolioFormDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="portfolio-account-holder">{t("accountHolder")}</Label>
-            <Input
+            <Select
               id="portfolio-account-holder"
-              value={accountHolder}
-              onChange={(e) => setAccountHolder(e.target.value)}
-              placeholder={t("accountHolderPlaceholder")}
-            />
+              value={accountHolderId}
+              onChange={(e) => setAccountHolderId(e.target.value)}
+            >
+              <option value="">{t("holderNone")}</option>
+              {holders.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.name}
+                  {h.type === "child" ? ` · ${t("holderTypeChild")}` : ""}
+                  {h.birthYear != null ? ` (${h.birthYear})` : ""}
+                </option>
+              ))}
+              <option value={NEW_HOLDER}>{t("holderNew")}</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("accountHolderHint")}</p>
+
+            {accountHolderId === NEW_HOLDER && (
+              <div className="mt-2 space-y-3 rounded-md border border-border/60 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-holder-name">{t("holderName")}</Label>
+                  <Input
+                    id="new-holder-name"
+                    value={newHolderName}
+                    onChange={(e) => setNewHolderName(e.target.value)}
+                    placeholder={t("accountHolderPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-holder-type">{t("holderType")}</Label>
+                  <Select
+                    id="new-holder-type"
+                    value={newHolderType}
+                    onChange={(e) => setNewHolderType(e.target.value as AccountHolderType)}
+                  >
+                    <option value="self">{t("holderTypeSelf")}</option>
+                    <option value="child">{t("holderTypeChild")}</option>
+                    <option value="other">{t("holderTypeOther")}</option>
+                  </Select>
+                </div>
+                {newHolderType === "child" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-holder-birth-year">{t("birthYear")}</Label>
+                    <Input
+                      id="new-holder-birth-year"
+                      type="number"
+                      inputMode="numeric"
+                      placeholder={t("birthYearPlaceholder")}
+                      value={newHolderBirthYear}
+                      onChange={(e) => setNewHolderBirthYear(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">{t("birthYearHint")}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -322,33 +429,6 @@ export function PortfolioFormDialog({
               ))}
             </Select>
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-type">{t("type")}</Label>
-            <Select
-              id="portfolio-type"
-              value={type}
-              onChange={(e) => setType(e.target.value as "standard" | "child")}
-            >
-              <option value="standard">{t("typeStandard")}</option>
-              <option value="child">{t("typeChild")}</option>
-            </Select>
-          </div>
-
-          {type === "child" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="portfolio-birth-year">{t("birthYear")}</Label>
-              <Input
-                id="portfolio-birth-year"
-                type="number"
-                inputMode="numeric"
-                placeholder={t("birthYearPlaceholder")}
-                value={birthYear}
-                onChange={(e) => setBirthYear(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">{t("birthYearHint")}</p>
-            </div>
-          )}
 
           <div className="flex items-center gap-3">
             <input

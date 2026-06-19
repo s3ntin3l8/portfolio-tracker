@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import {
+  accountHolders,
   portfolios,
   screenshotImports,
   transactions,
@@ -56,11 +57,14 @@ export async function trRoute(app: FastifyInstance) {
 
   async function lookupPortfolio(userId: string, portfolioId: string) {
     const [p] = await app.db
-      .select({ id: portfolios.id, portfolioType: portfolios.portfolioType })
+      .select({ id: portfolios.id, holderType: accountHolders.type })
       .from(portfolios)
+      .leftJoin(accountHolders, eq(portfolios.accountHolderId, accountHolders.id))
       .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, userId)))
       .limit(1);
-    return p ?? null;
+    if (!p) return null;
+    // A portfolio is a child/Kinderdepot iff its linked holder is type "child".
+    return { id: p.id, isChild: p.holderType === "child" };
   }
 
   // Current connection state (no secrets).
@@ -98,7 +102,7 @@ export async function trRoute(app: FastifyInstance) {
     // Trade Republic child accounts (Kinderdepot) cannot be synced — TR exposes no
     // account selector via the API pytr uses, so a binding here would never pull data.
     // Refuse the connection rather than let the user pair into a dead end (see #123, #199).
-    if (portfolio.portfolioType === "child") {
+    if (portfolio.isChild) {
       return reply.code(422).send({ error: "tr_child_account_unsupported" });
     }
 

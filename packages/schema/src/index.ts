@@ -66,20 +66,34 @@ export const currencyCode = z
 
 // --- API inputs ----------------------------------------------------------
 
+// A person an investment account belongs to. Birth year + type live here (not on
+// the portfolio) so they are entered once and shared across that person's portfolios.
+export const accountHolderInputSchema = z.object({
+  name: z.string().trim().min(1),
+  // "self" | "child" | "other". A portfolio whose holder is "child" is treated as a
+  // child/Kinderdepot (drives the "to age 18" forecast and the TR Kinderdepot guard).
+  type: z.enum(["self", "child", "other"]).default("other"),
+  // Optional birth year — powers the "to age 18" forecast for a child.
+  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+});
+export type AccountHolderInput = z.infer<typeof accountHolderInputSchema>;
+
+// PATCH variant: every field optional, without create-time defaults.
+export const accountHolderPatchSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  type: z.enum(["self", "child", "other"]).optional(),
+  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+});
+export type AccountHolderPatch = z.infer<typeof accountHolderPatchSchema>;
+
 export const portfolioInputSchema = z.object({
   name: z.string().min(1),
   baseCurrency: currencyCode.default("IDR"),
-  // "standard" | "child". Only child portfolios carry a beneficiary birth year
-  // and the "to age 18" forecast target.
-  portfolioType: z.enum(["standard", "child"]).default("standard"),
-  // Optional beneficiary birth year (e.g. a child's account). Nullable so a PATCH
-  // can clear it.
-  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  // The person this portfolio belongs to. Child-ness and beneficiary birth year
+  // derive from this holder. Nullable so a PATCH can unassign it.
+  accountHolderId: z.guid().nullable().optional(),
   // Optional brokerage/custodian (free text). Nullable so a PATCH can clear it.
   brokerage: z.string().trim().nullable().optional(),
-  // Optional name of the person the portfolio belongs to (free text). Nullable so a
-  // PATCH can clear it.
-  accountHolder: z.string().trim().nullable().optional(),
   // Optional account number (SID, IBAN, broker account ID). Used for auto-detecting
   // which portfolio a screenshot belongs to. Nullable so a PATCH can clear it.
   accountNumber: z.string().trim().nullable().optional(),
@@ -100,10 +114,8 @@ export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 export const portfolioPatchSchema = z.object({
   name: z.string().min(1).optional(),
   baseCurrency: currencyCode.optional(),
-  portfolioType: z.enum(["standard", "child"]).optional(),
-  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  accountHolderId: z.guid().nullable().optional(),
   brokerage: z.string().trim().nullable().optional(),
-  accountHolder: z.string().trim().nullable().optional(),
   accountNumber: z.string().trim().nullable().optional(),
   includeInAggregate: z.boolean().optional(),
   cashCounted: z.boolean().optional(),

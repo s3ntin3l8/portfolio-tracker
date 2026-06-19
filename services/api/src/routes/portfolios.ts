@@ -1,38 +1,56 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
-import { portfolios } from "@portfolio/db";
+import { accountHolders, portfolios } from "@portfolio/db";
 import { portfolioInputSchema, portfolioPatchSchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
+import { flattenJoinRow, flattenPortfolio } from "../lib/portfolio.js";
 
 export async function portfoliosRoute(app: FastifyInstance) {
-  // List the authenticated user's portfolios.
+  // Confirm an account holder (if one is given) exists and belongs to the user, so a
+  // portfolio can never link to someone else's holder. Returns true when id is null.
+  async function holderOwnedOrNull(userId: string, holderId: string | null | undefined) {
+    if (holderId == null) return true;
+    const [h] = await app.db
+      .select({ id: accountHolders.id })
+      .from(accountHolders)
+      .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, userId)))
+      .limit(1);
+    return Boolean(h);
+  }
+
+  // List the authenticated user's portfolios, with holder-derived fields flattened in.
   app.get("/portfolios", { preHandler: app.authenticate }, async (request) => {
     const { id } = requireUser(request);
-    return app.db.select().from(portfolios).where(eq(portfolios.userId, id));
+    const rows = await app.db
+      .select()
+      .from(portfolios)
+      .leftJoin(accountHolders, eq(portfolios.accountHolderId, accountHolders.id))
+      .where(eq(portfolios.userId, id));
+    return rows.map(flattenJoinRow);
   });
 
   // Create a portfolio for the authenticated user.
   app.post("/portfolios", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = requireUser(request);
     const input = portfolioInputSchema.parse(request.body);
+    if (!(await holderOwnedOrNull(id, input.accountHolderId))) {
+      return reply.code(404).send({ error: "account_holder_not_found" });
+    }
     const [created] = await app.db
       .insert(portfolios)
       .values({
         userId: id,
         name: input.name,
         baseCurrency: input.baseCurrency,
-        portfolioType: input.portfolioType,
-        // Birth year only applies to child portfolios.
-        birthYear: input.portfolioType === "child" ? (input.birthYear ?? null) : null,
+        accountHolderId: input.accountHolderId ?? null,
         brokerage: input.brokerage ?? null,
-        accountHolder: input.accountHolder ?? null,
         accountNumber: input.accountNumber ?? null,
         includeInAggregate: input.includeInAggregate,
         cashCounted: input.cashCounted,
       })
       .returning();
     reply.code(201);
-    return created;
+    return flattenPortfolio(created, await holderFor(created.accountHolderId));
   });
 
   // Rename / update a portfolio (owner only). Empty body is a no-op update.
@@ -43,19 +61,18 @@ export async function portfoliosRoute(app: FastifyInstance) {
       const { id } = requireUser(request);
       const { portfolioId } = request.params;
       const input = portfolioPatchSchema.parse(request.body);
-      // Flipping a portfolio back to "standard" clears any stored birth year so it
-      // can't leak into the forecast.
-      const patch =
-        input.portfolioType === "standard" ? { ...input, birthYear: null } : input;
+      if (!(await holderOwnedOrNull(id, input.accountHolderId))) {
+        return reply.code(404).send({ error: "account_holder_not_found" });
+      }
       const [updated] = await app.db
         .update(portfolios)
-        .set(patch)
+        .set(input)
         .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, id)))
         .returning();
       if (!updated) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      return updated;
+      return flattenPortfolio(updated, await holderFor(updated.accountHolderId));
     },
   );
 
@@ -77,4 +94,15 @@ export async function portfoliosRoute(app: FastifyInstance) {
       return reply.code(204).send();
     },
   );
+
+  // Fetch a single holder row (or null) to flatten a create/update response.
+  async function holderFor(holderId: string | null) {
+    if (holderId == null) return null;
+    const [h] = await app.db
+      .select()
+      .from(accountHolders)
+      .where(eq(accountHolders.id, holderId))
+      .limit(1);
+    return h ?? null;
+  }
 }

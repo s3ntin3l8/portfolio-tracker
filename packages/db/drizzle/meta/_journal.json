@@ -197,6 +197,13 @@
       "when": 1781887796814,
       "tag": "0027_cash_boundary",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1781901095000,
+      "tag": "0028_account_holders",
+      "breakpoints": true
     }
   ]
 }

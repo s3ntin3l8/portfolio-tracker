@@ -158,44 +158,90 @@ describe("auth + portfolios + transactions", () => {
     expect(cleared.json()).toMatchObject({ name: "Euro", brokerage: null });
   });
 
-  it("sets and clears the account holder via PATCH", async () => {
+  it("links a portfolio to an account holder and derives its name via the holder", async () => {
     const t = await token("holder-user");
+    const emma = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Emma", type: "child", birthYear: 2017 },
+      })
+    ).json();
+    const luca = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Luca", type: "child" },
+      })
+    ).json();
+
     const portfolioId = (
       await app.inject({
         method: "POST",
         url: "/portfolios",
         headers: auth(t),
-        payload: { name: "Kids", baseCurrency: "idr", accountHolder: "Emma" },
+        payload: { name: "Kids", baseCurrency: "idr", accountHolderId: emma.id },
       })
     ).json().id;
 
-    // Account holder is persisted on create.
-    const created = await app.inject({
-      method: "GET",
-      url: "/portfolios",
-      headers: auth(t),
+    // The holder's name + birth year + child type surface as derived read fields.
+    const created = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
+    expect(created.json()[0]).toMatchObject({
+      accountHolderId: emma.id,
+      accountHolder: "Emma",
+      birthYear: 2017,
+      portfolioType: "child",
     });
-    expect(created.json()[0].accountHolder).toBe("Emma");
 
-    // PATCH updates it.
+    // Re-link to another holder.
     const updated = await app.inject({
       method: "PATCH",
       url: `/portfolios/${portfolioId}`,
       headers: auth(t),
-      payload: { accountHolder: "Luca" },
+      payload: { accountHolderId: luca.id },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({ name: "Kids", accountHolder: "Luca" });
+    expect(updated.json()).toMatchObject({ accountHolderId: luca.id, accountHolder: "Luca" });
 
-    // Explicit null clears it; other fields are untouched.
+    // Explicit null unassigns it → derives back to standard with no name/birth year.
     const cleared = await app.inject({
       method: "PATCH",
       url: `/portfolios/${portfolioId}`,
       headers: auth(t),
-      payload: { accountHolder: null },
+      payload: { accountHolderId: null },
     });
     expect(cleared.statusCode).toBe(200);
-    expect(cleared.json()).toMatchObject({ name: "Kids", accountHolder: null });
+    expect(cleared.json()).toMatchObject({
+      name: "Kids",
+      accountHolderId: null,
+      accountHolder: null,
+      birthYear: null,
+      portfolioType: "standard",
+    });
+  });
+
+  it("rejects linking a portfolio to another user's account holder", async () => {
+    const owner = await token("holder-owner");
+    const intruder = await token("holder-intruder");
+    const holder = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(owner),
+        payload: { name: "Mine", type: "self" },
+      })
+    ).json();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(intruder),
+      payload: { name: "Sneaky", baseCurrency: "idr", accountHolderId: holder.id },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe("account_holder_not_found");
   });
 
   it("sets and clears the account number via PATCH", async () => {

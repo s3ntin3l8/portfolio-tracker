@@ -142,17 +142,34 @@ describe("contribution analytics", () => {
     expect(c.monthlyAverage).toBe("8000"); // 24000 / 3
   });
 
-  it("persists a portfolio birth year and surfaces it on contributions", async () => {
+  // Create a holder and return its id.
+  async function createHolder(
+    t: string,
+    name: string,
+    type: "self" | "child" | "other",
+    birthYear?: number,
+  ) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/account-holders",
+      headers: auth(t),
+      payload: { name, type, birthYear: birthYear ?? null },
+    });
+    return res.json().id as string;
+  }
+
+  it("surfaces the linked holder's birth year on contributions", async () => {
     const t = await token("parent");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    const holderId = await createHolder(t, "Kid", "child", 2017);
     const pf = await createPortfolio(t, "Kid");
 
-    // Set the birth year via PATCH.
+    // Link the holder via PATCH.
     const patched = await app.inject({
       method: "PATCH",
       url: `/portfolios/${pf}`,
       headers: auth(t),
-      payload: { birthYear: 2017 },
+      payload: { accountHolderId: holderId },
     });
     expect(patched.statusCode).toBe(200);
     expect(patched.json().birthYear).toBe(2017);
@@ -168,33 +185,34 @@ describe("contribution analytics", () => {
     });
     expect(contrib.json().birthYear).toBe(2017);
 
-    // Clearing it with null works too.
+    // Unassigning the holder clears the derived birth year.
     const cleared = await app.inject({
       method: "PATCH",
       url: `/portfolios/${pf}`,
       headers: auth(t),
-      payload: { birthYear: null },
+      payload: { accountHolderId: null },
     });
     expect(cleared.json().birthYear).toBeNull();
   });
 
-  it("classifies child portfolios and gates the birth year on the type", async () => {
+  it("derives child classification from the linked holder", async () => {
     const t = await token("classifier");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
 
-    // Create a child portfolio with a birth year in one shot.
+    // A portfolio linked to a child holder reads as a child depot in one shot.
+    const childHolder = await createHolder(t, "Kid", "child", 2017);
     const created = await app.inject({
       method: "POST",
       url: "/portfolios",
       headers: auth(t),
-      payload: { name: "Kid", baseCurrency: "idr", portfolioType: "child", birthYear: 2017 },
+      payload: { name: "Kid", baseCurrency: "idr", accountHolderId: childHolder },
     });
     expect(created.statusCode).toBe(201);
     const pf = created.json().id as string;
     expect(created.json().portfolioType).toBe("child");
     expect(created.json().birthYear).toBe(2017);
 
-    // A POST without a type defaults to "standard".
+    // A POST without a holder defaults to "standard".
     const standard = await app.inject({
       method: "POST",
       url: "/portfolios",
@@ -203,7 +221,7 @@ describe("contribution analytics", () => {
     });
     expect(standard.json().portfolioType).toBe("standard");
 
-    // The type rides the list and contributions payloads.
+    // The derived type rides the list and contributions payloads.
     const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
     expect(list.json().find((p: { id: string }) => p.id === pf).portfolioType).toBe("child");
     const contrib = await app.inject({
@@ -213,12 +231,12 @@ describe("contribution analytics", () => {
     });
     expect(contrib.json().portfolioType).toBe("child");
 
-    // Flipping back to "standard" clears the birth year so it can't leak into the forecast.
+    // Unassigning the holder reverts the portfolio to "standard" with no birth year.
     const reverted = await app.inject({
       method: "PATCH",
       url: `/portfolios/${pf}`,
       headers: auth(t),
-      payload: { portfolioType: "standard" },
+      payload: { accountHolderId: null },
     });
     expect(reverted.json().portfolioType).toBe("standard");
     expect(reverted.json().birthYear).toBeNull();
