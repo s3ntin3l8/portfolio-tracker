@@ -1,9 +1,8 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowLeft } from "lucide-react";
-import { Link } from "@/i18n/navigation";
-import { Button } from "@/components/ui/button";
-import { RecordCorporateAction } from "@/components/record-corporate-action";
+import { setRequestLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 
+// The corporate-action form now lives as a tab on /transactions/new. Keep this path as a
+// lightweight redirect so any bookmarks land on that tab.
 export default async function NewCorporateActionPage({
   params,
 }: {
@@ -11,22 +10,8 @@ export default async function NewCorporateActionPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("CorpAction");
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild aria-label={t("title")}>
-          <Link href="/holdings">
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-        </div>
-      </div>
-      <RecordCorporateAction />
-    </div>
-  );
+  redirect({
+    href: { pathname: "/transactions/new", query: { kind: "corporate-action" } },
+    locale,
+  });
 }
