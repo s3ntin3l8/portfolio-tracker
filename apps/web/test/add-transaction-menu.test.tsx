@@ -12,13 +12,24 @@ vi.mock("next/navigation", () => ({
 }));
 
 // Render Link as an anchor that forwards ref + the props Radix's `asChild` Slot injects
-// (role, tabindex…) so roving focus can find the menu items.
+// (role, tabindex…) so roving focus can find the menu items. Serialize the next-intl
+// object href form ({pathname, query}) the way real next-intl does, so the test asserts
+// the query survives.
 const replace = vi.fn();
+function hrefToString(href: unknown): string {
+  if (typeof href === "string") return href;
+  const { pathname, query } = href as {
+    pathname: string;
+    query?: Record<string, string>;
+  };
+  const qs = query ? new URLSearchParams(query).toString() : "";
+  return qs ? `${pathname}?${qs}` : pathname;
+}
 vi.mock("@/i18n/navigation", () => ({
-  Link: forwardRef<HTMLAnchorElement, React.ComponentPropsWithoutRef<"a">>(
-    function Link({ children, ...props }, ref) {
+  Link: forwardRef<HTMLAnchorElement, { href: unknown; children?: React.ReactNode }>(
+    function Link({ children, href, ...props }, ref) {
       return (
-        <a ref={ref} {...props}>
+        <a ref={ref} href={hrefToString(href)} {...props}>
           {children}
         </a>
       );
@@ -80,7 +91,7 @@ describe("AddTransactionMenu", () => {
     });
     expect(corpAction.closest("a")).toHaveAttribute(
       "href",
-      "/corporate-actions/new",
+      "/transactions/new?kind=corporate-action",
     );
   });
 

@@ -79,7 +79,12 @@ export function AddTransactionMenu() {
             {ti("menu.import")}
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href="/corporate-actions/new">
+            <Link
+              href={{
+                pathname: "/transactions/new",
+                query: { kind: "corporate-action" },
+              }}
+            >
               <GitBranch className="size-4" />
               {tca("link")}
             </Link>
