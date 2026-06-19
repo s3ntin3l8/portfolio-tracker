@@ -239,10 +239,14 @@ export async function syncTrConnection(
     .orderBy(desc(screenshotImports.createdAt))
     .limit(1);
   const existing = collector ? (collector.parsedJson as CollectorJson) : null;
-  const stagedIds = new Set<string>([
-    ...(existing?.drafts ?? []).map((d) => d.externalId).filter((x): x is string => Boolean(x)),
-    ...(existing?.errors ?? []).map((e) => e.eventId).filter((x): x is string => Boolean(x)),
-  ]);
+  // Only staged *drafts* block re-import. Staged *errors* (attention issues, e.g. a trade
+  // whose detail fetch transiently failed so its share count is missing) are intentionally
+  // left re-mappable: re-deriving them from a fresh export self-heals once the detail
+  // succeeds. Safe because no user intent lives on an error object — mapping one turns it
+  // into a confirmed transaction + a resolved-ledger entry, which is filtered out above.
+  const stagedIds = new Set<string>(
+    (existing?.drafts ?? []).map((d) => d.externalId).filter((x): x is string => Boolean(x)),
+  );
 
   // 4. New events = present, executed, in an enabled category, neither resolved nor staged.
   const newRaw = events.filter((e) => {
@@ -267,8 +271,14 @@ export async function syncTrConnection(
       exportIds.has(d.externalId) &&
       allowed(d.externalId),
   );
+  // Errors are NOT carried verbatim: any whose event is still in the export was just
+  // re-derived above (into a fresh draft if its detail recovered, else a fresh error), so
+  // drop the stale copy to avoid duplication. Keep only errors with no id, or whose event
+  // has vanished from the export (and isn't resolved/cancelled).
   const keptErrors = (existing?.errors ?? []).filter(
-    (e) => !e.eventId || (!resolved.has(e.eventId) && !cancelledIds.has(e.eventId)),
+    (e) =>
+      !e.eventId ||
+      (!resolved.has(e.eventId) && !cancelledIds.has(e.eventId) && !exportIds.has(e.eventId)),
   );
   const mergedDrafts = [...keptDrafts, ...newDrafts];
   const mergedErrors = [...keptErrors, ...newErrors];

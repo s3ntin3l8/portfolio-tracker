@@ -134,6 +134,33 @@ describe("syncTrConnection", () => {
     expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["tr-1", "tr-2", "tr-4"]);
   });
 
+  it("self-heals a staged error once a transiently-failed detail recovers", async () => {
+    const conn = await makeConnection("self-heal");
+    const db = getDb();
+
+    // Sync 1: a trade whose detail fetch failed → no share count → an attention error.
+    const thin = [
+      { id: "heal-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, isin: "DE0007236101", currency: "EUR" },
+    ];
+    const first = await syncTrConnection(db, enc, runnerWith(async () => ({ events: thin, sessionData: "J1" })), conn);
+    expect(first.drafts).toBe(0);
+    expect(first.errors).toBe(1);
+
+    // Sync 2: TR's detail now resolves, so the same event arrives with its share count.
+    const full = [{ ...thin[0], shares: 10 }];
+    const second = await syncTrConnection(db, enc, runnerWith(async () => ({ events: full, sessionData: "J2" })), conn);
+
+    // The staged error was re-derived into a proper draft — not kept as a stale error.
+    expect(second.drafts).toBe(1);
+    const [imp] = await db
+      .select()
+      .from(screenshotImports)
+      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
+    const parsed = imp.parsedJson as { drafts: { externalId: string }[]; errors: { eventId?: string }[] };
+    expect(parsed.drafts.map((d) => d.externalId)).toEqual(["heal-1"]);
+    expect(parsed.errors.some((e) => e.eventId === "heal-1")).toBe(false);
+  });
+
   it("un-imports a confirmed transaction whose source event was cancelled", async () => {
     const conn = await makeConnection("cancel");
     const db = getDb();
