@@ -276,6 +276,26 @@ describe("PortfolioFormDialog", () => {
     );
   });
 
+  it("does not offer the TR connection for a TR child account (Kinderdepot)", async () => {
+    renderEdit({
+      id: "p-tr-kid",
+      name: "TR Kinderdepot",
+      baseCurrency: "EUR",
+      portfolioType: "child",
+      birthYear: 2020,
+      brokerage: "Trade Republic",
+      accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
+      contributionMode: "auto",
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    // The connect section is suppressed and an explanatory note is shown instead.
+    expect(screen.getByText(m.trChildUnsupported)).toBeInTheDocument();
+    expect(screen.queryByText(m.trSectionTitle)).not.toBeInTheDocument();
+    expect(getTrConnection).not.toHaveBeenCalled();
+  });
+
   it("does not show the TR section for a non-TR portfolio", async () => {
     renderEdit({
       id: "p1",

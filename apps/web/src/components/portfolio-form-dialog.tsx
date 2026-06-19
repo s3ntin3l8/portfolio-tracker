@@ -91,8 +91,15 @@ export function PortfolioFormDialog({
   const isTr = resolveBrokerage(brokerage)?.key === "trade-republic";
   // In edit mode the portfolio already exists; in create mode it exists after creation.
   const effectivePortfolio = mode === "edit" ? portfolio : createdPortfolio;
-  // Show the TR section only once we have a real portfolio id to bind against.
-  const showTrSection = effectivePortfolio != null && isTr;
+  // Trade Republic can't sync child accounts (Kinderdepot). Gate the connect section on the
+  // *saved* type so the offer never disagrees with the backend guard that rejects such
+  // bindings (#199); use the live form `type` only for the explanatory note, which is
+  // cosmetic and should also be right while creating a child portfolio before its first save.
+  const isTrChildSaved = isTr && effectivePortfolio?.portfolioType === "child";
+  const showTrChildNote = isTr && type === "child";
+  // Show the TR section only once we have a real portfolio id to bind against, and never
+  // for a TR child account.
+  const showTrSection = effectivePortfolio != null && isTr && !isTrChildSaved;
 
   // Fetch (or re-fetch) the TR connection when the dialog is open and the section is
   // visible, or when onChanged fires (trFetchSeq bump). Gating on `open` matters: it
@@ -272,8 +279,12 @@ export function PortfolioFormDialog({
               ))}
             </datalist>
             {/* Hint shown only in create mode before the portfolio has been saved. */}
-            {isTr && !effectivePortfolio && (
+            {isTr && !effectivePortfolio && !showTrChildNote && (
               <p className="text-xs text-muted-foreground">{t("trConnectAfterSave")}</p>
+            )}
+            {/* TR can't sync child accounts — explain instead of offering the connection. */}
+            {showTrChildNote && (
+              <p className="text-xs text-muted-foreground">{t("trChildUnsupported")}</p>
             )}
           </div>
 

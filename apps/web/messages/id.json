@@ -204,6 +204,7 @@
     "contributionModeHint": "Cara halaman Tabungan menghitung kontribusi. \"Setoran\" memakai setoran tunai (atau pembelian rencana tabungan bila tidak ada) — tepat saat Anda mengimpor rekening kas. Pilih \"Setiap pembelian\" untuk akun khusus investasi yang diimpor tanpa kas pendananya (mis. snapshot depot), agar pembelian sekali jalan tetap dihitung.",
     "trSectionTitle": "Koneksi Trade Republic",
     "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
+    "trChildUnsupported": "Trade Republic belum bisa menyinkronkan akun anak (Kinderdepot) — impor lewat CSV atau PDF saja.",
     "trLoading": "Memuat koneksi…",
     "done": "Selesai"
   },

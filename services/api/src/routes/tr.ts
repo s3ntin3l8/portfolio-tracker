@@ -54,13 +54,13 @@ export async function trRoute(app: FastifyInstance) {
     return conn ?? null;
   }
 
-  async function ownsPortfolio(userId: string, portfolioId: string) {
+  async function lookupPortfolio(userId: string, portfolioId: string) {
     const [p] = await app.db
-      .select({ id: portfolios.id })
+      .select({ id: portfolios.id, portfolioType: portfolios.portfolioType })
       .from(portfolios)
       .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, userId)))
       .limit(1);
-    return Boolean(p);
+    return p ?? null;
   }
 
   // Current connection state (no secrets).
@@ -91,8 +91,15 @@ export async function trRoute(app: FastifyInstance) {
       return reply.code(503).send({ error: "encryption_required" });
     }
     const body = connectBodySchema.parse(request.body);
-    if (!(await ownsPortfolio(id, body.portfolioId))) {
+    const portfolio = await lookupPortfolio(id, body.portfolioId);
+    if (!portfolio) {
       return reply.code(404).send({ error: "portfolio_not_found" });
+    }
+    // Trade Republic child accounts (Kinderdepot) cannot be synced — TR exposes no
+    // account selector via the API pytr uses, so a binding here would never pull data.
+    // Refuse the connection rather than let the user pair into a dead end (see #123, #199).
+    if (portfolio.portfolioType === "child") {
+      return reply.code(422).send({ error: "tr_child_account_unsupported" });
     }
 
     request.log.info(

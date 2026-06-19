@@ -154,6 +154,28 @@ describe("Trade Republic connection (encryption enabled)", () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it("422s when pairing into a Trade Republic child account (Kinderdepot)", async () => {
+    const t = await token("tr-child");
+    const created = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Kid", baseCurrency: "EUR", portfolioType: "child", birthYear: 2020 },
+    });
+    const portfolioId = created.json().id;
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+4915112345678", pin: "1234", portfolioId },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toEqual({ error: "tr_child_account_unsupported" });
+    // No connection row should have been created.
+    const conn = await app.inject({ method: "GET", url: "/tr/connection", headers: auth(t) });
+    expect(conn.json()).toMatchObject({ status: "disconnected" });
+  });
+
   it("409s on verify when no pairing is in progress", async () => {
     const t = await token("tr-nopair");
     const res = await app.inject({
