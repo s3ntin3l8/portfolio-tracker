@@ -46,6 +46,13 @@ Target one workspace with `--workspace @portfolio/<name>` (e.g.
 
 Local backing services: `docker compose up -d postgres minio` (then `npm run dev`).
 
+> **Known dev flake:** on `npm run dev` the API (`tsx watch`) can crash once at
+> startup with `SyntaxError: … does not provide an export named …` from a
+> `@portfolio/*` dist file. This is a benign race: `tsc --watch` is mid-emitting
+> `dist/` when `tsx` first loads the module graph. It self-recovers on `tsc`'s next
+> emit (usually within a few seconds). If the API stays unreachable, check for a
+> stale `tsx watch` process holding the port before re-running.
+
 ## Conventions
 
 - **ESM throughout** (`"type": "module"`); `.ts` sources import with `.js` specifiers
@@ -75,7 +82,7 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   root Vitest `thresholds` (fails `test:coverage` locally) and `coverage-fail-under: 70`
   in CI. **Keep it green: new code lands with tests.** Excluded from the gate:
   entrypoints/CLIs (`server.ts`, `db/seed.ts`) and framework boilerplate
-  (`app/**`, `middleware.ts`, `i18n/**`, configs, `*.d.ts`).
+  (`app/**`, `proxy.ts`, `i18n/**`, configs, `*.d.ts`).
 - **API/packages:** Node env. The API uses embedded **PGlite** (`pglite://` URLs) so
   tests need no external Postgres; routes use `app.inject()`.
 - **Web:** **jsdom + React Testing Library** (`@vitejs/plugin-react`). Render client

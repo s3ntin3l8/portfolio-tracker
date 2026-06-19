@@ -37,7 +37,7 @@ export default defineConfig({
         // can't reliably instrument JSX in the aggregate run, so they're kept out of
         // the % gate (their tests still run). Pure web logic (lib/) stays gated.
         "apps/web/src/app/**",
-        "apps/web/src/middleware.ts",
+        "apps/web/src/proxy.ts",
         "apps/web/src/i18n/**",
         "apps/web/src/components/**",
         // NextAuth framework config (provider wiring) — covered by live login / e2e.
