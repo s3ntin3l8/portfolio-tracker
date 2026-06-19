@@ -120,11 +120,14 @@ export const portfolios = pgTable(
     // which portfolio a screenshot belongs to when the account number appears in the document.
     accountNumber: text("account_number"),
     includeInAggregate: boolean("include_in_aggregate").notNull().default(true),
-    // How the Savings page counts contributions for this portfolio (see
-    // `@portfolio/core` contributionStats): "auto" prefers deposits and falls back to
-    // savings-plan buys; "purchases" counts every buy + savings_plan (for invest-only
-    // accounts imported without their funding cash leg, e.g. a DKB depot snapshot).
-    contributionMode: text("contribution_mode").notNull().default("auto"),
+    // Where this portfolio's investment boundary sits (see `@portfolio/core`
+    // contributionStats and the "one boundary per portfolio" rule in CLAUDE.md).
+    // `true` = cash is INSIDE the boundary (Tagesgeld/Festgeld/savings depot):
+    // contribution = net external cash (deposits − withdrawals), and net worth
+    // includes cash. `false` = cash is OUTSIDE (mixed/checking, invest-only):
+    // contribution = net invested capital, cash is excluded from this portfolio's
+    // net worth. Income is never a contribution in either case.
+    cashCounted: boolean("cash_counted").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

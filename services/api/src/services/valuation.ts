@@ -39,6 +39,7 @@ export async function valuePortfolio(
   portfolioId: string,
   displayCurrency: string,
   costBasisMode?: CostBasisMode,
+  cashCounted = true,
 ): Promise<Valuation> {
   const rows = await db
     .select()
@@ -93,6 +94,7 @@ export async function valuePortfolio(
     currency: r.currency,
     executedAt: r.executedAt,
     loanId: r.loanId,
+    kind: r.kind,
   }));
 
   // Resolve FX so holdings/cash in other currencies convert to the display currency
@@ -111,6 +113,7 @@ export async function valuePortfolio(
     displayCurrency,
     fx,
     costBasisMode,
+    cashCounted,
   });
   return { coreTxns, summary, metaById };
 }

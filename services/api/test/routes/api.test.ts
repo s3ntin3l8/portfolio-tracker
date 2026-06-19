@@ -325,9 +325,11 @@ describe("auth + portfolios + transactions", () => {
       unit: "shares",
     });
     expect(summary.totalUnrealizedPnL).toBe("0");
-    // Bought without a prior cash deposit, so cash is negative and net worth nets to 0.
-    expect(summary.cash.IDR).toBe("-950000");
-    expect(summary.netWorth).toBe("0");
+    // Default boundary is cash-outside: uninvested (here negative) cash is excluded, so
+    // net worth is the securities sleeve only. This also avoids the negative-cash artifact
+    // from importing buys without their funding deposit.
+    expect(summary.cash.IDR).toBeUndefined();
+    expect(summary.netWorth).toBe("950000");
     // Day change from the fixture's prior close (BBCA 9000 → 9500): 100 × 500.
     expect(summary.holdings[0].previousClose).toBe("9000");
     expect(summary.holdings[0].dayChange).toBe("50000");
@@ -1108,7 +1110,7 @@ describe("auth + portfolios + transactions", () => {
           method: "POST",
           url: "/portfolios",
           headers: auth(t),
-          payload: { name, baseCurrency: "IDR" },
+          payload: { name, baseCurrency: "IDR", cashCounted: true },
         })
       ).json().id;
     const p1 = await mkPortfolio("One");
@@ -1644,7 +1646,7 @@ describe("auth + portfolios + transactions", () => {
         method: "POST",
         url: "/portfolios",
         headers: auth(t),
-        payload: { name: "USD cash", baseCurrency: "USD" },
+        payload: { name: "USD cash", baseCurrency: "USD", cashCounted: true },
       })
     ).json().id;
     await app.db
@@ -1800,7 +1802,7 @@ describe("auth + portfolios + transactions", () => {
         method: "POST",
         url: "/portfolios",
         headers: auth(t),
-        payload: { name: "Perf", baseCurrency: "IDR" },
+        payload: { name: "Perf", baseCurrency: "IDR", cashCounted: true },
       })
     ).json().id;
 

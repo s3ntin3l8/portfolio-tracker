@@ -100,12 +100,26 @@ const TX_COLS: ColDef<TxRow>[] = [
   { key: "source", get: (r) => r.source, type: "text" },
 ];
 
+// Cash/non-investment legs hidden by the "Investments only" filter. This is a pure
+// display filter — it never affects any computed figure (see CLAUDE.md "one boundary
+// per portfolio"; counting is set by the portfolio's cash boundary, not this toggle).
+const NON_INVESTMENT_TYPES = new Set([
+  "deposit",
+  "withdrawal",
+  "fee",
+  "interest",
+  "loan_drawdown",
+  "loan_repayment",
+]);
+
 export function TransactionsTable({
   rows,
   showPortfolio = false,
+  defaultInvestmentsOnly = false,
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
+  defaultInvestmentsOnly?: boolean;
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -120,6 +134,13 @@ export function TransactionsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [investmentsOnly, setInvestmentsOnly] = useState(defaultInvestmentsOnly);
+
+  // Display-only filter; does not touch any calculation.
+  const visibleRows = useMemo(
+    () => (investmentsOnly ? rows.filter((r) => !NON_INVESTMENT_TYPES.has(r.type)) : rows),
+    [rows, investmentsOnly],
+  );
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
@@ -127,7 +148,7 @@ export function TransactionsTable({
     [locale],
   );
 
-  const allSelected = rows.length > 0 && selected.size === rows.length;
+  const allSelected = visibleRows.length > 0 && selected.size === visibleRows.length;
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -139,7 +160,7 @@ export function TransactionsTable({
   }
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)));
+    setSelected(allSelected ? new Set() : new Set(visibleRows.map((r) => r.id)));
   }
 
   async function onBatchDelete() {
@@ -172,6 +193,23 @@ export function TransactionsTable({
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-1 text-sm">
+        <Button
+          size="sm"
+          variant={investmentsOnly ? "ghost" : "secondary"}
+          onClick={() => setInvestmentsOnly(false)}
+        >
+          {t("filterAll")}
+        </Button>
+        <Button
+          size="sm"
+          variant={investmentsOnly ? "secondary" : "ghost"}
+          onClick={() => setInvestmentsOnly(true)}
+        >
+          {t("filterInvestments")}
+        </Button>
+      </div>
+
       {selected.size > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card/60 px-4 py-2 text-sm">
           <span className="text-muted-foreground">
@@ -241,7 +279,7 @@ export function TransactionsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sort(rows).map((tx) => {
+            {sort(visibleRows).map((tx) => {
               const Icon = SOURCE_ICON[tx.source] ?? PencilLine;
               const qty = Number(tx.quantity);
               const price = Number(tx.price);
@@ -323,7 +361,7 @@ export function TransactionsTable({
                 </TableRow>
               );
             })}
-            {rows.length === 0 && (
+            {visibleRows.length === 0 && (
               <TableRow>
                 <TableCell
                   colSpan={colSpan}

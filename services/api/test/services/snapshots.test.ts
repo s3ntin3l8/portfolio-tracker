@@ -26,7 +26,7 @@ describe("recordDailySnapshots", () => {
       .returning();
     const [p] = await db
       .insert(portfolios)
-      .values({ userId: u.id, name: "Snap", baseCurrency: "IDR" })
+      .values({ userId: u.id, name: "Snap", baseCurrency: "IDR", cashCounted: true })
       .returning();
     portfolioId = p.id;
     const [bbca] = await db

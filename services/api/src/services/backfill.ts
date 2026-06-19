@@ -15,6 +15,7 @@ import {
   corporateActions,
   dividendEvents,
   instruments,
+  portfolios,
   portfolioSnapshots,
   prices,
   scrapedQuotes,
@@ -63,6 +64,14 @@ export async function backfillPortfolioHistory(
     .where(eq(transactions.portfolioId, portfolioId));
 
   if (txRows.length === 0) return { instruments: 0, days: 0, truncated: [] };
+
+  // Cash is part of historical net worth only when inside this portfolio's boundary.
+  const [pf] = await db
+    .select({ cashCounted: portfolios.cashCounted })
+    .from(portfolios)
+    .where(eq(portfolios.id, portfolioId))
+    .limit(1);
+  const cashCounted = pf?.cashCounted ?? true;
 
   // Inception = earliest transaction date, unless fromDate narrows it.
   const inceptionMs = Math.min(...txRows.map((r) => r.executedAt.getTime()));
@@ -392,7 +401,9 @@ export async function backfillPortfolioHistory(
       const p = priceAt(h.instrumentId, flow.date);
       if (p) pricesForDate[h.instrumentId] = { price: p.close, currency: p.currency };
     }
-    const cash = cashBalances(coreTxns.filter((t) => t.executedAt <= asOf));
+    const cash = cashCounted
+      ? cashBalances(coreTxns.filter((t) => t.executedAt <= asOf))
+      : {};
     const fx = fxAt(flow.date);
     const nw = netWorth({
       holdings: holdingsAtDate,

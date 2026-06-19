@@ -68,6 +68,13 @@ export interface SummarizeInput {
   fx?: FxRateFn;
   /** Cost-basis presentation for financed holdings. Defaults to "purchase_price". */
   costBasisMode?: CostBasisMode;
+  /**
+   * Whether cash is inside this portfolio's investment boundary (see CLAUDE.md
+   * "one boundary per portfolio"). When `false` (cash-outside: mixed/invest-only),
+   * uninvested cash is excluded from net worth and the cash map is emptied, so the
+   * value reflects the securities sleeve only. Defaults to `true`.
+   */
+  cashCounted?: boolean;
 }
 
 /**
@@ -181,7 +188,11 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     };
   });
 
-  const cash = cashBalances(input.transactions);
+  // Cash is part of net worth only when it is inside the portfolio's boundary.
+  // For cash-outside portfolios the value is the securities sleeve only — this also
+  // avoids a negative-cash artifact when buys are imported without funding deposits.
+  const cashCounted = input.cashCounted ?? true;
+  const cash = cashCounted ? cashBalances(input.transactions) : {};
   for (const [ccy, amount] of Object.entries(cash)) {
     addExposure(ccy, convert(amount, ccy, input.displayCurrency, fx));
   }

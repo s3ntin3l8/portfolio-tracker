@@ -251,6 +251,23 @@ describe("summarizePortfolio", () => {
     expect(summary.netWorth).toBe("5199000"); // 1,650,000 + 3,549,000
   });
 
+  it("excludes cash from net worth when cashCounted is false (cash-outside boundary)", () => {
+    const txs: CoreTransaction[] = [
+      mk({ type: "deposit", instrumentId: null, price: "5000000" }),
+      mk({ type: "buy", quantity: "100", price: "9500", executedAt: new Date("2026-01-02") }),
+    ];
+    const summary = summarizePortfolio({
+      transactions: txs,
+      prices: { [I1]: { price: "11000", currency: "IDR" } },
+      displayCurrency: "IDR",
+      cashCounted: false,
+    });
+    // Cash is outside the boundary: the map is empty and net worth is the securities sleeve.
+    expect(summary.cash).toEqual({});
+    expect(summary.totalMarketValue).toBe("1100000"); // 100 * 11000
+    expect(summary.netWorth).toBe("1100000"); // cash (4,050,000) excluded
+  });
+
   it("sums dividend and coupon cash as total income", () => {
     const summary = summarizePortfolio({
       transactions: [

@@ -26,12 +26,12 @@ async function token(sub: string) {
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` });
 
-async function createPortfolio(t: string, name: string) {
+async function createPortfolio(t: string, name: string, cashCounted = false) {
   const res = await app.inject({
     method: "POST",
     url: "/portfolios",
     headers: auth(t),
-    payload: { name, baseCurrency: "idr" },
+    payload: { name, baseCurrency: "idr", cashCounted },
   });
   return res.json().id as string;
 }
@@ -66,18 +66,19 @@ describe("contribution analytics", () => {
     delete process.env.RATE_LIMIT_MAX;
   });
 
-  it("derives per-portfolio contributions (deposit preferred over the plan buy in a month)", async () => {
+  it("derives per-portfolio contributions (cash-outside counts the invested savings-plan buys)", async () => {
     const t = await token("saver");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert user
-    const pf = await createPortfolio(t, "Child A");
+    const pf = await createPortfolio(t, "Child A"); // default cash-outside
 
     const [bbca] = await app.db
       .insert(instruments)
       .values({ symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR", name: "BCA" })
       .returning();
 
-    // Two months, each funded by a deposit then invested via a savings plan. The
-    // deposit and the plan buy describe the SAME money, so the month counts once.
+    // Two months, each funded by a deposit then invested via a savings plan. Cash-outside
+    // counts the invested capital (the plan buys) and ignores the deposits — counting the
+    // same money once, from the securities side.
     for (const month of ["2026-01", "2026-02"]) {
       await postTx(t, pf, {
         type: "deposit",
@@ -116,9 +117,10 @@ describe("contribution analytics", () => {
     expect(typeof c.seedAnnualReturn).toBe("string");
   });
 
-  it("aggregates contributions across all of the user's portfolios", async () => {
-    const t = await token("saver"); // same user as above (1 existing portfolio)
-    const pf2 = await createPortfolio(t, "Child B");
+  it("aggregates contributions across boundaries (cash-outside buys + cash-inside deposit)", async () => {
+    const t = await token("saver"); // same user as above (1 existing cash-outside portfolio)
+    // A cash-inside savings account whose deposit IS the contribution.
+    const pf2 = await createPortfolio(t, "Child B", true);
     await postTx(t, pf2, {
       type: "deposit",
       price: "5000",
@@ -133,7 +135,9 @@ describe("contribution analytics", () => {
     });
     expect(res.statusCode).toBe(200);
     const c = res.json();
-    expect(c.totalContributed).toBe("24000"); // 19000 + 5000
+    // 19000 from the cash-outside portfolio's buys + 5000 from the cash-inside deposit;
+    // each portfolio is computed under its own boundary, then merged.
+    expect(c.totalContributed).toBe("24000");
     expect(c.monthsActive).toBe(3); // Jan, Feb, Mar
     expect(c.monthlyAverage).toBe("8000"); // 24000 / 3
   });
@@ -220,7 +224,7 @@ describe("contribution analytics", () => {
     expect(reverted.json().birthYear).toBeNull();
   });
 
-  it("counts one-off buys only under contributionMode 'purchases' (round-trips the column)", async () => {
+  it("counts one-off buys only when cash is outside the boundary (round-trips cashCounted)", async () => {
     const t = await token("investonly");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     const [tlkm] = await app.db
@@ -228,24 +232,25 @@ describe("contribution analytics", () => {
       .values({ symbol: "TLKM", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom" })
       .returning();
 
-    // A portfolio created with the purchases mode — and it must ride create + list.
+    // A cash-outside portfolio (the default) — the buys are the invested capital. The flag
+    // must ride create + list.
     const created = await app.inject({
       method: "POST",
       url: "/portfolios",
       headers: auth(t),
-      payload: { name: "Invest-only", baseCurrency: "idr", contributionMode: "purchases" },
+      payload: { name: "Invest-only", baseCurrency: "idr", cashCounted: false },
     });
-    expect(created.json().contributionMode).toBe("purchases");
-    const purchasesPf = created.json().id as string;
+    expect(created.json().cashCounted).toBe(false);
+    const outsidePf = created.json().id as string;
     const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
     expect(
-      list.json().find((p: { id: string }) => p.id === purchasesPf).contributionMode,
-    ).toBe("purchases");
+      list.json().find((p: { id: string }) => p.id === outsidePf).cashCounted,
+    ).toBe(false);
 
-    // An "auto" portfolio (the default) with the SAME buy-only data.
-    const autoPf = await createPortfolio(t, "Auto buys");
+    // A cash-inside portfolio with the SAME buy-only data — buys are internal there.
+    const insidePf = await createPortfolio(t, "Cash inside", true);
 
-    for (const pf of [purchasesPf, autoPf]) {
+    for (const pf of [outsidePf, insidePf]) {
       for (const month of ["2026-01", "2026-02"]) {
         await postTx(t, pf, {
           type: "buy",
@@ -258,23 +263,23 @@ describe("contribution analytics", () => {
       }
     }
 
-    const purchases = await app.inject({
+    const outside = await app.inject({
       method: "GET",
-      url: `/portfolios/${purchasesPf}/contributions`,
+      url: `/portfolios/${outsidePf}/contributions`,
       headers: auth(t),
     });
-    expect(purchases.json().totalContributed).toBe("19000"); // both buys counted
-    expect(purchases.json().monthsActive).toBe(2);
+    expect(outside.json().totalContributed).toBe("19000"); // both buys counted
+    expect(outside.json().monthsActive).toBe(2);
 
-    const autoRes = await app.inject({
+    const inside = await app.inject({
       method: "GET",
-      url: `/portfolios/${autoPf}/contributions`,
+      url: `/portfolios/${insidePf}/contributions`,
       headers: auth(t),
     });
-    expect(autoRes.json().totalContributed).toBe("0"); // auto ignores plain buys
+    expect(inside.json().totalContributed).toBe("0"); // cash-inside ignores buys (no deposits)
   });
 
-  it("merges per-portfolio modes in the aggregate (auto deposit + purchases buy)", async () => {
+  it("merges per-portfolio boundaries in the aggregate (cash-inside deposit + cash-outside buy)", async () => {
     const t = await token("mixed");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     const [tlkm] = await app.db
@@ -282,22 +287,15 @@ describe("contribution analytics", () => {
       .values({ symbol: "TLKM2", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom2" })
       .returning();
 
-    // Auto portfolio funded by a deposit; purchases portfolio funded by a one-off buy.
-    const autoPf = await createPortfolio(t, "Auto");
-    await postTx(t, autoPf, {
+    // Cash-inside portfolio funded by a deposit; cash-outside portfolio funded by a one-off buy.
+    const insidePf = await createPortfolio(t, "Inside", true);
+    await postTx(t, insidePf, {
       type: "deposit",
       price: "5000",
       currency: "IDR",
       executedAt: "2026-01-05T00:00:00.000Z",
     });
-    const buyPf = (
-      await app.inject({
-        method: "POST",
-        url: "/portfolios",
-        headers: auth(t),
-        payload: { name: "Buys", baseCurrency: "idr", contributionMode: "purchases" },
-      })
-    ).json().id as string;
+    const buyPf = await createPortfolio(t, "Buys"); // cash-outside (default)
     await postTx(t, buyPf, {
       type: "buy",
       instrumentId: tlkm.id,

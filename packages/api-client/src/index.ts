@@ -179,9 +179,10 @@ export interface Portfolio {
   accountNumber: string | null;
   /** When false, this portfolio is excluded from the aggregate net-worth/performance view. */
   includeInAggregate: boolean;
-  /** How the Savings page counts contributions: "auto" (deposits, else plan buys) or
-   * "purchases" (every buy + savings_plan — for invest-only accounts). */
-  contributionMode: "auto" | "purchases";
+  /** Whether cash is inside this portfolio's investment boundary. `true` = savings/
+   * deposit account (contribution = net external cash, net worth includes cash);
+   * `false` = mixed/invest-only (contribution = net invested capital, cash excluded). */
+  cashCounted: boolean;
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */

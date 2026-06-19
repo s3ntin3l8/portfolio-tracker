@@ -244,6 +244,11 @@ export function parseTrCsv(content: string): CsvParseResult {
         unit: "shares",
         price: "0", // shares received with no cash consideration
         fees: "0",
+        // A FREE_RECEIPT is an inbound securities transfer — contributed capital at its
+        // carried cost basis (the user sets the price when editing). DIVIDEND_OPTION/
+        // _REINVESTMENT are reinvested income, not contributions, so they stay untagged.
+        // See CLAUDE.md "one boundary per portfolio".
+        kind: type === "FREE_RECEIPT" ? "transfer_in" : null,
       };
     } else if (UNSUPPORTED.has(type)) {
       fail(`${type}: ${UNSUPPORTED.get(type)}`);

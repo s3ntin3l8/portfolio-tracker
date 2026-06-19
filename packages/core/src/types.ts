@@ -30,6 +30,10 @@ export interface CoreTransaction {
   executedAt: Date;
   // Links a financing leg (and the financed buy) to its loan; null otherwise.
   loanId?: string | null;
+  // Optional source-set sub-classification (e.g. "saveback", "roundup", "transfer_in").
+  // Used to tell apart externally-funded purchases from broker-credited reinvestment
+  // when deriving contributions; null/undefined for plain transactions.
+  kind?: string | null;
 }
 
 export interface CorporateAction {

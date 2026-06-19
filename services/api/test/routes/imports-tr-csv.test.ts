@@ -98,8 +98,10 @@ describe("Trade Republic CSV import path", () => {
     expect(persisted).toMatchObject({ type: "dividend", tax: "0.59", fxRate: "1.103400" });
     expect(persisted.instrumentId).toBeTruthy();
 
-    // Contribution skew guard (auto mode): only the real €500 CUSTOMER_INPAYMENT counts.
-    // The saveback (now `interest`) and the synthetic buy must NOT inflate contributed total.
+    // A TR account is the mixed-cash case → cash-outside (the default), so contribution is
+    // the invested capital: the €241.52 buy (2 × 120.26 + €1 fee). The €500 deposit is
+    // ignored (cash outside the boundary), and the saveback (now `interest`) and the
+    // dividend are income — neither inflates the contributed total.
     const contrib = (
       await app.inject({
         method: "GET",
@@ -107,6 +109,6 @@ describe("Trade Republic CSV import path", () => {
         headers: auth(t),
       })
     ).json();
-    expect(contrib.totalContributed).toBe("500");
+    expect(contrib.totalContributed).toBe("241.52");
   });
 });

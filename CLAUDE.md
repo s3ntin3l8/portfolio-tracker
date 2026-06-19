@@ -68,6 +68,18 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   explicit currency.
 - **Transactions are the source of truth.** Holdings, P&L, cash balance, XIRR and net
   worth are derived in `packages/core` — never stored as primary state.
+- **One boundary per portfolio (contributions & performance).** Each portfolio declares
+  whether cash is *inside* its investment boundary (savings/deposit accounts — Tagesgeld,
+  Festgeld, a child's savings depot) or *outside* it (mixed/checking, invest-only) via the
+  `cashCounted` flag. **Contribution = net external cash crossing that boundary; the
+  performance value = what's inside it — same boundary for numerator and denominator,
+  always.** Cash-inside: contribution = deposits − withdrawals, value = net worth incl. cash.
+  Cash-outside: contribution = net invested capital (kind-aware buys − sells), value =
+  securities only, cash excluded from net worth. Never mix boundaries (cash in the value but
+  not the contribution, or vice versa) — that manufactures phantom gains. Income (dividends/
+  interest/coupons, `saveback`, bonus shares) is return, never contribution; an explicitly
+  tagged `transfer_in` is contributed capital at its carried cost basis. Lives in
+  `packages/core/src/contributions.ts` + the `boundaryFlows`/`summarizePortfolio` plumbing.
 - **Imports never auto-commit.** Screenshot/CSV parses become *draft* records that the
   user confirms before a transaction is written. Dedup runs at three levels: **file-level**
   (same file re-upload → `contentHash`), **within-source transaction-level** (the

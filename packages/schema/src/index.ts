@@ -86,9 +86,11 @@ export const portfolioInputSchema = z.object({
   // Whether this portfolio is included in the net-worth aggregate. Defaults to true
   // so new portfolios are counted without any explicit action.
   includeInAggregate: z.boolean().default(true),
-  // How the Savings page counts contributions: "auto" (deposits, else savings-plan
-  // buys) or "purchases" (every buy + savings_plan — for invest-only accounts).
-  contributionMode: z.enum(["auto", "purchases"]).default("auto"),
+  // Where this portfolio's investment boundary sits. `true` = cash inside the
+  // boundary (savings/deposit account): contribution = net external cash, net worth
+  // includes cash. `false` (default) = cash outside (mixed/invest-only): contribution
+  // = net invested capital, cash excluded from net worth.
+  cashCounted: z.boolean().default(false),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
@@ -104,7 +106,7 @@ export const portfolioPatchSchema = z.object({
   accountHolder: z.string().trim().nullable().optional(),
   accountNumber: z.string().trim().nullable().optional(),
   includeInAggregate: z.boolean().optional(),
-  contributionMode: z.enum(["auto", "purchases"]).optional(),
+  cashCounted: z.boolean().optional(),
 });
 export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 

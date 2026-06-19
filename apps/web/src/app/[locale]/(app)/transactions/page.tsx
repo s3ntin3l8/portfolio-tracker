@@ -32,6 +32,9 @@ export default async function TransactionsPage({
 
   let status: "ok" | "empty" | "unavailable";
   let rows: TxRow[] = [];
+  // For a single cash-outside portfolio, default the list to "Investments only" so the
+  // cash/spending noise is hidden; aggregate and cash-inside views default to "All".
+  let defaultInvestmentsOnly = false;
   if (aggregate) {
     const result = await loadTransactionsAcrossPortfolios();
     status = result.status;
@@ -42,6 +45,7 @@ export default async function TransactionsPage({
     );
     status = result.status;
     rows = result.status === "ok" ? result.data : [];
+    if (result.status === "ok") defaultInvestmentsOnly = !result.portfolio.cashCounted;
   }
 
   // Newest first.
@@ -133,7 +137,11 @@ export default async function TransactionsPage({
   return (
     <div className="space-y-6">
       {heading(addButton)}
-      <TransactionsTable rows={rows} showPortfolio={aggregate} />
+      <TransactionsTable
+        rows={rows}
+        showPortfolio={aggregate}
+        defaultInvestmentsOnly={defaultInvestmentsOnly}
+      />
     </div>
   );
 }

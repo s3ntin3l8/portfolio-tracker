@@ -31,6 +31,8 @@ export async function recordDailySnapshots(
       ttlMs,
       p.id,
       p.baseCurrency,
+      undefined,
+      p.cashCounted,
     );
 
     // Compute today's effectiveFlow: -Σ cashFlow(tx) for qualifying txns executed today.

@@ -21,6 +21,7 @@ import {
   trailingYield,
   aggregateIncome,
   convert,
+  cashFlow,
   contributionStats,
   mergeContributionStats,
   chainIndex,
@@ -93,6 +94,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     portfolioId: string,
     displayCurrency: string,
     costBasisMode?: CostBasisMode,
+    cashCounted = true,
   ) {
     return valuePortfolio(
       app.db,
@@ -101,6 +103,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       portfolioId,
       displayCurrency,
       costBasisMode,
+      cashCounted,
     );
   }
 
@@ -125,27 +128,62 @@ export async function transactionsRoute(app: FastifyInstance) {
     }));
   }
 
+  // Money-weighted flows for a portfolio's boundary (see CLAUDE.md "one boundary per
+  // portfolio"). The caller appends a terminal `boundaryValue` point. Sign convention
+  // (matching `externalFlows`): capital the investor commits is negative, money returned
+  // is positive.
+  // - inside: external cash crossing the cash+securities boundary (deposits/withdrawals).
+  // - outside: cash crossing the securities boundary — buys (−), sells (+), security
+  //   income dividend/coupon (+). `cashFlow` already carries the right sign per type.
+  //   Broker-credited reinvestment (`saveback`) is excluded so it shows as return in the
+  //   terminal value rather than as committed capital; cash `interest` stays outside.
+  async function boundaryFlows(
+    txns: CoreTransaction[],
+    boundary: "inside" | "outside",
+    target: string,
+  ): Promise<CashFlowPoint[]> {
+    if (boundary === "inside") return externalFlows(txns, target);
+    const isInvestmentFlow = (t: CoreTransaction): boolean => {
+      if (t.type === "sell" || t.type === "dividend" || t.type === "coupon") return true;
+      if (t.type === "buy" || t.type === "savings_plan") return t.kind !== "saveback";
+      if (t.type === "bonus") return t.kind === "transfer_in";
+      return false;
+    };
+    const relevant = txns.filter(isInvestmentFlow);
+    const rates = await getFxRates(
+      app.db,
+      [...new Set(relevant.map((t) => t.currency))],
+      target,
+    );
+    const fx = makeFxRateFn(rates, target);
+    return relevant.map((t) => ({
+      amount: Number(convert(cashFlow(t).toString(), t.currency, target, fx)),
+      date: t.executedAt,
+    }));
+  }
+
   // Wrap a (possibly merged) ContributionStats with the forecast seed — current value,
-  // simple gain, and money-weighted return (XIRR) against the portfolio's net worth.
+  // simple gain, and money-weighted return (XIRR). `currentValue` and `flows` are the
+  // boundary-consistent value and cash flows the caller computed (per portfolio, or
+  // concatenated across portfolios for the aggregate) — same boundary on both sides.
   function enrichContributions(
     stats: ContributionStats,
-    summary: PortfolioSummary,
+    currentValue: string,
+    flows: CashFlowPoint[],
     birthYear: number | null = null,
     portfolioType: "standard" | "child" = "standard",
   ) {
-    const currentValue = summary.netWorth;
     const net = Number(stats.netContributed);
     const simpleGainPct = net > 0 ? (Number(currentValue) - net) / net : null;
 
-    // Money-weighted return from the deduped monthly contributions (placed mid-
-    // month) against the current value — used to seed the forecast's return rate.
+    // Money-weighted return from the boundary flows against the current value —
+    // also used to seed the forecast's return rate.
     const asOf = new Date();
-    const flows: CashFlowPoint[] = stats.series.map((s) => ({
-      amount: -Number(s.contributed),
-      date: new Date(`${s.month}-15T00:00:00.000Z`),
-    }));
-    flows.push({ amount: Number(currentValue), date: asOf });
-    const rate = stats.series.length ? xirr(flows) : NaN;
+    const allFlows: CashFlowPoint[] = [
+      ...flows,
+      { amount: Number(currentValue), date: asOf },
+    ];
+    const rate = flows.length ? xirr(allFlows) : NaN;
     const xirrVal = Number.isFinite(rate) ? rate : null;
     const seedAnnualReturn =
       xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5 ? xirrVal.toString() : "0.07";
@@ -162,34 +200,23 @@ export async function transactionsRoute(app: FastifyInstance) {
     };
   }
 
-  // Contribution analytics (total/average money saved + per-month series) plus a
-  // forecast seed (current value, simple gain, money-weighted return). Derived
-  // entirely from transactions; FX-converts each amount to the display currency.
+  // Contribution analytics (total/average money invested + per-month series) plus a
+  // forecast seed (current value, simple gain, money-weighted return) for ONE portfolio.
+  // Derived entirely from transactions; FX-converts each amount to the display currency.
   async function buildContributions(
     coreTxns: CoreTransaction[],
     summary: PortfolioSummary,
     display: string,
     birthYear: number | null = null,
     portfolioType: "standard" | "child" = "standard",
-    mode: "auto" | "purchases" = "auto",
+    boundary: "inside" | "outside" = "inside",
   ) {
-    const ccys = [
-      ...new Set(
-        coreTxns
-          .filter(
-            (t) =>
-              t.type === "deposit" ||
-              t.type === "savings_plan" ||
-              t.type === "withdrawal" ||
-              (mode === "purchases" && t.type === "buy"),
-          )
-          .map((t) => t.currency),
-      ),
-    ];
+    const ccys = [...new Set(coreTxns.map((t) => t.currency))];
     const rates = await getFxRates(app.db, ccys, display);
     const fx = makeFxRateFn(rates, display);
-    const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx, mode });
-    return enrichContributions(stats, summary, birthYear, portfolioType);
+    const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx, boundary });
+    const flows = await boundaryFlows(coreTxns, boundary, display);
+    return enrichContributions(stats, summary.netWorth, flows, birthYear, portfolioType);
   }
 
   // Income analytics for a set of valued transactions: per-year/-month totals, TTM,
@@ -630,6 +657,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolioId,
         portfolio.baseCurrency,
         costBasisFromQuery(request.query),
+        portfolio.cashCounted,
       );
       return {
         ...summary,
@@ -690,9 +718,15 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
+      const boundary = portfolio.cashCounted ? "inside" : "outside";
+      const { coreTxns, summary } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
+      );
 
-      const flows = await externalFlows(coreTxns, portfolio.baseCurrency);
+      const flows = await boundaryFlows(coreTxns, boundary, portfolio.baseCurrency);
       const asOf = new Date();
       flows.push({ amount: Number(summary.netWorth), date: asOf });
 
@@ -716,14 +750,19 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
+      const { coreTxns, summary } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
+      );
       return buildContributions(
         coreTxns,
         summary,
         portfolio.baseCurrency,
         portfolio.birthYear,
         portfolio.portfolioType === "child" ? "child" : "standard",
-        portfolio.contributionMode === "purchases" ? "purchases" : "auto",
+        portfolio.cashCounted ? "inside" : "outside",
       );
     },
   );
@@ -746,12 +785,20 @@ export async function transactionsRoute(app: FastifyInstance) {
       const pfs = await app.db.select().from(portfolios).where(eq(portfolios.userId, id));
 
       const summaries = [];
-      const flowTxns: CoreTransaction[] = [];
       const instrumentIds = new Set<string>();
+      // Each portfolio's money-weighted flows are computed under its own boundary
+      // (cash-inside vs cash-outside), then concatenated — the aggregate spans
+      // portfolios with different boundaries, so there is no single boundary to pass.
+      const flows: CashFlowPoint[] = [];
       for (const p of pfs) {
-        const { coreTxns, summary } = await loadValuation(p.id, display, costBasisMode);
+        const { coreTxns, summary } = await loadValuation(
+          p.id,
+          display,
+          costBasisMode,
+          p.cashCounted,
+        );
         summaries.push(summary);
-        flowTxns.push(...coreTxns);
+        flows.push(...(await boundaryFlows(coreTxns, p.cashCounted ? "inside" : "outside", display)));
         for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
       }
 
@@ -762,8 +809,6 @@ export async function transactionsRoute(app: FastifyInstance) {
         instrument: meta.get(h.instrumentId) ?? null,
       }));
 
-      // Flows across all portfolios, each FX-converted to the display currency.
-      const flows = await externalFlows(flowTxns, display);
       const asOf = new Date();
       flows.push({ amount: Number(aggregated.netWorth), date: asOf });
       const rate = xirr(flows);
@@ -790,14 +835,14 @@ export async function transactionsRoute(app: FastifyInstance) {
     const display = u?.displayCurrency ?? "IDR";
 
     const pfs = await app.db
-      .select({ id: portfolios.id })
+      .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
       .from(portfolios)
       .where(eq(portfolios.userId, id));
 
     const summaries = [];
     const allTxns: CoreTransaction[] = [];
     for (const p of pfs) {
-      const { coreTxns, summary } = await loadValuation(p.id, display);
+      const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
       summaries.push(summary);
       allTxns.push(...coreTxns);
     }
@@ -817,7 +862,12 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns, summary } = await loadValuation(portfolioId, portfolio.baseCurrency);
+      const { coreTxns, summary } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
+      );
       return buildIncomeStats(coreTxns, summary, portfolio.baseCurrency);
     },
   );
@@ -834,41 +884,39 @@ export async function transactionsRoute(app: FastifyInstance) {
     const display = u?.displayCurrency ?? "IDR";
 
     const pfs = await app.db
-      .select({ id: portfolios.id, contributionMode: portfolios.contributionMode })
+      .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
       .from(portfolios)
       .where(eq(portfolios.userId, id));
 
     const summaries: PortfolioSummary[] = [];
-    const loaded: { txns: CoreTransaction[]; mode: "auto" | "purchases" }[] = [];
+    const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = [];
     const allTxns: CoreTransaction[] = [];
     for (const p of pfs) {
-      const { coreTxns, summary } = await loadValuation(p.id, display);
+      const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
       summaries.push(summary);
-      loaded.push({ txns: coreTxns, mode: p.contributionMode === "purchases" ? "purchases" : "auto" });
+      loaded.push({ txns: coreTxns, boundary: p.cashCounted ? "inside" : "outside" });
       allTxns.push(...coreTxns);
     }
-    // FX once for every currency that can contribute (incl. buys, used only by purchases mode).
-    const ccys = [
-      ...new Set(
-        allTxns
-          .filter(
-            (t) =>
-              t.type === "deposit" ||
-              t.type === "savings_plan" ||
-              t.type === "withdrawal" ||
-              t.type === "buy",
-          )
-          .map((t) => t.currency),
-      ),
-    ];
-    const fx = makeFxRateFn(await getFxRates(app.db, ccys, display), display);
-    // Compute each portfolio under ITS mode, then merge — so a portfolio's deposit-vs-plan
-    // dedup isn't lost in a single cross-portfolio bucket.
-    const perPortfolio = loaded.map(({ txns, mode }) =>
-      contributionStats({ txns, displayCurrency: display, fx, mode }),
+    const fx = makeFxRateFn(
+      await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
+      display,
     );
+    // Compute each portfolio under ITS boundary, then merge — so each portfolio keeps its
+    // own boundary instead of being collapsed into one cross-portfolio bucket.
+    const perPortfolio = loaded.map(({ txns, boundary }) =>
+      contributionStats({ txns, displayCurrency: display, fx, boundary }),
+    );
+    // Money-weighted flows: each portfolio under its boundary, concatenated.
+    const flows: CashFlowPoint[] = [];
+    for (const { txns, boundary } of loaded) {
+      flows.push(...(await boundaryFlows(txns, boundary, display)));
+    }
     const aggregated = aggregatePortfolios(summaries, display);
-    return enrichContributions(mergeContributionStats(perPortfolio, display), aggregated);
+    return enrichContributions(
+      mergeContributionStats(perPortfolio, display),
+      aggregated.netWorth,
+      flows,
+    );
   });
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
