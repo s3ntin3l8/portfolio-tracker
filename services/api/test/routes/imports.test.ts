@@ -953,6 +953,100 @@ describe("CSV import → confirm flow", () => {
 
     void p2; // both portfolios were created
   });
+
+  // IDX KIK ETF upgrade (#120): a CSV draft whose type is mutual_fund but whose ticker
+  // matches the IDX ETF convention should be stored as etf, not mutual_fund.
+  it("classifies an IDX KIK ETF ticker (XIIT) as etf even when the CSV row says mutual_fund", async () => {
+    const t = await token("idx-etf-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "ETF Portfolio", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    const etfCsv = [
+      "date,action,assetClass,ticker,name,quantity,unit,price,fees,currency",
+      "2026-01-15,buy,mutual_fund,XIIT,Premier ETF IDX30,100,shares,1500,0,IDR",
+    ].join("\n");
+
+    const { importId, drafts } = (
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: etfCsv },
+      })
+    ).json();
+    expect(drafts).toHaveLength(1);
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: drafts },
+    });
+    expect(confirm.statusCode).toBe(201);
+
+    // The stored instrument must be classed etf (not mutual_fund).
+    const found = (
+      await app.inject({
+        method: "GET",
+        url: `/instruments?q=XIIT`,
+        headers: auth(t),
+      })
+    ).json() as { symbol: string; assetClass: string }[];
+    expect(found.length).toBeGreaterThan(0);
+    expect(found[0].assetClass).toBe("etf");
+  });
+
+  it("keeps a genuine open-end reksa dana (non-ETF ticker) as mutual_fund after CSV confirm", async () => {
+    const t = await token("idx-fund-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Fund Portfolio", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // SCHRODER is a fund code that doesn't match the X / R- pattern.
+    const fundCsv = [
+      "date,action,assetClass,ticker,name,quantity,unit,price,fees,currency",
+      "2026-01-15,buy,mutual_fund,SCHRODER,Schroder Dana Prestasi,100,shares,20000,0,IDR",
+    ].join("\n");
+
+    const { importId, drafts } = (
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: fundCsv },
+      })
+    ).json();
+    expect(drafts).toHaveLength(1);
+
+    const confirm = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: drafts },
+    });
+    expect(confirm.statusCode).toBe(201);
+
+    const found = (
+      await app.inject({
+        method: "GET",
+        url: `/instruments?q=SCHRODER`,
+        headers: auth(t),
+      })
+    ).json() as { symbol: string; assetClass: string }[];
+    expect(found.length).toBeGreaterThan(0);
+    expect(found[0].assetClass).toBe("mutual_fund");
+  });
 });
 
 describe("screenshot import → confirm flow", () => {

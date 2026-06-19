@@ -129,32 +129,70 @@ export function eodhdExchangeForMarket(market: string): string | undefined {
 }
 
 /**
+ * IDX KIK ETFs (exchange-traded reksa dana) carry a "Reksa Dana" type with no ETF token,
+ * but their tickers follow IDX's ETF convention: an "R-" prefix (e.g. R-LQ45X) or an
+ * "X"-prefixed 4-char code (XIIT, XIJI, XIIC, XISC, XNVE). Open-end reksa dana are
+ * NAV-keyed by fund code/name and never carry an IDX exchange ticker, so this predicate
+ * stays clear of them. Encodes Premier/IPIM's convention — an ETF from an issuer not
+ * following it would be missed (a known-symbol list would be more precise but
+ * higher-maintenance).
+ */
+export function isIdxEtfSymbol(symbol: string | undefined | null): boolean {
+  const s = (symbol ?? "").trim().toUpperCase();
+  return /^R-/.test(s) || /^X[A-Z]{3}$/.test(s);
+}
+
+/**
  * Normalise a provider's instrument-type/security-type string to our `AssetClass`.
  * Falls back to `equity` (the dominant case) when the type is missing or unknown.
+ *
+ * Pass `opts.symbol` + `opts.market` to activate the IDX KIK ETF heuristic: when the type
+ * resolves to `mutual_fund` but the symbol matches the IDX ETF ticker convention on the IDX
+ * market, the result is upgraded to `etf`.
  */
-export function assetClassFromType(type: string | undefined | null): AssetClass {
+export function assetClassFromType(
+  type: string | undefined | null,
+  opts?: { symbol?: string | null; market?: string | null },
+): AssetClass {
   const t = (type ?? "").toLowerCase();
   // "etf"/"etp"/"exchange traded" must be checked before "mutual"/"reksa": a UCITS ETF
   // reports OpenFIGI securityType "ETP" (with securityType2 "Mutual Fund"), and an
   // Indonesian exchange-traded reksa dana reads "exchange traded" — both are ETFs.
+  let base: AssetClass;
   if (
     t.includes("etf") ||
     t.includes("etp") ||
     t.includes("fund of") ||
     t.includes("exchange traded") ||
     t.includes("exchange-traded")
-  )
-    return "etf";
-  if (t.includes("mutual") || t.includes("reksa")) return "mutual_fund";
-  if (t.includes("bond") || t.includes("note") || t.includes("govt") || t.includes("corp"))
-    return "bond";
-  if (t.includes("crypto") || t.includes("digital currency")) return "crypto";
-  if (
+  ) {
+    base = "etf";
+  } else if (t.includes("mutual") || t.includes("reksa")) {
+    base = "mutual_fund";
+  } else if (
+    t.includes("bond") ||
+    t.includes("note") ||
+    t.includes("govt") ||
+    t.includes("corp")
+  ) {
+    base = "bond";
+  } else if (t.includes("crypto") || t.includes("digital currency")) {
+    base = "crypto";
+  } else if (
     t.includes("future") ||
     t.includes("option") ||
     t.includes("warrant") ||
     t.includes("derivative")
-  )
-    return "derivative";
-  return "equity";
+  ) {
+    base = "derivative";
+  } else {
+    base = "equity";
+  }
+  // IDX KIK ETF upgrade: a reksa-dana-typed symbol whose ticker matches the IDX ETF
+  // convention is an exchange-traded fund, not an open-end fund. Gated on market === "IDX"
+  // so a foreign mutual_fund whose symbol happens to match the pattern (e.g. NYSE "X") is
+  // never reclassified. (#120)
+  if (base === "mutual_fund" && opts?.market === "IDX" && isIdxEtfSymbol(opts.symbol))
+    return "etf";
+  return base;
 }

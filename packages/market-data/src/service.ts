@@ -126,7 +126,7 @@ export class MarketDataService {
       symbol: resolved.symbol,
       name: resolved.name ?? resolved.symbol,
       market: info?.market ?? resolved.exchange,
-      assetClass: assetClassFromType(resolved.type),
+      assetClass: assetClassFromType(resolved.type, { symbol: resolved.symbol, market: info?.market }),
       currency: info?.currency ?? "USD",
       isin,
       source: provider.name,

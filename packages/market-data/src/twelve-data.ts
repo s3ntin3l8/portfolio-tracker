@@ -102,7 +102,7 @@ export class TwelveDataProvider implements MarketDataProvider {
         symbol: d.symbol,
         name: d.instrument_name ?? d.symbol,
         market: info?.market ?? d.exchange ?? d.mic_code ?? "",
-        assetClass: assetClassFromType(d.instrument_type),
+        assetClass: assetClassFromType(d.instrument_type, { symbol: d.symbol, market: info?.market }),
         currency,
         source: this.name,
       });

@@ -12,6 +12,7 @@ export { CoinGeckoProvider, CRYPTO_MARKET, type CoinGeckoOptions } from "./coing
 export {
   mapExchange,
   assetClassFromType,
+  isIdxEtfSymbol,
   yahooSuffixForMarket,
   eodhdExchangeForMarket,
   resolveCryptoIsin,

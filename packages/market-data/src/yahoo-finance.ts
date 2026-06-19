@@ -207,7 +207,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
         symbol,
         name: q.longname ?? q.shortname ?? symbol,
         market: info.market,
-        assetClass: assetClassFromType(q.quoteType),
+        assetClass: assetClassFromType(q.quoteType, { symbol, market: info.market }),
         currency: info.currency,
         source: this.name,
       });

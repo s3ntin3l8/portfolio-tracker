@@ -30,7 +30,7 @@ import {
   marketForEuInstrument,
 } from "../services/instruments.js";
 import { getMarketData } from "../services/market-data.js";
-import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS } from "@portfolio/market-data";
+import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS, isIdxEtfSymbol } from "@portfolio/market-data";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -632,6 +632,13 @@ export async function importsRoute(app: FastifyInstance) {
             : marketForAssetClass(d.assetClass ?? "equity");
           let instrumentCurrency = d.currency;
           let assetClass = d.assetClass ?? "equity";
+
+          // IDX KIK ETFs read "Reksa Dana" in screenshots so the parser tags them
+          // mutual_fund. Their ticker reveals the truth — reclassify so they group under
+          // ETFs, not reksa dana. Gated on !isEu + market === "IDX" so EU mutual funds
+          // whose symbols might match the pattern are never touched. (#120)
+          if (!isEu && assetClass === "mutual_fund" && market === "IDX" && isIdxEtfSymbol(symbol))
+            assetClass = "etf";
 
           if (isEu && d.isin) {
             const r = await resolveEuIsin(d.isin);

@@ -14,6 +14,7 @@ import {
   EodhdProvider,
   CoinGeckoProvider,
   assetClassFromType,
+  isIdxEtfSymbol,
   mapExchange,
   resolveCryptoIsin,
   PRICEABLE_FOREIGN_MARKETS,
@@ -1046,6 +1047,63 @@ describe("assetClassFromType", () => {
   it("defaults unknown/empty types to equity", () => {
     expect(assetClassFromType("Common Stock")).toBe("equity");
     expect(assetClassFromType(null)).toBe("equity");
+  });
+
+  // IDX KIK ETF heuristic (#120): plain "Reksa Dana" type + IDX ETF ticker → etf.
+  it("upgrades a 'Reksa Dana' type to etf when the IDX symbol matches the ETF ticker convention", () => {
+    expect(assetClassFromType("Reksa Dana", { symbol: "XIIT", market: "IDX" })).toBe("etf");
+    expect(assetClassFromType("Reksa Dana", { symbol: "XIJI", market: "IDX" })).toBe("etf");
+    expect(assetClassFromType("Reksa Dana", { symbol: "R-LQ45X", market: "IDX" })).toBe("etf");
+  });
+
+  it("keeps a genuine open-end reksa dana as mutual_fund even with IDX market context", () => {
+    // NAV-keyed fund codes are never 4-char X-prefixed or R- prefixed.
+    expect(assetClassFromType("Reksa Dana", { symbol: "SCHRODER-DANA-PRESTASI", market: "IDX" })).toBe(
+      "mutual_fund",
+    );
+    expect(assetClassFromType("Reksa Dana", { symbol: "BBCA", market: "IDX" })).toBe("mutual_fund");
+  });
+
+  it("does NOT upgrade a non-IDX mutual_fund even if the symbol pattern matches (false-positive guard)", () => {
+    // E.g. NYSE "X" (US Steel) should never become etf.
+    expect(assetClassFromType("Mutual Fund", { symbol: "XYZW", market: "US" })).toBe("mutual_fund");
+    expect(assetClassFromType("Reksa Dana", { symbol: "XIIT", market: "XETRA" })).toBe("mutual_fund");
+  });
+
+  it("remains backwards-compatible when opts are omitted (no reclassification without market context)", () => {
+    // Existing callers that pass only a type string should be unaffected.
+    expect(assetClassFromType("Reksa Dana")).toBe("mutual_fund");
+    expect(assetClassFromType("Mutual Fund")).toBe("mutual_fund");
+  });
+});
+
+describe("isIdxEtfSymbol", () => {
+  it("recognises X-prefixed 4-char IDX ETF tickers", () => {
+    expect(isIdxEtfSymbol("XIIT")).toBe(true);
+    expect(isIdxEtfSymbol("XIJI")).toBe(true);
+    expect(isIdxEtfSymbol("XIIC")).toBe(true);
+    expect(isIdxEtfSymbol("XISC")).toBe(true);
+    expect(isIdxEtfSymbol("XNVE")).toBe(true);
+  });
+
+  it("recognises R- prefixed IDX ETF tickers", () => {
+    expect(isIdxEtfSymbol("R-LQ45X")).toBe(true);
+  });
+
+  it("rejects ordinary IDX equity tickers", () => {
+    expect(isIdxEtfSymbol("BBCA")).toBe(false);
+    expect(isIdxEtfSymbol("TLKM")).toBe(false);
+  });
+
+  it("rejects open-end reksa dana NAV codes", () => {
+    expect(isIdxEtfSymbol("RD-PRINCIPAL")).toBe(false);
+    expect(isIdxEtfSymbol("SCHRODER-DANA-PRESTASI")).toBe(false);
+  });
+
+  it("rejects null/undefined/empty", () => {
+    expect(isIdxEtfSymbol(null)).toBe(false);
+    expect(isIdxEtfSymbol(undefined)).toBe(false);
+    expect(isIdxEtfSymbol("")).toBe(false);
   });
 });
 
