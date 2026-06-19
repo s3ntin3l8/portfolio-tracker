@@ -28,6 +28,7 @@ export async function portfoliosRoute(app: FastifyInstance) {
         accountHolder: input.accountHolder ?? null,
         accountNumber: input.accountNumber ?? null,
         includeInAggregate: input.includeInAggregate,
+        contributionMode: input.contributionMode,
       })
       .returning();
     reply.code(201);

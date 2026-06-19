@@ -43,6 +43,7 @@ export {
 } from "./income.js";
 export {
   contributionStats,
+  mergeContributionStats,
   type ContributionInput,
   type ContributionStats,
 } from "./contributions.js";

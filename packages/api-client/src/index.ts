@@ -172,6 +172,9 @@ export interface Portfolio {
   accountNumber: string | null;
   /** When false, this portfolio is excluded from the aggregate net-worth/performance view. */
   includeInAggregate: boolean;
+  /** How the Savings page counts contributions: "auto" (deposits, else plan buys) or
+   * "purchases" (every buy + savings_plan — for invest-only accounts). */
+  contributionMode: "auto" | "purchases";
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */

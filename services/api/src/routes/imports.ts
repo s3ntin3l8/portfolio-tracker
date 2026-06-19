@@ -20,6 +20,8 @@ import {
 } from "../services/parsers/gold-contract.js";
 import { parseCsv } from "../services/parsers/csv.js";
 import { parseDkb } from "../services/parsers/dkb.js";
+import { detectDkbPdf, parseDkbPdf } from "../services/parsers/dkb-pdf.js";
+import { extractPdfText } from "../services/parsers/pdf-text.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
@@ -289,8 +291,25 @@ export async function importsRoute(app: FastifyInstance) {
       }
 
       let parsed;
+      // Deterministic fast-path for DKB securities PDFs (Wertpapierabrechnung /
+      // Dividendengutschrift / Ausschüttung): parse the text layer exactly — no LLM call,
+      // no billing, no data egress. Falls through to vision for any non-DKB / scanned PDF.
+      if (mimeType === "application/pdf") {
+        try {
+          const text = await extractPdfText(buf);
+          if (detectDkbPdf(text)) {
+            const { drafts: dkbDrafts, accountNumber: dkbAccount } = parseDkbPdf(text);
+            if (dkbDrafts.length > 0) {
+              request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
+              parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
+            }
+          }
+        } catch (err) {
+          request.log.warn({ err }, "DKB PDF text parse failed; falling back to vision");
+        }
+      }
       try {
-        parsed = await app.screenshotParser.parse({ data: buf, mimeType }, request.log);
+        parsed ??= await app.screenshotParser.parse({ data: buf, mimeType }, request.log);
       } catch (err) {
         // Extract the provider HTTP status from the thrown message (e.g. "claude_vision_error_429")
         // and surface it in the response so the client can display a meaningful per-file reason.

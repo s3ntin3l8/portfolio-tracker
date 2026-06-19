@@ -176,6 +176,13 @@
       "when": 1781867844601,
       "tag": "0024_awesome_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781880354548,
+      "tag": "0025_breezy_gertrude_yorkes",
+      "breakpoints": true
     }
   ]
 }

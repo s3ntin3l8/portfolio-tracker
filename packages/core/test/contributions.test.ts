@@ -75,4 +75,29 @@ describe("contributionStats", () => {
     expect(s.monthlyAverage).toBe("0");
     expect(s.series).toEqual([]);
   });
+
+  it('"auto" mode ignores plain buys (a depot-snapshot import counts nothing)', () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-15") }),
+      tx({ type: "buy", quantity: "2", price: "100", executedAt: new Date("2026-02-15") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR" });
+    expect(s.totalContributed).toBe("0");
+    expect(s.monthsActive).toBe(0);
+  });
+
+  it('"purchases" mode counts every buy + savings_plan, ignoring deposits', () => {
+    const txns: CoreTransaction[] = [
+      // A deposit that would, under "auto", suppress the same-month buy — ignored here.
+      tx({ type: "deposit", price: "9999", executedAt: new Date("2026-01-05") }),
+      tx({ type: "buy", quantity: "5", price: "100", fees: "1", executedAt: new Date("2026-01-15") }),
+      tx({ type: "savings_plan", quantity: "2", price: "100", executedAt: new Date("2026-02-15") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", mode: "purchases" });
+    // Jan buy 501 + Feb plan 200 = 701; the 9999 deposit is not counted.
+    expect(s.totalContributed).toBe("701");
+    expect(s.monthsActive).toBe(2);
+    expect(s.series[0]).toEqual({ month: "2026-01", contributed: "501" });
+    expect(s.series[1]).toEqual({ month: "2026-02", contributed: "200" });
+  });
 });

@@ -29,7 +29,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 /** The portfolio fields the edit form pre-fills. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber" | "includeInAggregate"
+  "id" | "name" | "baseCurrency" | "portfolioType" | "birthYear" | "brokerage" | "accountHolder" | "accountNumber" | "includeInAggregate" | "contributionMode"
 >;
 
 /**
@@ -74,6 +74,9 @@ export function PortfolioFormDialog({
   const [accountHolder, setAccountHolder] = useState(portfolio?.accountHolder ?? "");
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
   const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
+  const [contributionMode, setContributionMode] = useState<"auto" | "purchases">(
+    portfolio?.contributionMode ?? "auto",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -129,6 +132,7 @@ export function PortfolioFormDialog({
       setAccountHolder(portfolio?.accountHolder ?? "");
       setAccountNumber(portfolio?.accountNumber ?? "");
       setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
+      setContributionMode(portfolio?.contributionMode ?? "auto");
       setError(false);
       setConfirmDelete(false);
       setCreatedPortfolio(null);
@@ -155,6 +159,7 @@ export function PortfolioFormDialog({
       accountHolder: accountHolder.trim() || null,
       accountNumber: accountNumber.trim() || null,
       includeInAggregate,
+      contributionMode,
     };
     try {
       if (mode === "edit" && portfolio) {
@@ -333,6 +338,19 @@ export function PortfolioFormDialog({
               <p className="text-xs text-muted-foreground">{t("birthYearHint")}</p>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="portfolio-contribution-mode">{t("contributionMode")}</Label>
+            <Select
+              id="portfolio-contribution-mode"
+              value={contributionMode}
+              onChange={(e) => setContributionMode(e.target.value as "auto" | "purchases")}
+            >
+              <option value="auto">{t("contributionModeAuto")}</option>
+              <option value="purchases">{t("contributionModePurchases")}</option>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("contributionModeHint")}</p>
+          </div>
 
           <div className="flex items-center gap-3">
             <input

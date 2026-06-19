@@ -22,12 +22,14 @@ import {
   aggregateIncome,
   convert,
   contributionStats,
+  mergeContributionStats,
   chainIndex,
   aggregateValueFlows,
   type CoreTransaction,
   type CostBasisMode,
   type CorporateAction,
   type CashFlowPoint,
+  type ContributionStats,
   type PortfolioSummary,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
@@ -123,29 +125,14 @@ export async function transactionsRoute(app: FastifyInstance) {
     }));
   }
 
-  // Contribution analytics (total/average money saved + per-month series) plus a
-  // forecast seed (current value, simple gain, money-weighted return). Derived
-  // entirely from transactions; FX-converts each amount to the display currency.
-  async function buildContributions(
-    coreTxns: CoreTransaction[],
+  // Wrap a (possibly merged) ContributionStats with the forecast seed — current value,
+  // simple gain, and money-weighted return (XIRR) against the portfolio's net worth.
+  function enrichContributions(
+    stats: ContributionStats,
     summary: PortfolioSummary,
-    display: string,
     birthYear: number | null = null,
     portfolioType: "standard" | "child" = "standard",
   ) {
-    const ccys = [
-      ...new Set(
-        coreTxns
-          .filter(
-            (t) => t.type === "deposit" || t.type === "savings_plan" || t.type === "withdrawal",
-          )
-          .map((t) => t.currency),
-      ),
-    ];
-    const rates = await getFxRates(app.db, ccys, display);
-    const fx = makeFxRateFn(rates, display);
-    const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx });
-
     const currentValue = summary.netWorth;
     const net = Number(stats.netContributed);
     const simpleGainPct = net > 0 ? (Number(currentValue) - net) / net : null;
@@ -173,6 +160,36 @@ export async function transactionsRoute(app: FastifyInstance) {
       portfolioType,
       asOf: asOf.toISOString(),
     };
+  }
+
+  // Contribution analytics (total/average money saved + per-month series) plus a
+  // forecast seed (current value, simple gain, money-weighted return). Derived
+  // entirely from transactions; FX-converts each amount to the display currency.
+  async function buildContributions(
+    coreTxns: CoreTransaction[],
+    summary: PortfolioSummary,
+    display: string,
+    birthYear: number | null = null,
+    portfolioType: "standard" | "child" = "standard",
+    mode: "auto" | "purchases" = "auto",
+  ) {
+    const ccys = [
+      ...new Set(
+        coreTxns
+          .filter(
+            (t) =>
+              t.type === "deposit" ||
+              t.type === "savings_plan" ||
+              t.type === "withdrawal" ||
+              (mode === "purchases" && t.type === "buy"),
+          )
+          .map((t) => t.currency),
+      ),
+    ];
+    const rates = await getFxRates(app.db, ccys, display);
+    const fx = makeFxRateFn(rates, display);
+    const stats = contributionStats({ txns: coreTxns, displayCurrency: display, fx, mode });
+    return enrichContributions(stats, summary, birthYear, portfolioType);
   }
 
   // Income analytics for a set of valued transactions: per-year/-month totals, TTM,
@@ -706,6 +723,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolio.baseCurrency,
         portfolio.birthYear,
         portfolio.portfolioType === "child" ? "child" : "standard",
+        portfolio.contributionMode === "purchases" ? "purchases" : "auto",
       );
     },
   );
@@ -816,19 +834,41 @@ export async function transactionsRoute(app: FastifyInstance) {
     const display = u?.displayCurrency ?? "IDR";
 
     const pfs = await app.db
-      .select({ id: portfolios.id })
+      .select({ id: portfolios.id, contributionMode: portfolios.contributionMode })
       .from(portfolios)
       .where(eq(portfolios.userId, id));
 
     const summaries: PortfolioSummary[] = [];
+    const loaded: { txns: CoreTransaction[]; mode: "auto" | "purchases" }[] = [];
     const allTxns: CoreTransaction[] = [];
     for (const p of pfs) {
       const { coreTxns, summary } = await loadValuation(p.id, display);
       summaries.push(summary);
+      loaded.push({ txns: coreTxns, mode: p.contributionMode === "purchases" ? "purchases" : "auto" });
       allTxns.push(...coreTxns);
     }
+    // FX once for every currency that can contribute (incl. buys, used only by purchases mode).
+    const ccys = [
+      ...new Set(
+        allTxns
+          .filter(
+            (t) =>
+              t.type === "deposit" ||
+              t.type === "savings_plan" ||
+              t.type === "withdrawal" ||
+              t.type === "buy",
+          )
+          .map((t) => t.currency),
+      ),
+    ];
+    const fx = makeFxRateFn(await getFxRates(app.db, ccys, display), display);
+    // Compute each portfolio under ITS mode, then merge — so a portfolio's deposit-vs-plan
+    // dedup isn't lost in a single cross-portfolio bucket.
+    const perPortfolio = loaded.map(({ txns, mode }) =>
+      contributionStats({ txns, displayCurrency: display, fx, mode }),
+    );
     const aggregated = aggregatePortfolios(summaries, display);
-    return buildContributions(allTxns, aggregated, display);
+    return enrichContributions(mergeContributionStats(perPortfolio, display), aggregated);
   });
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each

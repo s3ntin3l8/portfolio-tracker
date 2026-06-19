@@ -30,6 +30,8 @@ export default defineConfig({
         "services/api/src/db/scrape.ts",
         // Provider wiring depends on env keys + network; covered by live use.
         "services/api/src/services/market-data.ts",
+        // Thin `unpdf` I/O glue (PDF→text); the DKB parser it feeds is fully unit-tested.
+        "services/api/src/services/parsers/pdf-text.ts",
         // pg-boss glue needs external Postgres; the refresh logic it runs
         // (refresh.ts / market-hours.ts) is unit-tested independently.
         "services/api/src/services/scheduler.ts",
