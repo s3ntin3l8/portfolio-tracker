@@ -74,8 +74,17 @@ async def _attach_details(tr, events):
                 "timelineDetailV2",
                 match=lambda s: s.get("id") == event_id,
             )
-        except Exception:  # noqa: BLE001 - details are best-effort
+        except Exception as exc:  # noqa: BLE001 - details are best-effort
+            # A transient TR backend error (or a 30s silent timeout) leaves this event
+            # without its enrichment (shares/tax/fx/venue → null). Surface which event so a
+            # thin draft is explained rather than silently shipped; it self-heals on the
+            # next sync that re-fetches the detail (until the event is confirmed/discarded).
             event["details"] = None
+            print(
+                f"detail fetch failed for {event_id} "
+                f"({event.get('eventType')}): {exc}",
+                file=sys.stderr,
+            )
     return events
 
 
