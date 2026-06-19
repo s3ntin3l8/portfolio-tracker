@@ -387,6 +387,44 @@ describe("ClaudeVisionParser — DKB enrichment round-trip", () => {
       total: "97.49",
     });
   });
+
+  it("preserves a foreign-dividend income row (net price, gross total, Quellensteuer tax, FX)", async () => {
+    // Mirrors the Microsoft Ertragsabrechnung Dividenden: declared in USD, booked in EUR,
+    // German KapSt 0 (Sparer-Pauschbetrag) but 0.12 EUR foreign withholding. price MUST be
+    // the net Ausmachender Betrag (drives cashFlow), total the gross, tax the Quellensteuer.
+    const income = {
+      assetClass: "equity",
+      action: "dividend",
+      isin: "US5949181045",
+      wkn: "870747",
+      name: "MICROSOFT CORP.",
+      quantity: "0",
+      unit: "shares",
+      price: "0.65",
+      total: "0.77",
+      tax: "0.12",
+      fxRate: "1.1777",
+      currency: "EUR",
+      executedAt: "2025-12-12T00:00:00.000Z",
+      confidence: 0.95,
+    };
+    const parser = new ClaudeVisionParser("sk-test", {
+      fetch: mockFetch({
+        content: [{ type: "tool_use", input: { transactions: [income] } }],
+      }),
+    });
+    const { drafts } = await parser.parse(IMAGE);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({
+      action: "dividend",
+      quantity: "0",
+      price: "0.65",
+      total: "0.77",
+      tax: "0.12",
+      fxRate: "1.1777",
+      currency: "EUR",
+    });
+  });
 });
 
 describe("GeminiVisionParser", () => {

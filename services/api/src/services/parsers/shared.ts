@@ -37,14 +37,21 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
           name: { type: "string" },
           quantity: { type: "string", description: "Decimal string. Grams for gold." },
           unit: { type: "string", enum: ["shares", "grams", "units"] },
-          price: { type: "string", description: "Decimal string, price per unit." },
+          price: {
+            type: "string",
+            description:
+              "Decimal string. For a trade: price per unit. For an income row " +
+              "(dividend/coupon/interest, quantity 0): the NET amount actually credited " +
+              "(German 'Ausmachender Betrag'), in the booking currency.",
+          },
           fees: { type: "string", description: "Decimal string, default 0." },
-          total: { type: "string", description: "Decimal string, optional gross total." },
+          total: { type: "string", description: "Decimal string, optional gross total (before tax)." },
           tax: {
             type: "string",
             description:
-              "Decimal string. Total withholding/capital-gains tax deducted " +
-              "(e.g. German Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer, summed).",
+              "Decimal string. Total withholding/capital-gains tax deducted, summed — " +
+              "German Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer AND any " +
+              "foreign withholding tax (Quellensteuer / anrechenbare Quellensteuer).",
           },
           executedPrice: {
             type: "string",
@@ -150,10 +157,14 @@ export const EXTRACTION_PROMPT =
   "'1.234,56'), and a confidence between 0 and 1. Return the transactions.\n" +
   "Capture these enrichments when present: the order/document reference " +
   "(Ordernr/Auftragsnummer, Belegnr/Abrechnungsnr, booking ref) → externalId; withholding " +
-  "tax (Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer, summed) → tax; the " +
-  "trading venue/counterparty (Handels-/Ausführungsplatz, Gegenpartei) → venue; an FX rate " +
-  "(Devisenkurs) → fxRate. For a savings-plan execution (Sparplan / ETF-Sparplan) set " +
-  "action to 'savings_plan'.\n" +
+  "tax (Kapitalertragsteuer + Solidaritätszuschlag + Kirchensteuer, plus any foreign " +
+  "Quellensteuer, summed) → tax; the trading venue/counterparty (Handels-/Ausführungsplatz, " +
+  "Gegenpartei) → venue; an FX rate (Devisenkurs) → fxRate. For a savings-plan execution " +
+  "(Sparplan / ETF-Sparplan) set action to 'savings_plan'.\n" +
+  "For an income row (dividend / Ausschüttung / Dividendengutschrift / coupon / interest): " +
+  "set quantity to 0, put the NET amount credited ('Ausmachender Betrag') in price and the " +
+  "gross payout in total, use the currency the cash was booked in (e.g. EUR even if the " +
+  "dividend was declared in USD) and record the Devisenkurs in fxRate.\n" +
   "Also extract the account number (SID, IBAN, broker account ID, or similar) if one " +
   "appears on the document — set accountNumber to the verbatim value, or omit it if absent.\n" +
   "A document may span multiple pages forming ONE financed gold-purchase contract " +
