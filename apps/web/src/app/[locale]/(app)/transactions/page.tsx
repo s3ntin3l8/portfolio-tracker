@@ -122,12 +122,16 @@ export default async function TransactionsPage({
             isEmptyPortfolio ? te("noPortfolioBody") : te("noTransactionsBody")
           }
           action={
-            <Button asChild>
-              <Link href="/transactions/new">
-                <Plus className="size-4" />
-                {isEmptyPortfolio ? tm("createPortfolio") : tm("addTransaction")}
-              </Link>
-            </Button>
+            isEmptyPortfolio ? (
+              <Button asChild>
+                <Link href="/transactions/new">
+                  <Plus className="size-4" />
+                  {tm("createPortfolio")}
+                </Link>
+              </Button>
+            ) : (
+              <AddTransactionMenu />
+            )
           }
         />
       </div>
