@@ -348,6 +348,18 @@ export function ImportReview({
   const pct = (c: number) => t("confidence", { pct: Math.round(c * 100) });
   const dateOf = (d: ReviewDraft) => d.executedAt.slice(0, 10);
 
+  // Drafts flagged as cross-format duplicates (#196). They're excluded from the default
+  // "Confirm" (the parent handles that); here we badge them and explain the exclusion.
+  const duplicateCount = useMemo(
+    () => drafts.filter((d) => d.likelyDuplicate).length,
+    [drafts],
+  );
+  const dupLabel = (d: ReviewDraft) =>
+    t("review.duplicate", {
+      source: d.likelyDuplicate?.source ?? "—",
+      date: (d.likelyDuplicate?.executedAt ?? "").slice(0, 10),
+    });
+
   function draftCells(d: ReviewDraft, isSelected: boolean) {
     return (
       <>
@@ -361,9 +373,16 @@ export function ImportReview({
           />
         </TableCell>
         <TableCell>
-          <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
-            {pct(d.confidence)}
-          </Badge>
+          <div className="flex flex-col items-start gap-1">
+            <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
+              {pct(d.confidence)}
+            </Badge>
+            {d.likelyDuplicate && (
+              <Badge variant="warning" title={dupLabel(d)}>
+                {dupLabel(d)}
+              </Badge>
+            )}
+          </div>
         </TableCell>
         <TableCell>
           <Badge variant="outline">{d.assetClass}</Badge>
@@ -516,6 +535,7 @@ export function ImportReview({
               {d.wkn && (
                 <span className="font-mono text-muted-foreground">{d.wkn}</span>
               )}
+              {d.likelyDuplicate && <Badge variant="warning">{dupLabel(d)}</Badge>}
             </div>
             <div className="mt-1 tabular text-sm text-muted-foreground">
               {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
@@ -545,6 +565,14 @@ export function ImportReview({
       <p className="text-sm text-muted-foreground">
         {t("draftCount", { count: drafts.length })} — {t("reviewHint")}
       </p>
+
+      {/* Cross-format duplicate notice (#196): flagged rows are excluded from "Confirm";
+          to import one anyway the user selects it and uses "Confirm selected". */}
+      {duplicateCount > 0 && (
+        <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+          {t("review.duplicateNotice", { count: duplicateCount })}
+        </div>
+      )}
 
       {/* Issues: attention events become rows in the table (see below); only the count
           is shown here as a banner so users know to check the "needs review" filter.

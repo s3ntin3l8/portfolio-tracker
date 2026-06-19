@@ -69,8 +69,13 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 - **Transactions are the source of truth.** Holdings, P&L, cash balance, XIRR and net
   worth are derived in `packages/core` — never stored as primary state.
 - **Imports never auto-commit.** Screenshot/CSV parses become *draft* records that the
-  user confirms before a transaction is written; imports are idempotent. Raw
-  screenshots are deleted after a confirmed parse (parsed JSON is kept).
+  user confirms before a transaction is written. Dedup runs at three levels: **file-level**
+  (same file re-upload → `contentHash`), **within-source transaction-level** (the
+  `(portfolioId, source, externalId)` unique index + `onConflictDoNothing`), and
+  **cross-source economic** (a source-independent `(instrument, type, day, qty, price)`
+  fingerprint flags likely CSV-vs-PDF re-imports in the review screen, count-aware so
+  genuine same-day repeats aren't suppressed). Raw screenshots are deleted after a
+  confirmed parse (parsed JSON is kept).
 - **Tests** live in each workspace's `test/`. The API uses an embedded **PGlite**
   Postgres (`pglite://` URLs) so tests need no external DB; `app.inject()` for routes.
 - Config is read from `app.config` (typed in `services/api/src/plugins/env.ts`), not

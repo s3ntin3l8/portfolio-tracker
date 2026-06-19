@@ -350,7 +350,14 @@
         "mapSave": "Tambahkan ke draf",
         "attentionHint": "lihat baris tabel di bawah (filter perlu diperiksa)"
       },
-      "empty": "Tidak ada draf yang cocok dengan filter Anda."
+      "empty": "Tidak ada draf yang cocok dengan filter Anda.",
+      "duplicate": "Sudah diimpor · {source} · {date}",
+      "duplicateNotice": "{count, plural, other {# draf}} sepertinya sudah pernah diimpor dan tidak akan ditambahkan oleh Konfirmasi. Untuk tetap menambahkannya, pilih draf tersebut lalu gunakan \"Konfirmasi terpilih\"."
+    },
+    "accountMismatch": {
+      "otherPortfolio": "Berkas ini (rekening {account}) sepertinya milik \"{portfolio}\". Tetap impor ke portofolio yang dipilih?",
+      "noMatch": "Nomor rekening pada berkas ini ({account}) tidak cocok dengan portofolio yang dipilih. Tetap impor?",
+      "importAnyway": "Tetap impor"
     },
     "discard": "Buang",
     "confirm": "Konfirmasi",

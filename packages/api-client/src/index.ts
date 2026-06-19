@@ -497,20 +497,48 @@ export interface ContributionStats {
   asOf: string;
 }
 
+/** A draft transaction matched a transaction already committed to the candidate portfolio
+ * — likely a cross-format re-import (#196). The review screen pre-deselects these. */
+export interface LikelyDuplicate {
+  /** Source of the already-committed transaction (e.g. "csv", "screenshot"). */
+  source: string | null;
+  /** When the already-committed transaction executed (ISO date). */
+  executedAt: string;
+}
+
+/** A draft enriched with a cross-source duplicate hint (otherwise a plain ParsedTransaction). */
+export type DraftTransaction = ParsedTransaction & { likelyDuplicate?: LikelyDuplicate };
+
+/** Verdict that a file's account number conflicts with the chosen portfolio (#197). */
+export interface AccountMismatch {
+  /** `other_portfolio`: the file matches a *different* portfolio (named below).
+   *  `no_match`: no portfolio matches, but the selected one has a differing account number. */
+  kind: "other_portfolio" | "no_match";
+  /** The likely-owner portfolio (only for `other_portfolio`). */
+  matchedPortfolioId?: string;
+  matchedName?: string;
+  /** The account number detected on the file. */
+  detected: string;
+}
+
 export interface CsvImportResult {
   importId: string;
-  drafts: ParsedTransaction[];
+  drafts: DraftTransaction[];
   contracts: ParsedGoldContract[];
   errors: ImportIssue[];
   /** True when the exact file was already uploaded and the existing draft was returned. */
   alreadyExists?: boolean;
   /** True when the exact file was already uploaded and fully confirmed. */
   alreadyConfirmed?: boolean;
+  /** Portfolio whose accountNumber matched the file's detected account, if any. */
+  matchedPortfolioId?: string | null;
+  /** Set when the file's account looks like it belongs to a different portfolio. */
+  accountMismatch?: AccountMismatch | null;
 }
 
 export interface ScreenshotImportResult {
   importId: string;
-  drafts: ParsedTransaction[];
+  drafts: DraftTransaction[];
   /** Financed gold-purchase contracts (Pegadaian/Galeri 24 cicilan). */
   contracts: ParsedGoldContract[];
   errors: ImportIssue[];
@@ -520,6 +548,8 @@ export interface ScreenshotImportResult {
   alreadyConfirmed?: boolean;
   /** Portfolio whose accountNumber matched the document's detected account, if any. */
   matchedPortfolioId?: string | null;
+  /** Set when the file's account looks like it belongs to a different portfolio. */
+  accountMismatch?: AccountMismatch | null;
 }
 
 /** A past import in the user's history (draft, confirmed, or discarded). */
@@ -539,7 +569,7 @@ export interface ImportDetail {
   portfolioId: string | null;
   parser: string;
   status: "draft" | "confirmed" | "discarded";
-  drafts: ParsedTransaction[];
+  drafts: DraftTransaction[];
   contracts: ParsedGoldContract[];
   errors: ImportIssue[];
 }
@@ -618,6 +648,29 @@ export function apiErrorCode(err: unknown): string | null {
       typeof (parsed as { error: unknown }).error === "string"
     ) {
       return (parsed as { error: string }).error;
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return null;
+}
+
+/**
+ * Extract the account-mismatch verdict from a thrown 409 (`{ error: "account_mismatch", … }`).
+ * Returns null for any other error so callers can `if (accountMismatchFromError(err))` to
+ * detect and re-prompt with `acknowledgeAccountMismatch`. (#197)
+ */
+export function accountMismatchFromError(err: unknown): AccountMismatch | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  try {
+    const parsed: unknown = JSON.parse(err.body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as { error?: unknown }).error === "account_mismatch"
+    ) {
+      const { error: _omit, ...rest } = parsed as Record<string, unknown>;
+      return rest as unknown as AccountMismatch;
     }
   } catch {
     // body wasn't JSON — fall through
@@ -822,11 +875,12 @@ export function createApiClient(config: ApiClientConfig) {
       transactions: ParsedTransaction[],
       contracts: ParsedGoldContract[] = [],
       portfolioId?: string,
+      acknowledgeAccountMismatch = false,
     ) =>
-      request<{ confirmed: number; transactions: Transaction[] }>(
+      request<{ confirmed: number; transactions: Transaction[]; likelyDuplicates: number }>(
         "POST",
         `/imports/${importId}/confirm`,
-        { portfolioId, transactions, contracts },
+        { portfolioId, transactions, contracts, acknowledgeAccountMismatch },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */

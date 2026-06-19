@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq, ne } from "drizzle-orm";
 import {
+  instruments,
   loans,
   portfolios,
   screenshotImports,
@@ -12,6 +13,7 @@ import {
   parsedGoldContractSchema,
   parsedTransactionSchema,
   type AssetClass,
+  type ParsedTransaction,
 } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import {
@@ -26,7 +28,11 @@ import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { parseTrCsv } from "../services/parsers/tr-csv.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
-import { assignContentExternalIds, shortHash } from "../services/parsers/hash.js";
+import {
+  assignContentExternalIds,
+  economicFingerprint,
+  shortHash,
+} from "../services/parsers/hash.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -74,6 +80,9 @@ const confirmBodySchema = z.object({
   // Financed gold-purchase contracts (Pegadaian/Galeri24 cicilan). Each becomes a
   // loan row plus its derived legs.
   contracts: z.array(parsedGoldContractSchema).default([]),
+  // Set true to proceed past an account-number mismatch (the file looks like it belongs
+  // to a different portfolio). The server otherwise refuses with 409 (#197).
+  acknowledgeAccountMismatch: z.boolean().default(false),
 });
 
 export async function importsRoute(app: FastifyInstance) {
@@ -114,24 +123,148 @@ export async function importsRoute(app: FastifyInstance) {
   }
 
   /**
-   * Find the portfolio whose accountNumber matches the detected value (exact normalized
-   * match). Returns null when no account number was detected, no portfolio has one, or
-   * more than one portfolio matches (ambiguous → no prefill).
+   * Do two account identifiers refer to the same account? Exact normalized match, or a
+   * suffix match (one is the tail of the other, ≥6 chars) so a full IBAN in one document
+   * matches a short depot/Kontonummer in another (e.g. DKB IBAN `DE78…1066505387` vs the
+   * stored Kontonummer `1066505387`). Blank on either side never matches.
+   */
+  function accountsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+    const na = normalizeAccountNumber(a);
+    const nb = normalizeAccountNumber(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na];
+    return short.length >= 6 && long.endsWith(short);
+  }
+
+  /**
+   * Find the portfolio whose accountNumber matches the detected value. Returns null when
+   * no account number was detected, no portfolio has one, or more than one portfolio
+   * matches (ambiguous → no prefill). Uses {@link accountsMatch} so IBAN-vs-depot still routes.
    */
   async function matchAccountNumber(
     userId: string,
     detected: string | null | undefined,
   ): Promise<string | null> {
-    const normalizedDetected = normalizeAccountNumber(detected);
-    if (!normalizedDetected) return null;
+    if (!normalizeAccountNumber(detected)) return null;
     const rows = await app.db
       .select({ id: portfolios.id, accountNumber: portfolios.accountNumber })
       .from(portfolios)
       .where(eq(portfolios.userId, userId));
-    const matches = rows.filter(
-      (p) => normalizeAccountNumber(p.accountNumber) === normalizedDetected,
-    );
+    const matches = rows.filter((p) => accountsMatch(p.accountNumber, detected));
     return matches.length === 1 ? (matches[0]?.id ?? null) : null;
+  }
+
+  /**
+   * Verdict on whether a file's detected account number conflicts with the *selected*
+   * target portfolio (#197). Returns null when there's nothing to warn about (no detected
+   * number, it matches the selected portfolio, or there's nothing comparable on either
+   * side). Otherwise names the likely-owner portfolio (`other_portfolio`) or flags a soft
+   * mismatch when the selected portfolio's own account number differs (`no_match`).
+   */
+  async function accountMismatchVerdict(
+    userId: string,
+    detected: string | null | undefined,
+    selectedPortfolioId: string,
+  ): Promise<
+    | { kind: "other_portfolio"; matchedPortfolioId: string; matchedName: string; detected: string }
+    | { kind: "no_match"; detected: string }
+    | null
+  > {
+    if (!normalizeAccountNumber(detected)) return null;
+    const rows = await app.db
+      .select({ id: portfolios.id, name: portfolios.name, accountNumber: portfolios.accountNumber })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
+    const selected = rows.find((p) => p.id === selectedPortfolioId);
+    if (selected && accountsMatch(selected.accountNumber, detected)) return null;
+    const other = rows.find(
+      (p) => p.id !== selectedPortfolioId && accountsMatch(p.accountNumber, detected),
+    );
+    if (other) {
+      return {
+        kind: "other_portfolio",
+        matchedPortfolioId: other.id,
+        matchedName: other.name,
+        detected: detected as string,
+      };
+    }
+    // No portfolio matches: warn only when the selected portfolio has its own (differing)
+    // account number — otherwise there's nothing to compare against.
+    if (selected?.accountNumber) return { kind: "no_match", detected: detected as string };
+    return null;
+  }
+
+  /** The user's only portfolio id, or null when they have zero or several. Used as the
+   * fallback target for upload-time duplicate flagging when no account match prefilled one. */
+  async function soleOwnedPortfolioId(userId: string): Promise<string | null> {
+    const rows = await app.db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId))
+      .limit(2);
+    return rows.length === 1 ? rows[0].id : null;
+  }
+
+  /**
+   * Flag drafts that economically match transactions already committed to `portfolioId`
+   * (#196 cross-format dedup), so the review screen can pre-deselect them. Best-effort:
+   * keyed on the draft's ISIN (instruments aren't resolved yet at upload), and **count-aware**
+   * — at most (number already committed) drafts per fingerprint are flagged, so two
+   * legitimate identical same-day buys against an empty history are never both suppressed.
+   * Mutates drafts in place, adding `likelyDuplicate: { source, executedAt }`.
+   */
+  async function annotateLikelyDuplicates(
+    drafts: ParsedTransaction[],
+    portfolioId: string | null,
+  ): Promise<void> {
+    if (!portfolioId || drafts.length === 0) return;
+    const rows = await app.db
+      .select({
+        type: transactions.type,
+        executedAt: transactions.executedAt,
+        quantity: transactions.quantity,
+        price: transactions.price,
+        source: transactions.source,
+        isin: instruments.isin,
+      })
+      .from(transactions)
+      .leftJoin(instruments, eq(instruments.id, transactions.instrumentId))
+      .where(eq(transactions.portfolioId, portfolioId));
+
+    const buckets = new Map<string, { count: number; source: string | null; executedAt: Date }>();
+    for (const r of rows) {
+      if (!r.isin) continue; // ISIN-keyed; cash legs have no instrument
+      const fp = economicFingerprint({
+        key: r.isin,
+        action: r.type,
+        executedAt: r.executedAt,
+        quantity: r.quantity,
+        price: r.price,
+      });
+      const b = buckets.get(fp);
+      if (b) b.count++;
+      else buckets.set(fp, { count: 1, source: r.source, executedAt: r.executedAt });
+    }
+
+    for (const d of drafts) {
+      if (!d.isin) continue;
+      const fp = economicFingerprint({
+        key: d.isin,
+        action: d.action,
+        executedAt: d.executedAt,
+        quantity: d.quantity,
+        price: d.price,
+      });
+      const b = buckets.get(fp);
+      if (b && b.count > 0) {
+        b.count--;
+        (d as Record<string, unknown>).likelyDuplicate = {
+          source: b.source,
+          executedAt: b.executedAt,
+        };
+      }
+    }
   }
 
   // Parse a CSV into draft transactions and store them as a draft import.
@@ -156,7 +289,14 @@ export async function importsRoute(app: FastifyInstance) {
       if (existing) {
         const isDraft = existing.status === "draft";
         const parsed = isDraft
-          ? ((existing.parsedJson ?? {}) as { drafts?: unknown[]; errors?: unknown[] })
+          ? ((existing.parsedJson ?? {}) as {
+              drafts?: unknown[];
+              errors?: unknown[];
+              accountNumber?: string | null;
+            })
+          : null;
+        const matchedPortfolioId = isDraft
+          ? await matchAccountNumber(id, parsed?.accountNumber)
           : null;
         request.log.info(
           { importId: existing.id, status: existing.status },
@@ -172,6 +312,7 @@ export async function importsRoute(app: FastifyInstance) {
           errors: isDraft && parsed && Array.isArray(parsed.errors) ? parsed.errors : [],
           alreadyExists: isDraft,
           alreadyConfirmed: !isDraft,
+          matchedPortfolioId,
         };
       }
 
@@ -186,12 +327,24 @@ export async function importsRoute(app: FastifyInstance) {
         request.log.debug({ line: e.line, message: e.message }, "csv row rejected");
       }
 
+      // Account auto-detect (DKB CSV exposes IBAN/Depotnummer; other formats don't).
+      const detected = result.accountNumber ?? null;
+      const matchedPortfolioId = await matchAccountNumber(id, detected);
+      // Candidate portfolio for duplicate flagging: the account-matched one, else the
+      // user's sole portfolio (the unambiguous default the review picker will land on).
+      const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
+      await annotateLikelyDuplicates(result.drafts, candidate);
+      const accountMismatch = candidate
+        ? await accountMismatchVerdict(id, detected, candidate)
+        : null;
+
       const [imp] = await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
           // portfolioId is deliberately omitted — resolved at confirm time.
           parser: PARSER_TAG[resolved] ?? "csv",
+          // `result` carries `accountNumber` (DKB) so re-upload + confirm can re-match.
           parsedJson: result,
           contentHash,
           status: "draft",
@@ -199,11 +352,18 @@ export async function importsRoute(app: FastifyInstance) {
         .returning();
 
       request.log.info(
-        { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length },
+        { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length, matchedPortfolioId },
         "csv parse complete",
       );
       reply.code(201);
-      return { importId: imp.id, drafts: result.drafts, contracts: [] as unknown[], errors: result.errors };
+      return {
+        importId: imp.id,
+        drafts: result.drafts,
+        contracts: [] as unknown[],
+        errors: result.errors,
+        matchedPortfolioId,
+        accountMismatch,
+      };
     },
   );
 
@@ -355,6 +515,12 @@ export async function importsRoute(app: FastifyInstance) {
       };
 
       const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
+      // Candidate portfolio for duplicate flagging: account-matched, else the sole portfolio.
+      const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
+      await annotateLikelyDuplicates(result.drafts, candidate);
+      const accountMismatch = candidate
+        ? await accountMismatchVerdict(id, detectedAccountNumber, candidate)
+        : null;
 
       const [imp] = await app.db
         .insert(screenshotImports)
@@ -380,6 +546,7 @@ export async function importsRoute(app: FastifyInstance) {
         contracts: result.contracts,
         errors: result.errors,
         matchedPortfolioId,
+        accountMismatch,
       };
     },
   );
@@ -563,9 +730,12 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "already_confirmed" });
       }
 
-      const { transactions: drafts, contracts, portfolioId: bodyPortfolioId } = confirmBodySchema.parse(
-        request.body,
-      );
+      const {
+        transactions: drafts,
+        contracts,
+        portfolioId: bodyPortfolioId,
+        acknowledgeAccountMismatch,
+      } = confirmBodySchema.parse(request.body);
       if (drafts.length === 0 && contracts.length === 0) {
         return reply.code(400).send({ error: "nothing_to_confirm" });
       }
@@ -578,6 +748,20 @@ export async function importsRoute(app: FastifyInstance) {
       }
       if (!(await ownedPortfolio(id, targetPortfolioId))) {
         return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Account-mismatch guard (#197, defense-in-depth): if the file's account number looks
+      // like it belongs to a different portfolio than the chosen one, refuse until the
+      // caller explicitly acknowledges. The web flow surfaces this as a banner + "Import
+      // anyway". pytr is exempt — it's always bound to its connection's portfolio.
+      const importedAccountNumber = (imp.parsedJson as { accountNumber?: string | null } | null)
+        ?.accountNumber;
+      if (!acknowledgeAccountMismatch && imp.parser !== "pytr") {
+        const mismatch = await accountMismatchVerdict(id, importedAccountNumber, targetPortfolioId);
+        if (mismatch) {
+          request.log.info({ importId: imp.id, kind: mismatch.kind }, "confirm blocked: account mismatch");
+          return reply.code(409).send({ error: "account_mismatch", ...mismatch });
+        }
       }
       const isDkb = imp.parser === "dkb";
       const isPytr = imp.parser === "pytr";
@@ -706,6 +890,58 @@ export async function importsRoute(app: FastifyInstance) {
           request.log.debug({ symbol, market, instrumentId }, "instrument resolved");
         }
         resolved.push({ draft: d, instrumentId });
+      }
+
+      // Cross-source duplicate check (#196), authoritative: now that instruments are
+      // resolved, count how many drafts economically match a transaction already committed
+      // to the target portfolio (count-aware, keyed on the resolved instrumentId). Behaviour
+      // is selection-authoritative — we report/log but never drop what the user chose to
+      // confirm; the review pre-deselect is what prevents the double-write in the normal flow.
+      let likelyDuplicates = 0;
+      {
+        const committed = await app.db
+          .select({
+            instrumentId: transactions.instrumentId,
+            type: transactions.type,
+            executedAt: transactions.executedAt,
+            quantity: transactions.quantity,
+            price: transactions.price,
+          })
+          .from(transactions)
+          .where(eq(transactions.portfolioId, targetPortfolioId));
+        const buckets = new Map<string, number>();
+        for (const r of committed) {
+          if (!r.instrumentId) continue;
+          const fp = economicFingerprint({
+            key: r.instrumentId,
+            action: r.type,
+            executedAt: r.executedAt,
+            quantity: r.quantity,
+            price: r.price,
+          });
+          buckets.set(fp, (buckets.get(fp) ?? 0) + 1);
+        }
+        for (const { draft: d, instrumentId } of resolved) {
+          if (!instrumentId) continue;
+          const fp = economicFingerprint({
+            key: instrumentId,
+            action: d.action,
+            executedAt: d.executedAt,
+            quantity: d.quantity,
+            price: d.price,
+          });
+          const n = buckets.get(fp) ?? 0;
+          if (n > 0) {
+            buckets.set(fp, n - 1);
+            likelyDuplicates++;
+          }
+        }
+        if (likelyDuplicates > 0) {
+          request.log.info(
+            { importId: imp.id, likelyDuplicates },
+            "confirm: cross-source duplicates among selected drafts",
+          );
+        }
       }
 
       // Pass 2 — write the transactions and reconcile the import atomically.
@@ -922,7 +1158,7 @@ export async function importsRoute(app: FastifyInstance) {
         "confirm complete",
       );
       reply.code(201);
-      return { confirmed: created.length, transactions: created };
+      return { confirmed: created.length, transactions: created, likelyDuplicates };
     },
   );
 }

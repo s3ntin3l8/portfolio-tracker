@@ -1484,3 +1484,237 @@ describe("gold installment contract import → confirm → undo", () => {
     expect(afterSummary.totalLiabilities).toBe("0");
   });
 });
+
+// ── #196 cross-format dedup + #197 account-mismatch ──────────────────────────
+describe("import dedup + account mismatch (#196, #197)", () => {
+  beforeAll(() => {
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+  });
+
+  afterAll(async () => {
+    // The embedded PGlite db is a shared singleton; each test built+closed its own app
+    // (closing the db). Reset it so a following describe re-initialises cleanly.
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+  });
+
+  // Each test gets its own app + signing key. buildApp reuses the shared db singleton, but
+  // closing one app closes that db — so every test builds fresh (getting an empty db) and
+  // closes at the end, keeping the cases isolated.
+  async function freshApp(parser?: ScreenshotParser) {
+    const kp = await generateKeyPair("ES256");
+    const a = await buildApp(parser ? { authKey: kp.publicKey, screenshotParser: parser } : { authKey: kp.publicKey });
+    const mkTok = (sub: string) =>
+      new SignJWT({})
+        .setProtectedHeader({ alg: "ES256" })
+        .setSubject(sub)
+        .setIssuer(ISSUER)
+        .setAudience(AUDIENCE)
+        .setIssuedAt()
+        .setExpirationTime("1h")
+        .sign(kp.privateKey);
+    return { a, mkTok };
+  }
+
+  // The same Amazon trade as a vision draft (source="screenshot") and as a DKB depot
+  // row (source="csv"). Identical economic fingerprint, different broker refs / source.
+  const SAME_TRADE: ParsedTransaction = {
+    assetClass: "equity",
+    action: "buy",
+    isin: "US0231351067",
+    name: "Amazon",
+    quantity: "5",
+    unit: "shares",
+    price: "81.37",
+    fees: "0",
+    currency: "EUR",
+    executedAt: new Date("2026-06-15T00:00:00.000Z"),
+    confidence: 1,
+  };
+  const DKB_DEPOT_ONE = [
+    "Datum der Erstellung;Depotnummer;Wertpapierbezeichnung;WKN;ISIN;Einstiegskurs;Bewertungskurs;Stückzahl;Absoluter Gewinn;Relativer Gewinn;Assetklasse",
+    '15.06.2026;506740786;"AMAZON.COM INC.    DL-,01";906866;US0231351067;"81,37 €";"210,10 €";5;"643,65 €";158.2%;Aktien',
+  ].join("\n");
+
+  it("flags a cross-source duplicate on the second import (screenshot → DKB CSV)", async () => {
+    // A mock vision parser that returns the shared trade (source="screenshot").
+    const { a, mkTok } = await freshApp({
+      name: "mock-dup",
+      isConfigured: () => true,
+      parse: async () => ({ drafts: [SAME_TRADE], contracts: [] }),
+    });
+    const t = await mkTok("dup-user");
+
+    // Single portfolio → it is the unambiguous candidate for upload-time flagging.
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Solo", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    // 1) Import the trade as a screenshot and confirm it (source="screenshot").
+    const up1 = screenshotPart(Buffer.from("amazon-screenshot"), "image/png");
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...up1.headers },
+      payload: up1.payload,
+    });
+    expect(r1.statusCode).toBe(201);
+    const conf1 = await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
+    expect(conf1.statusCode).toBe(201);
+    expect(conf1.json().confirmed).toBe(1);
+
+    // 2) Import the SAME trade as a DKB CSV — it must be flagged as a likely duplicate.
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: DKB_DEPOT_ONE, format: "dkb" },
+    });
+    expect(r2.statusCode).toBe(201);
+    const dkbDraft = r2.json().drafts[0];
+    expect(dkbDraft.likelyDuplicate).toBeTruthy();
+    expect(dkbDraft.likelyDuplicate.source).toBe("screenshot");
+    expect(dkbDraft.likelyDuplicate.executedAt.slice(0, 10)).toBe("2026-06-15");
+
+    await a.close();
+  });
+
+  it("does NOT flag two legitimate identical same-day trades against an empty history", async () => {
+    const { a, mkTok } = await freshApp();
+    const t = await mkTok("fp-user");
+    await a.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Empty", baseCurrency: "EUR" },
+    });
+    // Two identical depot rows; nothing committed yet → count-aware match flags zero.
+    const twoRows = [
+      "Datum der Erstellung;Depotnummer;Wertpapierbezeichnung;WKN;ISIN;Einstiegskurs;Bewertungskurs;Stückzahl;Absoluter Gewinn;Relativer Gewinn;Assetklasse",
+      '15.06.2026;506740786;"AMAZON.COM INC.    DL-,01";906866;US0231351067;"81,37 €";"210,10 €";5;"643,65 €";158.2%;Aktien',
+      '15.06.2026;506740786;"AMAZON.COM INC.    DL-,01";906866;US0231351067;"81,37 €";"210,10 €";5;"643,65 €";158.2%;Aktien',
+    ].join("\n");
+    const r = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: twoRows, format: "dkb" },
+    });
+    expect(r.statusCode).toBe(201);
+    const drafts = r.json().drafts;
+    expect(drafts).toHaveLength(2);
+    expect(drafts.every((d: { likelyDuplicate?: unknown }) => !d.likelyDuplicate)).toBe(true);
+    // …and both carry distinct externalIds so both would be written.
+    expect(drafts[0].externalId).not.toBe(drafts[1].externalId);
+    await a.close();
+  });
+
+  it("blocks confirm into a mismatched portfolio until acknowledged (#197)", async () => {
+    const { a, mkTok } = await freshApp({
+      name: "mock-acct",
+      isConfigured: () => true,
+      parse: async () => ({ drafts: [GOLD_DRAFT], contracts: [], accountNumber: "506740786" }),
+    });
+    const t = await mkTok("acct-user");
+
+    const a1 = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Depot A", baseCurrency: "EUR", accountNumber: "506740786" },
+      })
+    ).json().id;
+    const b = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Other B", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const up = screenshotPart(Buffer.from("acct-doc"), "image/png");
+    const r = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...up.headers },
+      payload: up.payload,
+    });
+    expect(r.statusCode).toBe(201);
+    expect(r.json().matchedPortfolioId).toBe(a1); // routed to the matching depot
+    const importId = r.json().importId;
+    const drafts = r.json().drafts;
+
+    // Confirm into the WRONG portfolio without acknowledging → 409 with the verdict.
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: b, transactions: drafts },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("account_mismatch");
+    expect(blocked.json().kind).toBe("other_portfolio");
+    expect(blocked.json().matchedPortfolioId).toBe(a1);
+
+    // Acknowledge → it goes through.
+    const forced = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: b, transactions: drafts, acknowledgeAccountMismatch: true },
+    });
+    expect(forced.statusCode).toBe(201);
+
+    await a.close();
+  });
+
+  it("does not warn when the account matches, or when either side has no account number", async () => {
+    // Parser returns NO account number → nothing to compare → never blocks.
+    const { a, mkTok } = await freshApp({
+      name: "mock-noacct",
+      isConfigured: () => true,
+      parse: async () => ({ drafts: [GOLD_DRAFT], contracts: [] }),
+    });
+    const t = await mkTok("noacct-user");
+
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Has Account", baseCurrency: "EUR", accountNumber: "999999" },
+      })
+    ).json().id;
+    const up = screenshotPart(Buffer.from("noacct-doc"), "image/png");
+    const r = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...up.headers },
+      payload: up.payload,
+    });
+    expect(r.json().accountMismatch ?? null).toBeNull(); // file has no account number
+    const confirmed = await a.inject({
+      method: "POST",
+      url: `/imports/${r.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r.json().drafts },
+    });
+    expect(confirmed.statusCode).toBe(201); // no warning, no block
+
+    await a.close();
+  });
+});

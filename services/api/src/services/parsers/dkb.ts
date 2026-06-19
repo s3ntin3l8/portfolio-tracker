@@ -124,6 +124,11 @@ function headerIndex(cols: string[]): (name: string) => number {
   return (name: string) => lower.indexOf(name.toLowerCase());
 }
 
+// IBAN as printed by DKB (no spaces in the CSV export): 2-letter country + 2 check
+// digits + up to 30 alphanumerics. Used to pull the *account's own* IBAN out of the
+// Girokonto preamble (the first line: `"Girokonto …";"DE78…"`).
+const IBAN_RE = /\b([A-Z]{2}\d{2}[A-Z0-9]{10,30})\b/;
+
 // --- A. Depot positions snapshot ----------------------------------------
 
 function parseDkbDepot(lines: string[]): CsvParseResult {
@@ -144,6 +149,11 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
   const cQty = idx("Stückzahl");
   const cAsset = idx("Assetklasse");
   const cDate = idx("Datum der Erstellung");
+  const cDepot = idx("Depotnummer");
+
+  // The Depotnummer is repeated on every row; take it from the first data row.
+  const accountNumber =
+    cDepot >= 0 ? splitDkbLine(rows[1]?.l ?? "")[cDepot]?.trim() || null : null;
 
   for (const { l, i } of rows.slice(1)) {
     const cols = splitDkbLine(l);
@@ -167,7 +177,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
     else errors.push({ line: i + 1, message: parsed.error.issues[0]?.message ?? "invalid row" });
   }
 
-  return { drafts, errors };
+  return { drafts, errors, accountNumber };
 }
 
 // --- B. Girokonto Umsatzliste -------------------------------------------
@@ -186,6 +196,11 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
     (l) => l.includes("Buchungsdatum") && l.includes("Verwendungszweck"),
   );
   if (headerLineNo < 0) return { drafts, errors };
+
+  // The account's own IBAN sits in the preamble (`"Girokonto …";"DE78…"`), before the
+  // transaction header. The per-row IBAN column is the *counterparty*, so only scan above.
+  const accountNumber =
+    lines.slice(0, headerLineNo).map((l) => l.match(IBAN_RE)?.[1]).find(Boolean) ?? null;
 
   const header = splitDkbLine(lines[headerLineNo]);
   const idx = headerIndex(header);
@@ -303,5 +318,5 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
     else errors.push({ line: i + 1, message: parsed.error.issues[0]?.message ?? "invalid row" });
   }
 
-  return { drafts, errors };
+  return { drafts, errors, accountNumber };
 }

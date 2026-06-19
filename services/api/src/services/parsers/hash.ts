@@ -11,6 +11,48 @@ export function shortHash(s: string): string {
 }
 
 /**
+ * Normalise a decimal string for fingerprint comparison so trivially-different
+ * spellings of the same number (`"5"` vs `"5.0000"`, `"0.3355"`) collapse to one
+ * canonical form. Falls back to the trimmed raw string when it isn't a finite number.
+ */
+function canonicalDecimal(raw: string | null | undefined): string {
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(n) : String(raw ?? "").trim();
+}
+
+/**
+ * Source-independent **economic fingerprint** of a trade — the key for cross-format /
+ * cross-source duplicate detection (#196). Unlike {@link assignContentExternalIds}'s
+ * content key (which also folds in fees + currency + source tag), this keys only on the
+ * economic essence — instrument, action, calendar day, quantity, price — so the *same*
+ * trade imported as a CSV row and a PDF settlement note fingerprints identically even
+ * though their broker refs (and `source`) differ.
+ *
+ * `key` is the caller's choice of instrument identity: the resolved `instrumentId` at
+ * confirm time (reliable), or the `isin` at upload time (best-effort, before resolution).
+ * `executedAt` is truncated to the day (tolerance: same-day match, ignoring intraday time).
+ */
+export function economicFingerprint(input: {
+  key: string;
+  action: string;
+  executedAt: Date | string;
+  quantity: string;
+  price: string;
+}): string {
+  const day =
+    input.executedAt instanceof Date
+      ? input.executedAt.toISOString().slice(0, 10)
+      : new Date(input.executedAt).toISOString().slice(0, 10);
+  return [
+    input.key,
+    input.action,
+    day,
+    canonicalDecimal(input.quantity),
+    canonicalDecimal(input.price),
+  ].join("|");
+}
+
+/**
  * Assign deterministic, content-derived externalIds to draft transactions that
  * don't already have one (DKB booking refs, pytr event ids, etc. are left untouched).
  *

@@ -5,6 +5,12 @@ import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/sche
 export interface CsvParseResult {
   drafts: ParsedTransaction[];
   errors: { line: number; message: string }[];
+  /**
+   * Account identifier embedded in the file (IBAN / depot number), when the format
+   * exposes one. Used for portfolio auto-detect and the account-mismatch warning.
+   * Most CSV formats don't carry one — left undefined there.
+   */
+  accountNumber?: string | null;
 }
 
 /**

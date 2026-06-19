@@ -78,7 +78,11 @@ describe("splitDkbLine", () => {
 });
 
 describe("parseDkb — depot positions snapshot", () => {
-  const { drafts, errors } = parseDkb(DEPOT_CSV);
+  const { drafts, errors, accountNumber } = parseDkb(DEPOT_CSV);
+
+  it("extracts the Depotnummer as the account number", () => {
+    expect(accountNumber).toBe("506740786");
+  });
 
   it("turns every position into a buy draft with no errors", () => {
     expect(errors).toEqual([]);
@@ -110,7 +114,11 @@ describe("parseDkb — depot positions snapshot", () => {
 });
 
 describe("parseDkb — Girokonto Umsatzliste", () => {
-  const { drafts, errors } = parseDkb(GIRO_CSV);
+  const { drafts, errors, accountNumber } = parseDkb(GIRO_CSV);
+
+  it("extracts the account IBAN from the preamble (not a counterparty IBAN)", () => {
+    expect(accountNumber).toBe("DE78120300001066505387");
+  });
 
   it("skips the preamble and the zero-amount Abrechnung row", () => {
     expect(errors).toEqual([]);

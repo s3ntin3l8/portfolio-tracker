@@ -17,7 +17,8 @@ import { Link } from "@/i18n/navigation";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ImportIssue } from "@portfolio/api-client";
+import type { AccountMismatch, ImportIssue, LikelyDuplicate } from "@portfolio/api-client";
+import { accountMismatchFromError } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
 import { ImportReview } from "@/components/import-review";
@@ -43,6 +44,9 @@ export interface ImportDraft {
   confidence: number;
   /** Stable source id (TR event id) — set when a draft is mapped from an issue. */
   externalId?: string | null;
+  /** Set when this draft economically matches a transaction already imported (#196);
+   *  the review screen badges it and excludes it from the default "Confirm". */
+  likelyDuplicate?: LikelyDuplicate | null;
 }
 
 // A financed gold contract as it comes back from the API (dates are ISO strings).
@@ -86,6 +90,8 @@ export interface ImportResult {
   alreadyConfirmed?: boolean;
   /** Portfolio whose accountNumber matched the detected account number in the document, if any. */
   matchedPortfolioId?: string | null;
+  /** Set when the file's account looks like it belongs to a different portfolio (#197). */
+  accountMismatch?: AccountMismatch | null;
 }
 
 /**
@@ -127,6 +133,7 @@ export interface ImportClient {
     drafts: ImportDraft[],
     contracts?: ImportContract[],
     portfolioId?: string,
+    acknowledgeAccountMismatch?: boolean,
   ): Promise<{ confirmed: number }>;
 }
 
@@ -237,6 +244,9 @@ export function ImportFlow({
   // Files skipped during the parse pass.
   const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Account-mismatch warning (#197) — set from the upload hint or a confirm 409. Shown as
+  // a banner in the review step; "Import anyway" re-confirms with the acknowledge flag.
+  const [accountMismatch, setAccountMismatch] = useState<AccountMismatch | null>(null);
   const [confirmedCount, setConfirmedCount] = useState(0);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -308,6 +318,7 @@ export function ImportFlow({
         setGroups(new Map([[result.importId, file.name]]));
         setIssueMap(new Map([[result.importId, result.errors]]));
         setPortfolioByImport(new Map([[result.importId, result.matchedPortfolioId ?? defaultPid]]));
+        setAccountMismatch(result.accountMismatch ?? null);
         setStep("review");
       } catch (err) {
         setError(errorMessage(err));
@@ -441,12 +452,16 @@ export function ImportFlow({
    * Multi-group: fan-out — one call per import id, contracts attached to their
    * owning import. Confirmed counts are summed.
    */
-  async function confirm(uids?: string[]) {
+  async function confirm(uids?: string[], acknowledgeMismatch = false) {
     setError(null);
     setStep("parsing");
     try {
+      // "Confirm all" (no uids) excludes drafts flagged as likely duplicates (#196) — the
+      // user overrides by selecting them and using "Confirm selected" (an explicit subset).
       const subset =
-        uids && uids.length ? drafts.filter((d) => uids.includes(d.uid)) : drafts;
+        uids && uids.length
+          ? drafts.filter((d) => uids.includes(d.uid))
+          : drafts.filter((d) => !d.likelyDuplicate);
 
       if (groups.size <= 1) {
         // ── Single-import fast path ──────────────────────────────────────
@@ -455,6 +470,7 @@ export function ImportFlow({
           subset.map(stripUid),
           contracts,
           portfolioByImport.get(importId),
+          acknowledgeMismatch,
         );
         setConfirmedCount(confirmed);
       } else {
@@ -478,14 +494,23 @@ export function ImportFlow({
               ds.map(stripUid),
               iid === contractImportId ? contracts : [],
               portfolioByImport.get(iid),
+              acknowledgeMismatch,
             ),
           ),
         );
         setConfirmedCount(results.reduce((s, r) => s + r.confirmed, 0));
       }
+      setAccountMismatch(null);
       setStep("done");
     } catch (err) {
-      setError(errorMessage(err));
+      // A confirm into a portfolio whose account doesn't match (#197) comes back as a 409
+      // with the verdict — surface the banner + "Import anyway" instead of a generic error.
+      const mismatch = accountMismatchFromError(err);
+      if (mismatch) {
+        setAccountMismatch(mismatch);
+      } else {
+        setError(errorMessage(err));
+      }
       setStep("review");
     }
   }
@@ -501,6 +526,7 @@ export function ImportFlow({
     setPortfolioByImport(new Map());
     setFileStatuses([]);
     setError(null);
+    setAccountMismatch(null);
     setStep("upload");
   }
 
@@ -685,6 +711,31 @@ export function ImportFlow({
 
       {step === "review" && (
         <div className="space-y-6">
+          {/* Account-mismatch warning (#197): the file looks like it belongs elsewhere. */}
+          {accountMismatch && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
+            >
+              <AlertCircle className="size-4 shrink-0" />
+              <span className="flex-1">
+                {accountMismatch.kind === "other_portfolio"
+                  ? t("accountMismatch.otherPortfolio", {
+                      portfolio: accountMismatch.matchedName ?? "",
+                      account: accountMismatch.detected,
+                    })
+                  : t("accountMismatch.noMatch", { account: accountMismatch.detected })}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void confirm(undefined, true)}
+              >
+                {t("accountMismatch.importAnyway")}
+              </Button>
+            </div>
+          )}
+
           {/* Collapsible skip-notice banner — collapsed by default so it doesn't dominate */}
           {skipped.length > 0 && (
             <details className="rounded-md border border-border bg-muted/40 text-sm text-muted-foreground">

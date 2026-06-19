@@ -89,7 +89,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1", false);
   });
 
   it("edits a draft in the dialog and confirms the edited value", async () => {
@@ -133,6 +133,7 @@ describe("ImportFlow", () => {
       [{ ...DRAFT, name: "Antam Gold 2" }],
       [],
       "p1",
+      false,
     );
   });
 
@@ -207,7 +208,7 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     // Confirm carries the selected portfolio.
-    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2", false);
   });
 
   it("auto-parses a screenshot handed in via initialFile (share target)", async () => {
@@ -305,7 +306,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false);
   });
 
   // ── Multi-file CSV tests ────────────────────────────────────────────────────
@@ -344,8 +345,8 @@ describe("ImportFlow", () => {
 
     // One confirmImport call per import id, each with the default portfolio.
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1");
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false);
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
@@ -393,8 +394,8 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1");
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1", false);
   });
 
   it("all files empty/duplicate → stays on upload with error notice", async () => {
@@ -489,6 +490,73 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1");
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1", false);
+  });
+
+  it("excludes likely-duplicate drafts from the default Confirm (#196)", async () => {
+    const dup: ImportDraft = {
+      ...DRAFT,
+      likelyDuplicate: { source: "screenshot", executedAt: "2026-02-08" },
+    };
+    const client: ImportClient = {
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp-dup",
+        drafts: [dup, DRAFT_B],
+        errors: [],
+      })),
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
+
+    // The duplicate badge + notice render in review.
+    await waitFor(() =>
+      expect(screen.getAllByText(/Already imported/i).length).toBeGreaterThan(0),
+    );
+
+    // Confirm (all) writes everything EXCEPT the flagged duplicate.
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-dup", [DRAFT_B], [], "p1", false);
+  });
+
+  it("warns on an account mismatch and re-confirms with acknowledgement (#197)", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp-mm",
+        drafts: [DRAFT],
+        errors: [],
+        accountMismatch: {
+          kind: "other_portfolio" as const,
+          matchedPortfolioId: "p2",
+          matchedName: "Other",
+          detected: "506740786",
+        },
+      })),
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    renderFlow(client, [
+      { id: "p1", name: "Main" },
+      { id: "p2", name: "Other" },
+    ]);
+
+    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
+
+    // The mismatch banner + "Import anyway" CTA render.
+    const importAnyway = await screen.findByRole("button", {
+      name: messages.Import.accountMismatch.importAnyway,
+    });
+    fireEvent.click(importAnyway);
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    // Re-confirm carries the acknowledgement flag.
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-mm", [DRAFT], [], "p1", true);
   });
 });

@@ -350,7 +350,14 @@
         "mapSave": "Add to drafts",
         "attentionHint": "see table rows below (needs review filter)"
       },
-      "empty": "No drafts match your filters."
+      "empty": "No drafts match your filters.",
+      "duplicate": "Already imported · {source} · {date}",
+      "duplicateNotice": "{count, plural, one {# draft looks like it was already imported} other {# drafts look like they were already imported}} and won't be added by Confirm. To add one anyway, select it and use \"Confirm selected\"."
+    },
+    "accountMismatch": {
+      "otherPortfolio": "This file (account {account}) looks like it belongs to \"{portfolio}\". Import into the selected portfolio anyway?",
+      "noMatch": "The account number on this file ({account}) doesn't match the selected portfolio. Import anyway?",
+      "importAnyway": "Import anyway"
     },
     "discard": "Discard",
     "confirm": "Confirm",
