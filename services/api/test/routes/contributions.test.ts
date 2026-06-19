@@ -220,6 +220,107 @@ describe("contribution analytics", () => {
     expect(reverted.json().birthYear).toBeNull();
   });
 
+  it("counts one-off buys only under contributionMode 'purchases' (round-trips the column)", async () => {
+    const t = await token("investonly");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    const [tlkm] = await app.db
+      .insert(instruments)
+      .values({ symbol: "TLKM", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom" })
+      .returning();
+
+    // A portfolio created with the purchases mode — and it must ride create + list.
+    const created = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Invest-only", baseCurrency: "idr", contributionMode: "purchases" },
+    });
+    expect(created.json().contributionMode).toBe("purchases");
+    const purchasesPf = created.json().id as string;
+    const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
+    expect(
+      list.json().find((p: { id: string }) => p.id === purchasesPf).contributionMode,
+    ).toBe("purchases");
+
+    // An "auto" portfolio (the default) with the SAME buy-only data.
+    const autoPf = await createPortfolio(t, "Auto buys");
+
+    for (const pf of [purchasesPf, autoPf]) {
+      for (const month of ["2026-01", "2026-02"]) {
+        await postTx(t, pf, {
+          type: "buy",
+          instrumentId: tlkm.id,
+          quantity: "1",
+          price: "9500",
+          currency: "IDR",
+          executedAt: `${month}-15T00:00:00.000Z`,
+        });
+      }
+    }
+
+    const purchases = await app.inject({
+      method: "GET",
+      url: `/portfolios/${purchasesPf}/contributions`,
+      headers: auth(t),
+    });
+    expect(purchases.json().totalContributed).toBe("19000"); // both buys counted
+    expect(purchases.json().monthsActive).toBe(2);
+
+    const autoRes = await app.inject({
+      method: "GET",
+      url: `/portfolios/${autoPf}/contributions`,
+      headers: auth(t),
+    });
+    expect(autoRes.json().totalContributed).toBe("0"); // auto ignores plain buys
+  });
+
+  it("merges per-portfolio modes in the aggregate (auto deposit + purchases buy)", async () => {
+    const t = await token("mixed");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    const [tlkm] = await app.db
+      .insert(instruments)
+      .values({ symbol: "TLKM2", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom2" })
+      .returning();
+
+    // Auto portfolio funded by a deposit; purchases portfolio funded by a one-off buy.
+    const autoPf = await createPortfolio(t, "Auto");
+    await postTx(t, autoPf, {
+      type: "deposit",
+      price: "5000",
+      currency: "IDR",
+      executedAt: "2026-01-05T00:00:00.000Z",
+    });
+    const buyPf = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Buys", baseCurrency: "idr", contributionMode: "purchases" },
+      })
+    ).json().id as string;
+    await postTx(t, buyPf, {
+      type: "buy",
+      instrumentId: tlkm.id,
+      quantity: "1",
+      price: "3000",
+      currency: "IDR",
+      executedAt: "2026-02-15T00:00:00.000Z",
+    });
+
+    const agg = await app.inject({
+      method: "GET",
+      url: "/networth/contributions",
+      headers: auth(t),
+    });
+    const c = agg.json();
+    expect(c.totalContributed).toBe("8000"); // 5000 deposit + 3000 buy
+    expect(c.monthsActive).toBe(2);
+    expect(c.series).toEqual([
+      { month: "2026-01", contributed: "5000" },
+      { month: "2026-02", contributed: "3000" },
+    ]);
+  });
+
   it("404s a portfolio the user does not own; 401s without a token", async () => {
     const t = await token("saver");
     const stranger = await token("intruder");

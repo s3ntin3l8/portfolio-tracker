@@ -1,0 +1,1 @@
+ALTER TABLE "portfolios" ADD COLUMN "contribution_mode" text DEFAULT 'auto' NOT NULL;

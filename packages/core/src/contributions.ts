@@ -16,8 +16,13 @@ export interface ContributionInput {
    *   month are internal reallocations of that cash); otherwise the month's
    *   contribution is the `savings_plan` notional, net of withdrawals. This
    *   avoids double-counting the same money when both styles are recorded.
+   * - "purchases": every `buy` and `savings_plan` notional counts as a contribution
+   *   and deposits are ignored. For invest-only accounts whose funding cash leg isn't
+   *   imported (e.g. a DKB depot-snapshot, all synthetic `buy` rows) — there, "auto"
+   *   would count nothing. Don't use it when deposits ARE imported: the purchases they
+   *   fund would then be double-counted.
    */
-  mode?: "auto";
+  mode?: "auto" | "purchases";
 }
 
 export interface ContributionStats {
@@ -72,6 +77,10 @@ const WITHDRAWAL_TYPES: TransactionType[] = ["withdrawal"];
 export function contributionStats(input: ContributionInput): ContributionStats {
   const fx: FxRateFn = input.fx ?? (() => "1");
   const display = input.displayCurrency;
+  const mode = input.mode ?? "auto";
+  // "purchases" mode treats every securities purchase as a contribution and ignores
+  // deposits (no dedup); "auto" prefers deposits per month, falling back to plan buys.
+  const planTypes: TransactionType[] = mode === "purchases" ? ["savings_plan", "buy"] : PLAN_TYPES;
 
   // Group by month, tracking deposits/plan-inflows/withdrawals separately so we
   // can prefer deposits over plan buys within any month that has both.
@@ -86,10 +95,10 @@ export function contributionStats(input: ContributionInput): ContributionStats {
       buckets.get(key) ??
       { deposit: D(0), plan: D(0), withdrawal: D(0), hasDeposit: false };
 
-    if (DEPOSIT_TYPES.includes(tx.type)) {
+    if (mode === "auto" && DEPOSIT_TYPES.includes(tx.type)) {
       b.deposit = b.deposit.add(inflowMagnitude(tx, fx, display));
       b.hasDeposit = true;
-    } else if (PLAN_TYPES.includes(tx.type)) {
+    } else if (planTypes.includes(tx.type)) {
       b.plan = b.plan.add(inflowMagnitude(tx, fx, display));
     } else if (WITHDRAWAL_TYPES.includes(tx.type)) {
       b.withdrawal = b.withdrawal.add(outflowMagnitude(tx, fx, display));
@@ -118,6 +127,44 @@ export function contributionStats(input: ContributionInput): ContributionStats {
 
   return {
     displayCurrency: display,
+    totalContributed: totalContributed.toString(),
+    totalWithdrawn: totalWithdrawn.toString(),
+    netContributed: netContributed.toString(),
+    monthsActive,
+    monthlyAverage,
+    series,
+  };
+}
+
+/**
+ * Merge several portfolios' {@link ContributionStats} (each already computed in the same
+ * display currency, possibly under different modes) into one aggregate. Per-month net
+ * series are summed by month and the totals re-derived — so each portfolio keeps its own
+ * deposit-vs-plan dedup instead of being collapsed into one cross-portfolio bucket.
+ */
+export function mergeContributionStats(
+  stats: ContributionStats[],
+  displayCurrency: string,
+): ContributionStats {
+  const byMonth = new Map<string, Decimal>();
+  let totalContributed = D(0);
+  let totalWithdrawn = D(0);
+  for (const s of stats) {
+    totalContributed = totalContributed.add(s.totalContributed);
+    totalWithdrawn = totalWithdrawn.add(s.totalWithdrawn);
+    for (const pt of s.series) {
+      byMonth.set(pt.month, (byMonth.get(pt.month) ?? D(0)).add(pt.contributed));
+    }
+  }
+  const series = [...byMonth.keys()]
+    .sort()
+    .map((month) => ({ month, contributed: byMonth.get(month)!.toString() }))
+    .filter((pt) => !D(pt.contributed).isZero());
+  const netContributed = totalContributed.sub(totalWithdrawn);
+  const monthsActive = series.length;
+  const monthlyAverage = monthsActive ? netContributed.div(monthsActive).toString() : "0";
+  return {
+    displayCurrency,
     totalContributed: totalContributed.toString(),
     totalWithdrawn: totalWithdrawn.toString(),
     netContributed: netContributed.toString(),
