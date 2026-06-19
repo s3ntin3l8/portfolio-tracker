@@ -521,6 +521,69 @@ export interface ContributionStats {
   asOf: string;
 }
 
+export type TradeMethod = "average" | "fifo";
+
+/** A matched disposal slice — FIFO: one consumed lot; average: the whole sell. */
+export interface TradeLeg {
+  acqDate: string; // YYYY-MM-DD
+  sellDate: string; // YYYY-MM-DD
+  quantity: string;
+  cost: string; // display currency
+  proceeds: string; // display currency
+  gain: string; // display currency
+  holdingDays: number;
+  longTerm: boolean;
+  taxYear: number;
+}
+
+/** A round-trip "trade" (position episode), money fields in display currency. */
+export interface Trade {
+  instrumentId: string;
+  /** Instrument currency — the unit for avgEntryPrice / avgExitPrice. */
+  currency: string;
+  status: "open" | "closed";
+  entryDate: string; // YYYY-MM-DD
+  exitDate: string | null;
+  holdingDays: number;
+  longTerm: boolean;
+  quantity: string;
+  avgEntryPrice: string; // instrument currency
+  avgExitPrice: string | null; // instrument currency
+  invested: string;
+  realizedPnL: string;
+  unrealizedPnL: string;
+  dividends: string;
+  totalReturn: string;
+  totalReturnPct: number | null;
+  annualizedPct: number | null;
+  legs: TradeLeg[];
+  instrument: InstrumentMeta | null;
+}
+
+export interface YearAmount {
+  year: number;
+  amount: string;
+}
+export interface YearTax {
+  year: number;
+  amount: string;
+  tax: string;
+}
+
+/** The trade log for a scope: round-trip trades + tax-by-year breakdowns. */
+export interface TradeLog {
+  displayCurrency: string;
+  method: TradeMethod;
+  trades: Trade[];
+  totalRealized: string;
+  totalDividends: string;
+  totalReturn: string;
+  /** Fraction of closed trades with a positive total return; null if none closed. */
+  winRate: number | null;
+  realizedByYear: YearAmount[];
+  dividendsByYear: YearTax[];
+}
+
 /** A draft transaction matched a transaction already committed to the candidate portfolio
  * — likely a cross-format re-import (#196). The review screen pre-deselects these. */
 export interface LikelyDuplicate {
@@ -887,6 +950,24 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPerformance: (portfolioId: string) =>
       request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
+
+    getTrades: (
+      portfolioId: string,
+      method: TradeMethod = "average",
+      costBasis?: "purchase_price" | "total_paid",
+    ) => {
+      const params = new URLSearchParams({ method });
+      if (costBasis) params.set("costBasis", costBasis);
+      return request<TradeLog>("GET", `/portfolios/${portfolioId}/trades?${params.toString()}`);
+    },
+    getNetWorthTrades: (
+      method: TradeMethod = "average",
+      costBasis?: "purchase_price" | "total_paid",
+    ) => {
+      const params = new URLSearchParams({ method });
+      if (costBasis) params.set("costBasis", costBasis);
+      return request<TradeLog>("GET", `/networth/trades?${params.toString()}`);
+    },
 
     importCsv: (
       content: string,

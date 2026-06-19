@@ -27,12 +27,16 @@ import {
   mergeContributionStats,
   chainIndex,
   aggregateValueFlows,
+  computeTrades,
+  mergeTradeLogs,
   type CoreTransaction,
   type CostBasisMode,
   type CorporateAction,
   type CashFlowPoint,
   type ContributionStats,
   type PortfolioSummary,
+  type TradeLog,
+  type TradeMethod,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
@@ -117,6 +121,48 @@ export async function transactionsRoute(app: FastifyInstance) {
     return q.costBasis === "total_paid" || q.costBasis === "purchase_price"
       ? q.costBasis
       : undefined;
+  }
+
+  // `?method=fifo` matches sells to the oldest lots (German-tax-correct); the default
+  // (average) is consistent with the dashboard. Only changes tax-by-year attribution,
+  // open-position basis and per-lot holding period — see the trade log's docstring.
+  function methodFromQuery(q: { method?: string }): TradeMethod {
+    return q.method === "fifo" ? "fifo" : "average";
+  }
+
+  // Build a trade log for one transaction set, in `target` currency. Resolves the
+  // corporate actions and an FX snapshot the engine needs.
+  async function buildTradeLog(
+    coreTxns: CoreTransaction[],
+    prices: Record<string, { price: string; currency: string }>,
+    target: string,
+    method: TradeMethod,
+    costBasisMode: CostBasisMode | undefined,
+  ): Promise<TradeLog> {
+    const currencies = new Set<string>(coreTxns.map((t) => t.currency));
+    for (const p of Object.values(prices)) currencies.add(p.currency);
+    const fx = makeFxRateFn(await getFxRates(app.db, [...currencies], target), target);
+    const cas = await corporateActionsFor(coreTxns.map((t) => t.instrumentId));
+    return computeTrades({
+      transactions: coreTxns,
+      corporateActions: cas,
+      prices,
+      displayCurrency: target,
+      fx,
+      method,
+      costBasisMode,
+    });
+  }
+
+  // Attach presentation metadata to each trade for the web app.
+  function attachInstruments(log: TradeLog, meta: Map<string, InstrumentMeta>) {
+    return {
+      ...log,
+      trades: log.trades.map((t) => ({
+        ...t,
+        instrument: meta.get(t.instrumentId) ?? null,
+      })),
+    };
   }
 
   // External capital flows (deposits in (−), withdrawals out (+)) for XIRR, each
@@ -771,6 +817,31 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Trade log for a single portfolio: round-trip episodes with realized/unrealized
+  // P&L, folded-in dividends, per-trade return and a tax-by-year breakdown.
+  app.get<{ Params: PortfolioParams; Querystring: { method?: string; costBasis?: string } }>(
+    "/portfolios/:portfolioId/trades",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      const portfolio = await ownedPortfolio(id, portfolioId);
+      if (!portfolio) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const method = methodFromQuery(request.query);
+      const costBasisMode = costBasisFromQuery(request.query);
+      const { coreTxns, prices, metaById } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        costBasisMode,
+        portfolio.cashCounted,
+      );
+      const log = await buildTradeLog(coreTxns, prices, portfolio.baseCurrency, method, costBasisMode);
+      return attachInstruments(log, metaById);
+    },
+  );
+
   // Aggregate net worth across all of the user's portfolios, in their display
   // currency — combined holdings, cash, totals, and money-weighted return.
   app.get<{ Querystring: { costBasis?: string } }>(
@@ -854,6 +925,44 @@ export async function transactionsRoute(app: FastifyInstance) {
 
     return buildIncomeStats(allTxns, aggregated, display);
   });
+
+  // Aggregate trade log across all of the user's portfolios, in their display
+  // currency. Each portfolio's trades are computed under its own settings, then merged
+  // (a position held in two portfolios is two trades).
+  app.get<{ Querystring: { method?: string; costBasis?: string } }>(
+    "/networth/trades",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+      const method = methodFromQuery(request.query);
+      const costBasisMode = costBasisFromQuery(request.query);
+
+      const pfs = await app.db
+        .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
+        .from(portfolios)
+        .where(eq(portfolios.userId, id));
+
+      const logs: TradeLog[] = [];
+      const meta = new Map<string, InstrumentMeta>();
+      for (const p of pfs) {
+        const { coreTxns, prices, metaById } = await loadValuation(
+          p.id,
+          display,
+          costBasisMode,
+          p.cashCounted,
+        );
+        logs.push(await buildTradeLog(coreTxns, prices, display, method, costBasisMode));
+        for (const [k, v] of metaById) meta.set(k, v);
+      }
+      return attachInstruments(mergeTradeLogs(logs, display, method), meta);
+    },
+  );
 
   // Income analytics for a single portfolio (in its base currency).
   app.get<{ Params: PortfolioParams }>(

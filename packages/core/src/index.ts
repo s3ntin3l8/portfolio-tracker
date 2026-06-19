@@ -64,3 +64,14 @@ export {
   type IndexPoint,
   type BuildDailyValueFlowsInput,
 } from "./twr.js";
+export {
+  computeTrades,
+  mergeTradeLogs,
+  type TradeMethod,
+  type Trade,
+  type TradeLeg,
+  type TradeLog,
+  type YearAmount,
+  type YearTax,
+  type ComputeTradesInput,
+} from "./trade-log.js";

@@ -31,7 +31,8 @@
     "portfolios": "Portfolios",
     "settings": "Settings",
     "admin": "Admin",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "trades": "Trades"
   },
   "Admin": {
     "title": "Admin",
@@ -715,5 +716,42 @@
       "not_connected": "Not connected. Reconnect and try again.",
       "tr_sync_failed": "Sync failed. Please try again."
     }
+  },
+  "Trades": {
+    "title": "Trade Log",
+    "subtitle": "Every position and its performance, dividends included.",
+    "methodAverage": "Average cost",
+    "methodFifo": "FIFO",
+    "filter_all": "All",
+    "filter_open": "Open",
+    "filter_closed": "Closed",
+    "status_open": "Open",
+    "status_closed": "Closed",
+    "instrument": "Instrument",
+    "entry": "Entry",
+    "exit": "Exit",
+    "held": "Held",
+    "quantity": "Qty",
+    "invested": "Invested",
+    "realized": "Realized",
+    "dividends": "Dividends",
+    "totalReturn": "Total return",
+    "annualized": "Annualized",
+    "longTerm": "Tax-free (>1y)",
+    "yearsAbbr": "y",
+    "daysAbbr": "d",
+    "totalRealized": "Realized P&L",
+    "totalDividends": "Dividends",
+    "winRate": "Win rate",
+    "realizedByYear": "Realized gains by year",
+    "dividendsByYear": "Dividends by year",
+    "noRealized": "No realized gains yet.",
+    "noDividends": "No dividends received yet.",
+    "year": "Year",
+    "received": "Received",
+    "withholding": "Tax withheld",
+    "emptyTitle": "No trades yet",
+    "emptyBody": "Buy an instrument and your positions will show up here as trades.",
+    "taxDisclaimer": "Indicative figures for your own tracking — not an official tax statement. Foreign-currency amounts are converted at the latest rate, not each transaction's date."
   }
 }

@@ -31,7 +31,8 @@
     "portfolios": "Portofolio",
     "settings": "Pengaturan",
     "admin": "Admin",
-    "signOut": "Keluar"
+    "signOut": "Keluar",
+    "trades": "Catatan Dagang"
   },
   "Admin": {
     "title": "Admin",
@@ -715,5 +716,42 @@
       "not_connected": "Belum terhubung. Hubungkan kembali lalu coba lagi.",
       "tr_sync_failed": "Sinkronisasi gagal. Silakan coba lagi."
     }
+  },
+  "Trades": {
+    "title": "Catatan Transaksi",
+    "subtitle": "Setiap posisi dan kinerjanya, termasuk dividen.",
+    "methodAverage": "Biaya rata-rata",
+    "methodFifo": "FIFO",
+    "filter_all": "Semua",
+    "filter_open": "Terbuka",
+    "filter_closed": "Tertutup",
+    "status_open": "Terbuka",
+    "status_closed": "Tertutup",
+    "instrument": "Instrumen",
+    "entry": "Masuk",
+    "exit": "Keluar",
+    "held": "Ditahan",
+    "quantity": "Jml",
+    "invested": "Diinvestasikan",
+    "realized": "Terealisasi",
+    "dividends": "Dividen",
+    "totalReturn": "Total imbal hasil",
+    "annualized": "Tahunan",
+    "longTerm": "Bebas pajak (>1th)",
+    "yearsAbbr": "th",
+    "daysAbbr": "h",
+    "totalRealized": "Laba/rugi terealisasi",
+    "totalDividends": "Dividen",
+    "winRate": "Tingkat menang",
+    "realizedByYear": "Keuntungan terealisasi per tahun",
+    "dividendsByYear": "Dividen per tahun",
+    "noRealized": "Belum ada keuntungan terealisasi.",
+    "noDividends": "Belum ada dividen yang diterima.",
+    "year": "Tahun",
+    "received": "Diterima",
+    "withholding": "Pajak dipotong",
+    "emptyTitle": "Belum ada transaksi",
+    "emptyBody": "Beli sebuah instrumen dan posisi Anda akan muncul di sini sebagai transaksi.",
+    "taxDisclaimer": "Angka indikatif untuk pelacakan pribadi — bukan laporan pajak resmi. Jumlah mata uang asing dikonversi pada kurs terkini, bukan tanggal tiap transaksi."
   }
 }

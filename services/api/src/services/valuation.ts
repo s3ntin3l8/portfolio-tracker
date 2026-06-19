@@ -24,6 +24,8 @@ export interface Valuation {
   coreTxns: CoreTransaction[];
   summary: PortfolioSummary;
   metaById: Map<string, InstrumentMeta>;
+  /** Latest price + currency keyed by instrument id (for open-position valuation). */
+  prices: Record<string, { price: string; currency: string }>;
 }
 
 /**
@@ -95,6 +97,7 @@ export async function valuePortfolio(
     executedAt: r.executedAt,
     loanId: r.loanId,
     kind: r.kind,
+    tax: r.tax,
   }));
 
   // Resolve FX so holdings/cash in other currencies convert to the display currency
@@ -115,7 +118,7 @@ export async function valuePortfolio(
     costBasisMode,
     cashCounted,
   });
-  return { coreTxns, summary, metaById };
+  return { coreTxns, summary, metaById, prices };
 }
 
 /** Corporate actions for the given instruments, shaped for @portfolio/core. */

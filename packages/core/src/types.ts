@@ -34,6 +34,10 @@ export interface CoreTransaction {
   // Used to tell apart externally-funded purchases from broker-credited reinvestment
   // when deriving contributions; null/undefined for plain transactions.
   kind?: string | null;
+  // Withholding tax already netted into `price` for income legs (dividend/coupon/
+  // interest). Informational — used by the trade log to surface tax-by-year; the
+  // cash effect lives in `price`. null/undefined when not applicable.
+  tax?: string | null;
 }
 
 export interface CorporateAction {

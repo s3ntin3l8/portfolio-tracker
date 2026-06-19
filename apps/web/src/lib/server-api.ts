@@ -17,6 +17,8 @@ import {
   type ImportDetail,
   type IncomeStats,
   type ContributionStats,
+  type TradeLog,
+  type TradeMethod,
   type TrConnection,
   type AdminProvider,
   type AdminVisionProvider,
@@ -250,6 +252,35 @@ export async function loadContributions(): Promise<ContributionsView> {
     const data = selected
       ? await api.getPortfolioContributions(selected.id)
       : await api.getContributions();
+    return { status: "ok", data };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+export type TradeLogView =
+  | { status: "ok"; data: TradeLog }
+  | { status: "empty" }
+  | { status: "unavailable" };
+
+/**
+ * Trade log for the active scope: a single portfolio when one is selected, else the
+ * cross-portfolio aggregate. Mirrors {@link loadHoldings}.
+ */
+export async function loadTrades(
+  method: TradeMethod = "average",
+  costBasis?: "purchase_price" | "total_paid",
+): Promise<TradeLogView> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty" };
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    const data = selected
+      ? await api.getTrades(selected.id, method, costBasis)
+      : await api.getNetWorthTrades(method, costBasis);
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
