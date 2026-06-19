@@ -296,6 +296,50 @@ describe("PortfolioFormDialog", () => {
     expect(getTrConnection).not.toHaveBeenCalled();
   });
 
+  it("closes the dialog after saving a TR child account (no TR section to keep open)", async () => {
+    renderEdit({
+      id: "p-tr-kid",
+      name: "TR Kinderdepot",
+      baseCurrency: "EUR",
+      portfolioType: "child",
+      birthYear: 2020,
+      brokerage: "Trade Republic",
+      accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
+      cashCounted: false,
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    fireEvent.click(screen.getByRole("button", { name: m.save }));
+
+    await waitFor(() => expect(updatePortfolio).toHaveBeenCalledWith("p-tr-kid", expect.anything()));
+    // Dialog closed — the name field and Save button are gone.
+    await waitFor(() => expect(screen.queryByLabelText(m.name)).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: m.save })).not.toBeInTheDocument();
+  });
+
+  it("keeps the dialog open after saving a standard TR account (connect section stays)", async () => {
+    renderEdit({
+      id: "p-tr",
+      name: "TR Portfolio",
+      baseCurrency: "EUR",
+      portfolioType: "standard",
+      brokerage: "Trade Republic",
+      birthYear: null,
+      accountHolder: null, accountNumber: null,
+      includeInAggregate: true,
+      cashCounted: false,
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.edit }));
+
+    fireEvent.click(screen.getByRole("button", { name: m.save }));
+
+    await waitFor(() => expect(updatePortfolio).toHaveBeenCalledWith("p-tr", expect.anything()));
+    // Dialog stays open so the user can pair — the TR section remains visible.
+    expect(screen.getByText(m.trSectionTitle)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.name)).toBeInTheDocument();
+  });
+
   it("does not show the TR section for a non-TR portfolio", async () => {
     renderEdit({
       id: "p1",

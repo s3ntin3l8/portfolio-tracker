@@ -170,14 +170,16 @@ export function PortfolioFormDialog({
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
         router.refresh();
-        // Keep the dialog open when brokerage is TR so the connection section stays
-        // accessible; the user can close with the × or the Done button.
-        if (!isTr) setOpen(false);
+        // Keep the dialog open only when the TR connection section is actually shown
+        // (standard TR accounts) so the user can pair; otherwise close as usual. Gating
+        // on isTr alone trapped TR child accounts (Kinderdepot), whose section is hidden.
+        if (!showTrSection) setOpen(false);
       } else {
         const created = await api.createPortfolio(input);
         router.refresh();
-        if (isTr) {
+        if (isTr && created.portfolioType !== "child") {
           // Stay open and reveal the TR connection section bound to the new portfolio.
+          // TR child accounts can't sync, so close like a non-TR portfolio.
           setCreatedPortfolio(created);
         } else {
           setOpen(false);
