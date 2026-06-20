@@ -201,8 +201,10 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
   for (const [instrumentId, events] of byInstrument) {
     events.sort((a, b) => a.at.getTime() - b.at.getTime());
 
-    // Instrument currency — the price quote, else the first price-bearing tx
-    // (computeHoldings enforces one currency per instrument), else display.
+    // instrumentCcy — quote currency for market-value conversions (terminal MV, exposure).
+    // costCcy      — trade currency of the actual buy/sell txns; used for cost basis,
+    //                realized P&L, and leg amounts. Often equal to instrumentCcy, but
+    //                diverges for cross-currency holdings (e.g. US stock bought in EUR).
     const firstPriceTx = events.find(
       (e): e is Extract<Event, { kind: "tx" }> =>
         e.kind === "tx" &&
@@ -210,6 +212,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
     );
     const instrumentCcy =
       input.prices[instrumentId]?.currency ?? firstPriceTx?.tx.currency ?? display;
+    const costCcy = firstPriceTx?.tx.currency ?? instrumentCcy;
 
     // Income (dividend/coupon) events for this instrument, for window-folding.
     const incomeEvents = events
@@ -255,16 +258,20 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const remainingCostFin = remainingCost.add(fin);
 
       // Open-position unrealized + terminal XIRR flow.
+      // Market value uses the quote currency (instrumentCcy); cost basis uses the trade
+      // currency (costCcy). Both are converted to display before subtracting so the
+      // subtraction is always in a common (display) unit — necessary when the two
+      // currencies differ (e.g. USD quote, EUR cost).
       let unrealized = ZERO;
       const quote = input.prices[instrumentId];
       if (status === "open" && quote && currentQty.gt(0)) {
         const mvDisplay = conv(currentQty.mul(quote.price), instrumentCcy);
-        unrealized = mvDisplay.sub(conv(remainingCostFin, instrumentCcy));
+        unrealized = mvDisplay.sub(conv(remainingCostFin, costCcy));
         flows.push({ amount: mvDisplay.toNumber(), date: periodEnd });
       }
 
-      const realizedDisplay = conv(ep.realized, instrumentCcy);
-      const investedDisplay = conv(ep.acqCost.add(fin), instrumentCcy);
+      const realizedDisplay = conv(ep.realized, costCcy);
+      const investedDisplay = conv(ep.acqCost.add(fin), costCcy);
       const totalReturn = realizedDisplay.add(unrealized).add(dividends);
       const totalReturnPct = investedDisplay.isZero()
         ? null
@@ -282,7 +289,9 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
 
       trades.push({
         instrumentId,
-        currency: instrumentCcy,
+        // avgEntryPrice / avgExitPrice are in the trade (cost) currency, which is
+        // what the user actually paid per share — use costCcy so the label is correct.
+        currency: costCcy,
         status,
         entryDate: toDateStr(entryDate),
         exitDate: exitDate ? toDateStr(exitDate) : null,
@@ -377,6 +386,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         episode.realized = episode.realized.add(realizedSlice);
 
         // Legs for the chosen method (display currency).
+        // Leg cost/proceeds/gain are all in costCcy (the trade currency of buys/sells).
         if (method === "fifo") {
           const proceedsPerUnit = sellQty.gt(0) ? proceeds.div(sellQty) : ZERO;
           for (const s of fifoSlices) {
@@ -386,9 +396,9 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
               acqDate: toDateStr(s.acqDate),
               sellDate: toDateStr(sellDate),
               quantity: s.qty.toString(),
-              cost: conv(s.cost, instrumentCcy).toString(),
-              proceeds: conv(sliceProceeds, instrumentCcy).toString(),
-              gain: conv(sliceProceeds.sub(s.cost), instrumentCcy).toString(),
+              cost: conv(s.cost, costCcy).toString(),
+              proceeds: conv(sliceProceeds, costCcy).toString(),
+              gain: conv(sliceProceeds.sub(s.cost), costCcy).toString(),
               holdingDays: days,
               longTerm: days >= LONG_TERM_DAYS,
               taxYear,
@@ -400,9 +410,9 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
             acqDate: toDateStr(episode.entryDate),
             sellDate: toDateStr(sellDate),
             quantity: sellQty.toString(),
-            cost: conv(costAvg, instrumentCcy).toString(),
-            proceeds: conv(proceeds, instrumentCcy).toString(),
-            gain: conv(realizedSlice, instrumentCcy).toString(),
+            cost: conv(costAvg, costCcy).toString(),
+            proceeds: conv(proceeds, costCcy).toString(),
+            gain: conv(realizedSlice, costCcy).toString(),
             holdingDays: days,
             longTerm: days >= LONG_TERM_DAYS,
             taxYear,

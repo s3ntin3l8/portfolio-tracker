@@ -330,3 +330,89 @@ describe("computeTrades — summary", () => {
     expect(log.winRate).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-currency: cost ccy (EUR) ≠ quote ccy (USD)
+// ---------------------------------------------------------------------------
+// Regression for the PEP bug: a USD-quoted US stock bought in EUR via a
+// European broker had its EUR cost basis incorrectly treated as USD, producing
+// a large overstatement of invested/totalReturn and a misleadingly negative
+// annualizedPct. After the fix both measures agree on sign.
+describe("cross-currency trade — USD-quoted, EUR-bought (PEP scenario)", () => {
+  const PEP = "inst-pep";
+  const NOW = new Date("2026-06-20");
+
+  // Real production values:
+  //   buy 0.196633 sh × €127.14 + €1 fee = €26.00 cost
+  //   3 × €0.18 dividend = €0.54
+  //   market value: 0.196633 × $142.02 = $27.93 USD; at 0.8708 → €24.32
+  //   true EUR total return ≈ 24.32 + 0.54 − 26.00 = −1.14 (a real loss)
+  const buyTx: CoreTransaction = {
+    instrumentId: PEP, type: "buy",
+    quantity: "0.196633", price: "127.14", fees: "1",
+    currency: "EUR", executedAt: new Date("2025-08-26"),
+  };
+  const div = (date: string): CoreTransaction => ({
+    instrumentId: PEP, type: "dividend",
+    quantity: "0", price: "0.18", fees: "0",
+    currency: "EUR", executedAt: new Date(date),
+  });
+  const prices = { [PEP]: { price: "142.02", currency: "USD" } };
+  const fx = (from: string, to: string): string => {
+    if (from === "USD" && to === "EUR") return "0.8708";
+    if (from === "EUR" && to === "USD") return "1.1484";
+    return "1";
+  };
+
+  it("invested is in EUR (cost ccy), not USD-treated-as-EUR", () => {
+    const { trades } = computeTrades({
+      transactions: [buyTx],
+      prices,
+      displayCurrency: "EUR",
+      fx,
+      now: NOW,
+    });
+    expect(trades).toHaveLength(1);
+    const t = trades[0];
+    // Cost basis ≈ €26.00 (not €22.64 which was the bug)
+    expect(Number(t.invested)).toBeCloseTo(26.00, 1);
+    // currency label should be EUR (the trade currency), not USD
+    expect(t.currency).toBe("EUR");
+  });
+
+  it("totalReturn is negative in EUR for a position actually under water", () => {
+    const { trades } = computeTrades({
+      transactions: [buyTx, div("2025-09-30"), div("2026-01-06"), div("2026-03-31")],
+      prices,
+      displayCurrency: "EUR",
+      fx,
+      now: NOW,
+    });
+    const t = trades[0];
+    // Total return = MV (≈24.32) + dividends (0.54) − invested (26.00) ≈ −1.14
+    expect(Number(t.totalReturn)).toBeLessThan(0);
+    // annualizedPct should also be negative (consistent with totalReturn sign)
+    expect(t.annualizedPct).toBeLessThan(0);
+    // totalReturnPct should be negative
+    expect(t.totalReturnPct).toBeLessThan(0);
+  });
+
+  it("same-currency position (EUR/EUR) is unaffected — no regression", () => {
+    const I = "inst-eur";
+    const { trades } = computeTrades({
+      transactions: [{
+        instrumentId: I, type: "buy",
+        quantity: "10", price: "100", fees: "0",
+        currency: "EUR", executedAt: new Date("2024-01-01"),
+      }],
+      prices: { [I]: { price: "120", currency: "EUR" } },
+      displayCurrency: "EUR",
+      now: NOW,
+    });
+    expect(trades).toHaveLength(1);
+    const t = trades[0];
+    expect(t.invested).toBe("1000");
+    expect(Number(t.unrealizedPnL)).toBeCloseTo(200, 0);
+    expect(t.currency).toBe("EUR");
+  });
+});

@@ -717,3 +717,99 @@ describe("aggregatePortfolios", () => {
     expect(out.holdings).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-currency cost/quote separation
+// ---------------------------------------------------------------------------
+// A USD-quoted instrument bought in EUR: cost basis is EUR, market value is USD.
+// The holding should surface costCurrency="EUR" and convert each side correctly.
+describe("cross-currency holdings and valuation", () => {
+  const PEP = "inst-pep";
+
+  // Mirrors the real PEP production case from the investigation:
+  //   buy 0.196633 sh × €127.14 + €1 fee = €26.00 cost (EUR, trade ccy)
+  //   quote USD 142.02; FX 0.8708 USD/EUR → EUR market value ≈ €24.32
+  const pepBuy: CoreTransaction = {
+    instrumentId: PEP,
+    type: "buy",
+    quantity: "0.196633",
+    price: "127.14",
+    fees: "1",
+    currency: "EUR",          // trade currency
+    executedAt: new Date("2025-08-26"),
+  };
+
+  const prices = { [PEP]: { price: "142.02", currency: "USD" } };
+  const fx = (from: string, to: string): string => {
+    if (from === "USD" && to === "EUR") return "0.8708";
+    if (from === "EUR" && to === "USD") return "1.1484";
+    return "1";
+  };
+
+  it("computeHoldings surfaces costCurrency=EUR for a EUR-traded instrument", () => {
+    const [h] = computeHoldings([pepBuy]);
+    expect(h.costCurrency).toBe("EUR");
+    // costBasis = 0.196633 * 127.14 + 1 ≈ 26.00
+    expect(Number(h.costBasis)).toBeCloseTo(26.00, 1);
+  });
+
+  it("computeHoldings costCurrency is null for instruments with no price-bearing txns", () => {
+    const divOnly: CoreTransaction = {
+      instrumentId: PEP,
+      type: "dividend",
+      quantity: "0",
+      price: "0.18",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date("2025-09-30"),
+    };
+    // A dividend with an instrumentId still produces a holding entry (qty=0),
+    // but costCurrency is null because there were no buy/sell txns.
+    const holdings = computeHoldings([divOnly]);
+    expect(holdings).toHaveLength(1);
+    expect(holdings[0].costCurrency).toBeNull();
+    expect(holdings[0].quantity).toBe("0");
+  });
+
+  it("summarizePortfolio uses EUR (cost ccy) for costBasisDisplay and USD for marketValueDisplay", () => {
+    const summary = summarizePortfolio({
+      transactions: [pepBuy],
+      prices,
+      displayCurrency: "EUR",
+      fx,
+    });
+    const h = summary.holdings.find((h) => h.instrumentId === PEP)!;
+    // Market value: 0.196633 * 142.02 USD * 0.8708 = approx €24.32
+    expect(Number(h.marketValueDisplay)).toBeCloseTo(24.32, 1);
+    // Cost basis: 26.00 EUR * 1 (EUR→EUR) = 26.00
+    expect(Number(h.costBasisDisplay)).toBeCloseTo(26.00, 1);
+    // Unrealized: 24.32 - 26.00 ≈ -1.68 (a real loss)
+    expect(Number(h.unrealizedPnLDisplay)).toBeCloseTo(-1.68, 1);
+    // totalCost uses cost ccy (EUR), not quote ccy (USD)
+    expect(Number(summary.totalCost)).toBeCloseTo(26.00, 1);
+  });
+
+  it("summarizePortfolio is unchanged for same-currency holdings (no regression)", () => {
+    const I = "inst-eur";
+    const buyEur: CoreTransaction = {
+      instrumentId: I,
+      type: "buy",
+      quantity: "10",
+      price: "100",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date("2024-01-01"),
+    };
+    const summary = summarizePortfolio({
+      transactions: [buyEur],
+      prices: { [I]: { price: "120", currency: "EUR" } },
+      displayCurrency: "EUR",
+    });
+    const h = summary.holdings[0];
+    // costBasisDisplay = costBasis (EUR→EUR, no conversion)
+    expect(h.costBasisDisplay).toBe("1000");
+    // marketValueDisplay = 10 * 120 = 1200
+    expect(h.marketValueDisplay).toBe("1200");
+    expect(h.unrealizedPnLDisplay).toBe("200");
+  });
+});

@@ -103,6 +103,7 @@ export function computeHoldings(
       avgCost: avgCost.toString(),
       costBasis: costBasis.toString(),
       realizedPnL: realized.toString(),
+      costCurrency,
     });
   }
 

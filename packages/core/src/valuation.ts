@@ -116,7 +116,11 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
 
   const valuations: HoldingValuation[] = holdings.map((h) => {
     const quote = input.prices[h.instrumentId];
-    const currency = quote?.currency ?? input.displayCurrency;
+    // Split cost vs quote currency so cross-currency holdings (e.g. a US stock
+    // bought in EUR) are converted correctly. Market value uses the quote currency;
+    // cost basis and realized P&L use the cost currency (the trade currency).
+    const quoteCcy = quote?.currency ?? input.displayCurrency;
+    const costCcy = h.costCurrency ?? quoteCcy;
 
     // Effective (mode-dependent) cost basis and the derived average cost.
     const cb = effectiveCost(h);
@@ -125,10 +129,12 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     const avgCost = qty.isZero() ? h.avgCost : cb.div(qty).toString();
 
     totalRealized = totalRealized.add(
-      new Decimal(convert(h.realizedPnL, currency, input.displayCurrency, fx)),
+      new Decimal(convert(h.realizedPnL, costCcy, input.displayCurrency, fx)),
     );
 
     if (!quote) {
+      // No market price — cost basis is kept in its native cost currency and is not
+      // summed into totalCost; value/P&L are unknown.
       return {
         ...h,
         costBasis: cbStr,
@@ -137,8 +143,6 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
         currency: null,
         marketValue: null,
         unrealizedPnL: null,
-        // Currency unknown without a quote — keep cost basis as-is (it isn't summed
-        // into totalCost either), and leave value/P&L unknown.
         marketValueDisplay: null,
         costBasisDisplay: cbStr,
         unrealizedPnLDisplay: null,
@@ -149,19 +153,24 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     }
 
     const mv = marketValue(h.quantity, quote.price);
-    const unrealized = new Decimal(mv).sub(cb).toString();
-    const marketValueDisplay = convert(mv, currency, input.displayCurrency, fx);
-    const costBasisDisplay = convert(cbStr, currency, input.displayCurrency, fx);
+    // Unrealized in native units: market value (quote ccy) minus cost basis (cost ccy).
+    // We convert both to display first, then subtract — the display-currency amounts are
+    // comparable regardless of whether cost ccy and quote ccy differ.
+    const marketValueDisplay = convert(mv, quoteCcy, input.displayCurrency, fx);
+    const costBasisDisplay = convert(cbStr, costCcy, input.displayCurrency, fx);
     const unrealizedPnLDisplay = new Decimal(marketValueDisplay)
       .sub(new Decimal(costBasisDisplay))
       .toString();
-    totalCost = totalCost.add(
-      new Decimal(convert(cbStr, currency, input.displayCurrency, fx)),
-    );
-    totalMarketValue = totalMarketValue.add(
-      new Decimal(convert(mv, currency, input.displayCurrency, fx)),
-    );
-    addExposure(currency, convert(mv, currency, input.displayCurrency, fx));
+    // Native-currency unrealized is meaningful only when cost ccy == quote ccy;
+    // leave it as the raw difference for same-currency positions (unchanged), and
+    // use the display-currency figure for cross-currency ones (best approximation).
+    const unrealized =
+      costCcy === quoteCcy
+        ? new Decimal(mv).sub(cb).toString()
+        : unrealizedPnLDisplay;
+    totalCost = totalCost.add(new Decimal(costBasisDisplay));
+    totalMarketValue = totalMarketValue.add(new Decimal(marketValueDisplay));
+    addExposure(quoteCcy, marketValueDisplay);
 
     // Day change needs a non-zero prior close; otherwise it's simply unknown.
     const prev =
@@ -175,7 +184,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
       dayChange = priceDelta.mul(h.quantity).toString();
       dayChangePct = priceDelta.div(prev).mul(100).toString();
       totalDayChange = totalDayChange.add(
-        new Decimal(convert(dayChange, currency, input.displayCurrency, fx)),
+        new Decimal(convert(dayChange, quoteCcy, input.displayCurrency, fx)),
       );
     }
 
@@ -322,6 +331,7 @@ export function aggregatePortfolios(
         avgCost: qty.isZero() ? "0" : costBasis.div(qty).toString(),
         costBasis: costBasis.toString(),
         realizedPnL: new Decimal(ex.realizedPnL).add(h.realizedPnL).toString(),
+        costCurrency: h.costCurrency ?? ex.costCurrency,
         price: h.price ?? ex.price,
         currency: h.currency ?? ex.currency,
         marketValue: addNullable(ex.marketValue, h.marketValue),

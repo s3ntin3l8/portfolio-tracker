@@ -34,6 +34,7 @@ const makeHolding = (
   avgCost,
   costBasis: String(Number(quantity) * Number(avgCost)),
   realizedPnL: "0",
+  costCurrency: "IDR",
   price: "100",
   currency: "IDR",
   marketValue: String(Number(quantity) * 100),

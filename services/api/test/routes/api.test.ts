@@ -331,6 +331,7 @@ describe("auth + portfolios + transactions", () => {
         avgCost: "9500",
         costBasis: "950000",
         realizedPnL: "0",
+        costCurrency: "IDR",
       },
     ]);
 

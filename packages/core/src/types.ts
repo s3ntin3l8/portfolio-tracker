@@ -55,6 +55,15 @@ export interface Holding {
   instrumentId: string;
   quantity: string; // remaining units
   avgCost: string; // average cost per unit
-  costBasis: string; // total cost of remaining units
-  realizedPnL: string;
+  costBasis: string; // total cost of remaining units (in costCurrency)
+  realizedPnL: string; // in costCurrency
+  /**
+   * The currency in which the cost basis and realized P&L are denominated.
+   * Normally the trade currency from buy/savings_plan/sell transactions for
+   * this instrument. Null when the instrument has had no price-bearing trades
+   * (e.g. pure-dividend rows). This is often the same as the quote currency,
+   * but diverges for instruments traded in a different currency than they are
+   * priced/quoted in (e.g. US stocks bought in EUR via a European broker).
+   */
+  costCurrency: string | null;
 }

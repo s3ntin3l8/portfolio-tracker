@@ -301,6 +301,10 @@ export interface Holding {
   avgCost: string;
   costBasis: string;
   realizedPnL: string;
+  /** Currency in which cost basis and realized P&L are denominated (the trade/buy currency).
+   * Null when the instrument has had no price-bearing transactions. Usually the same as the
+   * quote currency, but differs for cross-currency holdings (e.g. US stocks bought in EUR). */
+  costCurrency: string | null;
 }
 
 export interface HoldingValuation extends Holding {
