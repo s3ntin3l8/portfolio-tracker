@@ -93,6 +93,9 @@ describe("AddTransactionMenu", () => {
       "href",
       "/transactions/new?kind=corporate-action",
     );
+
+    const merger = screen.getByRole("menuitem", { name: messages.Merger.link });
+    expect(merger.closest("a")).toHaveAttribute("href", "/transactions/new?kind=merger");
   });
 
   it("keeps the import sheet closed without a share/import param", () => {

@@ -1,3 +1,4 @@
+import { Decimal } from "decimal.js";
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
 import { parseEuroDecimal, parseDkbDate } from "./dkb.js";
 
@@ -28,13 +29,37 @@ export interface DkbPdfResult {
 }
 
 const ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}\d)\b/;
+// One merger leg: "<Ausbuchung|Einbuchung> Stück <qty>-? <name> <ISIN> (<WKN>)" — captures
+// quantity, name, ISIN and WKN. The optional trailing "-" appears on the Ausbuchung quantity.
+const MERGER_LEG_RE = (label: string) =>
+  new RegExp(
+    `${label}\\s+St(?:ü|ue)ck\\s+([\\d.,]+)-?\\s+(.*?)\\s+([A-Z]{2}[A-Z0-9]{9}\\d)\\s*\\(([0-9A-Z]{6})\\)`,
+  );
 // A DKB-specific signature (their BLZ / BIC) so we never claim a non-DKB broker's PDF.
 const DKB_SIG_RE = /BYLADEM1001|BLZ\s*120\s*300\s*00|BLZ\s*12030000/;
 const DOC_TYPE_RE = /Dividendengutschrift|Ausschüttung Investmentfonds|Wertpapier\s+Abrechnung/;
 
-/** True when `text` is a recognised DKB securities settlement PDF this parser can handle. */
+/**
+ * A taxable Kapitalmaßnahme — Fondsverschmelzung (fund merger / ISIN change) **confirmation**
+ * ("Umbuchung"): it carries both legs (Ausbuchung/Einbuchung) and a Kurswert. The earlier
+ * *announcement* (no Ausbuchung/Einbuchung/Kurswert — "Umtauschverhältnis noch nicht
+ * veröffentlicht") is deliberately NOT matched, as it can't produce the merged-in quantity.
+ * These letters carry no BLZ/BIC signature, so we gate on a DKB-specific field combination.
+ */
+function isMergerDoc(text: string): boolean {
+  return (
+    /Kapitalmaßnahme/.test(text) &&
+    /verschmelzung/i.test(text) && // "Fondsverschmelzung" (compound → lowercase v)
+    /Ausbuchung/.test(text) &&
+    /Einbuchung/.test(text) &&
+    /Kurswert/.test(text) &&
+    /Depotnummer/.test(text)
+  );
+}
+
+/** True when `text` is a recognised DKB securities settlement / corporate-action PDF. */
 export function detectDkbPdf(text: string): boolean {
-  return DKB_SIG_RE.test(text) && DOC_TYPE_RE.test(text);
+  return (DKB_SIG_RE.test(text) && DOC_TYPE_RE.test(text)) || isMergerDoc(text);
 }
 
 /** Collapse internal whitespace runs to single spaces and trim. */
@@ -99,6 +124,59 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
 
   const accountNumber = text.match(/Depotnummer\s+(\d+)/)?.[1] ?? null;
   const docDate = parseDkbDate(text.match(/\bDatum\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]);
+
+  // Kapitalmaßnahme — taxable Fondsverschmelzung (ISIN change): the old instrument is
+  // ausgebucht (a `sell`) and the new one eingebucht (a `buy`), both `kind:"merger"`, priced
+  // at the doc's Kurswert (deemed market value). The basis steps up to Kurswert and the gain
+  // realizes against the old position's existing buys; `kind:"merger"` keeps contributions
+  // neutral (see the merger feature). The pair flows through the normal import-review pipeline.
+  if (isMergerDoc(text)) {
+    const out = text.match(MERGER_LEG_RE("Ausbuchung"));
+    const inb = text.match(MERGER_LEG_RE("Einbuchung"));
+    const kurswert = amountAfter(text, "Kurswert");
+    const outQty = parseEuroDecimal(out?.[1]);
+    const inQty = parseEuroDecimal(inb?.[1]);
+    const valuta = parseDkbDate(text.match(/Valuta\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? docDate;
+    const belegnr = text.match(/Belegnummer\s+(\d+)/)?.[1];
+
+    if (!out || !inb || kurswert == null || outQty == null || inQty == null) {
+      errors.push({ line: 1, message: "incomplete DKB Kapitalmaßnahme (merger) document" });
+      return { drafts, errors, accountNumber };
+    }
+
+    const value = new Decimal(kurswert);
+    const leg = (
+      side: "out" | "in",
+      m: RegExpMatchArray,
+      qty: string,
+      price: string,
+    ) =>
+      pushDraft(
+        {
+          assetClass: /\bETF\b/.test(m[2]) ? "etf" : /Fonds/.test(m[2]) ? "mutual_fund" : "equity",
+          action: side === "out" ? "sell" : "buy",
+          isin: m[3],
+          wkn: m[4],
+          name: collapse(m[2]) || undefined,
+          quantity: qty,
+          unit: "shares",
+          price,
+          fees: "0",
+          total: kurswert,
+          currency: "EUR",
+          kind: "merger",
+          executedAt: valuta ?? undefined,
+          externalId: belegnr ? `dkb:merger:${belegnr}:${side}` : undefined,
+          confidence: 1,
+        },
+        drafts,
+        errors,
+      );
+    leg("out", out, outQty, value.div(outQty).toFixed(8));
+    leg("in", inb, inQty, value.div(inQty).toFixed(8));
+    return { drafts, errors, accountNumber };
+  }
+
   const { name, isin, wkn, quantity } = extractSecurity(text);
 
   const isIncome = /Dividendengutschrift|Ausschüttung Investmentfonds/.test(text);

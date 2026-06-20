@@ -77,15 +77,87 @@ const VERKAUF =
   "Gegenwert buchen wir mit Valuta 07.03.2023 (IBAN DE00 0000 0000 0000 0000 00), BLZ " +
   "12030000 (BIC BYLADEM1001).";
 
+// Kapitalmaßnahme — taxable Fondsverschmelzung *confirmation* (Umbuchung): both legs +
+// Kurswert. A2H9QY (LU1737652237) merges into A3DH0A (IE000CNSFAR2) at ratio 1:7,4817192.
+const MERGER =
+  "10919 Berlin Frau Max Mustermann Schloßgasse 1e 85120 Hepberg Seite 1 von 4 Depotnummer " +
+  "506740786 Kundennummer 0000000000 Max Mustermann Belegnummer 61395576 Datum 23.01.2024 " +
+  "Kapitalmaßnahme LU17376522370100 0883.01232222.0022362KM52 Steuerwirksame " +
+  "Fondsverschmelzung Nominale Wertpapierbezeichnung ISIN (WKN) Stück 48,1464 AIS-AMUNDI " +
+  "INDEX MSCI WORLD ACT.NOM.UCITS ETF DR D ON LU1737652237 (A2H9QY) Sehr geehrte Frau " +
+  "Mustermann, Ihren Depotbestand haben wir mit Valuta 23.01.2024 zu folgenden Bedingungen " +
+  "umgebucht: Ex-Tag: 18.01.2024 Verhältnis: 1 : 7,4817192 Ausbuchung Stück 48,1464- " +
+  "AIS-AMUNDI INDEX MSCI WORLD ACT.NOM.UCITS ETF DR D ON LU1737652237 (A2H9QY) Einbuchung " +
+  "Stück 360,2180 AM.ETF I.-MSCI WORLD U.ETF REG. SHS DIS. ON Wertpapierrechnung " +
+  "Großbritannien IE000CNSFAR2 (A3DH0A) Als Ergebnis der Fondsverschmelzung buchen wir Ihre " +
+  "Anteile um. Veräußerung infolge Kapitalmaßnahme Kurswert 3.869,77 EUR steuerrelevanter " +
+  "Bewertungskurs 87,4238889 USD Devisenkurs 1,0877 USD/EUR Veräußerungsergebnis " +
+  "(Differenzmethode) 169,89+ EUR Mit freundlichen Grüßen Deutsche Kreditbank AG";
+
+// The earlier *announcement* (Anschreiben): same merger but the ratio isn't published yet,
+// so there's no Ausbuchung/Einbuchung/Kurswert — it can't produce the merged-in quantity.
+const MERGER_ANNOUNCEMENT =
+  "10919 Berlin Frau Max Mustermann Depotnummer 506740786 Belegnummer 51710196 Datum " +
+  "28.12.2023 Kapitalmaßnahme Steuerwirksame Fondsverschmelzung Nominale Wertpapierbezeichnung " +
+  "ISIN (WKN) Stück 44,8329 AIS-AMUNDI INDEX MSCI WORLD ACT.NOM.UCITS ETF DR D ON " +
+  "LU1737652237 (A2H9QY) Ex-Tag 18.01.2024 Umtauschverhältnis noch nicht veröffentlicht ISIN " +
+  "(WKN) neu IE000CNSFAR2 (A3DH0A) Mit freundlichen Grüßen Deutsche Kreditbank AG";
+
 describe("detectDkbPdf", () => {
   it("recognises DKB securities settlement PDFs", () => {
     for (const t of [DIVIDEND, FUND, KAUF, SPARPLAN]) expect(detectDkbPdf(t)).toBe(true);
+  });
+
+  it("recognises a Kapitalmaßnahme merger confirmation but not the incomplete announcement", () => {
+    expect(detectDkbPdf(MERGER)).toBe(true);
+    expect(detectDkbPdf(MERGER_ANNOUNCEMENT)).toBe(false);
   });
 
   it("rejects non-DKB / non-securities text", () => {
     expect(detectDkbPdf("Just some random invoice text with a total of 42 EUR")).toBe(false);
     // A different German broker's trade note (no DKB BLZ/BIC signature).
     expect(detectDkbPdf("Wertpapier Abrechnung Kauf ... BIC COBADEFFXXX")).toBe(false);
+  });
+});
+
+describe("parseDkbPdf — Kapitalmaßnahme fund merger (Fondsverschmelzung)", () => {
+  const { drafts, errors, accountNumber } = parseDkbPdf(MERGER);
+
+  it("emits a sell+buy pair tagged kind:merger, priced at the Kurswert", () => {
+    expect(errors).toEqual([]);
+    expect(accountNumber).toBe("506740786");
+    expect(drafts).toHaveLength(2);
+
+    const sell = drafts.find((d) => d.action === "sell")!;
+    const buy = drafts.find((d) => d.action === "buy")!;
+
+    expect(sell).toMatchObject({
+      action: "sell",
+      isin: "LU1737652237",
+      wkn: "A2H9QY",
+      quantity: "48.1464",
+      price: "80.37506439", // 3869,77 / 48,1464
+      total: "3869.77",
+      kind: "merger",
+      currency: "EUR",
+    });
+    expect(buy).toMatchObject({
+      action: "buy",
+      isin: "IE000CNSFAR2",
+      wkn: "A3DH0A",
+      quantity: "360.2180",
+      price: "10.74285572", // 3869,77 / 360,218
+      total: "3869.77",
+      kind: "merger",
+      assetClass: "etf",
+    });
+    expect(sell.executedAt.toISOString()).toBe("2024-01-23T00:00:00.000Z"); // Valuta
+  });
+
+  it("does not parse the incomplete announcement into a merger", () => {
+    // detectDkbPdf gates it out in the route; called directly it yields no merger drafts.
+    const r = parseDkbPdf(MERGER_ANNOUNCEMENT);
+    expect(r.drafts.some((d) => d.kind === "merger")).toBe(false);
   });
 });
 

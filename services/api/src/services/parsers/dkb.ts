@@ -182,10 +182,15 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
 
 // --- B. Girokonto Umsatzliste -------------------------------------------
 
-const ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b/;
-const WKN_RE = /\bWKN\s+([0-9A-HJ-NP-Z]{6})\b/;
+// ISINs are a fixed 12 chars and WKNs a fixed 6, so anchor on their labels and take the
+// fixed-length code rather than relying on a trailing word boundary — hand-curated /
+// PDF-pasted rows glue the next word onto the code (`ISIN LU1737652583Ihr`, `WKN
+// A2H9Q0Gesch`), which would defeat a trailing `\b`. The dividend branch also relies on
+// ISIN_RE; its rows end with `… ISIN US5949181045`, so the label-anchored form still hits.
+const ISIN_RE = /ISIN\s+([A-Z]{2}[A-Z0-9]{9}[0-9])/;
+const WKN_RE = /WKN\s+([0-9A-HJ-NP-Z]{6})/;
 const PRICE_RE = /Preis\s+([\d.,]+)/;
-const QTY_RE = /Stück\s+([\d.,]+)/; // "Stück <qty>"
+const QTY_RE = /St(?:ü|ue)ck\s+([\d.,]+)/; // "Stück"/"Stueck <qty>" (ASCII transliteration)
 const BOOKING_REF_RE = /\b(\d{15,})\b/;
 
 function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
@@ -236,10 +241,19 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
         parseDkbDate(vz.match(/Wertp\.Abrechn\.\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? date;
       const isin = vz.match(ISIN_RE)?.[1];
       const wkn = vz.match(WKN_RE)?.[1];
-      const price = parseEuroDecimal(vz.match(PRICE_RE)?.[1]);
+      let price = parseEuroDecimal(vz.match(PRICE_RE)?.[1]);
       const quantity = parseEuroDecimal(vz.match(QTY_RE)?.[1]);
+      // One-off market buys/sells omit the `Preis` token (only `Stück` + the settlement
+      // `Betrag` are printed). Back the per-share price out of the exact settlement amount;
+      // `total` carries the lossless Betrag, so cost basis is unaffected and `fees` stay 0.
+      if (price == null && quantity != null && Number(quantity) !== 0) {
+        price = (Math.abs(amountNum) / Number(quantity)).toFixed(8);
+      }
       const name = collapse(vz.match(/Gesch\.Art\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
-      const isSavingsPlan = vz.includes("Wertpapier-Sparplan");
+      // DKB renamed the savings-plan label "Fondssparplan" → "Wertpapier-Sparplan"
+      // around mid-2025; historical statements still carry the older wording, so match both.
+      const isSavingsPlan =
+        vz.includes("Wertpapier-Sparplan") || vz.includes("Fondssparplan");
       const action = isSavingsPlan ? "savings_plan" : amountNum > 0 ? "sell" : "buy";
       // The cash `Betrag` is the actual settlement amount (DKB "Auszumachender Betrag")
       // — keep it as `total` (lossless, strip the sign) and back out the Provision as

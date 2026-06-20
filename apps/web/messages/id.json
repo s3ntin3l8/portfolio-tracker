@@ -500,6 +500,23 @@
     "save": "Simpan",
     "cancel": "Batal"
   },
+  "Merger": {
+    "link": "Merger",
+    "subtitle": "Ubah kepemilikan dari satu ISIN ke ISIN lain (Fondsverschmelzung), membawa basis biaya.",
+    "from": "Instrumen asal (lama)",
+    "to": "Instrumen tujuan (baru)",
+    "search": "Cari berdasarkan simbol, nama, atau ISIN",
+    "outQty": "Unit keluar",
+    "inQty": "Unit masuk",
+    "date": "Tanggal",
+    "taxable": "Merger kena pajak (realisasikan keuntungan pada nilai pasar)",
+    "marketValue": "Nilai pasar",
+    "marketValueHint": "Total nilai posisi saat merger — hanya untuk merger kena pajak.",
+    "submit": "Catat merger",
+    "submitting": "Mencatat…",
+    "needInstruments": "Pilih instrumen lama dan baru.",
+    "error": "Tidak dapat mencatat merger. Periksa kolom dan coba lagi."
+  },
   "Settings": {
     "title": "Pengaturan",
     "subtitle": "Akun dan preferensi Anda.",

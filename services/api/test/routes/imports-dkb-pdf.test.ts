@@ -82,7 +82,10 @@ describe("DKB PDF deterministic import path", () => {
   });
 
   it("parses a DKB dividend PDF deterministically, without calling the vision parser", async () => {
-    const t = await token("dkb-pdf-user");
+    // Distinct sub per test: the extractPdfText mock returns a constant, so every PDF now
+    // hashes to the same text-layer contentHash (#216). A shared user would dedup these
+    // independent uploads together; separate subs keep the tests order-independent.
+    const t = await token("dkb-pdf-parse");
     const form = pdfPart(Buffer.from("%PDF-1.4 (content irrelevant — extractor is mocked)"));
     const res = await app.inject({
       method: "POST",
@@ -107,7 +110,7 @@ describe("DKB PDF deterministic import path", () => {
   });
 
   it("confirms the dividend draft into a transaction carrying tax + fxRate", async () => {
-    const t = await token("dkb-pdf-user");
+    const t = await token("dkb-pdf-confirm");
     const portfolioId = (
       await app.inject({
         method: "POST",
@@ -142,6 +145,40 @@ describe("DKB PDF deterministic import path", () => {
     const list = txns.json();
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ type: "dividend", tax: "0.12", fxRate: "1.1777" });
+  });
+
+  it("dedups a PDF re-export whose bytes differ but text layer is identical (#216)", async () => {
+    // Two distinct byte buffers (as a re-exported/re-downloaded broker PDF would be) that
+    // share the same text layer (the constant mock). File-level dedup must collapse them to
+    // one import — proving the contentHash is derived from the text layer, not the raw bytes.
+    const t = await token("dkb-pdf-reexport");
+
+    const originalForm = pdfPart(Buffer.from("%PDF-1.7 original bytes"), "original.pdf");
+    const first = await app.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...originalForm.headers },
+      payload: originalForm.payload,
+    });
+    expect(first.statusCode).toBe(201);
+    const firstId = first.json().importId;
+    expect(first.json().alreadyExists).toBeFalsy();
+
+    // Byte-different "copy" of the same statement → same text → same hash → deduplicated.
+    const copyForm = pdfPart(Buffer.from("%PDF-1.7 re-exported, different bytes"), "copy.pdf");
+    const second = await app.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...copyForm.headers },
+      payload: copyForm.payload,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().importId).toBe(firstId);
+    expect(second.json().alreadyExists).toBe(true);
+
+    // Only one import row exists for this user (the copy did not create a second).
+    const list = await app.inject({ method: "GET", url: "/imports", headers: auth(t) });
+    expect(list.json()).toHaveLength(1);
   });
 
   it("skips the deterministic parser when the strategy is vision_only", async () => {

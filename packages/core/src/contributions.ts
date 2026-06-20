@@ -9,9 +9,12 @@ const D = (v: string | number) => new Decimal(v);
  * never count as a contribution, even though they buy shares (broker-credited
  * reinvestment). `roundup` is deliberately NOT here — round-ups are the user's
  * own spare change. Reinvested dividends arrive as zero-cash `bonus` rows
- * (notional 0) and are excluded by the type rules below.
+ * (notional 0) and are excluded by the type rules below. `merger` is the buy leg
+ * of a fund merger (Fondsverschmelzung): the new shares replace old ones rather
+ * than being newly-funded, so they are not contributed capital (its sell leg is
+ * likewise kept out of `outflow` — see {@link outsideMonths}).
  */
-const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback"]);
+const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger"]);
 
 export interface ContributionInput {
   txns: CoreTransaction[];
@@ -140,7 +143,9 @@ function outsideMonths(
       p.qty = p.qty.sub(sellQty);
       p.cost = p.cost.sub(costOfSold);
       pool.set(tx.instrumentId, p);
-      m.outflow = m.outflow.add(costOfSold);
+      // A merger's sell leg removes the old position but returns no capital — the
+      // basis moves into the new instrument's buy leg. Draw the pool, skip outflow.
+      if (tx.kind !== "merger") m.outflow = m.outflow.add(costOfSold);
     }
     months.set(key, m);
   }

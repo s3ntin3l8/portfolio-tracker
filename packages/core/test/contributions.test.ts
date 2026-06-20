@@ -135,6 +135,41 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
   });
 });
 
+describe("contributionStats — fund merger (sell+buy, kind:merger)", () => {
+  const OLD = "inst-old";
+  const NEW = "inst-new";
+
+  it("is contribution-neutral in the outside boundary (no phantom inflow/outflow)", () => {
+    const txns: CoreTransaction[] = [
+      // External capital into the old fund: 10 @ 100 = 1000.
+      tx({ instrumentId: OLD, type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-10") }),
+      // Taxable merger on 2026-02-01: sell old @ market 1200, buy new @ 1200 — both kind:"merger".
+      tx({ instrumentId: OLD, type: "sell", quantity: "10", price: "120", kind: "merger", executedAt: new Date("2026-02-01") }),
+      tx({ instrumentId: NEW, type: "buy", quantity: "5", price: "240", kind: "merger", executedAt: new Date("2026-02-01") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    // Only the original 1000 counts; the merger legs cancel out.
+    expect(s.netContributed).toBe("1000");
+    expect(s.totalContributed).toBe("1000");
+    expect(s.totalWithdrawn).toBe("0");
+    expect(s.series).toEqual([{ month: "2026-01", contributed: "1000" }]);
+  });
+
+  it("draws the cost pool so a later real sell of the new fund counts correctly", () => {
+    const txns: CoreTransaction[] = [
+      tx({ instrumentId: OLD, type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-10") }),
+      tx({ instrumentId: OLD, type: "sell", quantity: "10", price: "120", kind: "merger", executedAt: new Date("2026-02-01") }),
+      tx({ instrumentId: NEW, type: "buy", quantity: "5", price: "240", kind: "merger", executedAt: new Date("2026-02-01") }),
+      // Later: a real sell of half the new fund → outflow at the (stepped-up) avg cost 240.
+      tx({ instrumentId: NEW, type: "sell", quantity: "2.5", price: "300", executedAt: new Date("2026-03-01") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    // 1000 in, then 2.5 × 240 = 600 of cost basis out.
+    expect(s.totalWithdrawn).toBe("600");
+    expect(s.netContributed).toBe("400");
+  });
+});
+
 describe("contributionStats — shared", () => {
   it("FX-converts amounts to the display currency before summing", () => {
     const txns: CoreTransaction[] = [

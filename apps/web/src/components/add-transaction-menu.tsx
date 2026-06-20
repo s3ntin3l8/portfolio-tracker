@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, PenLine, FileUp, GitBranch } from "lucide-react";
+import { Plus, PenLine, FileUp, GitBranch, GitMerge } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,7 @@ export function AddTransactionMenu({
   const tm = useTranslations("Manage");
   const ti = useTranslations("Import");
   const tca = useTranslations("CorpAction");
+  const tmg = useTranslations("Merger");
   const api = useApiClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -103,6 +104,17 @@ export function AddTransactionMenu({
             >
               <GitBranch className="size-4" />
               {tca("link")}
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link
+              href={{
+                pathname: "/transactions/new",
+                query: { kind: "merger" },
+              }}
+            >
+              <GitMerge className="size-4" />
+              {tmg("link")}
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>

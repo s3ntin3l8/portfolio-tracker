@@ -29,7 +29,14 @@ export async function instrumentsRoute(app: FastifyInstance) {
       return app.db
         .select()
         .from(instruments)
-        .where(or(ilike(instruments.symbol, `%${q}%`), ilike(instruments.name, `%${q}%`)))
+        .where(
+          or(
+            ilike(instruments.symbol, `%${q}%`),
+            ilike(instruments.name, `%${q}%`),
+            ilike(instruments.isin, `%${q}%`),
+            ilike(instruments.wkn, `%${q}%`),
+          ),
+        )
         .orderBy(asc(instruments.symbol))
         .limit(limit);
     }
