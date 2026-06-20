@@ -423,6 +423,7 @@
     "totalPnL": "Total P&L",
     "positions": "Positions",
     "cash": "Cash",
+    "cashNotTracked": "Not tracked",
     "income": "Income",
     "return": "Return (p.a.)",
     "valueOverTime": "Value over time",

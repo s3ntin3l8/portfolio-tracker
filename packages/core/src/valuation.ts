@@ -37,6 +37,14 @@ export interface PortfolioSummary {
   displayCurrency: string;
   holdings: HoldingValuation[];
   cash: Record<string, string>;
+  /**
+   * Whether the cash balance is meaningful: cash is inside the portfolio's boundary
+   * (`cashCounted`) AND at least one external funding movement (deposit/withdrawal) was
+   * recorded. When `false`, `cash` is empty and excluded from net worth — either because
+   * cash is outside the boundary, or because no funding was imported (so a derived balance
+   * would be a phantom negative artifact of buys). Lets the UI show "not tracked" vs a real 0.
+   */
+  cashTracked: boolean;
   netWorth: string;
   totalCost: string;
   totalMarketValue: string;
@@ -188,11 +196,23 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     };
   });
 
-  // Cash is part of net worth only when it is inside the portfolio's boundary.
-  // For cash-outside portfolios the value is the securities sleeve only — this also
-  // avoids a negative-cash artifact when buys are imported without funding deposits.
+  // Cash is part of net worth only when it is inside the portfolio's boundary AND
+  // actually tracked — i.e. at least one explicit cash-account movement was imported:
+  // an external deposit/withdrawal, or a financing leg (loan drawdown/repayment, whose
+  // negative cash legitimately captures out-of-pocket financing cost). For cash-outside
+  // portfolios, or cash-inside ones whose only cash effects are plain securities buys/
+  // sells, the value is the securities sleeve only — this avoids the phantom negative-cash
+  // artifact when buys are imported without their funding deposits.
   const cashCounted = input.cashCounted ?? true;
-  const cash = cashCounted ? cashBalances(input.transactions) : {};
+  const hasCashMovement = input.transactions.some(
+    (tx) =>
+      tx.type === "deposit" ||
+      tx.type === "withdrawal" ||
+      tx.type === "loan_drawdown" ||
+      tx.type === "loan_repayment",
+  );
+  const cashTracked = cashCounted && hasCashMovement;
+  const cash = cashTracked ? cashBalances(input.transactions) : {};
   for (const [ccy, amount] of Object.entries(cash)) {
     addExposure(ccy, convert(amount, ccy, input.displayCurrency, fx));
   }
@@ -228,6 +248,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     displayCurrency: input.displayCurrency,
     holdings: valuations,
     cash,
+    cashTracked,
     netWorth: nw,
     totalCost: totalCost.toString(),
     totalMarketValue: totalMarketValue.toString(),
@@ -328,6 +349,9 @@ export function aggregatePortfolios(
     displayCurrency,
     holdings: [...holdings.values()],
     cash,
+    // The aggregate cash figure is meaningful as long as at least one portfolio tracks
+    // cash; untracked portfolios contribute an empty cash map, so they don't distort it.
+    cashTracked: summaries.some((s) => s.cashTracked),
     netWorth: netWorth.toString(),
     totalCost: totalCost.toString(),
     totalMarketValue: totalMarketValue.toString(),

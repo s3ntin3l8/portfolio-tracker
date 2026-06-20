@@ -263,9 +263,37 @@ describe("summarizePortfolio", () => {
       cashCounted: false,
     });
     // Cash is outside the boundary: the map is empty and net worth is the securities sleeve.
+    expect(summary.cashTracked).toBe(false);
     expect(summary.cash).toEqual({});
     expect(summary.totalMarketValue).toBe("1100000"); // 100 * 11000
     expect(summary.netWorth).toBe("1100000"); // cash (4,050,000) excluded
+  });
+
+  it("treats cash as not tracked when buys are imported without any funding deposit", () => {
+    // Cash-inside (default) but only securities buys, no deposit/withdrawal: the derived
+    // balance would be a phantom negative (−950,000). Instead cash is reported untracked
+    // and net worth is the securities sleeve only — no phantom drag.
+    const txs: CoreTransaction[] = [
+      mk({ type: "buy", quantity: "100", price: "9500" }),
+    ];
+    const summary = summarizePortfolio({
+      transactions: txs,
+      prices: { [I1]: { price: "11000", currency: "IDR" } },
+      displayCurrency: "IDR",
+    });
+    expect(summary.cashTracked).toBe(false);
+    expect(summary.cash).toEqual({});
+    expect(summary.netWorth).toBe("1100000"); // 100 * 11000, no −950,000 cash drag
+
+    // Once a funding deposit exists, cash is tracked and counted again.
+    const tracked = summarizePortfolio({
+      transactions: [mk({ type: "deposit", instrumentId: null, price: "2000000" }), ...txs],
+      prices: { [I1]: { price: "11000", currency: "IDR" } },
+      displayCurrency: "IDR",
+    });
+    expect(tracked.cashTracked).toBe(true);
+    expect(tracked.cash.IDR).toBe("1050000"); // 2,000,000 − 950,000
+    expect(tracked.netWorth).toBe("2150000"); // 1,100,000 + 1,050,000
   });
 
   it("sums dividend and coupon cash as total income", () => {

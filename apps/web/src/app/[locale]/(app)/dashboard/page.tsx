@@ -201,7 +201,10 @@ export default async function DashboardPage({
           }
         />
         <StatCard label={t("positions")} value={String(openHoldings.length)} />
-        <StatCard label={t("cash")} value={m(cashTotal)} />
+        <StatCard
+          label={t("cash")}
+          value={summary.cashTracked ? m(cashTotal) : t("cashNotTracked")}
+        />
         <StatCard label={t("income")} value={m(Number(summary.totalIncome))} />
       </div>
 

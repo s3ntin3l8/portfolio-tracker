@@ -323,6 +323,9 @@ export interface PortfolioSummary {
   displayCurrency: string;
   holdings: HoldingValuation[];
   cash: Record<string, string>;
+  /** Whether `cash` is meaningful (inside the boundary + funding recorded). When false,
+   * `cash` is empty and excluded from net worth — UI shows "not tracked" vs a real 0. */
+  cashTracked: boolean;
   netWorth: string;
   totalCost: string;
   totalMarketValue: string;
@@ -348,6 +351,9 @@ export interface NetWorth {
   displayCurrency: string;
   holdings: HoldingValuation[];
   cash: Record<string, string>;
+  /** Whether `cash` is meaningful (at least one portfolio tracks cash). When false,
+   * `cash` is empty and excluded from net worth — UI shows "not tracked" vs a real 0. */
+  cashTracked: boolean;
   netWorth: string;
   totalCost: string;
   totalMarketValue: string;

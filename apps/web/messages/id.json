@@ -423,6 +423,7 @@
     "totalPnL": "Total Untung/Rugi",
     "positions": "Posisi",
     "cash": "Kas",
+    "cashNotTracked": "Tidak dilacak",
     "income": "Pendapatan",
     "return": "Imbal hasil (per tahun)",
     "valueOverTime": "Nilai dari waktu ke waktu",
