@@ -1717,4 +1717,168 @@ describe("import dedup + account mismatch (#196, #197)", () => {
 
     await a.close();
   });
+
+  // ── #217 cross-source dedup is a real backstop, not just advisory ──────────
+  // Helper: commit DKB_DEPOT_ONE (the Amazon buy, source="csv") into a fresh solo portfolio,
+  // then return an app whose vision parser yields `draft` so a screenshot of the "same" trade
+  // can be confirmed and asserted on.
+  async function committedCsvThenScreenshot(draft: ParsedTransaction, sub: string) {
+    const { a, mkTok } = await freshApp({
+      name: "mock-217",
+      isConfigured: () => true,
+      parse: async () => ({ drafts: [draft], contracts: [] }),
+    });
+    const t = await mkTok(sub);
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Solo", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    // Commit the trade as a DKB CSV (source="csv").
+    const csv = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: DKB_DEPOT_ONE, format: "dkb" },
+    });
+    const conf = await a.inject({
+      method: "POST",
+      url: `/imports/${csv.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: csv.json().drafts },
+    });
+    expect(conf.json().confirmed).toBe(1);
+    // Now import the screenshot draft.
+    const up = screenshotPart(Buffer.from(`shot-${draft.action}-${String(draft.executedAt)}`), "image/png");
+    const shot = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...up.headers },
+      payload: up.payload,
+    });
+    return { a, t, pid, importId: shot.json().importId as string, drafts: shot.json().drafts };
+  }
+
+  it("blocks a PDF/screenshot confirm of a trade already imported from CSV, until acknowledged", async () => {
+    const { a, t, pid, importId, drafts } = await committedCsvThenScreenshot(SAME_TRADE, "dup217-csv");
+
+    // Selecting the duplicated draft (i.e. the upload-time flag was missed or overridden)
+    // must hit the backstop: a 409 listing the duplicate, NOT a silent double-write.
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: drafts },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("duplicate_transactions");
+    expect(blocked.json().count).toBe(1);
+    expect(blocked.json().duplicates[0].matchedSource).toBe("csv");
+
+    // Acknowledging the override writes it through (the user consciously chose to).
+    const forced = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: drafts, acknowledgeDuplicates: true },
+    });
+    expect(forced.statusCode).toBe(201);
+    expect(forced.json().confirmed).toBe(1);
+
+    await a.close();
+  });
+
+  it("matches across the buy ↔ savings_plan action divergence", async () => {
+    // The CSV records the savings-plan execution as a `buy`; the screenshot/PDF as
+    // `savings_plan`. Same acquisition — the backstop must still catch it.
+    const { a, t, pid, importId, drafts } = await committedCsvThenScreenshot(
+      { ...SAME_TRADE, action: "savings_plan" },
+      "dup217-sp",
+    );
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: drafts },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("duplicate_transactions");
+
+    await a.close();
+  });
+
+  it("matches across a ±1 day trade-vs-settlement date skew", async () => {
+    // CSV trade date 2026-06-15; the screenshot carries the settlement date one day later.
+    const { a, t, pid, importId, drafts } = await committedCsvThenScreenshot(
+      { ...SAME_TRADE, executedAt: new Date("2026-06-16T00:00:00.000Z") },
+      "dup217-day",
+    );
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: drafts },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("duplicate_transactions");
+
+    await a.close();
+  });
+
+  it("does NOT block a same-source re-import that onConflictDoNothing already dedupes", async () => {
+    // A second CSV file that *also* contains the already-committed Amazon row (plus a new
+    // trade). The Amazon row has the same (source, content externalId) → silently skipped by
+    // the unique index, so it must not raise a 409; only the genuinely new trade is written.
+    const { a, mkTok } = await freshApp();
+    const t = await mkTok("samesrc-user");
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Solo", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const csv1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: DKB_DEPOT_ONE, format: "dkb" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/imports/${csv1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: csv1.json().drafts },
+    });
+
+    // File B: the same Amazon row + a distinct Microsoft row → different file hash, but the
+    // Amazon row reproduces the identical content externalId.
+    const DKB_DEPOT_TWO = [
+      "Datum der Erstellung;Depotnummer;Wertpapierbezeichnung;WKN;ISIN;Einstiegskurs;Bewertungskurs;Stückzahl;Absoluter Gewinn;Relativer Gewinn;Assetklasse",
+      '15.06.2026;506740786;"AMAZON.COM INC.    DL-,01";906866;US0231351067;"81,37 €";"210,10 €";5;"643,65 €";158.2%;Aktien',
+      '15.06.2026;506740786;"MICROSOFT CORP.";870747;US5949181045;"270,55 €";"300,00 €";1;"29,45 €";10.9%;Aktien',
+    ].join("\n");
+    const csv2 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: DKB_DEPOT_TWO, format: "dkb" },
+    });
+    const conf2 = await a.inject({
+      method: "POST",
+      url: `/imports/${csv2.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: csv2.json().drafts },
+    });
+    // No 409: the overlapping Amazon row is a silent no-op, only Microsoft is written.
+    expect(conf2.statusCode).toBe(201);
+    expect(conf2.json().confirmed).toBe(1);
+
+    await a.close();
+  });
 });

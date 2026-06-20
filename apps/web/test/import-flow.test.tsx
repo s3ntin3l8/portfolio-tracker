@@ -6,6 +6,7 @@ import {
   type ImportClient,
   type ImportDraft,
 } from "../src/components/import-flow";
+import { ApiError } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
 const DRAFT: ImportDraft = {
@@ -94,7 +95,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1", false, false);
   });
 
   it("edits a draft in the dialog and confirms the edited value", async () => {
@@ -138,6 +139,7 @@ describe("ImportFlow", () => {
       [{ ...DRAFT, name: "Antam Gold 2" }],
       [],
       "p1",
+      false,
       false,
     );
   });
@@ -216,7 +218,7 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     // Confirm carries the selected portfolio.
-    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2", false, false);
   });
 
   it("maps an unrecognised-type issue into a draft and confirms it (TR CSV flag-for-review)", async () => {
@@ -356,7 +358,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false, false);
   });
 
   // ── Multi-file CSV tests ────────────────────────────────────────────────────
@@ -395,8 +397,8 @@ describe("ImportFlow", () => {
 
     // One confirmImport call per import id, each with the default portfolio.
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false, false);
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
@@ -444,8 +446,8 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1", false, false);
   });
 
   it("all files empty/duplicate → stays on upload with error notice", async () => {
@@ -540,7 +542,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1", false, false);
   });
 
   it("excludes likely-duplicate drafts from the default Confirm (#196)", async () => {
@@ -571,7 +573,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-dup", [DRAFT_B], [], "p1", false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-dup", [DRAFT_B], [], "p1", false, false);
   });
 
   it("warns on an account mismatch and re-confirms with acknowledgement (#197)", async () => {
@@ -607,6 +609,59 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     // Re-confirm carries the acknowledgement flag.
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-mm", [DRAFT], [], "p1", true);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-mm", [DRAFT], [], "p1", true, false);
+  });
+
+  it("surfaces a cross-source duplicate 409 and re-confirms with acknowledgement (#217)", async () => {
+    const confirmImport = vi
+      .fn()
+      // First confirm is blocked by the backstop with the duplicate verdict.
+      .mockRejectedValueOnce(
+        new ApiError(
+          409,
+          JSON.stringify({
+            error: "duplicate_transactions",
+            count: 1,
+            duplicates: [
+              {
+                name: "Antam Gold",
+                action: "buy",
+                quantity: "5",
+                executedAt: "2026-02-08",
+                matchedSource: "csv",
+                matchedExecutedAt: "2026-02-08",
+              },
+            ],
+          }),
+        ),
+      )
+      // The acknowledged retry goes through.
+      .mockResolvedValueOnce({ confirmed: 1 });
+    const client: ImportClient = {
+      importScreenshot: vi.fn(async () => ({ importId: "imp-dup2", drafts: [DRAFT], errors: [] })),
+      importCsv: vi.fn(),
+      confirmImport,
+    };
+    renderFlow(client);
+
+    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: messages.Import.confirm })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+
+    // The duplicate banner + "Import anyway" CTA render instead of a generic error.
+    const importAnyway = await screen.findByRole("button", {
+      name: messages.Import.duplicates.importAnyway,
+    });
+    fireEvent.click(importAnyway);
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    );
+    // The first attempt did not acknowledge; the retry does.
+    expect(confirmImport).toHaveBeenNthCalledWith(1, "imp-dup2", [DRAFT], [], "p1", false, false);
+    expect(confirmImport).toHaveBeenNthCalledWith(2, "imp-dup2", [DRAFT], [], "p1", false, true);
   });
 });

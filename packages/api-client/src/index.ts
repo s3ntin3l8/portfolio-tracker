@@ -779,6 +779,52 @@ export function accountMismatchFromError(err: unknown): AccountMismatch | null {
   return null;
 }
 
+/** One selected draft that economically matches an already-committed transaction (#217). */
+export interface DuplicateMatch {
+  /** Instrument name/ISIN/ticker of the duplicated draft (best-effort, may be null). */
+  name: string | null;
+  action: string;
+  quantity: string;
+  /** The draft's own execution day (YYYY-MM-DD). */
+  executedAt: string;
+  /** Source of the already-committed transaction it matched (`csv` / `screenshot` / `pytr`). */
+  matchedSource: string | null;
+  /** Execution day of the committed match (YYYY-MM-DD). */
+  matchedExecutedAt: string;
+}
+
+/** Verdict that a confirm contains cross-source economic duplicates (#217). */
+export interface DuplicateConflict {
+  count: number;
+  duplicates: DuplicateMatch[];
+}
+
+/**
+ * Extract the duplicate verdict from a thrown 409 (`{ error: "duplicate_transactions", … }`).
+ * Returns null for any other error so callers can `if (duplicatesFromError(err))` to detect
+ * and re-prompt with `acknowledgeDuplicates`. (#217)
+ */
+export function duplicatesFromError(err: unknown): DuplicateConflict | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  try {
+    const parsed: unknown = JSON.parse(err.body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as { error?: unknown }).error === "duplicate_transactions"
+    ) {
+      const { count, duplicates } = parsed as Record<string, unknown>;
+      return {
+        count: typeof count === "number" ? count : 0,
+        duplicates: Array.isArray(duplicates) ? (duplicates as DuplicateMatch[]) : [],
+      };
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return null;
+}
+
 export interface ApiClientConfig {
   baseUrl: string;
   getToken?: () => string | undefined | Promise<string | undefined>;
@@ -1006,11 +1052,18 @@ export function createApiClient(config: ApiClientConfig) {
       contracts: ParsedGoldContract[] = [],
       portfolioId?: string,
       acknowledgeAccountMismatch = false,
+      acknowledgeDuplicates = false,
     ) =>
       request<{ confirmed: number; transactions: Transaction[]; likelyDuplicates: number }>(
         "POST",
         `/imports/${importId}/confirm`,
-        { portfolioId, transactions, contracts, acknowledgeAccountMismatch },
+        {
+          portfolioId,
+          transactions,
+          contracts,
+          acknowledgeAccountMismatch,
+          acknowledgeDuplicates,
+        },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */

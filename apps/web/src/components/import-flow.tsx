@@ -18,8 +18,13 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioPicker } from "@/components/portfolio-picker";
-import type { AccountMismatch, ImportIssue, LikelyDuplicate } from "@portfolio/api-client";
-import { accountMismatchFromError } from "@portfolio/api-client";
+import type {
+  AccountMismatch,
+  DuplicateConflict,
+  ImportIssue,
+  LikelyDuplicate,
+} from "@portfolio/api-client";
+import { accountMismatchFromError, duplicatesFromError } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
 import { ImportReview } from "@/components/import-review";
@@ -135,6 +140,7 @@ export interface ImportClient {
     contracts?: ImportContract[],
     portfolioId?: string,
     acknowledgeAccountMismatch?: boolean,
+    acknowledgeDuplicates?: boolean,
   ): Promise<{ confirmed: number }>;
 }
 
@@ -250,6 +256,14 @@ export function ImportFlow({
   // Account-mismatch warning (#197) — set from the upload hint or a confirm 409. Shown as
   // a banner in the review step; "Import anyway" re-confirms with the acknowledge flag.
   const [accountMismatch, setAccountMismatch] = useState<AccountMismatch | null>(null);
+  // Cross-source duplicate warning (#217) — set from a confirm 409. Shown as a banner in the
+  // review step; "Import anyway" re-confirms the same selection with the acknowledge flag.
+  const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
+  // The selection that produced the last confirm attempt, so a duplicate "Import anyway"
+  // replays exactly what the user chose (not just "confirm all").
+  const pendingConfirm = useRef<{ uids?: string[]; acknowledgeMismatch: boolean }>({
+    acknowledgeMismatch: false,
+  });
   const [confirmedCount, setConfirmedCount] = useState(0);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -475,8 +489,9 @@ export function ImportFlow({
    * Multi-group: fan-out — one call per import id, contracts attached to their
    * owning import. Confirmed counts are summed.
    */
-  async function confirm(uids?: string[], acknowledgeMismatch = false) {
+  async function confirm(uids?: string[], acknowledgeMismatch = false, acknowledgeDup = false) {
     setError(null);
+    pendingConfirm.current = { uids, acknowledgeMismatch };
     setStep("parsing");
     try {
       // "Confirm all" (no uids) excludes drafts flagged as likely duplicates (#196) — the
@@ -494,6 +509,7 @@ export function ImportFlow({
           contracts,
           portfolioByImport.get(importId),
           acknowledgeMismatch,
+          acknowledgeDup,
         );
         setConfirmedCount(confirmed);
       } else {
@@ -523,19 +539,25 @@ export function ImportFlow({
                 iid === contractImportId ? contracts : [],
                 portfolioByImport.get(iid),
                 acknowledgeMismatch,
+                acknowledgeDup,
               ),
             ),
         );
         setConfirmedCount(results.reduce((s, r) => s + r.confirmed, 0));
       }
       setAccountMismatch(null);
+      setDuplicateConflict(null);
       setStep("done");
     } catch (err) {
-      // A confirm into a portfolio whose account doesn't match (#197) comes back as a 409
-      // with the verdict — surface the banner + "Import anyway" instead of a generic error.
+      // A confirm blocked by a 409 carries its verdict — surface a banner + "Import anyway"
+      // instead of a generic error. Account mismatch (#197) is checked server-side before
+      // duplicates (#217), so at most one verdict is present per attempt.
       const mismatch = accountMismatchFromError(err);
+      const duplicates = duplicatesFromError(err);
       if (mismatch) {
         setAccountMismatch(mismatch);
+      } else if (duplicates) {
+        setDuplicateConflict(duplicates);
       } else {
         setError(errorMessage(err));
       }
@@ -555,6 +577,7 @@ export function ImportFlow({
     setFileStatuses([]);
     setError(null);
     setAccountMismatch(null);
+    setDuplicateConflict(null);
     setStep("upload");
   }
 
@@ -761,6 +784,46 @@ export function ImportFlow({
               >
                 {t("accountMismatch.importAnyway")}
               </Button>
+            </div>
+          )}
+
+          {/* Duplicate warning (#217): selected drafts already exist from another source. */}
+          {duplicateConflict && (
+            <div
+              role="alert"
+              className="space-y-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <div className="flex-1 space-y-1">
+                  <p>{t("duplicates.warning", { count: duplicateConflict.count })}</p>
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning/90">
+                    {duplicateConflict.duplicates.slice(0, 5).map((d, i) => (
+                      <li key={i}>
+                        {t("duplicates.row", {
+                          name: d.name ?? "—",
+                          action: d.action,
+                          date: d.executedAt,
+                          source: d.matchedSource ?? "—",
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void confirm(
+                      pendingConfirm.current.uids,
+                      pendingConfirm.current.acknowledgeMismatch,
+                      true,
+                    )
+                  }
+                >
+                  {t("duplicates.importAnyway")}
+                </Button>
+              </div>
             </div>
           )}
 
