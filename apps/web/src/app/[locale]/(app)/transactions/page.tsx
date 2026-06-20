@@ -84,16 +84,15 @@ export default async function TransactionsPage({
     ...(aggregate ? [r.portfolioName ?? ""] : []),
   ]);
 
+  // Adding is handled by the global add-entry menu in the app-shell header, so this page
+  // header only carries the export action (no redundant second Add button).
   const addButton = (
-    <div className="flex items-center gap-2">
-      <ExportCsvButton
-        filename="transactions.csv"
-        headers={exportHeaders}
-        rows={exportRows}
-        label={t("exportCsv")}
-      />
-      <AddTransactionMenu />
-    </div>
+    <ExportCsvButton
+      filename="transactions.csv"
+      headers={exportHeaders}
+      rows={exportRows}
+      label={t("exportCsv")}
+    />
   );
 
   const heading = (action?: React.ReactNode) => (
