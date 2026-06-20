@@ -7,6 +7,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -52,6 +53,24 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
   const { sortKey, sortDir, toggle, sort } = useTableSort<HoldingValuation>(HOLDINGS_COLS);
 
   const sorted = sort(rows);
+
+  // Column totals across the (already class-filtered) visible rows. Market value and
+  // P&L sum only the priced holdings — unpriced ones (marketValueDisplay === null) are
+  // skipped, matching how net worth ignores instruments without a live quote. The total
+  // P&L % is taken against summed cost basis so it stays consistent with the rows.
+  const totals = rows.reduce(
+    (acc, h) => {
+      if (h.marketValueDisplay !== null) acc.value += Number(h.marketValueDisplay);
+      if (h.unrealizedPnLDisplay !== null) acc.pnl += Number(h.unrealizedPnLDisplay);
+      acc.cost += Number(h.costBasisDisplay);
+      return acc;
+    },
+    { value: 0, pnl: 0, cost: 0 },
+  );
+  const totalPct = totals.cost !== 0 ? (totals.pnl / totals.cost) * 100 : null;
+  const totalPnlColor =
+    totals.pnl > 0 ? "text-success" : totals.pnl < 0 ? "text-destructive" : "";
+  const money = (n: number) => formatMoney(n, currency, locale);
 
   return (
     <>
@@ -116,6 +135,18 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
               );
             })}
           </TableBody>
+          <TableFooter>
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={4}>{t("total")}</TableCell>
+              <TableCell className="tabular text-right">{money(totals.value)}</TableCell>
+              <TableCell className={cn("tabular text-right", totalPnlColor)}>
+                {`${totals.pnl >= 0 ? "+" : ""}${money(totals.pnl)}`}
+                {totalPct !== null && (
+                  <div className="text-xs">{formatPct(totalPct)}</div>
+                )}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
         </Table>
       </div>
 
@@ -172,6 +203,17 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
             </Fragment>
           );
         })}
+
+        {/* Totals row */}
+        <div className="col-span-3 border-t-2 border-border" />
+        <div className="py-3 pl-4 font-medium">{t("total")}</div>
+        <div aria-hidden />
+        <div className="text-right tabular py-3 pr-4">
+          <div className="text-sm font-medium">{money(totals.value)}</div>
+          <div className={cn("text-xs", totalPnlColor)}>
+            {`${totals.pnl >= 0 ? "+" : ""}${money(totals.pnl)}${totalPct !== null ? ` ${formatPct(totalPct)}` : ""}`}
+          </div>
+        </div>
       </div>
     </>
   );

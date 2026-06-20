@@ -508,6 +508,7 @@
     "value": "Nilai",
     "pnl": "Untung/Rugi",
     "all": "Semua",
+    "total": "Total",
     "exportCsv": "Ekspor CSV",
     "costBasisPurchasePrice": "Harga beli",
     "costBasisTotalPaid": "Total dibayar"

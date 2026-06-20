@@ -508,6 +508,7 @@
     "value": "Value",
     "pnl": "P&L",
     "all": "All",
+    "total": "Total",
     "exportCsv": "Export CSV",
     "costBasisPurchasePrice": "Purchase price",
     "costBasisTotalPaid": "Total paid"

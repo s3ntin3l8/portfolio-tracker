@@ -117,4 +117,12 @@ describe("HoldingsTable", () => {
     const instrumentBtn = screen.getByRole("button", { name: /instrument/i });
     expect(instrumentBtn.closest("th")).toHaveAttribute("aria-sort", "none");
   });
+
+  it("renders a totals row summing market value across the visible rows", () => {
+    renderTable();
+    // "Total" appears in both the desktop footer and the mobile total row.
+    expect(screen.getAllByText("Total").length).toBeGreaterThan(0);
+    // Market values: 50*100 + 10*100 + 100*100 = 16,000 in the display currency.
+    expect(screen.getAllByText(/16,000/).length).toBeGreaterThan(0);
+  });
 });
