@@ -245,19 +245,7 @@
       "review": "Review",
       "done": "Done"
     },
-    "tabs": {
-      "screenshot": "Screenshot",
-      "csv": "CSV file"
-    },
     "targetPortfolio": "Import into",
-    "csvFormat": {
-      "label": "Format",
-      "auto": "Auto-detect",
-      "generic": "Generic",
-      "dkb": "DKB (Germany)",
-      "ibkr": "Interactive Brokers",
-      "coinbase": "Coinbase"
-    },
     "menu": {
       "manual": "Manual entry",
       "import": "Import file"
@@ -265,8 +253,7 @@
     "dropzone": {
       "title": "Add a transaction",
       "hint": "From a broker, gold app or bank confirmation",
-      "cta": "Choose a screenshot or PDF",
-      "csvCta": "Choose one or more CSV files",
+      "cta": "Choose screenshots, PDFs, or CSV files",
       "dropHere": "Drop files here"
     },
     "fileStatus": {
