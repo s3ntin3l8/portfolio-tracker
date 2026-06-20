@@ -194,6 +194,64 @@ describe("parseDkb — Girokonto Umsatzliste", () => {
   });
 });
 
+// Hand-augmented history: older rows pasted from PDFs / transliterated, so the
+// Verwendungszweck uses ASCII "Stueck" (not "Stück"), collapses inter-token spacing (the
+// ISIN glues onto the next word), and one-off market orders omit the "Preis" token.
+const GIRO_CURATED_CSV = [
+  '"Girokonto u18";"DE78120300001066505387"',
+  '""',
+  '"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"IBAN";"Betrag (€)";"Gläubiger-ID";"Mandatsreferenz";"Kundenreferenz"',
+  // ASCII "Stueck" + clean spacing → must parse like its "Stück" twin.
+  '"08.06.26";"09.06.26";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786 Wertp.Abrechn. 05.06.2026 000006520078300 WKN A2H9Q0 Gesch.Art KV AIS-A.CO.MSCI E.M.UETFDRD ISIN LU1737652583 Ihr Wertpapier-Sparplan Preis       74,50600000 EUR Stueck           0,3355";"Ausgang";"0000000000";"-25";"";"";""',
+  // Collapsed spacing: ISIN glued to "Ihr", "Stueck" glued to "EUR". ISIN must still extract.
+  '"08.01.24";"09.01.24";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786Wertp.Abrechn. 05.01.2024000006434844000 WKN A2H9Q0Gesch.Art KVAIS-A.IN.MSCI E.M.UCETFDDISIN LU1737652583Ihr FondssparplanPreis       45,32390000 EURStueck           3,8331";"Ausgang";"0000000000";"-173,73";"";"";""',
+  // One-off market buy: no "Preis" token — only Stueck + the settlement Betrag.
+  '"01.02.24";"02.02.24";"Gebucht";"Max Mustermann";"DKB AG";"Depot 0506740786Wertp.Abrechn. 01.02.2024000006768938400 WKN A1CX3TGesch.Art KVStueck              2,0000TESLA INC. DL -,001ISIN US88160R1014";"Ausgang";"0000000000";"-360,40";"";"";""',
+].join("\n");
+
+describe("parseDkb — Girokonto Umsatzliste, hand-curated / transliterated rows", () => {
+  const { drafts, errors } = parseDkb(GIRO_CURATED_CSV);
+
+  it("parses every row with no decimal-string errors", () => {
+    expect(errors).toEqual([]);
+    expect(drafts).toHaveLength(3);
+  });
+
+  it("reads ASCII 'Stueck' as the quantity (not just the umlaut form)", () => {
+    const sp = drafts.find((d) => d.action === "savings_plan");
+    expect(sp).toMatchObject({
+      isin: "LU1737652583",
+      quantity: "0.3355",
+      price: "74.50600000",
+      total: "25",
+      fees: "0",
+    });
+  });
+
+  it("extracts the ISIN from a collapsed-spacing row (glued to the next word)", () => {
+    const collapsed = drafts.find((d) => d.quantity === "3.8331");
+    expect(collapsed).toMatchObject({
+      action: "buy",
+      isin: "LU1737652583",
+      quantity: "3.8331",
+      price: "45.32390000",
+      total: "173.73",
+    });
+  });
+
+  it("derives the price from the settlement amount when 'Preis' is absent", () => {
+    const tesla = drafts.find((d) => d.isin === "US88160R1014");
+    expect(tesla).toMatchObject({
+      action: "buy",
+      wkn: "A1CX3T",
+      quantity: "2.0000",
+      price: "180.20000000", // 360,40 / 2
+      total: "360.40",
+      fees: "0",
+    });
+  });
+});
+
 describe("parseDkb — unrecognised format", () => {
   it("reports an error rather than throwing", () => {
     const { drafts, errors } = parseDkb("foo;bar;baz\n1;2;3");
