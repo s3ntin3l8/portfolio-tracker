@@ -27,7 +27,7 @@ export default async function NewTransactionPage({
   const ns = creatingPortfolio ? "Manage.portfolio" : "Manage.tx";
   const t = await getTranslations(ns);
   const defaultTab: NewEntryTab =
-    kind === "corporate-action" ? "corporate-action" : "transaction";
+    kind === "corporate-action" ? "corporate-action" : kind === "merger" ? "merger" : "transaction";
   // Neutral H1 so it reads correctly across both tabs (the empty/creating-portfolio
   // branches keep their own portfolio-specific title).
   const heading = creatingPortfolio ? t("title") : tm("tx.entryTitle");

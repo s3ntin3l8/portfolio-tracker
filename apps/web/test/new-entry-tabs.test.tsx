@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
     updateTransaction: vi.fn(async () => ({})),
     getGoldSources: vi.fn(async () => [{ market: "ANTAM", label: "Antam buyback" }]),
     createCorporateAction: vi.fn(async () => ({})),
+    createMerger: vi.fn(async () => []),
   }),
 }));
 
@@ -24,8 +25,9 @@ import { NewEntryTabs } from "../src/components/new-entry-tabs";
 
 const tx = messages.Manage.tx;
 const ca = messages.CorpAction;
+const mg = messages.Merger;
 
-function renderTabs(defaultTab?: "transaction" | "corporate-action") {
+function renderTabs(defaultTab?: "transaction" | "corporate-action" | "merger") {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <NewEntryTabs portfolioId="p1" defaultTab={defaultTab} />
@@ -53,5 +55,12 @@ describe("NewEntryTabs", () => {
   it("starts on the corporate-action tab when requested", () => {
     renderTabs("corporate-action");
     expect(screen.getByLabelText(ca.ratio)).toBeInTheDocument();
+  });
+
+  it("starts on the merger tab when requested", () => {
+    renderTabs("merger");
+    // The merger form's two instrument pickers are present (their search inputs).
+    expect(screen.getByLabelText(mg.from)).toBeInTheDocument();
+    expect(screen.getByLabelText(mg.to)).toBeInTheDocument();
   });
 });

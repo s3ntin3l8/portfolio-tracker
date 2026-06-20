@@ -213,6 +213,33 @@ export const transactionInputSchema = z.object({
 });
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
 
+// A fund merger / Fondsverschmelzung (ISIN change): the old instrument's position is
+// closed and the new one opened, carrying cost basis — recorded as a paired sell+buy
+// (both `kind:"merger"`, see the mergers route). `taxable` (steuerwirksam) deems a
+// disposal at `marketValue`, realizing the gain and stepping the new basis up to market;
+// otherwise the basis carries with no realized gain. Quantities differ by the exchange
+// ratio. The legs' currency is derived from the instruments (must match).
+export const mergerInputSchema = z
+  .object({
+    portfolioId: z.guid(),
+    fromInstrumentId: z.guid(),
+    toInstrumentId: z.guid(),
+    outQty: decimalString,
+    inQty: decimalString,
+    executedAt: z.coerce.date(),
+    taxable: z.boolean().default(false),
+    marketValue: decimalString.optional(),
+  })
+  .refine((v) => v.fromInstrumentId !== v.toInstrumentId, {
+    message: "from and to instruments must differ",
+    path: ["toInstrumentId"],
+  })
+  .refine((v) => !v.taxable || v.marketValue !== undefined, {
+    message: "marketValue is required for a taxable merger",
+    path: ["marketValue"],
+  });
+export type MergerInput = z.infer<typeof mergerInputSchema>;
+
 // --- Screenshot / CSV parse output ---------------------------------------
 
 // Actions a parser can emit. Securities trades + income (buy/sell/dividend/coupon),

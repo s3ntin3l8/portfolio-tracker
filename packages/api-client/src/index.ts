@@ -1,6 +1,7 @@
 import type {
   PortfolioInput,
   TransactionInput,
+  MergerInput,
   InstrumentInput,
   CorporateActionInput,
   ParsedTransaction,
@@ -911,6 +912,9 @@ export function createApiClient(config: ApiClientConfig) {
       request<{ deleted: number }>("POST", `/portfolios/${portfolioId}/transactions/bulk-delete`, {
         ids,
       }),
+    /** Record a fund merger (Fondsverschmelzung) as an atomic sell+buy pair. */
+    createMerger: (portfolioId: string, input: Omit<MergerInput, "portfolioId">) =>
+      request<Transaction[]>("POST", `/portfolios/${portfolioId}/mergers`, input),
 
     getQuote: (ref: QuoteRef) =>
       request<Quote>(

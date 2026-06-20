@@ -481,6 +481,23 @@
     "save": "Save",
     "cancel": "Cancel"
   },
+  "Merger": {
+    "link": "Merger",
+    "subtitle": "Convert a holding from one ISIN to another (Fondsverschmelzung), carrying cost basis.",
+    "from": "From instrument (old)",
+    "to": "To instrument (new)",
+    "search": "Search by symbol, name or ISIN",
+    "outQty": "Shares out",
+    "inQty": "Shares in",
+    "date": "Date",
+    "taxable": "Taxable merger (realise the gain at market value)",
+    "marketValue": "Market value",
+    "marketValueHint": "Total value of the position at the merger — taxable mergers only.",
+    "submit": "Record merger",
+    "submitting": "Recording…",
+    "needInstruments": "Select both the old and the new instrument.",
+    "error": "Couldn't record the merger. Check the fields and try again."
+  },
   "Settings": {
     "title": "Settings",
     "subtitle": "Your account and preferences.",
