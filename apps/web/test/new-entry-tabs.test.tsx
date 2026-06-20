@@ -27,9 +27,18 @@ const tx = messages.Manage.tx;
 const ca = messages.CorpAction;
 const mg = messages.Merger;
 
+type TestPortfolio = {
+  id: string;
+  name: string;
+  brokerage: string | null;
+  accountHolder: string | null;
+};
+
 function renderTabs(
   defaultTab?: "transaction" | "corporate-action" | "merger",
-  portfolios: { id: string; name: string }[] = [{ id: "p1", name: "Main" }],
+  portfolios: TestPortfolio[] = [
+    { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+  ],
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -71,26 +80,36 @@ describe("NewEntryTabs", () => {
     expect(screen.getByLabelText(mg.to)).toBeInTheDocument();
   });
 
-  it("offers a portfolio picker only when more than one portfolio exists", () => {
+  it("offers the rich portfolio picker only when more than one portfolio exists", () => {
     // Single portfolio: no picker (destination is unambiguous).
     const { unmount } = renderTabs();
-    expect(screen.queryByLabelText(tx.portfolioPicker)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: tx.portfolioPicker }),
+    ).not.toBeInTheDocument();
     unmount();
 
-    // Two portfolios: the picker is shown on the transaction tab, listing both.
+    // Two portfolios: the rich picker (a Radix dropdown trigger, not a native select) is
+    // shown on the transaction tab; opening it lists both, with the brokerage appended.
     renderTabs("transaction", [
-      { id: "p1", name: "Main" },
-      { id: "p2", name: "DKB" },
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "DKB", brokerage: "DKB", accountHolder: null },
     ]);
-    expect(screen.getByLabelText(tx.portfolioPicker)).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "DKB" })).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: tx.portfolioPicker });
+    expect(trigger).toBeInTheDocument();
+    // Radix opens on pointer/keyboard events, not a synthetic click.
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    expect(
+      screen.getByRole("menuitem", { name: /DKB · DKB/ }),
+    ).toBeInTheDocument();
   });
 
-  it("shares the portfolio picker with the merger tab", () => {
+  it("shares the rich portfolio picker with the merger tab", () => {
     renderTabs("merger", [
-      { id: "p1", name: "Main" },
-      { id: "p2", name: "DKB" },
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
     ]);
-    expect(screen.getByLabelText(tx.portfolioPicker)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: tx.portfolioPicker }),
+    ).toBeInTheDocument();
   });
 });

@@ -134,6 +134,14 @@ export function RecordCorporateActionForm({
             )}
           </>
         )}
+        {/* A corporate action is instrument-global — recorded once, it adjusts holdings in
+            every portfolio that holds the instrument. Spell that out so the absence of a
+            portfolio picker doesn't read as a missing field. */}
+        <p className="text-xs text-muted-foreground">
+          {selected
+            ? t("scopeHintFor", { symbol: selected.symbol })
+            : t("scopeHint")}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
