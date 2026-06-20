@@ -9,6 +9,7 @@ const refresh = vi.fn();
 const discardImport = vi.fn(async () => undefined);
 const deleteImport = vi.fn(async () => ({ removed: 1 }));
 const clearImport = vi.fn(async () => undefined);
+const bulkClearImports = vi.fn(async () => ({ cleared: 2 }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -17,7 +18,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ discardImport, deleteImport, clearImport }),
+  useApiClient: () => ({ discardImport, deleteImport, clearImport, bulkClearImports }),
 }));
 
 import { ImportHistory } from "../src/components/import-history";
@@ -101,6 +102,7 @@ describe("ImportHistory", () => {
     discardImport.mockClear();
     deleteImport.mockClear();
     clearImport.mockClear();
+    bulkClearImports.mockClear();
   });
 
   it("discards a draft import", async () => {
@@ -220,10 +222,11 @@ describe("ImportHistory", () => {
       </NextIntlClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: m.clearAll }));
+    // One batched request, not one DELETE per row (which tripped the rate limiter).
     await waitFor(() => {
-      expect(clearImport).toHaveBeenCalledWith("disc1");
-      expect(clearImport).toHaveBeenCalledWith("disc2");
+      expect(bulkClearImports).toHaveBeenCalledWith(["disc1", "disc2"]);
     });
+    expect(clearImport).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();
   });
 });

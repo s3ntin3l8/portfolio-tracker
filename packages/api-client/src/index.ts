@@ -1076,6 +1076,9 @@ export function createApiClient(config: ApiClientConfig) {
     /** Hard-delete a discarded import row (no-op on its already-removed children). */
     clearImport: (importId: string) =>
       request<void>("DELETE", `/imports/${importId}/clear`),
+    /** Batch hard-delete of discarded imports (one request — used by "clear all"). */
+    bulkClearImports: (ids: string[]) =>
+      request<{ cleared: number }>("POST", `/imports/bulk-clear`, { ids }),
 
     // --- Trade Republic ---
     getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),

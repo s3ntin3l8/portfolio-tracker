@@ -97,6 +97,9 @@ describe("CSV import → confirm flow", () => {
     privateKey = kp.privateKey;
     process.env.AUTHENTIK_ISSUER = ISSUER;
     process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    // This block shares one app across many tests, so the global rate limiter (default
+    // 100/min) accumulates and would 429 later tests. Lift it for the suite.
+    process.env.RATE_LIMIT_MAX = "10000";
     app = await buildApp({ authKey: kp.publicKey });
   });
 
@@ -105,6 +108,7 @@ describe("CSV import → confirm flow", () => {
     await closeDb();
     delete process.env.AUTHENTIK_ISSUER;
     delete process.env.AUTHENTIK_AUDIENCE;
+    delete process.env.RATE_LIMIT_MAX;
   });
 
   it("imports drafts, confirms to transactions, and 409s on re-confirm", async () => {
@@ -476,6 +480,94 @@ describe("CSV import → confirm flow", () => {
         })
       ).statusCode,
     ).toBe(404);
+  });
+
+  it("bulk-clears only the caller's discarded imports", async () => {
+    const t = await token("bulk-clear-user");
+    await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "BulkClear", baseCurrency: "IDR" },
+    });
+
+    // Three imports: discard two, leave one as a draft.
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const imp = (
+        await app.inject({
+          method: "POST",
+          url: `/imports/csv`,
+          headers: auth(t),
+          // Vary the content so each is a distinct import (file-level dedup otherwise
+          // collapses identical re-uploads onto the same draft row).
+          payload: { content: `${CSV}\n# import ${i}` },
+        })
+      ).json();
+      ids.push(imp.importId);
+    }
+    const [discardedA, discardedB, draftId] = ids;
+    for (const id of [discardedA, discardedB]) {
+      await app.inject({ method: "POST", url: `/imports/${id}/discard`, headers: auth(t) });
+    }
+
+    // Another user's discarded import — must not be touched by t's bulk-clear.
+    const other = await token("bulk-clear-other");
+    await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(other),
+      payload: { name: "OtherBulk", baseCurrency: "IDR" },
+    });
+    const otherImp = (
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(other),
+        payload: { content: CSV },
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${otherImp.importId}/discard`,
+      headers: auth(other),
+    });
+
+    // Clear all four ids in one request: only t's two discarded rows are removed —
+    // the draft (not discarded) and the other user's row (not owned) are skipped.
+    const res = await app.inject({
+      method: "POST",
+      url: "/imports/bulk-clear",
+      headers: auth(t),
+      payload: { ids: [discardedA, discardedB, draftId, otherImp.importId] },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().cleared).toBe(2);
+
+    // The discarded rows are gone; the draft survives.
+    const remaining = (
+      await app.inject({ method: "GET", url: "/imports", headers: auth(t) })
+    ).json().map((r: { id: string }) => r.id);
+    expect(remaining).not.toContain(discardedA);
+    expect(remaining).not.toContain(discardedB);
+    expect(remaining).toContain(draftId);
+
+    // The other user's discarded row is untouched.
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${otherImp.importId}`, headers: auth(other) }))
+        .statusCode,
+    ).toBe(200);
+  });
+
+  it("rejects bulk-clear with an empty id list (400)", async () => {
+    const t = await token("bulk-clear-empty-user");
+    const res = await app.inject({
+      method: "POST",
+      url: "/imports/bulk-clear",
+      headers: auth(t),
+      payload: { ids: [] },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it("returns existing draft import on re-upload of identical CSV", async () => {
