@@ -25,10 +25,17 @@ import { NewEntryTabs } from "../src/components/new-entry-tabs";
 const tx = messages.Manage.tx;
 const ca = messages.CorpAction;
 
-function renderTabs(defaultTab?: "transaction" | "corporate-action") {
+function renderTabs(
+  defaultTab?: "transaction" | "corporate-action",
+  portfolios: { id: string; name: string }[] = [{ id: "p1", name: "Main" }],
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <NewEntryTabs portfolioId="p1" defaultTab={defaultTab} />
+      <NewEntryTabs
+        portfolios={portfolios}
+        initialPortfolioId={portfolios[0]?.id ?? ""}
+        defaultTab={defaultTab}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -53,5 +60,23 @@ describe("NewEntryTabs", () => {
   it("starts on the corporate-action tab when requested", () => {
     renderTabs("corporate-action");
     expect(screen.getByLabelText(ca.ratio)).toBeInTheDocument();
+  });
+
+  it("offers a portfolio picker only when more than one portfolio exists", () => {
+    // Single portfolio: no picker (destination is unambiguous).
+    const { unmount } = renderTabs();
+    expect(screen.queryByLabelText(tx.portfolioPicker)).not.toBeInTheDocument();
+    unmount();
+
+    // Two portfolios: the picker is shown on the transaction tab, listing both.
+    renderTabs("transaction", [
+      { id: "p1", name: "Main" },
+      { id: "p2", name: "DKB" },
+    ]);
+    const picker = screen.getByLabelText(tx.portfolioPicker);
+    expect(picker).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "DKB" }),
+    ).toBeInTheDocument();
   });
 });

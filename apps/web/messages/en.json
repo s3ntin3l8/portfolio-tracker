@@ -587,6 +587,7 @@
       "title": "Add a transaction",
       "entryTitle": "Add to portfolio",
       "tabTransaction": "Transaction",
+      "portfolioPicker": "Portfolio",
       "editTitle": "Edit transaction",
       "subtitle": "Record a trade, dividend or cash movement.",
       "save": "Save changes",

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { NewEntryTabs, type NewEntryTab } from "@/components/new-entry-tabs";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
-import { loadPortfolio } from "@/lib/server-api";
+import { resolveSelection } from "@/lib/server-api";
 
 export default async function NewTransactionPage({
   params,
@@ -21,9 +21,17 @@ export default async function NewTransactionPage({
   const tf = await getTranslations("PortfolioForm");
   const te = await getTranslations("Empty");
 
-  const result = await loadPortfolio(async (_api, portfolio) => portfolio);
+  const selection = await resolveSelection();
+  // The transaction lands in the switcher-selected portfolio, or the first one when the
+  // aggregate ("All portfolios") scope is active; the picker in NewEntryTabs makes that
+  // explicit and switchable.
+  const initialPortfolioId =
+    selection.status === "ok" && selection.portfolios.length > 0
+      ? (selection.selectedId ?? selection.portfolios[0].id)
+      : "";
 
-  const creatingPortfolio = result.status === "empty";
+  const creatingPortfolio =
+    selection.status === "ok" && selection.portfolios.length === 0;
   const ns = creatingPortfolio ? "Manage.portfolio" : "Manage.tx";
   const t = await getTranslations(ns);
   const defaultTab: NewEntryTab =
@@ -48,13 +56,13 @@ export default async function NewTransactionPage({
         </div>
       </div>
 
-      {result.status === "unavailable" ? (
+      {selection.status === "unavailable" ? (
         <EmptyState
           icon={Wallet}
           title={te("unavailableTitle")}
           description={te("unavailableBody")}
         />
-      ) : result.status === "empty" ? (
+      ) : creatingPortfolio ? (
         <PortfolioFormDialog
           mode="create"
           trigger={
@@ -66,7 +74,8 @@ export default async function NewTransactionPage({
         />
       ) : (
         <NewEntryTabs
-          portfolioId={result.portfolio.id}
+          portfolios={selection.portfolios.map((p) => ({ id: p.id, name: p.name }))}
+          initialPortfolioId={initialPortfolioId}
           defaultTab={defaultTab}
         />
       )}
