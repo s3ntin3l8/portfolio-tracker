@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import {
   instruments,
   loans,
@@ -95,16 +95,19 @@ export async function importsRoute(app: FastifyInstance) {
     return p ?? null;
   }
 
-  /** Look up a non-discarded import for the same (userId, contentHash). Scoped per-user
-   * so the same file cannot be re-imported across different portfolios. */
-  async function existingImport(userId: string, contentHash: string) {
+  /** Look up a non-discarded import for the same user matching any of the given content
+   * hashes. Scoped per-user so the same file cannot be re-imported across different
+   * portfolios. Accepts multiple hashes so the PDF path can match both the text-layer hash
+   * (the forward key, #216) and the legacy raw-byte hash of pre-#216 imports. */
+  async function existingImport(userId: string, contentHash: string | string[]) {
+    const hashes = Array.isArray(contentHash) ? contentHash : [contentHash];
     const [row] = await app.db
       .select()
       .from(screenshotImports)
       .where(
         and(
           eq(screenshotImports.userId, userId),
-          eq(screenshotImports.contentHash, contentHash),
+          inArray(screenshotImports.contentHash, hashes),
           ne(screenshotImports.status, "discarded"),
         ),
       )
@@ -410,15 +413,39 @@ export async function importsRoute(app: FastifyInstance) {
         throw err;
       }
 
-      // Hash the base64 representation so dedup semantics are preserved across both the
-      // old JSON path and the new multipart path (existing draft rows used base64 hashes).
-      const contentHash = shortHash(buf.toString("base64"));
+      // Raw-byte hash: the base64 representation so dedup semantics are preserved across
+      // both the old JSON path and the new multipart path (existing draft rows used base64
+      // hashes). Keep this formula verbatim — it's the backward-compat lookup key below.
+      const rawHash = shortHash(buf.toString("base64"));
+
+      // For PDFs with a text layer, hash the *normalized extracted text* instead of the raw
+      // bytes (#216): a re-export / re-download of the same statement differs at the byte
+      // level (embedded /ID, XMP timestamps, compression) but carries an identical text
+      // layer, so byte hashing fails to dedup it. Extracted once here and reused by the DKB
+      // fast-path below. Empty text (image-only/scanned) or a parse error falls back to the
+      // raw-byte hash for both store and lookup.
+      let pdfText: string | null = null;
+      let contentHash = rawHash;
+      if (mimeType === "application/pdf") {
+        try {
+          const text = await extractPdfText(buf);
+          const normalized = text.replace(/\s+/g, " ").trim();
+          if (normalized) {
+            pdfText = text;
+            contentHash = shortHash(normalized);
+          }
+        } catch (err) {
+          request.log.warn({ err }, "pdf text extraction for dedup failed; using raw-byte hash");
+        }
+      }
 
       request.log.info({ mimeType, bytes: buf.length }, "screenshot import started");
 
-      // Re-upload guard: same image already imported and not discarded → return it.
+      // Re-upload guard: same document already imported and not discarded → return it.
       // Scoped per-user so the same document can't be re-parsed into a different portfolio.
-      const existing = await existingImport(id, contentHash);
+      // Two-tier lookup: match the forward text-layer hash *and* the legacy raw-byte hash,
+      // so byte-identical re-uploads of imports created before #216 still dedup.
+      const existing = await existingImport(id, [contentHash, rawHash]);
       if (existing) {
         const isDraft = existing.status === "draft";
         const storedParsed = isDraft
@@ -467,7 +494,8 @@ export async function importsRoute(app: FastifyInstance) {
       // no billing, no data egress. Falls through to vision for any non-DKB / scanned PDF.
       if (importStrategy === "parser_first" && mimeType === "application/pdf") {
         try {
-          const text = await extractPdfText(buf);
+          // Reuse the text already extracted for the dedup hash above (it's the same buffer).
+          const text = pdfText ?? (await extractPdfText(buf));
           if (detectDkbPdf(text)) {
             const { drafts: dkbDrafts, accountNumber: dkbAccount } = parseDkbPdf(text);
             if (dkbDrafts.length > 0) {
