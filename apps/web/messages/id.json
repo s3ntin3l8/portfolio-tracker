@@ -376,6 +376,11 @@
       "noMatch": "Nomor rekening pada berkas ini ({account}) tidak cocok dengan portofolio yang dipilih. Tetap impor?",
       "importAnyway": "Tetap impor"
     },
+    "duplicates": {
+      "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",
+      "row": "{name} · {action} · {date} (sudah diimpor dari {source})",
+      "importAnyway": "Tetap impor"
+    },
     "discard": "Buang",
     "confirm": "Konfirmasi",
     "done": {
@@ -401,6 +406,10 @@
     "reviewTitle": "Tinjau impor",
     "reviewSubtitle": "Periksa transaksinya, lalu konfirmasi untuk menambahkannya — atau buang impor ini.",
     "reviewError": "Terjadi kesalahan. Silakan coba lagi.",
+    "duplicates": {
+      "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",
+      "importAnyway": "Tetap impor"
+    },
     "discard": "Buang",
     "undo": "Batalkan",
     "undoWarning": "Menghapus {count, plural, other {# transaksi}}.",

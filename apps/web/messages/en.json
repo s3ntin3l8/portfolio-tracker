@@ -376,6 +376,11 @@
       "noMatch": "The account number on this file ({account}) doesn't match the selected portfolio. Import anyway?",
       "importAnyway": "Import anyway"
     },
+    "duplicates": {
+      "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
+      "row": "{name} · {action} · {date} (already imported from {source})",
+      "importAnyway": "Import anyway"
+    },
     "discard": "Discard",
     "confirm": "Confirm",
     "done": {
@@ -401,6 +406,10 @@
     "reviewTitle": "Review import",
     "reviewSubtitle": "Check the transactions, then confirm to add them — or discard the import.",
     "reviewError": "Something went wrong. Please try again.",
+    "duplicates": {
+      "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
+      "importAnyway": "Import anyway"
+    },
     "discard": "Discard",
     "undo": "Undo",
     "undoWarning": "Removes {count, plural, one {# transaction} other {# transactions}}.",

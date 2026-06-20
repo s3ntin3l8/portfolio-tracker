@@ -13,6 +13,8 @@ import {
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
+import { duplicatesFromError, type DuplicateConflict } from "@portfolio/api-client";
+import { Button } from "@/components/ui/button";
 
 /**
  * Review and confirm an already-staged draft import (e.g. a Trade Republic sync, or a
@@ -40,6 +42,10 @@ export function DraftReviewClient({
   const [error, setError] = useState<string | null>(null);
   const [importedCount, setImportedCount] = useState<number | null>(null);
   const importedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cross-source duplicate warning (#217) from a confirm 409; "Import anyway" re-confirms
+  // the same selection with the acknowledge flag.
+  const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
+  const pendingUids = useRef<string[] | undefined>(undefined);
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
@@ -66,8 +72,9 @@ export function DraftReviewClient({
   }
 
   // Confirm all drafts, or just the subset whose uids are passed (confirm-selected).
-  async function confirm(uids?: string[]) {
+  async function confirm(uids?: string[], acknowledgeDup = false) {
     setError(null);
+    pendingUids.current = uids;
     const subset =
       uids && uids.length ? drafts.filter((d) => uids.includes(d.uid)) : drafts;
     // A partial confirm keeps the import open server-side — stay on the page, drop the
@@ -77,7 +84,12 @@ export function DraftReviewClient({
       await api.confirmImport(
         importId,
         subset.map(stripUid) as unknown as Parameters<typeof api.confirmImport>[1],
+        [],
+        undefined,
+        false,
+        acknowledgeDup,
       );
+      setDuplicateConflict(null);
       if (isPartial) {
         const confirmed = new Set(subset.map((d) => d.uid));
         setDrafts((ds) => ds.filter((d) => !confirmed.has(d.uid)));
@@ -89,8 +101,13 @@ export function DraftReviewClient({
       } else {
         backToImport();
       }
-    } catch {
-      setError(t("reviewError"));
+    } catch (err) {
+      const duplicates = duplicatesFromError(err);
+      if (duplicates) {
+        setDuplicateConflict(duplicates);
+      } else {
+        setError(t("reviewError"));
+      }
     }
   }
 
@@ -122,6 +139,24 @@ export function DraftReviewClient({
         >
           <CheckCircle2 className="size-4 shrink-0" />
           {t("importedBanner", { count: importedCount })}
+        </div>
+      )}
+      {duplicateConflict && (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span className="flex-1">
+            {t("duplicates.warning", { count: duplicateConflict.count })}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void confirm(pendingUids.current, true)}
+          >
+            {t("duplicates.importAnyway")}
+          </Button>
         </div>
       )}
       <ImportReview

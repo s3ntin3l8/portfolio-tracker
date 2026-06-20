@@ -67,12 +67,21 @@ export function ImportFlowClient({
       api.importScreenshot(file) as unknown as Promise<ImportResult>,
     importCsv: (content, format) =>
       api.importCsv(content, format) as unknown as Promise<ImportResult>,
-    confirmImport: async (importId, drafts, contracts, portfolioId) => {
+    confirmImport: async (
+      importId,
+      drafts,
+      contracts,
+      portfolioId,
+      acknowledgeAccountMismatch,
+      acknowledgeDuplicates,
+    ) => {
       const res = await api.confirmImport(
         importId,
         drafts as unknown as Parameters<typeof api.confirmImport>[1],
         contracts as unknown as Parameters<typeof api.confirmImport>[2],
         portfolioId,
+        acknowledgeAccountMismatch,
+        acknowledgeDuplicates,
       );
       router.refresh(); // surface the new transactions on other screens
       return res;

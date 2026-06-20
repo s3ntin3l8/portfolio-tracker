@@ -28,11 +28,8 @@ import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { parseTrCsv } from "../services/parsers/tr-csv.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
-import {
-  assignContentExternalIds,
-  economicFingerprint,
-  shortHash,
-} from "../services/parsers/hash.js";
+import { assignContentExternalIds, shortHash } from "../services/parsers/hash.js";
+import { findCrossSourceDuplicates } from "../services/parsers/dedup.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -83,7 +80,23 @@ const confirmBodySchema = z.object({
   // Set true to proceed past an account-number mismatch (the file looks like it belongs
   // to a different portfolio). The server otherwise refuses with 409 (#197).
   acknowledgeAccountMismatch: z.boolean().default(false),
+  // Set true to proceed past cross-source economic duplicates (the same trade was already
+  // imported from another format). The server otherwise refuses with 409 (#217).
+  acknowledgeDuplicates: z.boolean().default(false),
 });
+
+/** Best-effort instrument identity for upload-time dedup, before instruments are resolved:
+ *  prefer ISIN, then WKN, then a normalised name. Returns null when nothing is available. */
+function uploadIdentity(
+  isin: string | null | undefined,
+  wkn: string | null | undefined,
+  name: string | null | undefined,
+): string | null {
+  if (isin) return `isin:${isin.trim().toUpperCase()}`;
+  if (wkn) return `wkn:${wkn.trim().toUpperCase()}`;
+  const n = (name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return n ? `name:${n}` : null;
+}
 
 export async function importsRoute(app: FastifyInstance) {
   async function ownedPortfolio(userId: string, portfolioId: string) {
@@ -211,11 +224,15 @@ export async function importsRoute(app: FastifyInstance) {
 
   /**
    * Flag drafts that economically match transactions already committed to `portfolioId`
-   * (#196 cross-format dedup), so the review screen can pre-deselect them. Best-effort:
-   * keyed on the draft's ISIN (instruments aren't resolved yet at upload), and **count-aware**
-   * — at most (number already committed) drafts per fingerprint are flagged, so two
-   * legitimate identical same-day buys against an empty history are never both suppressed.
-   * Mutates drafts in place, adding `likelyDuplicate: { source, executedAt }`.
+   * (#196 cross-format dedup, hardened in #217), so the review screen can pre-deselect them.
+   * Best-effort: instruments aren't resolved yet at upload, so identity falls back to the
+   * draft's ISIN → WKN → normalised name. Matching is tolerant (action class, ±1 day,
+   * quantity/price within tolerance) and **count-aware** — each committed row flags at most
+   * one draft, so two legitimate identical same-day buys against an empty history are never
+   * both suppressed. Mutates drafts in place, adding `likelyDuplicate: { source, executedAt }`.
+   *
+   * This pass is advisory (it only pre-deselects in the UI). The authoritative backstop runs
+   * at confirm time against the resolved instrumentId — see the cross-source check there.
    */
   async function annotateLikelyDuplicates(
     drafts: ParsedTransaction[],
@@ -230,43 +247,34 @@ export async function importsRoute(app: FastifyInstance) {
         price: transactions.price,
         source: transactions.source,
         isin: instruments.isin,
+        wkn: instruments.wkn,
+        name: instruments.name,
       })
       .from(transactions)
       .leftJoin(instruments, eq(instruments.id, transactions.instrumentId))
       .where(eq(transactions.portfolioId, portfolioId));
 
-    const buckets = new Map<string, { count: number; source: string | null; executedAt: Date }>();
-    for (const r of rows) {
-      if (!r.isin) continue; // ISIN-keyed; cash legs have no instrument
-      const fp = economicFingerprint({
-        key: r.isin,
-        action: r.type,
-        executedAt: r.executedAt,
-        quantity: r.quantity,
-        price: r.price,
-      });
-      const b = buckets.get(fp);
-      if (b) b.count++;
-      else buckets.set(fp, { count: 1, source: r.source, executedAt: r.executedAt });
-    }
+    const committed = rows.map((r) => ({
+      key: uploadIdentity(r.isin, r.wkn, r.name),
+      action: r.type,
+      quantity: r.quantity,
+      price: r.price,
+      executedAt: r.executedAt,
+      source: r.source,
+    }));
+    const draftCandidates = drafts.map((d) => ({
+      key: uploadIdentity(d.isin, d.wkn, d.name),
+      action: d.action,
+      quantity: d.quantity,
+      price: d.price,
+      executedAt: d.executedAt,
+    }));
 
-    for (const d of drafts) {
-      if (!d.isin) continue;
-      const fp = economicFingerprint({
-        key: d.isin,
-        action: d.action,
-        executedAt: d.executedAt,
-        quantity: d.quantity,
-        price: d.price,
-      });
-      const b = buckets.get(fp);
-      if (b && b.count > 0) {
-        b.count--;
-        (d as Record<string, unknown>).likelyDuplicate = {
-          source: b.source,
-          executedAt: b.executedAt,
-        };
-      }
+    for (const { draftIndex, matched } of findCrossSourceDuplicates(draftCandidates, committed)) {
+      (drafts[draftIndex] as Record<string, unknown>).likelyDuplicate = {
+        source: matched.source,
+        executedAt: matched.executedAt,
+      };
     }
   }
 
@@ -763,6 +771,7 @@ export async function importsRoute(app: FastifyInstance) {
         contracts,
         portfolioId: bodyPortfolioId,
         acknowledgeAccountMismatch,
+        acknowledgeDuplicates,
       } = confirmBodySchema.parse(request.body);
       if (drafts.length === 0 && contracts.length === 0) {
         return reply.code(400).send({ error: "nothing_to_confirm" });
@@ -920,13 +929,14 @@ export async function importsRoute(app: FastifyInstance) {
         resolved.push({ draft: d, instrumentId });
       }
 
-      // Cross-source duplicate check (#196), authoritative: now that instruments are
-      // resolved, count how many drafts economically match a transaction already committed
-      // to the target portfolio (count-aware, keyed on the resolved instrumentId). Behaviour
-      // is selection-authoritative — we report/log but never drop what the user chose to
-      // confirm; the review pre-deselect is what prevents the double-write in the normal flow.
+      // Cross-source duplicate check (#196, hardened to a real backstop in #217): now that
+      // instruments are resolved, find drafts that economically match a transaction already
+      // committed to the target portfolio (tolerant + count-aware, keyed on the resolved
+      // instrumentId). Unlike before, this is authoritative — an *un-acknowledged* economic
+      // duplicate blocks the confirm with a 409 so the user consciously sees it and can either
+      // drop the row or re-confirm with `acknowledgeDuplicates`. It never silently drops a row.
       let likelyDuplicates = 0;
-      {
+      duplicateCheck: {
         const committed = await app.db
           .select({
             instrumentId: transactions.instrumentId,
@@ -934,41 +944,72 @@ export async function importsRoute(app: FastifyInstance) {
             executedAt: transactions.executedAt,
             quantity: transactions.quantity,
             price: transactions.price,
+            source: transactions.source,
+            externalId: transactions.externalId,
           })
           .from(transactions)
           .where(eq(transactions.portfolioId, targetPortfolioId));
-        const buckets = new Map<string, number>();
-        for (const r of committed) {
-          if (!r.instrumentId) continue;
-          const fp = economicFingerprint({
-            key: r.instrumentId,
-            action: r.type,
-            executedAt: r.executedAt,
-            quantity: r.quantity,
-            price: r.price,
+
+        // Same-source re-imports (e.g. overlapping monthly CSV exports) are already absorbed
+        // silently by the `(portfolioId, source, externalId)` unique index + onConflictDoNothing
+        // on insert. Excluding those from the 409 set keeps that flow quiet and reserves the
+        // block for genuine *cross-source* / divergent duplicates — the bug this targets.
+        const committedExtKeys = new Set(
+          committed
+            .filter((r) => r.externalId)
+            .map((r) => `${r.source}|${r.externalId}`),
+        );
+
+        const committedCandidates = committed.map((r) => ({
+          key: r.instrumentId,
+          action: r.type,
+          quantity: r.quantity,
+          price: r.price,
+          executedAt: r.executedAt,
+          source: r.source,
+        }));
+        const draftCandidates = resolved.map(({ draft: d, instrumentId }) => ({
+          key: instrumentId,
+          action: d.action,
+          quantity: d.quantity,
+          price: d.price,
+          executedAt: d.executedAt,
+        }));
+
+        const matches = findCrossSourceDuplicates(draftCandidates, committedCandidates).filter(
+          ({ draftIndex }) => {
+            // Skip economic matches that are also a guaranteed no-op write (same source +
+            // same content externalId already present) — those need no surfacing.
+            const d = resolved[draftIndex].draft;
+            const prospectiveExtId = d.externalId ?? `import:${imp.id}:${draftIndex}`;
+            return !committedExtKeys.has(`${source}|${prospectiveExtId}`);
+          },
+        );
+        if (matches.length === 0) break duplicateCheck; // no duplicates → likelyDuplicates stays 0
+        likelyDuplicates = matches.length;
+
+        request.log.info(
+          { importId: imp.id, likelyDuplicates, acknowledged: acknowledgeDuplicates },
+          "confirm: cross-source duplicates among selected drafts",
+        );
+        if (!acknowledgeDuplicates) {
+          const isoDay = (v: Date | string) =>
+            (v instanceof Date ? v.toISOString() : new Date(v).toISOString()).slice(0, 10);
+          return reply.code(409).send({
+            error: "duplicate_transactions",
+            count: likelyDuplicates,
+            duplicates: matches.map(({ draftIndex, matched }) => {
+              const d = resolved[draftIndex].draft;
+              return {
+                name: d.name ?? d.isin ?? d.ticker ?? null,
+                action: d.action,
+                quantity: d.quantity,
+                executedAt: isoDay(d.executedAt),
+                matchedSource: matched.source,
+                matchedExecutedAt: isoDay(matched.executedAt),
+              };
+            }),
           });
-          buckets.set(fp, (buckets.get(fp) ?? 0) + 1);
-        }
-        for (const { draft: d, instrumentId } of resolved) {
-          if (!instrumentId) continue;
-          const fp = economicFingerprint({
-            key: instrumentId,
-            action: d.action,
-            executedAt: d.executedAt,
-            quantity: d.quantity,
-            price: d.price,
-          });
-          const n = buckets.get(fp) ?? 0;
-          if (n > 0) {
-            buckets.set(fp, n - 1);
-            likelyDuplicates++;
-          }
-        }
-        if (likelyDuplicates > 0) {
-          request.log.info(
-            { importId: imp.id, likelyDuplicates },
-            "confirm: cross-source duplicates among selected drafts",
-          );
         }
       }
 
