@@ -11,11 +11,14 @@ import { splitCsvLine } from "./csv-line.js";
 //
 // Conventions verified against real exports (981-row main + a JUNIOR child depot, 2026-06-19):
 //   • Trades:    |amount| = shares × price  (fee is SEPARATE, not folded into amount).
-//   • Dividends: `amount` is GROSS; the withheld `tax` is `|tax|/|amount|` = the statutory
-//                rate (26.375% DE, 15% US). Net cash credited = amount − |tax|, which is
-//                what drives cashFlow/XIRR — so `price` = net, `total` = gross (cf. cash.ts).
-//   • Promos:    BENEFITS_SAVEBACK/BONUS/KINDERGELD_BONUS/STOCKPERK are broker-credited cash
-//                → income (action `interest` + a `kind`), excluded from contributed capital.
+//   • Dividends: `amount` is GROSS (signed). `tax` is negative for a withholding, positive
+//                for a refund/reversal. Net = amount + tax. `price` = signed net (drives
+//                cashFlow/XIRR); `tax` stored as −csv_tax (positive = withheld, negative =
+//                refund) to match the DKB/manual convention. A reversal row has a negative
+//                `amount` and positive `tax`, yielding a negative net and negative stored tax.
+//   • Promos:    BENEFITS_SAVEBACK → income (action `interest` + kind `saveback`) — excluded
+//                from contributions. BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`
+//                (a distinct broker-cash type with its own "Bonus" label), also excluded.
 //   • EARNINGS:  Vorabpauschale (advance fund tax): gross 0, only `tax` withheld, so the net
 //                cash is −|tax| → a negative-cash income leg (cash & gain drop, not contribution).
 //   • Sign:      buy amount<0/shares>0, sell amount>0/shares<0, cash-in>0, cash-out<0.
@@ -43,17 +46,17 @@ const WITHDRAWAL_TYPES = new Set([
 const CARD_TYPES = new Set(["CARD_TRANSACTION", "CARD_TRANSACTION_INTERNATIONAL"]);
 const DIVIDEND_TYPES = new Set(["DIVIDEND", "DISTRIBUTION"]);
 // Cash credits with no share leg (cashback / promos). Broker-credited money, not a user
-// contribution — recorded as income (interest) carrying a `kind`, so it lands in cash but
-// is excluded from contributed-capital like INTEREST_PAYOUT (cf. the pytr mapper). Unlike
-// pytr's SAVEBACK_AGGREGATE, the CSV row has no reinvestment shares. KINDERGELD_BONUS (a TR
-// promo credit on the Kindergeld feature) and STOCKPERK (a reward credited as cash, not
-// shares — the row has an instrument but no share count) are the same: broker income.
-const CASH_CREDIT_KIND: Record<string, string> = {
-  BENEFITS_SAVEBACK: "saveback",
-  BONUS: "bonus",
-  KINDERGELD_BONUS: "bonus",
-  STOCKPERK: "bonus",
-};
+// contribution — excluded from contributed capital (cf. the pytr mapper). Unlike pytr's
+// SAVEBACK_AGGREGATE, the CSV rows have no reinvestment shares.
+//
+// BENEFITS_SAVEBACK: recorded as action `interest` + kind `saveback` — keeping saveback's
+//   own contribution-exclusion path unchanged.
+// BONUS / KINDERGELD_BONUS / STOCKPERK: broker cash bonuses → action `bonus_cash` + kind
+//   `bonus`. KINDERGELD_BONUS is a TR cash credit on the Kindergeld feature; STOCKPERK is a
+//   reward credited as cash (the row has an instrument field but no share count). All three
+//   have the same economics but are now distinguishable in the UI as "Bonus".
+const CASH_SAVEBACK_TYPES = new Set(["BENEFITS_SAVEBACK"]);
+const CASH_BONUS_TYPES = new Set(["BONUS", "KINDERGELD_BONUS", "STOCKPERK"]);
 // Shares received with no cash consideration → bonus (quantity = received shares, price 0).
 const SHARE_IN_TYPES = new Set(["FREE_RECEIPT", "DIVIDEND_OPTION", "DIVIDEND_REINVESTMENT"]);
 // Recognised but not representable as a single transaction leg — surfaced for manual
@@ -188,17 +191,22 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail(`${type} row missing amount`);
         continue;
       }
-      const gross = Math.abs(amount);
-      const withheld = tax != null ? Math.abs(tax) : 0;
+      // CSV sign: `amount` = signed gross, `tax` = negative for a withholding, positive for
+      // a refund/reversal. net = amount + tax. We store `price` = signed net (drives
+      // cashFlow/XIRR), and convert the CSV tax to the app's convention: positive = withheld,
+      // negative = refund — i.e. stored_tax = −csv_tax. A reversal row (amount < 0, tax > 0)
+      // produces a negative price (cash out) and a negative stored_tax (refund tag).
+      const taxSigned = tax ?? 0; // CSV: negative = withheld, positive = refunded
+      const net = amount + taxSigned; // signed net cash credited
       candidate = {
         ...base,
         ...instrument,
         action: "dividend",
         quantity: "0", // the CSV `shares` here is the holding/rate, not a traded quantity
         unit: assetClass ? "shares" : undefined,
-        price: dec(gross - withheld), // NET cash credited drives cashFlow/XIRR
-        total: dec(gross), // gross payout (display only)
-        tax: withheld ? dec(withheld) : undefined,
+        price: dec(net), // signed NET drives cashFlow/XIRR; negative for reversals
+        total: dec(amount), // signed gross (display only; not persisted)
+        tax: taxSigned !== 0 ? dec(-taxSigned) : undefined, // +withheld / −refund
         fees: "0",
       };
     } else if (type === "INTEREST_PAYMENT") {
@@ -250,13 +258,13 @@ export function parseTrCsv(content: string): CsvParseResult {
     } else if (type === "CARD_ORDERING_FEE") {
       const charge = fee ?? amount ?? 0;
       candidate = { ...base, action: "withdrawal", quantity: "0", price: dec(Math.abs(charge)), fees: "0" };
-    } else if (type in CASH_CREDIT_KIND) {
+    } else if (CASH_SAVEBACK_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
         continue;
       }
-      // Income, not a holding or a contribution — keep the source name for context, drop
-      // the instrument. `interest` lands in cash but is excluded from contributed capital.
+      // Saveback: broker-credited cashback on trades — income, not a contribution.
+      // Recorded as `interest` + kind `saveback` to reuse the saveback contribution-exclusion.
       candidate = {
         ...base,
         name,
@@ -264,7 +272,24 @@ export function parseTrCsv(content: string): CsvParseResult {
         quantity: "0",
         price: dec(Math.abs(amount)),
         fees: "0",
-        kind: CASH_CREDIT_KIND[type],
+        kind: "saveback",
+      };
+    } else if (CASH_BONUS_TYPES.has(type)) {
+      if (amount == null) {
+        fail(`${type} row missing amount`);
+        continue;
+      }
+      // Broker cash bonus (Kindergeld credit, promotion bonus, stock perk) — income but
+      // distinct from uninvested-cash interest so it shows as "Bonus" in the UI.
+      // `kind: "bonus"` is kept for context and backfill matching.
+      candidate = {
+        ...base,
+        name,
+        action: "bonus_cash",
+        quantity: "0",
+        price: dec(Math.abs(amount)),
+        fees: "0",
+        kind: "bonus",
       };
     } else if (SHARE_IN_TYPES.has(type)) {
       if (shares == null || shares === 0) {

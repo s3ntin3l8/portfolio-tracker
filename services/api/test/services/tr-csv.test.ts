@@ -81,13 +81,17 @@ const ROWS: Record<string, string>[] = [
   // incoming cash transfer (parent funding a JUNIOR depot) → deposit
   { datetime: "2025-08-18T08:15:36.694729Z", category: "CASH", type: "TRANSFER_IN",
     amount: "100.000000", currency: "EUR", description: "Incoming transfer from Björn", transaction_id: id(20) },
-  // Kindergeld promo bonus → income (interest, kind bonus), tiny positive cash credit
+  // Kindergeld promo bonus → bonus_cash + kind "bonus", tiny positive cash credit
   { datetime: "2025-09-02T14:49:49.518403Z", category: "CASH", type: "KINDERGELD_BONUS",
     amount: "0.010000", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(21) },
-  // stock perk credited as cash (instrument present but NO shares) → income (interest, kind bonus)
+  // stock perk credited as cash (instrument present but NO shares) → bonus_cash + kind "bonus"
   { datetime: "2025-08-26T14:01:55.126058Z", category: "CASH", type: "STOCKPERK", asset_class: "FUND",
     name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", amount: "101.190000",
     currency: "EUR", description: "Stockperk", transaction_id: id(22) },
+  // dividend reversal (TR correction): amount negative, tax positive → negative net + negative tax
+  { datetime: "2025-11-15T10:00:00.000000Z", category: "CASH", type: "DIVIDEND", asset_class: "STOCK",
+    name: "Altria Group", symbol: "US02209S1033", shares: "11.0000000000", amount: "-0.10",
+    tax: "0.03", currency: "EUR", transaction_id: id(24) },
   // Vorabpauschale (advance fund tax): gross 0, only tax withheld → negative-cash income leg
   { datetime: "2026-01-28T07:42:17.274554Z", category: "CASH", type: "EARNINGS", asset_class: "FUND",
     name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", amount: "0.000000", tax: "-0.06",
@@ -110,8 +114,8 @@ describe("parseTrCsv", () => {
   const byId = new Map(drafts.map((d) => [d.externalId, d]));
   const draft = (n: number) => byId.get(`tr-csv:${id(n)}`);
 
-  it("maps 19 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
-    expect(drafts).toHaveLength(19);
+  it("maps 20 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
+    expect(drafts).toHaveLength(20);
     expect(errors).toHaveLength(4);
     expect(errors.map((e) => e.message)).toEqual([
       expect.stringContaining("TAX_OPTIMIZATION"),
@@ -186,12 +190,12 @@ describe("parseTrCsv", () => {
     expect(draft(10)).toMatchObject({ action: "withdrawal", price: "5" });
   });
 
-  it("maps cashback/bonus credits to income (interest), not a deposit, so they don't inflate contributions", () => {
-    // Broker-credited money is income, not contributed capital. `interest` lands in cash
-    // but is excluded from contributed-total (unlike `deposit`); `kind` preserves the label.
+  it("maps saveback cashback to interest (not a deposit) and broker cash bonuses to bonus_cash", () => {
+    // BENEFITS_SAVEBACK stays as interest+saveback for its own contribution-exclusion path.
     expect(draft(11)).toMatchObject({ action: "interest", kind: "saveback", price: "0.55", name: "Core S&P 500 USD (Acc)" });
     expect(draft(11)?.isin).toBeUndefined();
-    expect(draft(12)).toMatchObject({ action: "interest", kind: "bonus", price: "22.86" });
+    // BONUS/KINDERGELD_BONUS/STOCKPERK → bonus_cash so they show as "Bonus" (not "Interest").
+    expect(draft(12)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "22.86" });
   });
 
   it("maps share-in corporate actions to a zero-price bonus, defaulting blank currency to EUR", () => {
@@ -207,12 +211,25 @@ describe("parseTrCsv", () => {
     expect(draft(20)).toMatchObject({ action: "deposit", quantity: "0", price: "100", currency: "EUR" });
   });
 
-  it("maps Kindergeld and stock-perk credits to income (interest, kind bonus), dropping the instrument", () => {
-    expect(draft(21)).toMatchObject({ action: "interest", kind: "bonus", price: "0.01" });
+  it("maps Kindergeld and stock-perk credits to bonus_cash (kind bonus), dropping the instrument", () => {
+    // Both are broker cash bonuses — distinct from `interest` so they show as "Bonus" in the UI.
+    expect(draft(21)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "0.01" });
     // STOCKPERK carries a fund instrument but no shares — it's cash income, so drop the ISIN.
-    expect(draft(22)).toMatchObject({ action: "interest", kind: "bonus", price: "101.19" });
+    expect(draft(22)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "101.19" });
     expect(draft(22)?.isin).toBeUndefined();
     expect(draft(22)?.quantity).toBe("0");
+  });
+
+  it("maps a dividend reversal (TR correction) to a negative net price and negative tax", () => {
+    // amount=-0.10, tax=+0.03 (CSV: positive=refund) → net=-0.07, stored_tax=-0.03
+    // cashFlow for this row is -0.07 (cash deducted), which correctly reduces income totals.
+    expect(draft(24)).toMatchObject({
+      action: "dividend",
+      price: "-0.07", // negative net = cash out (reversal)
+      total: "-0.1", // signed gross
+      tax: "-0.03", // negative = refund/payback, not a fresh withholding
+      fees: "0",
+    });
   });
 
   it("maps EARNINGS (Vorabpauschale) to a negative-cash income leg: cash & gain drop, not contribution", () => {

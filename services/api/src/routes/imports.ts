@@ -417,7 +417,9 @@ export async function importsRoute(app: FastifyInstance) {
         .insert(screenshotImports)
         .values({
           userId: id,
-          // portfolioId is deliberately omitted — resolved at confirm time.
+          // Store the account-matched portfolio so the draft review page pre-selects it.
+          // Overwritten at confirm time with whatever the user chose in the review picker.
+          portfolioId: matchedPortfolioId ?? null,
           parser: PARSER_TAG[resolved] ?? "csv",
           // `result` carries `accountNumber` (DKB) so re-upload + confirm can re-match.
           parsedJson: result,
@@ -631,7 +633,9 @@ export async function importsRoute(app: FastifyInstance) {
         .insert(screenshotImports)
         .values({
           userId: id,
-          // portfolioId is deliberately omitted — resolved at confirm time.
+          // Store the account-matched portfolio so the draft review page pre-selects it.
+          // Overwritten at confirm time with whatever the user chose in the review picker.
+          portfolioId: matchedPortfolioId ?? null,
           parser: app.screenshotParser.name,
           parsedJson: result,
           confidence,
@@ -969,9 +973,12 @@ export async function importsRoute(app: FastifyInstance) {
       // OUTSIDE the transaction so a slow OpenFIGI/provider lookup never holds a DB tx open.
       const resolved: { draft: (typeof drafts)[number]; instrumentId: string | null }[] = [];
       for (const d of drafts) {
-        // Cash movements (deposit/withdrawal/interest) have no instrument.
+        // Cash movements (deposit/withdrawal/interest/bonus_cash) have no instrument.
         const isCash =
-          d.action === "deposit" || d.action === "withdrawal" || d.action === "interest";
+          d.action === "deposit" ||
+          d.action === "withdrawal" ||
+          d.action === "interest" ||
+          d.action === "bonus_cash";
         let instrumentId: string | null = null;
 
         if (!isCash) {

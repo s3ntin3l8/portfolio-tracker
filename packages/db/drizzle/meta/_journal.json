@@ -204,6 +204,20 @@
       "when": 1781901095000,
       "tag": "0028_account_holders",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1781990055627,
+      "tag": "0029_narrow_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781990100000,
+      "tag": "0030_backfill_bonus_cash",
+      "breakpoints": true
     }
   ]
 }

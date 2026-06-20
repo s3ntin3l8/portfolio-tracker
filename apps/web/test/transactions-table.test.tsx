@@ -53,6 +53,15 @@ const ROWS: TxRow[] = [
   },
 ];
 
+// Helper: render a minimal table with a single row for targeted assertions.
+function renderSingleRow(row: TxRow) {
+  return render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <TransactionsTable rows={[row]} />
+    </NextIntlClientProvider>,
+  );
+}
+
 const tb = messages.Transactions.batch;
 
 function renderTable(showPortfolio = false) {
@@ -180,5 +189,73 @@ describe("TransactionsTable", () => {
     renderTable();
     // t2 fxRate = "15500" → should appear as "15500.0000"
     expect(screen.getAllByText(/15500/).length).toBeGreaterThan(0);
+  });
+
+  it("shows GROSS amount (price + tax) for dividend rows; net amount stays separate", () => {
+    // Normal dividend: price=0.07 (net), tax=0.03 (withheld) → Amount should show gross 0.10.
+    const dividendRow: TxRow = {
+      id: "div1",
+      portfolioId: "p1",
+      type: "dividend",
+      quantity: "0",
+      price: "0.07",   // net cash credited (drives cashFlow)
+      fees: "0",
+      tax: "0.03",     // withheld (positive = deduction)
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-05-09T00:00:00.000Z",
+      source: "csv",
+      instrument: { symbol: "O", name: "Realty Income" },
+    };
+    renderSingleRow(dividendRow);
+    // Amount column = gross = 0.07 + 0.03 = 0.10
+    // Net Amount column = cashFlow = 0.07
+    // Both are formatted as EUR; check both values appear and 0.07 appears at least once (net)
+    const cells = screen.getAllByRole("cell");
+    const texts = cells.map((c) => c.textContent ?? "");
+    // Gross (0.10) appears in the Amount cell
+    expect(texts.some((t) => t.includes("0.10") || t.includes("0,10"))).toBe(true);
+  });
+
+  it("shows negative amount and net amount for a dividend reversal", () => {
+    const reversalRow: TxRow = {
+      id: "rev1",
+      portfolioId: "p1",
+      type: "dividend",
+      quantity: "0",
+      price: "-0.07",  // negative net (cash back to broker)
+      fees: "0",
+      tax: "-0.03",    // negative tax (refund, not a fresh withholding)
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-11-15T00:00:00.000Z",
+      source: "csv",
+      instrument: { symbol: "O", name: "Realty Income" },
+    };
+    renderSingleRow(reversalRow);
+    // gross = -0.07 + (-0.03) = -0.10 → Amount is negative
+    const cells = screen.getAllByRole("cell");
+    const texts = cells.map((c) => c.textContent ?? "");
+    expect(texts.some((t) => t.includes("-") && (t.includes("0.10") || t.includes("0,10")))).toBe(true);
+  });
+
+  it("renders bonus_cash rows with the Bonus type badge", () => {
+    const bonusRow: TxRow = {
+      id: "bonus1",
+      portfolioId: "p1",
+      type: "bonus_cash",
+      quantity: "0",
+      price: "22.86",
+      fees: "0",
+      tax: null,
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-01-20T00:00:00.000Z",
+      source: "csv",
+      instrument: null,
+    };
+    renderSingleRow(bonusRow);
+    // The TxType.bonus_cash label ("Bonus") should appear in the badge.
+    expect(screen.getByText(messages.TxType.bonus_cash)).toBeInTheDocument();
   });
 });

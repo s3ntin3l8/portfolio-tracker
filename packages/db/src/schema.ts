@@ -44,6 +44,10 @@ export const txTypeEnum = pgEnum("transaction_type", [
   "savings_plan",
   "deposit",
   "withdrawal",
+  // Broker-credited cash bonus (e.g. TR Kindergeld/promo bonus) — lump-sum income,
+  // not a user contribution. Distinct from `bonus` (zero-cash share receipts) and
+  // `interest` (uninvested-cash interest) so it renders with its own "Bonus" label.
+  "bonus_cash",
   // Financing legs for installment purchases (e.g. Pegadaian/Galeri24 gold cicilan).
   // Source of truth for the outstanding-liability balance; excluded from XIRR/
   // contributions by the deposit/withdrawal whitelists, so a loan is not a flow.

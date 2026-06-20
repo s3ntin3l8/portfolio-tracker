@@ -89,7 +89,11 @@ const TX_COLS: ColDef<TxRow>[] = [
     get: (r) => {
       const qty = Number(r.quantity);
       const price = Number(r.price);
-      return qty > 0 ? qty * price : price;
+      if (qty > 0) return qty * price; // trade: notional (qty×price)
+      // Income (dividend/coupon/interest/bonus_cash) and deposits/withdrawals:
+      // show GROSS = net price + withheld tax. For trades-with-tax or deposit/withdrawal
+      // (where tax is null) this is just price. For dividend reversals both are negative.
+      return price + (r.tax ? Number(r.tax) : 0);
     },
     type: "numeric",
   },
@@ -108,6 +112,7 @@ const NON_INVESTMENT_TYPES = new Set([
   "withdrawal",
   "fee",
   "interest",
+  "bonus_cash",
   "loan_drawdown",
   "loan_repayment",
 ]);
@@ -283,7 +288,10 @@ export function TransactionsTable({
               const Icon = SOURCE_ICON[tx.source] ?? PencilLine;
               const qty = Number(tx.quantity);
               const price = Number(tx.price);
-              const amount = qty > 0 ? qty * price : price;
+              const amount =
+                qty > 0
+                  ? qty * price // trade: notional
+                  : price + (tx.tax ? Number(tx.tax) : 0); // income/cash: gross
               const netAmount = txNetAmount(tx);
               const isSelected = selected.has(tx.id);
               return (

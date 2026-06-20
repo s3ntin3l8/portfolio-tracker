@@ -182,6 +182,10 @@ describe("cashFlow", () => {
     expect(cashFlow({ ...base, type: "split", fees: "0" }).toString()).toBe("0");
     expect(cashFlow({ ...base, type: "bonus" }).toString()).toBe("0");
     expect(cashFlow({ ...base, type: "rights", fees: "10" }).toString()).toBe("-10");
+    // bonus_cash = lump-sum income (same economics as interest): price − fees
+    expect(cashFlow({ ...base, type: "bonus_cash", price: "22.86" }).toString()).toBe("22.86");
+    // A negative price (dividend reversal stored as net) correctly reduces cash
+    expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "-0.07" }).toString()).toBe("-0.07");
   });
 });
 

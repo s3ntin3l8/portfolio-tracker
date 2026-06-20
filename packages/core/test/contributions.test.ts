@@ -133,6 +133,19 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     expect(s.netContributed).toBe("0");
     expect(s.monthsActive).toBe(0);
   });
+
+  it("excludes bonus_cash from contributions (broker cash bonus is return, not capital)", () => {
+    const txns: CoreTransaction[] = [
+      // A normal BUY that is the user's own money.
+      tx({ type: "buy", quantity: "2", price: "100", executedAt: new Date("2026-01-15") }),
+      // TR Kindergeld / promo bonus — income, never contributed capital.
+      tx({ type: "bonus_cash", instrumentId: null, quantity: "0", price: "22.86", kind: "bonus",
+        executedAt: new Date("2026-01-20") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    // Only the buy counts; the bonus_cash is excluded regardless of boundary.
+    expect(s.netContributed).toBe("200");
+  });
 });
 
 describe("contributionStats — fund merger (sell+buy, kind:merger)", () => {

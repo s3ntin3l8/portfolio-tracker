@@ -13,6 +13,10 @@ export type TransactionType =
   | "savings_plan"
   | "deposit"
   | "withdrawal"
+  // Broker-credited cash bonus (e.g. TR Kindergeld/promo bonus) — lump-sum income,
+  // not a user contribution. Same cash economics as `interest` but distinct so it
+  // renders with its own "Bonus" label.
+  | "bonus_cash"
   // Financing legs (e.g. Pegadaian/Galeri24 gold cicilan). Source of truth for the
   // outstanding-liability balance; deliberately excluded from XIRR/contributions
   // (which whitelist deposit/withdrawal), so booking a loan is not a capital flow.

@@ -31,6 +31,10 @@ export const transactionTypeSchema = z.enum([
   "savings_plan",
   "deposit",
   "withdrawal",
+  // Broker-credited cash bonus (e.g. TR Kindergeld/promo bonus) — lump-sum income,
+  // not a user contribution. Distinct from `bonus` (which means zero-cash share receipts)
+  // and `interest` (uninvested-cash interest) so it can be labelled "Bonus" in the UI.
+  "bonus_cash",
   // Installment-financing legs (e.g. Pegadaian/Galeri24 gold cicilan). The outstanding
   // liability is derived from these; excluded from XIRR/contributions by design.
   "loan_drawdown",
@@ -247,6 +251,7 @@ export type MergerInput = z.infer<typeof mergerInputSchema>;
 // execution behaves as a buy; deposit/withdrawal are instrument-less cash movements).
 // `bonus` = shares received with no cash (stock dividend / corporate bonus issue) —
 // mirrored from the DB transaction type so share-based corp actions can be auto-mapped.
+// `bonus_cash` = broker-credited cash bonus (e.g. TR Kindergeld/promo).
 export const parsedActionSchema = z.enum([
   "buy",
   "sell",
@@ -257,6 +262,7 @@ export const parsedActionSchema = z.enum([
   "deposit",
   "withdrawal",
   "bonus",
+  "bonus_cash",
 ]);
 export type ParsedAction = z.infer<typeof parsedActionSchema>;
 
