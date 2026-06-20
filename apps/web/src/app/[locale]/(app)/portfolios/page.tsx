@@ -114,7 +114,22 @@ export default async function PortfoliosPage({
           })}
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        <EmptyState
+          icon={Briefcase}
+          title={te("noPortfolioTitle")}
+          description={te("noPortfolioBody")}
+          action={
+            <PortfolioFormDialog
+              mode="create"
+              trigger={
+                <Button>
+                  <Plus className="size-4" />
+                  {tf("new")}
+                </Button>
+              }
+            />
+          }
+        />
       )}
 
       {result.status !== "unavailable" && <AccountHoldersManager holders={holders} />}

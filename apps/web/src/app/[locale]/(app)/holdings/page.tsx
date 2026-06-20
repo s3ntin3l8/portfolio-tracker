@@ -1,10 +1,13 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Layers } from "lucide-react";
+import { Layers, Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { HoldingsTable } from "@/components/holdings-table";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
+import { AddTransactionMenu } from "@/components/add-transaction-menu";
+import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { loadHoldings } from "@/lib/server-api";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
@@ -26,6 +29,7 @@ export default async function HoldingsPage({
   const t = await getTranslations("Holdings");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
+  const tf = await getTranslations("PortfolioForm");
 
   const result = await loadHoldings(costBasis);
 
@@ -125,6 +129,21 @@ export default async function HoldingsPage({
             result.status === "empty"
               ? te("noPortfolioBody")
               : te("noHoldingsBody")
+          }
+          action={
+            result.status === "empty" ? (
+              <PortfolioFormDialog
+                mode="create"
+                trigger={
+                  <Button>
+                    <Plus className="size-4" />
+                    {tf("new")}
+                  </Button>
+                }
+              />
+            ) : (
+              <AddTransactionMenu autoOpenFromParams={false} />
+            )
           }
         />
       </div>
