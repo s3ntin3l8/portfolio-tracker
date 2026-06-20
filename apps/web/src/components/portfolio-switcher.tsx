@@ -35,7 +35,7 @@ export function PortfolioSwitcher({
   const t = useTranslations("PortfolioSwitcher");
   const router = useRouter();
 
-  if (portfolios.length < 2) return null;
+  if (portfolios.length === 0) return null;
 
   function onSelect(value: string) {
     document.cookie = `${SELECTED_PORTFOLIO_COOKIE}=${value}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
@@ -49,6 +49,22 @@ export function PortfolioSwitcher({
     if (p.accountHolder) parts.push(p.accountHolder);
     return parts.join(" · ");
   };
+
+  // With a single portfolio there's nothing to switch between, but a static label still
+  // tells the user which portfolio every screen is scoped to (the scope is otherwise
+  // invisible). No dropdown — it's purely an indicator.
+  if (portfolios.length === 1) {
+    const only = portfolios[0];
+    return (
+      <div
+        className="inline-flex h-9 max-w-full items-center gap-2 rounded-md px-3 text-sm font-medium text-foreground"
+        aria-label={t("label")}
+      >
+        <BrokerageIcon brokerage={only.brokerage} className="size-5" />
+        <span className="truncate">{label(only)}</span>
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu>
