@@ -74,7 +74,12 @@ export default async function NewTransactionPage({
         />
       ) : (
         <NewEntryTabs
-          portfolios={selection.portfolios.map((p) => ({ id: p.id, name: p.name }))}
+          portfolios={selection.portfolios.map((p) => ({
+            id: p.id,
+            name: p.name,
+            brokerage: p.brokerage,
+            accountHolder: p.accountHolder,
+          }))}
           initialPortfolioId={initialPortfolioId}
           defaultTab={defaultTab}
         />

@@ -531,9 +531,7 @@ export function PortfolioFormDialog({
                 )}
                 <TrConnectFlow
                   client={api}
-                  portfolios={[
-                    { id: effectivePortfolio.id, name: effectivePortfolio.name },
-                  ]}
+                  portfolioId={effectivePortfolio.id}
                   initial={trInitForFlow!}
                   onChanged={() => {
                     router.refresh();

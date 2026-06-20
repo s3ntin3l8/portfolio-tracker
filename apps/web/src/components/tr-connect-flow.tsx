@@ -45,17 +45,18 @@ function phaseFor(status: TrConnection["status"]): Phase {
   return "form";
 }
 
-const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 export function TrConnectFlow({
   client,
-  portfolios,
+  portfolioId,
   initial,
   onChanged,
 }: {
   client: TrConnectClient;
-  portfolios: { id: string; name: string }[];
+  /**
+   * The portfolio this connection binds to. TrConnectFlow is only ever launched from a
+   * single portfolio's edit/create dialog, so the target is implicit — there's no picker.
+   */
+  portfolioId: string;
   initial: TrConnection;
   onChanged?: () => void;
 }) {
@@ -63,9 +64,6 @@ export function TrConnectFlow({
   const [phase, setPhase] = useState<Phase>(phaseFor(initial.status));
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
-  const [portfolioId, setPortfolioId] = useState(
-    initial.portfolioId ?? portfolios[0]?.id ?? "",
-  );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [wafToken, setWafToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -246,24 +244,6 @@ export function TrConnectFlow({
               onChange={(e) => setPin(e.target.value)}
             />
           </div>
-          {portfolios.length > 1 && (
-            <div className="space-y-1.5">
-              <Label htmlFor="tr-portfolio">{t("portfolio")}</Label>
-              <select
-                id="tr-portfolio"
-                className={selectClass}
-                value={portfolioId}
-                onChange={(e) => setPortfolioId(e.target.value)}
-              >
-                {portfolios.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <button
             type="button"
             className="text-xs text-muted-foreground underline"

@@ -37,7 +37,6 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
   };
 }
 
-const PORTFOLIOS = [{ id: "p1", name: "Main" }];
 const DISCONNECTED: TrConnection = {
   status: "disconnected",
   portfolioId: null,
@@ -53,7 +52,7 @@ function renderFlow(client: TrConnectClient, initial: TrConnection = DISCONNECTE
     <NextIntlClientProvider locale="en" messages={messages}>
       <TrConnectFlow
         client={client}
-        portfolios={PORTFOLIOS}
+        portfolioId="p1"
         initial={initial}
         onChanged={onChanged}
       />
@@ -213,10 +212,22 @@ describe("TrConnectFlow", () => {
     ).toBeTruthy();
   });
 
-  it("hides the portfolio dropdown when only one portfolio is passed", () => {
-    // When embedded in the portfolio form dialog, TrConnectFlow receives a single
-    // portfolio, so the dropdown must not render (the binding is implicit).
-    renderFlow(makeClient());
+  it("binds to the portfolio it was given, with no in-form picker", async () => {
+    // TrConnectFlow is launched from a single portfolio's edit dialog, so the binding is
+    // implicit (the prop) — there's no portfolio selector in the form.
+    const client = makeClient();
+    renderFlow(client);
     expect(screen.queryByLabelText("Import into")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: "+49150" },
+    });
+    fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
+    fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
+    await waitFor(() =>
+      expect(client.connectTr).toHaveBeenCalledWith(
+        expect.objectContaining({ portfolioId: "p1" }),
+      ),
+    );
   });
 });
