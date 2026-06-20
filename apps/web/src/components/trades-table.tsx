@@ -178,26 +178,42 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                         {tr.annualizedPct === null ? "—" : formatPercent(tr.annualizedPct, locale)}
                       </TableCell>
                     </TableRow>
-                    {isOpen &&
-                      tr.legs.map((leg, i) => (
-                        <TableRow key={`${key}:leg:${i}`} className="bg-muted/40 text-xs">
-                          <TableCell className="pl-9 text-muted-foreground" colSpan={2}>
-                            {leg.acqDate} → {leg.sellDate}
-                          </TableCell>
-                          <TableCell className="tabular text-right text-muted-foreground">
-                            {leg.holdingDays >= 365 ? `${(leg.holdingDays / 365).toFixed(1)}${t("yearsAbbr")}` : `${leg.holdingDays}${t("daysAbbr")}`}
-                          </TableCell>
-                          <TableCell className="tabular text-right">{Number(leg.quantity)}</TableCell>
-                          <TableCell className="tabular text-right">{money(Number(leg.cost))}</TableCell>
-                          <TableCell className="tabular text-right" colSpan={2}>{money(Number(leg.proceeds))}</TableCell>
-                          <TableCell className={cn("tabular text-right", toneClass(Number(leg.gain)))} colSpan={2}>
-                            {signed(Number(leg.gain))}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {leg.longTerm && <span className="text-success">{t("longTerm")}</span>}
+                    {isOpen && (
+                      <>
+                        {tr.legs.map((leg, i) => (
+                          <TableRow key={`${key}:leg:${i}`} className="bg-muted/40 text-xs">
+                            <TableCell className="pl-9 text-muted-foreground" colSpan={2}>
+                              {leg.acqDate} → {leg.sellDate}
+                            </TableCell>
+                            <TableCell className="tabular text-right text-muted-foreground">
+                              {leg.holdingDays >= 365 ? `${(leg.holdingDays / 365).toFixed(1)}${t("yearsAbbr")}` : `${leg.holdingDays}${t("daysAbbr")}`}
+                            </TableCell>
+                            <TableCell className="tabular text-right">{Number(leg.quantity)}</TableCell>
+                            <TableCell className="tabular text-right">{money(Number(leg.cost))}</TableCell>
+                            <TableCell className="tabular text-right" colSpan={2}>{money(Number(leg.proceeds))}</TableCell>
+                            <TableCell className={cn("tabular text-right", toneClass(Number(leg.gain)))} colSpan={2}>
+                              {signed(Number(leg.gain))}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {leg.longTerm && <span className="text-success">{t("longTerm")}</span>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {/* The legs carry no transaction ids, so link to the instrument's
+                            full transaction list rather than to individual rows. */}
+                        <TableRow className="bg-muted/40">
+                          <TableCell colSpan={10} className="pl-9">
+                            <Link
+                              href={`/instruments/${tr.instrumentId}`}
+                              className="text-xs font-medium text-primary hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {t("viewTransactions")} →
+                            </Link>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      </>
+                    )}
                   </Fragment>
                 );
               })}

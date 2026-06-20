@@ -446,6 +446,16 @@
     "noMoversTitle": "Belum ada pergerakan harga",
     "noMoversBody": "Perubahan harian muncul setelah harga langsung diperbarui untuk kepemilikan Anda."
   },
+  "Error": {
+    "title": "Terjadi kesalahan",
+    "body": "Terjadi kesalahan tak terduga saat memuat halaman ini.",
+    "retry": "Coba lagi"
+  },
+  "NotFound": {
+    "title": "Halaman tidak ditemukan",
+    "body": "Halaman yang Anda cari tidak ada atau telah dipindahkan.",
+    "backHome": "Kembali ke dasbor"
+  },
   "Gold": {
     "title": "Harga emas",
     "perGram": "per gram, 24k",
@@ -460,7 +470,16 @@
     "ratio": "Rasio",
     "exDate": "Tanggal ex",
     "notFound": "Instrumen tidak ditemukan",
-    "notFoundBody": "Mungkin telah dihapus, atau API tidak tersedia."
+    "notFoundBody": "Mungkin telah dihapus, atau API tidak tersedia.",
+    "position": "Posisi Anda",
+    "quantityLabel": "Jumlah",
+    "avgCostLabel": "Harga rata-rata",
+    "unrealizedPnl": "Laba/rugi belum terealisasi",
+    "noPosition": "Tidak ada posisi terbuka",
+    "noPositionBody": "Anda saat ini tidak memegang instrumen ini pada cakupan yang dipilih.",
+    "transactions": "Transaksi",
+    "noTransactions": "Tidak ada transaksi",
+    "noTransactionsBody": "Tidak ada transaksi untuk instrumen ini pada cakupan yang dipilih."
   },
   "CorpAction": {
     "title": "Catat aksi korporasi",
@@ -604,6 +623,7 @@
       "title": "Tambah transaksi",
       "entryTitle": "Tambah ke portofolio",
       "tabTransaction": "Transaksi",
+      "portfolioPicker": "Portofolio",
       "editTitle": "Ubah transaksi",
       "subtitle": "Catat transaksi, dividen, atau pergerakan kas.",
       "save": "Simpan perubahan",
@@ -758,6 +778,7 @@
     "longTerm": "Bebas pajak (>1th)",
     "yearsAbbr": "th",
     "daysAbbr": "h",
+    "viewTransactions": "Lihat transaksi",
     "totalRealized": "Laba/rugi terealisasi",
     "totalDividends": "Dividen",
     "winRate": "Tingkat menang",

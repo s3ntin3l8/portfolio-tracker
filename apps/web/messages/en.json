@@ -446,6 +446,16 @@
     "noMoversTitle": "No price moves yet",
     "noMoversBody": "Day changes appear once live prices refresh for your holdings."
   },
+  "Error": {
+    "title": "Something went wrong",
+    "body": "An unexpected error occurred while loading this page.",
+    "retry": "Try again"
+  },
+  "NotFound": {
+    "title": "Page not found",
+    "body": "The page you're looking for doesn't exist or has moved.",
+    "backHome": "Back to dashboard"
+  },
   "Gold": {
     "title": "Gold spot",
     "perGram": "per gram, 24k",
@@ -460,7 +470,16 @@
     "ratio": "Ratio",
     "exDate": "Ex-date",
     "notFound": "Instrument not found",
-    "notFoundBody": "It may have been removed, or the API is unavailable."
+    "notFoundBody": "It may have been removed, or the API is unavailable.",
+    "position": "Your position",
+    "quantityLabel": "Quantity",
+    "avgCostLabel": "Avg cost",
+    "unrealizedPnl": "Unrealized P&L",
+    "noPosition": "No open position",
+    "noPositionBody": "You don't currently hold this instrument in the selected scope.",
+    "transactions": "Transactions",
+    "noTransactions": "No transactions",
+    "noTransactionsBody": "No transactions for this instrument in the selected scope."
   },
   "CorpAction": {
     "title": "Record a corporate action",
@@ -604,6 +623,7 @@
       "title": "Add a transaction",
       "entryTitle": "Add to portfolio",
       "tabTransaction": "Transaction",
+      "portfolioPicker": "Portfolio",
       "editTitle": "Edit transaction",
       "subtitle": "Record a trade, dividend or cash movement.",
       "save": "Save changes",
@@ -758,6 +778,7 @@
     "longTerm": "Tax-free (>1y)",
     "yearsAbbr": "y",
     "daysAbbr": "d",
+    "viewTransactions": "View transactions",
     "totalRealized": "Realized P&L",
     "totalDividends": "Dividends",
     "winRate": "Win rate",

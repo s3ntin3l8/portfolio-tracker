@@ -50,10 +50,10 @@ vi.mock("@/components/import-flow-client", () => ({
 
 import { AddTransactionMenu } from "../src/components/add-transaction-menu";
 
-function renderMenu() {
+function renderMenu(props: { autoOpenFromParams?: boolean } = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <AddTransactionMenu />
+      <AddTransactionMenu {...props} />
     </NextIntlClientProvider>,
   );
 }
@@ -107,7 +107,7 @@ describe("AddTransactionMenu", () => {
 
   it("auto-opens the import sheet on ?import=1 and clears the flag", async () => {
     search.value = "import=1";
-    renderMenu();
+    renderMenu({ autoOpenFromParams: true });
     await waitFor(() =>
       expect(
         screen.getByRole("dialog", { name: messages.Import.title }),
@@ -118,12 +118,23 @@ describe("AddTransactionMenu", () => {
 
   it("auto-opens on ?shared=1 but leaves the param for ImportFlowClient", async () => {
     search.value = "shared=1";
-    renderMenu();
+    renderMenu({ autoOpenFromParams: true });
     await waitFor(() =>
       expect(
         screen.getByRole("dialog", { name: messages.Import.title }),
       ).toBeInTheDocument(),
     );
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("ignores share/import params without autoOpenFromParams (only one instance owns it)", async () => {
+    search.value = "import=1";
+    renderMenu();
+    // Give the (gated) effect a chance to run, then confirm it stayed closed.
+    await Promise.resolve();
+    expect(
+      screen.queryByRole("dialog", { name: messages.Import.title }),
+    ).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
   });
 });

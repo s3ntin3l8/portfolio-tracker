@@ -27,10 +27,17 @@ const tx = messages.Manage.tx;
 const ca = messages.CorpAction;
 const mg = messages.Merger;
 
-function renderTabs(defaultTab?: "transaction" | "corporate-action" | "merger") {
+function renderTabs(
+  defaultTab?: "transaction" | "corporate-action" | "merger",
+  portfolios: { id: string; name: string }[] = [{ id: "p1", name: "Main" }],
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <NewEntryTabs portfolioId="p1" defaultTab={defaultTab} />
+      <NewEntryTabs
+        portfolios={portfolios}
+        initialPortfolioId={portfolios[0]?.id ?? ""}
+        defaultTab={defaultTab}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -62,5 +69,28 @@ describe("NewEntryTabs", () => {
     // The merger form's two instrument pickers are present (their search inputs).
     expect(screen.getByLabelText(mg.from)).toBeInTheDocument();
     expect(screen.getByLabelText(mg.to)).toBeInTheDocument();
+  });
+
+  it("offers a portfolio picker only when more than one portfolio exists", () => {
+    // Single portfolio: no picker (destination is unambiguous).
+    const { unmount } = renderTabs();
+    expect(screen.queryByLabelText(tx.portfolioPicker)).not.toBeInTheDocument();
+    unmount();
+
+    // Two portfolios: the picker is shown on the transaction tab, listing both.
+    renderTabs("transaction", [
+      { id: "p1", name: "Main" },
+      { id: "p2", name: "DKB" },
+    ]);
+    expect(screen.getByLabelText(tx.portfolioPicker)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "DKB" })).toBeInTheDocument();
+  });
+
+  it("shares the portfolio picker with the merger tab", () => {
+    renderTabs("merger", [
+      { id: "p1", name: "Main" },
+      { id: "p2", name: "DKB" },
+    ]);
+    expect(screen.getByLabelText(tx.portfolioPicker)).toBeInTheDocument();
   });
 });

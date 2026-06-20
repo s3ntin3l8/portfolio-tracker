@@ -333,6 +333,61 @@ export async function loadInstrument(
   }
 }
 
+export interface InstrumentScope {
+  /** The user's position in this instrument for the active scope (null = not held). */
+  holding: HoldingValuation | null;
+  /** The user's transactions for this instrument, each tagged with its portfolio name. */
+  transactions: TransactionWithPortfolio[];
+  /** True in the cross-portfolio ("All portfolios") scope (drives the portfolio column). */
+  aggregate: boolean;
+  displayCurrency: string;
+}
+
+/**
+ * The user's own position and transactions for a single instrument, scoped to the active
+ * portfolio selection (a single portfolio, or the cross-portfolio aggregate). Composes the
+ * existing scope-aware loaders — there's no instrument-filtered endpoint — so it follows
+ * the global switcher for free. Distinct from {@link loadInstrument}, which is the
+ * instrument's market-data view (price + corporate actions).
+ */
+export async function loadInstrumentScope(
+  instrumentId: string,
+  costBasis?: "purchase_price" | "total_paid",
+): Promise<InstrumentScope> {
+  const holdingsView = await loadHoldings(costBasis);
+  const holding =
+    holdingsView.status === "ok"
+      ? (holdingsView.holdings.find((h) => h.instrumentId === instrumentId) ?? null)
+      : null;
+
+  const aggregate = (await getSelectedPortfolioId()) === null;
+  let transactions: TransactionWithPortfolio[] = [];
+  if (aggregate) {
+    const result = await loadTransactionsAcrossPortfolios();
+    if (result.status === "ok") {
+      transactions = result.transactions.filter(
+        (t) => t.instrumentId === instrumentId,
+      );
+    }
+  } else {
+    const result = await loadPortfolio((api, portfolio) =>
+      api.listTransactions(portfolio.id),
+    );
+    if (result.status === "ok") {
+      transactions = result.data
+        .filter((t) => t.instrumentId === instrumentId)
+        .map((t) => ({ ...t, portfolioName: result.portfolio.name }));
+    }
+  }
+
+  return {
+    holding,
+    transactions,
+    aggregate,
+    displayCurrency: holdingsView.displayCurrency,
+  };
+}
+
 export type IncomeStatsView =
   | { status: "ok"; data: IncomeStats }
   | { status: "empty" }

@@ -36,12 +36,24 @@ describe("PortfolioSwitcher", () => {
     document.cookie = "pf=; max-age=0; path=/";
   });
 
-  it("renders nothing with fewer than two portfolios", () => {
+  it("renders nothing with no portfolios", () => {
     const { container } = renderSwitcher({
-      portfolios: [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
+      portfolios: [],
       selectedId: null,
     });
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows a static label (no switcher) with exactly one portfolio", () => {
+    renderSwitcher({
+      portfolios: [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
+      selectedId: null,
+    });
+    // The single-portfolio scope indicator is non-interactive — no dropdown trigger.
+    expect(
+      screen.queryByRole("button", { name: messages.PortfolioSwitcher.label }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Main")).toBeInTheDocument();
   });
 
   it("shows the selected portfolio on the trigger, falling back to All", () => {

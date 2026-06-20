@@ -17,7 +17,21 @@ import { Link, useRouter, usePathname } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import type { ImportTargetPortfolio } from "@/components/import-flow";
 
-export function AddTransactionMenu() {
+/**
+ * The unified add-entry menu (Manual / Import / Corporate action). Rendered globally in
+ * the app-shell header (so it's reachable from every screen) and also inline in some
+ * empty states.
+ *
+ * `autoOpenFromParams` must be set on exactly ONE rendered instance per page — the global
+ * shell instance. It owns the `?shared=1` / `?import=1` auto-open (PWA share-target and
+ * shortcut). If two instances auto-opened, their `ImportFlowClient` mounts would race to
+ * consume and clear the cached screenshot, so every inline instance leaves it `false`.
+ */
+export function AddTransactionMenu({
+  autoOpenFromParams = false,
+}: {
+  autoOpenFromParams?: boolean;
+} = {}) {
   const tm = useTranslations("Manage");
   const ti = useTranslations("Import");
   const tca = useTranslations("CorpAction");
@@ -32,8 +46,10 @@ export function AddTransactionMenu() {
   const [defaultPortfolioId, setDefaultPortfolioId] = useState("");
 
   // A screenshot shared into the app lands on /transactions?shared=1 (see sw.ts); the
-  // "Import screenshot" PWA shortcut lands on ?import=1. Either auto-opens the import sheet.
+  // "Import screenshot" PWA shortcut lands on ?import=1. Either auto-opens the import sheet
+  // — but only on the single instance that owns this (see the prop doc above).
   useEffect(() => {
+    if (!autoOpenFromParams) return;
     const shared = searchParams.get("shared") === "1";
     const importFlag = searchParams.get("import") === "1";
     if (shared || importFlag) void openImport();
@@ -63,9 +79,9 @@ export function AddTransactionMenu() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button>
+          <Button aria-label={tm("addTransaction")}>
             <Plus className="size-4" />
-            {tm("addTransaction")}
+            <span className="hidden sm:inline">{tm("addTransaction")}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
