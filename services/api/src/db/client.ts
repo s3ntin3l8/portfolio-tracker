@@ -72,6 +72,45 @@ export function getDb(): DB {
   return dbInstance;
 }
 
+// Drizzle's default migrate() runs all pending migrations in a single transaction.
+// That breaks when migration N does `ALTER TYPE ADD VALUE` and migration N+1 uses
+// the new value: Postgres requires the ALTER TYPE to be committed first (PG error
+// 55P04). Run each file in its own BEGIN/COMMIT so the constraint is satisfied.
+async function migrateOneByOne(folder: string): Promise<void> {
+  const { readMigrationFiles } = await import("drizzle-orm/migrator");
+  const migrations = readMigrationFiles({ migrationsFolder: folder });
+
+  const conn = sql!;
+  await conn`CREATE SCHEMA IF NOT EXISTS drizzle`;
+  await conn`
+    CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  `;
+
+  const [last] = await conn`
+    SELECT created_at FROM drizzle.__drizzle_migrations
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  const lastMillis: number | null = last ? Number(last.created_at) : null;
+
+  for (const migration of migrations) {
+    if (lastMillis !== null && lastMillis >= migration.folderMillis) continue;
+
+    await conn.begin(async (tx) => {
+      for (const stmt of migration.sql) {
+        await tx.unsafe(stmt);
+      }
+      await tx`
+        INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+        VALUES (${migration.hash}, ${migration.folderMillis})
+      `;
+    });
+  }
+}
+
 export async function ensureDb(databaseUrl?: string): Promise<DB> {
   const db = await initDb(databaseUrl);
   if (pglite) {
@@ -79,9 +118,7 @@ export async function ensureDb(databaseUrl?: string): Promise<DB> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await migrate(db as any, { migrationsFolder: migrationsDir });
   } else {
-    const { migrate } = await import("drizzle-orm/postgres-js/migrator");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await migrate(db as any, { migrationsFolder: migrationsDir });
+    await migrateOneByOne(migrationsDir);
   }
   return db;
 }
