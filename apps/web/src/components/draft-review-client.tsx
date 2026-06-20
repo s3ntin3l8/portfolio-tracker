@@ -4,11 +4,14 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { ImportReview } from "@/components/import-review";
+import { PortfolioPicker } from "@/components/portfolio-picker";
+import { Label } from "@/components/ui/label";
 import {
   withUid,
   stripUid,
   type ImportDraft,
   type ImportIssue,
+  type ImportTargetPortfolio,
   type ReviewDraft,
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
@@ -24,14 +27,20 @@ import { Button } from "@/components/ui/button";
  */
 export function DraftReviewClient({
   importId,
+  initialPortfolioId,
   drafts: initial,
   issues: initialIssues = [],
+  portfolios = [],
 }: {
   importId: string;
+  /** Portfolio stored on the import record (pytr always has one; CSV/screenshot may not). */
+  initialPortfolioId: string | null;
   drafts: ImportDraft[];
   issues?: ImportIssue[];
+  portfolios?: ImportTargetPortfolio[];
 }) {
   const t = useTranslations("ImportHistory");
+  const ti = useTranslations("Import");
   const api = useApiClient();
   const router = useRouter();
 
@@ -46,6 +55,13 @@ export function DraftReviewClient({
   // the same selection with the acknowledge flag.
   const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
   const pendingUids = useRef<string[] | undefined>(undefined);
+
+  // Portfolio selection: use the stored portfolioId if available, otherwise default to
+  // the first portfolio in the list. The picker is only shown when there are multiple
+  // portfolios and the import doesn't already have a portfolio bound.
+  const [portfolioId, setPortfolioId] = useState<string>(
+    initialPortfolioId ?? portfolios[0]?.id ?? "",
+  );
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
@@ -85,7 +101,7 @@ export function DraftReviewClient({
         importId,
         subset.map(stripUid) as unknown as Parameters<typeof api.confirmImport>[1],
         [],
-        undefined,
+        portfolioId || undefined,
         false,
         acknowledgeDup,
       );
@@ -157,6 +173,18 @@ export function DraftReviewClient({
           >
             {t("duplicates.importAnyway")}
           </Button>
+        </div>
+      )}
+      {portfolios.length > 1 && (
+        <div className="space-y-1.5">
+          <Label>{ti("targetPortfolio")}</Label>
+          <PortfolioPicker
+            portfolios={portfolios}
+            value={portfolioId}
+            onChange={setPortfolioId}
+            ariaLabel={ti("targetPortfolio")}
+            triggerClassName="w-full"
+          />
         </div>
       )}
       <ImportReview

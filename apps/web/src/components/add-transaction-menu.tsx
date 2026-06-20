@@ -121,7 +121,12 @@ export function AddTransactionMenu({
       </DropdownMenu>
 
       <Sheet open={importOpen} onOpenChange={setImportOpen}>
-        <SheetContent className="p-0" side="bottom">
+        <SheetContent
+          className="p-0"
+          side="bottom"
+          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <SheetHeader className="px-6 pt-6">
             <SheetTitle>{ti("title")}</SheetTitle>
           </SheetHeader>

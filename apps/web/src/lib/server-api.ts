@@ -436,6 +436,17 @@ export async function loadImport(importId: string): Promise<ImportDetail | null>
   }
 }
 
+/** Plain portfolio list (no net-worth) — used for portfolio pickers that don't need valuations. */
+export async function loadPortfolioList(): Promise<Portfolio[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.listPortfolios();
+  } catch {
+    return [];
+  }
+}
+
 /** The authenticated user (or null when signed out / API unreachable). */
 export async function loadMe(): Promise<User | null> {
   const api = await getServerApi();

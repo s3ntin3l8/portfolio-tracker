@@ -35,7 +35,7 @@ const DRAFT: ImportDraft = {
 function renderClient() {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <DraftReviewClient importId="imp1" drafts={[DRAFT]} />
+      <DraftReviewClient importId="imp1" initialPortfolioId={null} drafts={[DRAFT]} />
     </NextIntlClientProvider>,
   );
 }
