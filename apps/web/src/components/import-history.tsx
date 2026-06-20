@@ -101,7 +101,7 @@ export function ImportHistory({
   async function clearAllDiscarded() {
     setClearingAll(true);
     try {
-      await Promise.all(discardedIds.map((id) => api.clearImport(id)));
+      await api.bulkClearImports(discardedIds);
       router.refresh();
     } finally {
       setClearingAll(false);

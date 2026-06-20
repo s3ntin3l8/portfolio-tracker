@@ -68,6 +68,12 @@ const PARSER_TAG: Record<string, "dkb" | "csv" | "tr-csv"> = {
 function isAcceptedMime(mimeType: string): boolean {
   return mimeType.startsWith("image/") || mimeType === "application/pdf";
 }
+// Batch hard-delete of discarded imports. Mirrors transactions' bulk-delete so the
+// web "clear all" fires one request instead of N parallel DELETE /clear calls (which
+// trip the global rate limiter — issue surfaced after a bulk import undo).
+const bulkClearSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+});
 const confirmBodySchema = z.object({
   // Target portfolio — required when the import was uploaded without one (upload-first
   // flow). Falls back to `imp.portfolioId` for pytr and legacy uploads that stored one.
@@ -693,6 +699,31 @@ export async function importsRoute(app: FastifyInstance) {
         .where(eq(screenshotImports.id, imp.id));
       request.log.info({ importId: imp.id, removedTransactions: removed.length }, "import undone");
       return { removed: removed.length };
+    },
+  );
+
+  // Batch hard-delete of discarded imports — one request for the web "clear all" instead
+  // of N parallel DELETE /clear calls. Scoped to the user and to discarded rows; ids that
+  // aren't owned-and-discarded are silently skipped (same forgiving contract as the
+  // transactions bulk-delete). Returns how many rows were actually removed.
+  app.post<{ Body: { ids?: unknown } }>(
+    "/imports/bulk-clear",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const { ids } = bulkClearSchema.parse(request.body);
+      const cleared = await app.db
+        .delete(screenshotImports)
+        .where(
+          and(
+            eq(screenshotImports.userId, id),
+            eq(screenshotImports.status, "discarded"),
+            inArray(screenshotImports.id, ids),
+          ),
+        )
+        .returning({ id: screenshotImports.id });
+      request.log.info({ requested: ids.length, cleared: cleared.length }, "imports bulk-cleared");
+      return { cleared: cleared.length };
     },
   );
 
