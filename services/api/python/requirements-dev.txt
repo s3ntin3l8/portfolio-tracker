@@ -4,4 +4,4 @@
 # `import tr_export` (stdlib at module load) — so the tests need pytest alone, not pytr.
 # Install with:
 #   .venv-pytr/bin/pip install -r services/api/python/requirements-dev.txt
-pytest==8.3.4
+pytest==9.0.3
