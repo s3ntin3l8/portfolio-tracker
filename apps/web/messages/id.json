@@ -245,19 +245,7 @@
       "review": "Periksa",
       "done": "Selesai"
     },
-    "tabs": {
-      "screenshot": "Tangkapan layar",
-      "csv": "Berkas CSV"
-    },
     "targetPortfolio": "Impor ke",
-    "csvFormat": {
-      "label": "Format",
-      "auto": "Deteksi otomatis",
-      "generic": "Umum",
-      "dkb": "DKB (Jerman)",
-      "ibkr": "Interactive Brokers",
-      "coinbase": "Coinbase"
-    },
     "menu": {
       "manual": "Input manual",
       "import": "Impor berkas"
@@ -265,8 +253,7 @@
     "dropzone": {
       "title": "Tambah transaksi",
       "hint": "Dari aplikasi sekuritas, emas, atau konfirmasi bank",
-      "cta": "Pilih tangkapan layar atau PDF",
-      "csvCta": "Pilih satu atau beberapa berkas CSV",
+      "cta": "Pilih tangkapan layar, PDF, atau berkas CSV",
       "dropHere": "Jatuhkan berkas di sini"
     },
     "fileStatus": {

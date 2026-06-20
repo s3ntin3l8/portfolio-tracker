@@ -145,22 +145,45 @@ describe("ImportFlow", () => {
     );
   });
 
-  it("sends CSV text when the CSV tab is selected", async () => {
+  it("auto-detects file type: CSV → importCsv, PNG → importScreenshot", async () => {
     const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({ importId: "imp2", drafts: [DRAFT], errors: [] })),
+      importScreenshot: vi.fn(async () => ({ importId: "imp2s", drafts: [DRAFT], errors: [] })),
+      importCsv: vi.fn(async () => ({ importId: "imp2c", drafts: [DRAFT], errors: [] })),
       confirmImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
-    const csv = csvFile("t.csv");
-    fireEvent.change(fileInput(container), { target: { files: [csv] } });
-
+    // CSV file → importCsv with auto format, no screenshot call
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("t.csv")] } });
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
-    // Format defaults to auto-detect. No portfolioId in upload (upload-first flow).
     expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
     expect(client.importScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("mixed batch: CSV and PNG each route to their own endpoint", async () => {
+    const client: ImportClient = {
+      importScreenshot: vi
+        .fn()
+        .mockResolvedValueOnce({ importId: "imp-png", drafts: [DRAFT], errors: [] }),
+      importCsv: vi
+        .fn()
+        .mockResolvedValueOnce({ importId: "imp-csv", drafts: [DRAFT_B], errors: [] }),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    };
+    const { container } = renderFlow(client);
+
+    const png = pngFile();
+    const csv = csvFile("data.csv");
+    fireEvent.change(fileInput(container), { target: { files: [png, csv] } });
+
+    // Both groups should land in the review step
+    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+
+    // Each file was routed to the correct endpoint
+    expect(client.importScreenshot).toHaveBeenCalledTimes(1);
+    expect(client.importCsv).toHaveBeenCalledTimes(1);
+    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
   });
 
   it("offers a force re-import when a file was already confirmed (#229)", async () => {
@@ -176,7 +199,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), { target: { files: [csvFile("dup.csv")] } });
 
     // The already-confirmed error and the "Re-import anyway" override both appear.
@@ -197,26 +219,6 @@ describe("ImportFlow", () => {
     );
   });
 
-  it("passes the DKB format when the DKB CSV source is selected", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({ importId: "imp3", drafts: [DRAFT], errors: [] })),
-      confirmImport: vi.fn(),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
-    fireEvent.change(screen.getByLabelText(messages.Import.csvFormat.label), {
-      target: { value: "dkb" },
-    });
-    const csv = csvFile("dkb.csv", "Datum der Erstellung;...");
-    fireEvent.change(fileInput(container), { target: { files: [csv] } });
-
-    await waitFor(() =>
-      expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "dkb", false),
-    );
-  });
-
   it("routes the import to the chosen target portfolio (selected on review step)", async () => {
     const client: ImportClient = {
       importScreenshot: vi.fn(),
@@ -229,7 +231,6 @@ describe("ImportFlow", () => {
     ]);
 
     // Portfolio is NOT selected before upload — picker is now on the review step.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     const csv = csvFile("t.csv");
     fireEvent.change(fileInput(container), { target: { files: [csv] } });
 
@@ -278,7 +279,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), { target: { files: [csvFile("tr.csv")] } });
 
     // The issue lands as a mappable row in the review table (its raw name is shown).
@@ -410,7 +410,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     const fileA = csvFile("broker-a.csv", "a");
     const fileB = csvFile("broker-b.csv", "b");
     fireEvent.change(fileInput(container), { target: { files: [fileA, fileB] } });
@@ -454,7 +453,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), {
       target: {
         files: [csvFile("good-a.csv", "a"), csvFile("dup.csv", "b"), csvFile("good-c.csv", "c")],
@@ -502,7 +500,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), {
       target: { files: [csvFile("a.csv", "a"), csvFile("b.csv", "b")] },
     });
@@ -563,7 +560,6 @@ describe("ImportFlow", () => {
     };
     const { container } = renderFlow(client);
 
-    fireEvent.mouseDown(screen.getByRole("tab", { name: messages.Import.tabs.csv }));
     fireEvent.change(fileInput(container), { target: { files: [csvFile("single.csv")] } });
 
     await waitFor(() =>

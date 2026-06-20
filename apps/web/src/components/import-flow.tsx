@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  ScanLine,
   CheckCircle2,
   Loader2,
   Upload,
-  FileText,
   AlertCircle,
   ChevronDown,
 } from "lucide-react";
@@ -15,8 +13,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioPicker } from "@/components/portfolio-picker";
 import type {
   AccountMismatch,
@@ -147,7 +143,6 @@ export interface ImportClient {
 }
 
 type Step = "upload" | "parsing" | "review" | "done";
-type Mode = "screenshot" | "csv";
 type CsvFormat = "auto" | "generic" | "dkb" | "ibkr" | "coinbase";
 
 export interface ImportTargetPortfolio {
@@ -203,6 +198,19 @@ function fileToText(file: File): Promise<string> {
   });
 }
 
+/**
+ * Detect CSV files by MIME type or extension. Browsers are inconsistent about
+ * reporting `text/csv` (some report empty string or `application/vnd.ms-excel`),
+ * so the filename extension is the authoritative fallback.
+ */
+function isCsvFile(file: File): boolean {
+  return (
+    file.type === "text/csv" ||
+    file.type === "application/vnd.ms-excel" ||
+    file.name.toLowerCase().endsWith(".csv")
+  );
+}
+
 /** A file that was skipped during the multi-file parse pass. */
 interface SkippedFile {
   file: string;
@@ -236,8 +244,6 @@ export function ImportFlow({
 } = {}) {
   const t = useTranslations("Import");
   const [step, setStep] = useState<Step>("upload");
-  const [mode, setMode] = useState<Mode>("screenshot");
-  const [csvFormat, setCsvFormat] = useState<CsvFormat>("auto");
   // Per-group portfolio selection: importId → portfolioId. Populated in handleFiles,
   // updated by the per-group pickers on the review step.
   const [portfolioByImport, setPortfolioByImport] = useState<PortfolioByImportMap>(new Map());
@@ -319,10 +325,9 @@ export function ImportFlow({
       // ── Single-file path ──────────────────────────────────────────────────
       const file = files[0]!;
       try {
-        const result =
-          mode === "csv"
-            ? await client.importCsv(await fileToText(file), csvFormat, force)
-            : await client.importScreenshot(file, force);
+        const result = isCsvFile(file)
+          ? await client.importCsv(await fileToText(file), "auto", force)
+          : await client.importScreenshot(file, force);
         if (result.alreadyConfirmed) {
           setError(t("errors.alreadyConfirmed"));
           // Offer a manual override: the file was already imported, but the user may have
@@ -369,10 +374,9 @@ export function ImportFlow({
         prev.map((s, idx) => (idx === i ? { ...s, status: "parsing" } : s)),
       );
       try {
-        const result =
-          mode === "csv"
-            ? await client.importCsv(await fileToText(file), csvFormat, force)
-            : await client.importScreenshot(file, force);
+        const result = isCsvFile(file)
+          ? await client.importCsv(await fileToText(file), "auto", force)
+          : await client.importScreenshot(file, force);
 
         if (result.alreadyConfirmed) {
           newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
@@ -659,42 +663,6 @@ export function ImportFlow({
 
       {step === "upload" && (
         <div className="space-y-4">
-          {/* Mode tabs */}
-          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-            <TabsList>
-              <TabsTrigger value="screenshot">
-                <ScanLine className="size-4" />
-                {t("tabs.screenshot")}
-              </TabsTrigger>
-              <TabsTrigger value="csv">
-                <FileText className="size-4" />
-                {t("tabs.csv")}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* CSV source format — auto-detected by default; override for edge cases */}
-          {mode === "csv" && (
-            <div className="flex items-center gap-2">
-              <Label htmlFor="csv-format" className="text-sm text-muted-foreground">
-                {t("csvFormat.label")}
-              </Label>
-              <Select
-                id="csv-format"
-                aria-label={t("csvFormat.label")}
-                value={csvFormat}
-                onChange={(e) => setCsvFormat(e.target.value as CsvFormat)}
-                className="h-8 w-auto"
-              >
-                {(["auto", "generic", "dkb", "ibkr", "coinbase"] as const).map((fmt) => (
-                  <option key={fmt} value={fmt}>
-                    {t(`csvFormat.${fmt}`)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
           {/* Dropzone: real drag-and-drop + click-to-pick fallback */}
           <button
             type="button"
@@ -710,11 +678,7 @@ export function ImportFlow({
             )}
           >
             <span className="flex size-12 items-center justify-center rounded-full bg-secondary">
-              {mode === "csv" ? (
-                <FileText className="size-6 text-primary" />
-              ) : (
-                <ScanLine className="size-6 text-primary" />
-              )}
+              <Upload className="size-6 text-primary" />
             </span>
             {dragActive ? (
               <span className="font-medium text-primary">{t("dropzone.dropHere")}</span>
@@ -724,7 +688,7 @@ export function ImportFlow({
                 <span className="text-sm text-muted-foreground">{t("dropzone.hint")}</span>
                 <span className="mt-1 inline-flex items-center gap-2 text-sm text-primary">
                   <Upload className="size-4" />
-                  {mode === "csv" ? t("dropzone.csvCta") : t("dropzone.cta")}
+                  {t("dropzone.cta")}
                 </span>
               </>
             )}
@@ -732,7 +696,7 @@ export function ImportFlow({
           <input
             ref={fileRef}
             type="file"
-            accept={mode === "csv" ? ".csv,text/csv" : "image/*,application/pdf"}
+            accept=".csv,text/csv,image/*,application/pdf"
             multiple
             className="sr-only"
             aria-label={t("dropzone.cta")}
