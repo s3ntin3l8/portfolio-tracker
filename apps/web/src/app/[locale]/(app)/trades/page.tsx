@@ -141,6 +141,23 @@ export default async function TradesPage({
             )}
           </CardContent>
         </Card>
+
+        {log.bonusesByYear.length > 0 && (
+          <Card>
+            <CardContent className="space-y-3 p-5">
+              <h2 className="text-sm font-semibold">{t("bonusesByYear")}</h2>
+              <p className="text-xs text-muted-foreground">{t("bonusesNote")}</p>
+              <div className="space-y-1">
+                {log.bonusesByYear.map((b) => (
+                  <div key={b.year} className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{b.year}</span>
+                    <span className="tabular text-success">{money(b.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">{t("taxDisclaimer")}</p>

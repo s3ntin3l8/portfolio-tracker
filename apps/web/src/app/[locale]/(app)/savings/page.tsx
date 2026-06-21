@@ -60,7 +60,7 @@ export default async function SavingsPage({
         <StatCard
           label={t("monthlyAverage")}
           value={m(Number(c.monthlyAverage))}
-          delta={t("monthsActive", { count: c.monthsActive })}
+          delta={t("monthsElapsed", { count: c.monthsElapsed })}
           deltaTone="neutral"
         />
         <StatCard

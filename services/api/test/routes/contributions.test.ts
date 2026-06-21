@@ -105,8 +105,10 @@ describe("contribution analytics", () => {
     const c = res.json();
     expect(c.totalContributed).toBe("19000"); // 9500 + 9500, not 38000
     expect(c.netContributed).toBe("19000");
-    expect(c.monthsActive).toBe(2);
-    expect(c.monthlyAverage).toBe("9500");
+    expect(c.monthsActive).toBe(2); // only months with activity
+    // monthsElapsed = elapsed months from first tx (2026-01) to now; monthlyAverage = 19000 / monthsElapsed
+    expect(c.monthsElapsed).toBeGreaterThanOrEqual(2);
+    expect(Number(c.monthlyAverage) * c.monthsElapsed).toBeCloseTo(19000, 2);
     expect(c.series).toEqual([
       { month: "2026-01", contributed: "9500" },
       { month: "2026-02", contributed: "9500" },
@@ -142,7 +144,9 @@ describe("contribution analytics", () => {
     // each portfolio is computed under its own boundary, then merged.
     expect(c.totalContributed).toBe("24000");
     expect(c.monthsActive).toBe(3); // Jan, Feb, Mar
-    expect(c.monthlyAverage).toBe("8000"); // 24000 / 3
+    // monthsElapsed = elapsed months from 2026-01 to now (≥ 3); monthlyAverage = 24000 / monthsElapsed
+    expect(c.monthsElapsed).toBeGreaterThanOrEqual(3);
+    expect(Number(c.monthlyAverage) * c.monthsElapsed).toBeCloseTo(24000, 2);
   });
 
   // Create a holder and return its id.

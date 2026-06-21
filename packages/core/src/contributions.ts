@@ -42,7 +42,14 @@ export interface ContributionStats {
   totalContributed: string;
   totalWithdrawn: string;
   netContributed: string;
+  /** Count of calendar months from the first contribution month through the current
+   * month (inclusive). Used as the denominator for monthlyAverage so idle months
+   * dilute the average correctly. */
+  monthsElapsed: number;
+  /** Count of distinct calendar months that had non-zero net contribution activity.
+   * Kept for existing consumers; use monthsElapsed for the per-month average. */
   monthsActive: number;
+  /** Net contribution divided by monthsElapsed (all months since first transaction). */
   monthlyAverage: string;
   /** Net contribution per calendar month, ascending by `month` (YYYY-MM). */
   series: { month: string; contributed: string }[];
@@ -56,6 +63,18 @@ interface MonthAgg {
 /** UTC year-month bucket key, e.g. "2026-06". */
 function monthKey(d: Date): string {
   return d.toISOString().slice(0, 7);
+}
+
+/**
+ * Count of inclusive calendar months from `firstKey` ("YYYY-MM") through the
+ * month containing `now`. Returns at least 1 so the denominator is never zero.
+ * Example: first="2025-08", now=2026-06 → (2026-2025)*12 + (6-8) + 1 = 11 months.
+ */
+function elapsedMonths(firstKey: string, now: Date): number {
+  const [fy, fm] = firstKey.split("-").map(Number);
+  const ny = now.getUTCFullYear();
+  const nm = now.getUTCMonth() + 1; // 1-based
+  return Math.max(1, (ny - fy) * 12 + (nm - fm) + 1);
 }
 
 /** Cash amount of a deposit landing inside the boundary (fees reduce what lands). */
@@ -182,8 +201,13 @@ export function contributionStats(input: ContributionInput): ContributionStats {
 
   const netContributed = totalContributed.sub(totalWithdrawn);
   const monthsActive = series.length;
-  const monthlyAverage = monthsActive
-    ? netContributed.div(monthsActive).toString()
+  // Use elapsed calendar months (first bucket → now) as the denominator so that
+  // idle months dilute the average correctly rather than being silently dropped.
+  const now = input.now ?? new Date();
+  const firstKey = [...months.keys()].sort()[0];
+  const monthsElapsed = firstKey ? elapsedMonths(firstKey, now) : 1;
+  const monthlyAverage = firstKey
+    ? netContributed.div(monthsElapsed).toString()
     : "0";
 
   return {
@@ -191,6 +215,7 @@ export function contributionStats(input: ContributionInput): ContributionStats {
     totalContributed: totalContributed.toString(),
     totalWithdrawn: totalWithdrawn.toString(),
     netContributed: netContributed.toString(),
+    monthsElapsed,
     monthsActive,
     monthlyAverage,
     series,
@@ -206,6 +231,7 @@ export function contributionStats(input: ContributionInput): ContributionStats {
 export function mergeContributionStats(
   stats: ContributionStats[],
   displayCurrency: string,
+  now?: Date,
 ): ContributionStats {
   const byMonth = new Map<string, Decimal>();
   let totalContributed = D(0);
@@ -223,12 +249,19 @@ export function mergeContributionStats(
     .filter((pt) => !D(pt.contributed).isZero());
   const netContributed = totalContributed.sub(totalWithdrawn);
   const monthsActive = series.length;
-  const monthlyAverage = monthsActive ? netContributed.div(monthsActive).toString() : "0";
+  // Anchor on the earliest month visible in the merged series (note: each portfolio's
+  // series is already filtered to non-zero-net months, so the anchor is approximate —
+  // an idle first month can shift it forward slightly, which is acceptable).
+  const effectiveNow = now ?? new Date();
+  const firstKey = [...byMonth.keys()].sort()[0];
+  const monthsElapsed = firstKey ? elapsedMonths(firstKey, effectiveNow) : 1;
+  const monthlyAverage = firstKey ? netContributed.div(monthsElapsed).toString() : "0";
   return {
     displayCurrency,
     totalContributed: totalContributed.toString(),
     totalWithdrawn: totalWithdrawn.toString(),
     netContributed: netContributed.toString(),
+    monthsElapsed,
     monthsActive,
     monthlyAverage,
     series,

@@ -99,6 +99,10 @@ export interface TradeLog {
   winRate: number | null;
   realizedByYear: YearAmount[]; // method-aware (from leg tax years)
   dividendsByYear: YearTax[]; // all income incl. instrument-less interest
+  /** Broker-credited bonuses by year: bonus_cash (e.g. Kindergeld), saveback buy legs,
+   * and transfer_in free-share receipts. Purely informational — NOT included in
+   * totalReturn or totalDividends. Excludes roundup (user's own spare change). */
+  bonusesByYear: YearAmount[];
 }
 
 export interface ComputeTradesInput {
@@ -456,7 +460,37 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       tax: tax.toString(),
     }));
 
-  return finalizeLog(trades, dividendsByYear, method, display);
+  // bonusesByYear — broker-credited rewards, purely informational, NOT in totalReturn.
+  //   • bonus_cash (e.g. Kindergeld, promo cash) — cash flow as lump sum income.
+  //   • buy / savings_plan with kind="saveback" — reinvested cashback (notional cost).
+  //   • bonus with kind="transfer_in" — free share receipts (notional value q×p).
+  // roundup is excluded: it is the user's own spare change, not broker-credited.
+  const bonusMap = new Map<number, Decimal>();
+  for (const tx of input.transactions) {
+    let bonusAmount: Decimal | null = null;
+    if (tx.type === "bonus_cash") {
+      bonusAmount = conv(cashFlow(tx), tx.currency);
+    } else if (
+      (tx.type === "buy" || tx.type === "savings_plan") &&
+      tx.kind === "saveback"
+    ) {
+      bonusAmount = conv(
+        D(tx.quantity).mul(D(tx.price)).add(D(tx.fees)),
+        tx.currency,
+      );
+    } else if (tx.type === "bonus" && tx.kind === "transfer_in") {
+      bonusAmount = conv(D(tx.quantity).mul(D(tx.price)), tx.currency);
+    }
+    if (bonusAmount !== null) {
+      const year = tx.executedAt.getUTCFullYear();
+      bonusMap.set(year, (bonusMap.get(year) ?? ZERO).add(bonusAmount));
+    }
+  }
+  const bonusesByYear: YearAmount[] = [...bonusMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([year, amount]) => ({ year, amount: amount.toString() }));
+
+  return finalizeLog(trades, dividendsByYear, bonusesByYear, method, display);
 }
 
 /** Open first, then most-recent entry date on top. */
@@ -471,6 +505,7 @@ function sortTrades(trades: Trade[]): void {
 function finalizeLog(
   trades: Trade[],
   dividendsByYear: YearTax[],
+  bonusesByYear: YearAmount[],
   method: TradeMethod,
   display: string,
 ): TradeLog {
@@ -512,6 +547,7 @@ function finalizeLog(
     winRate: closed > 0 ? wins / closed : null,
     realizedByYear,
     dividendsByYear,
+    bonusesByYear,
   };
 }
 
@@ -528,12 +564,16 @@ export function mergeTradeLogs(
 ): TradeLog {
   const trades = logs.flatMap((l) => l.trades);
   const divMap = new Map<number, { amount: Decimal; tax: Decimal }>();
+  const bonusMap = new Map<number, Decimal>();
   for (const l of logs) {
     for (const d of l.dividendsByYear) {
       const e = divMap.get(d.year) ?? { amount: ZERO, tax: ZERO };
       e.amount = e.amount.add(d.amount);
       e.tax = e.tax.add(d.tax);
       divMap.set(d.year, e);
+    }
+    for (const b of l.bonusesByYear) {
+      bonusMap.set(b.year, (bonusMap.get(b.year) ?? ZERO).add(b.amount));
     }
   }
   const dividendsByYear: YearTax[] = [...divMap.entries()]
@@ -543,5 +583,8 @@ export function mergeTradeLogs(
       amount: amount.toString(),
       tax: tax.toString(),
     }));
-  return finalizeLog(trades, dividendsByYear, method, displayCurrency);
+  const bonusesByYear: YearAmount[] = [...bonusMap.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([year, amount]) => ({ year, amount: amount.toString() }));
+  return finalizeLog(trades, dividendsByYear, bonusesByYear, method, displayCurrency);
 }

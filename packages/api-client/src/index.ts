@@ -511,7 +511,12 @@ export interface ContributionStats {
   totalContributed: string;
   totalWithdrawn: string;
   netContributed: string;
+  /** Elapsed calendar months from first contribution month through the current month
+   * (inclusive). Denominator for monthlyAverage — idle months dilute the average. */
+  monthsElapsed: number;
+  /** Distinct months with non-zero net activity. Kept for backward compat. */
   monthsActive: number;
+  /** Net contribution divided by monthsElapsed (all months since start). */
   monthlyAverage: string;
   /** Net contribution per calendar month, ascending by `month` (YYYY-MM). */
   series: { month: string; contributed: string }[];
@@ -596,6 +601,9 @@ export interface TradeLog {
   winRate: number | null;
   realizedByYear: YearAmount[];
   dividendsByYear: YearTax[];
+  /** Broker-credited bonuses by year (bonus_cash, saveback, free transfer_in).
+   * Purely informational — NOT included in totalReturn or totalDividends. */
+  bonusesByYear: YearAmount[];
 }
 
 /** A draft transaction matched a transaction already committed to the candidate portfolio

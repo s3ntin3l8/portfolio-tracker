@@ -76,7 +76,7 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
                 <div className="text-xs text-muted-foreground">{e.name}</div>
               )}
             </TableCell>
-            <TableCell className="tabular text-right text-success">
+            <TableCell className={`tabular text-right ${Number(e.amount) >= 0 ? "text-success" : "text-destructive"}`}>
               {formatMoney(Number(e.amount), e.currency, locale)}
             </TableCell>
           </TableRow>
