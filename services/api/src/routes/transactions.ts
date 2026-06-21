@@ -151,6 +151,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     target: string,
     method: TradeMethod,
     costBasisMode: CostBasisMode | undefined,
+    instrumentsMeta?: Map<string, InstrumentMeta>,
   ): Promise<TradeLog> {
     const currencies = new Set<string>(coreTxns.map((t) => t.currency));
     for (const p of Object.values(prices)) currencies.add(p.currency);
@@ -164,6 +165,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       fx,
       method,
       costBasisMode,
+      instruments: instrumentsMeta,
     });
   }
 
@@ -904,7 +906,14 @@ export async function transactionsRoute(app: FastifyInstance) {
         costBasisMode,
         portfolio.cashCounted,
       );
-      const log = await buildTradeLog(coreTxns, prices, portfolio.baseCurrency, method, costBasisMode);
+      const log = await buildTradeLog(
+        coreTxns,
+        prices,
+        portfolio.baseCurrency,
+        method,
+        costBasisMode,
+        metaById,
+      );
       return attachInstruments(log, metaById);
     },
   );
@@ -1044,7 +1053,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           costBasisMode,
           p.cashCounted,
         );
-        logs.push(await buildTradeLog(coreTxns, prices, display, method, costBasisMode));
+        logs.push(await buildTradeLog(coreTxns, prices, display, method, costBasisMode, metaById));
         for (const [k, v] of metaById) meta.set(k, v);
       }
       return attachInstruments(mergeTradeLogs(logs, display, method), meta);

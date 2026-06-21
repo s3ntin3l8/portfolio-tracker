@@ -117,6 +117,8 @@ export interface ComputeTradesInput {
   now?: Date;
   /** Quantity dust tolerance for episode closure. Default 1e-6. */
   dustEpsilon?: string;
+  /** Instrument metadata (specifically assetClass) keyed by instrument id. */
+  instruments?: Map<string, { assetClass: string }> | Record<string, { assetClass: string }>;
 }
 
 function toDateStr(d: Date): string {
@@ -180,6 +182,16 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
   const cas = input.corporateActions ?? [];
   const conv = (amount: Decimal | string, from: string): Decimal =>
     D(convert(amount.toString(), from, display, fx));
+
+  const TAX_FREE_ELIGIBLE_CLASSES = new Set(["gold", "crypto"]);
+  const isTaxFreeEligible = (id: string): boolean => {
+    if (!input.instruments) return true;
+    const assetClass =
+      input.instruments instanceof Map
+        ? input.instruments.get(id)?.assetClass
+        : (input.instruments as Record<string, { assetClass: string }>)[id]?.assetClass;
+    return assetClass ? TAX_FREE_ELIGIBLE_CLASSES.has(assetClass) : true;
+  };
 
   // Financing capitalized into the open episode's cost basis under "total_paid".
   const financing =
@@ -300,7 +312,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         entryDate: toDateStr(entryDate),
         exitDate: exitDate ? toDateStr(exitDate) : null,
         holdingDays,
-        longTerm: holdingDays >= LONG_TERM_DAYS,
+        longTerm: holdingDays >= LONG_TERM_DAYS && isTaxFreeEligible(instrumentId),
         quantity: qtyShown.toString(),
         avgEntryPrice,
         avgExitPrice,
@@ -404,7 +416,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
               proceeds: conv(sliceProceeds, costCcy).toString(),
               gain: conv(sliceProceeds.sub(s.cost), costCcy).toString(),
               holdingDays: days,
-              longTerm: days >= LONG_TERM_DAYS,
+              longTerm: days >= LONG_TERM_DAYS && isTaxFreeEligible(instrumentId),
               taxYear,
             });
           }
@@ -418,7 +430,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
             proceeds: conv(proceeds, costCcy).toString(),
             gain: conv(realizedSlice, costCcy).toString(),
             holdingDays: days,
-            longTerm: days >= LONG_TERM_DAYS,
+            longTerm: days >= LONG_TERM_DAYS && isTaxFreeEligible(instrumentId),
             taxYear,
           });
         }
