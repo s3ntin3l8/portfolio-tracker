@@ -76,6 +76,10 @@ export function getDb(): DB {
 // That breaks when migration N does `ALTER TYPE ADD VALUE` and migration N+1 uses
 // the new value: Postgres requires the ALTER TYPE to be committed first (PG error
 // 55P04). Run each file in its own BEGIN/COMMIT so the constraint is satisfied.
+//
+// Tracks by hash (not timestamp watermark) to survive migration file regeneration
+// during development, where the same schema change gets a new folderMillis after a
+// `db:generate` re-run.
 async function migrateOneByOne(folder: string): Promise<void> {
   const { readMigrationFiles } = await import("drizzle-orm/migrator");
   const migrations = readMigrationFiles({ migrationsFolder: folder });
@@ -90,14 +94,13 @@ async function migrateOneByOne(folder: string): Promise<void> {
     )
   `;
 
-  const [last] = await conn`
-    SELECT created_at FROM drizzle.__drizzle_migrations
-    ORDER BY created_at DESC LIMIT 1
+  const applied = await conn<{ hash: string }[]>`
+    SELECT hash FROM drizzle.__drizzle_migrations
   `;
-  const lastMillis: number | null = last ? Number(last.created_at) : null;
+  const appliedHashes = new Set(applied.map((r) => r.hash));
 
   for (const migration of migrations) {
-    if (lastMillis !== null && lastMillis >= migration.folderMillis) continue;
+    if (appliedHashes.has(migration.hash)) continue;
 
     await conn.begin(async (tx) => {
       for (const stmt of migration.sql) {
