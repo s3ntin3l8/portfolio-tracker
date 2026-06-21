@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import {
   PytrRunner,
@@ -268,5 +269,166 @@ describe("PytrRunner.isAvailable", () => {
     const p2 = runner2.isAvailable();
     (await bad.nextChild()).emit("exit", 1);
     expect(await p2).toBe(false);
+  });
+
+  it("returns false (no throw) when the interpreter cannot be spawned", async () => {
+    const { spawn } = makeSpawn({ throwOnSpawn: true });
+    const runner = makeRunner(spawn);
+    expect(await runner.isAvailable()).toBe(false);
+  });
+});
+
+// ─── downloadDocuments ──────────────────────────────────────────────────────
+
+describe("PytrRunner.downloadDocuments", () => {
+  const SESSION = { phone: "+4915", pin: "1234", sessionData: "COOKIE_JAR" };
+
+  it("returns an empty Map immediately when pairs is empty (no spawn)", async () => {
+    const { spawn } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const result = await runner.downloadDocuments(SESSION, []);
+    expect(result.size).toBe(0);
+  });
+
+  it("throws PytrUnavailableError when disabled", async () => {
+    const runner = makeRunner(makeSpawn().spawn, { enabled: false });
+    await expect(
+      runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]),
+    ).rejects.toThrow(PytrUnavailableError);
+  });
+
+  it("writes pairs as NDJSON on stdin, reads downloaded files from --out dir", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn, { exportTimeoutMs: 5000 });
+    const downloadP = runner.downloadDocuments(SESSION, [{ eventId: "ev1", docId: "doc-A" }]);
+
+    const child = await nextChild();
+    expect(child.args[0]).toBe("/scripts/tr_documents.py");
+    expect(child.args).toContain("--out");
+    // Secrets go via env, never argv.
+    expect(child.opts.env?.TR_PHONE).toBe("+4915");
+    expect(child.opts.env?.TR_PIN).toBe("1234");
+
+    // The pairs are serialised as NDJSON and the pipe is closed so Python sees EOF.
+    expect(child.stdin.write).toHaveBeenCalledWith('{"eventId":"ev1","docId":"doc-A"}\n');
+    expect(child.stdin.end).toHaveBeenCalled();
+
+    // downloadDocuments already created the outDir before spawning — just write the file.
+    const outIdx = child.args.indexOf("--out");
+    const outDir = child.args[outIdx + 1];
+    await writeFile(join(outDir, "doc-A.pdf"), Buffer.from("%PDF-1.4"));
+
+    child.stdout.emit(
+      "data",
+      Buffer.from('{"docId":"doc-A","file":"doc-A.pdf","mimeType":"application/pdf","ok":true}\n'),
+    );
+    child.emit("exit", 0);
+
+    const result = await downloadP;
+    expect(result.size).toBe(1);
+    const entry = result.get("doc-A");
+    expect(entry?.mimeType).toBe("application/pdf");
+    expect(entry?.buf.toString()).toBe("%PDF-1.4");
+  });
+
+  it("throws PytrAuthError on exit code 2 (session expired)", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    child.stderr.emit("data", Buffer.from("session expired"));
+    child.emit("exit", 2);
+    await expect(p).rejects.toThrow(PytrAuthError);
+  });
+
+  it("throws PytrError on any other non-zero exit", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    child.emit("exit", 1);
+    await expect(p).rejects.toThrow(PytrError);
+  });
+
+  it("skips docs with ok:false and returns only successful ones", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn, { exportTimeoutMs: 5000 });
+    const p = runner.downloadDocuments(SESSION, [
+      { eventId: "e1", docId: "d1" },
+      { eventId: "e2", docId: "d2" },
+    ]);
+    const child = await nextChild();
+
+    const outIdx = child.args.indexOf("--out");
+    const outDir = child.args[outIdx + 1];
+    await writeFile(join(outDir, "d2.pdf"), Buffer.from("good-bytes"));
+
+    child.stdout.emit(
+      "data",
+      Buffer.from(
+        '{"docId":"d1","ok":false,"error":"HTTP 403"}\n' +
+          '{"docId":"d2","file":"d2.pdf","mimeType":"application/pdf","ok":true}\n',
+      ),
+    );
+    child.emit("exit", 0);
+
+    const result = await p;
+    expect(result.has("d1")).toBe(false);
+    expect(result.get("d2")?.buf.toString()).toBe("good-bytes");
+  });
+
+  it("skips unparseable stdout lines without throwing", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    child.stdout.emit("data", Buffer.from("not valid json\n"));
+    child.emit("exit", 0);
+    const result = await p;
+    expect(result.size).toBe(0);
+  });
+
+  it("skips a doc whose output file cannot be read (best-effort)", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    // ok:true but the referenced file was never written to outDir.
+    child.stdout.emit(
+      "data",
+      Buffer.from('{"docId":"d1","file":"missing.pdf","mimeType":"application/pdf","ok":true}\n'),
+    );
+    child.emit("exit", 0);
+    const result = await p;
+    expect(result.size).toBe(0);
+  });
+
+  // ── runWithStdin failure modes (exercised via downloadDocuments) ──────────
+
+  it("throws PytrUnavailableError when the interpreter cannot be spawned", async () => {
+    const { spawn } = makeSpawn({ throwOnSpawn: true });
+    const runner = makeRunner(spawn);
+    await expect(
+      runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]),
+    ).rejects.toThrow(PytrUnavailableError);
+  });
+
+  it("throws PytrError and kills the child process when the timeout elapses", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn, { exportTimeoutMs: 20 });
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    // Never emit exit — let the timeout fire.
+    await expect(p).rejects.toThrow(/timed out/);
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+  });
+
+  it("throws PytrUnavailableError when the child process emits an error event", async () => {
+    const { spawn, nextChild } = makeSpawn();
+    const runner = makeRunner(spawn);
+    const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
+    const child = await nextChild();
+    child.emit("error", new Error("ENOENT: python not found"));
+    await expect(p).rejects.toThrow(PytrUnavailableError);
   });
 });

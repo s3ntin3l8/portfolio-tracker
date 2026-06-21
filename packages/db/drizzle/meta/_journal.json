@@ -232,6 +232,13 @@
       "when": 1782031780071,
       "tag": "0032_dry_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1782035540035,
+      "tag": "0033_clever_ultimates",
+      "breakpoints": true
     }
   ]
 }

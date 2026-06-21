@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { FastifyBaseLogger } from "fastify";
 import {
+  portfolios,
   screenshotImports,
   transactions,
   trConnections,
@@ -15,7 +16,7 @@ import type { PytrRunner, TrExportSummary } from "./runner.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 import type { StorageProvider } from "../../storage/types.js";
-import { deleteReceiptsForTransactions } from "../../storage/receipts.js";
+import { deleteReceiptsForTransactions, storeReceipt } from "../../storage/receipts.js";
 
 type TrConnectionRow = typeof trConnections.$inferSelect;
 
@@ -329,6 +330,69 @@ export async function syncTrConnection(
     { connectionId, importId, action: collectorAction, drafts: mergedDrafts.length, errors: mergedErrors.length },
     "tr collector updated",
   );
+
+  // 6b. Download postbox document bytes for newly-staged drafts (best-effort).
+  //
+  // Only fires when:
+  //   • storage is injected (skipped in tests / callers without storage),
+  //   • there is an open collector with an importId,
+  //   • the portfolio has documentRetention=true (never download bytes to discard them),
+  //   • at least one new draft has a documentRefs entry.
+  //
+  // Future-only by design: incremental sync skips already-ledger'd events, so events
+  // confirmed before retention was enabled won't get their PDFs retroactively. This is
+  // intentional (no backfill), since we are pre-release with no live users.
+  if (storage && importId && newDrafts.length > 0) {
+    const [portfolio] = await db
+      .select({ documentRetention: portfolios.documentRetention })
+      .from(portfolios)
+      .where(eq(portfolios.id, portfolioId))
+      .limit(1);
+
+    if (portfolio?.documentRetention) {
+      // Collect (eventId, docId) pairs from new drafts' documentRefs.
+      const pairs: { eventId: string; docId: string }[] = [];
+      for (const draft of newDrafts) {
+        if (!draft.externalId || !draft.documentRefs) continue;
+        for (const ref of draft.documentRefs) {
+          if (ref?.id) pairs.push({ eventId: draft.externalId, docId: ref.id });
+        }
+      }
+
+      if (pairs.length > 0) {
+        const appLike = { storage, db, log: log ?? console } as Parameters<typeof storeReceipt>[0];
+        const userId = connection.userId;
+
+        try {
+          const downloaded = await runner.downloadDocuments(
+            { phone, pin, sessionData: result.sessionData },
+            pairs,
+          );
+          for (const [docId, { buf, mimeType }] of downloaded) {
+            // sourceEventId links this doc to its transaction at confirm time
+            // (via tx.externalId ↔ document.sourceEventId matching).
+            const sourceEventId = pairs.find((p) => p.docId === docId)?.eventId ?? null;
+            await storeReceipt(appLike, {
+              userId,
+              importId,
+              buf,
+              mimeType,
+              originalFilename: `${docId}.pdf`,
+              source: "pytr",
+              sourceEventId,
+            });
+          }
+          log?.info(
+            { connectionId, importId, requested: pairs.length, stored: downloaded.size },
+            "tr postbox documents staged",
+          );
+        } catch (err) {
+          // Best-effort: a document-fetch failure must never abort the sync.
+          log?.warn({ connectionId, importId, err }, "tr document download failed (non-fatal)");
+        }
+      }
+    }
+  }
 
   // 7. Reconcile cash against TR's reported balance, then roll the session forward.
   const reconciliation = reconcileCash(events, result.summary);

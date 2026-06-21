@@ -19,7 +19,7 @@
 
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { documents, transactions } from "@portfolio/db";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { schema } from "@portfolio/db";
@@ -66,8 +66,18 @@ export interface StoreReceiptOptions {
   buf: Buffer;
   mimeType: string;
   originalFilename?: string | null;
-  /** Parser/source label, e.g. "claude", "dkb", "csv", "tr-csv". */
+  /** Parser/source label, e.g. "claude", "dkb", "csv", "tr-csv", "pytr". */
   source?: string | null;
+  /**
+   * TR postbox sync→confirm join key: the TR timeline event id whose documentRefs
+   * triggered this download. Null/absent for upload-family (screenshot/DKB/CSV) docs.
+   */
+  sourceEventId?: string | null;
+  /**
+   * Override the initial status (default "staged"). Pass "retained" only when the
+   * document is stored at confirm time and the portfolio already has retention on.
+   */
+  status?: "staged" | "retained";
 }
 
 export interface FinalizeReceiptsOptions {
@@ -113,7 +123,16 @@ function db(app: AppLikeDb): PostgresJsDatabase<typeof schema> {
  * so a storage misconfiguration never breaks the import flow.
  */
 export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Promise<void> {
-  const { userId, importId, buf, mimeType, originalFilename, source } = opts;
+  const {
+    userId,
+    importId,
+    buf,
+    mimeType,
+    originalFilename,
+    source,
+    sourceEventId,
+    status = "staged",
+  } = opts;
   const key = buildReceiptKey(userId, importId, originalFilename, mimeType);
   try {
     await app.storage.put(key, buf, {
@@ -127,10 +146,11 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
       mimeType,
       originalFilename: originalFilename ?? null,
       sizeBytes: buf.byteLength,
-      status: "staged",
+      status,
       source: source ?? null,
+      sourceEventId: sourceEventId ?? null,
     });
-    app.log.debug({ importId, key, bytes: buf.byteLength }, "receipt staged");
+    app.log.debug({ importId, key, bytes: buf.byteLength, status }, "receipt staged");
   } catch (err) {
     app.log.warn({ err, importId, key }, "storeReceipt failed (non-fatal)");
   }
@@ -282,11 +302,14 @@ export async function getDocumentForTransaction(
   txId: string,
   txImportId: string | null,
 ): Promise<DocumentMeta | null> {
-  // Phase 1: transaction-scoped doc (TR future).
+  // Phase 1: transaction-scoped doc (TR — populated by linkTrReceiptsToTransactions at confirm).
+  // Order by storedAt desc so if multiple docs exist for the same transaction, the most
+  // recent one is returned (e.g. a re-sync after the original was deleted and re-fetched).
   const txRows = await db(app)
     .select()
     .from(documents)
     .where(and(eq(documents.transactionId, txId), eq(documents.status, "retained")))
+    .orderBy(desc(documents.storedAt))
     .limit(1);
   if (txRows.length > 0) return txRows[0] as DocumentMeta;
 
@@ -323,7 +346,9 @@ export async function getDocumentSummaryForImport(
 
 /**
  * Batch-check which importIds have a retained document.
- * Used to embed `hasDocument` on transaction list items.
+ * Used to embed `hasDocument` on transaction list items for non-TR sources
+ * (one doc per import). For TR transactions, use `transactionIdsWithDocuments` instead
+ * because TR has many docs per collector import (one per event).
  */
 export async function importIdsWithDocuments(
   app: AppLikeDb,
@@ -335,6 +360,64 @@ export async function importIdsWithDocuments(
     .from(documents)
     .where(and(inArray(documents.importId, importIds), eq(documents.status, "retained")));
   return new Set(rows.map((r) => r.importId).filter((id): id is string => id !== null));
+}
+
+/**
+ * Batch-check which transactionIds have a retained, transaction-linked document.
+ * Use this for TR transactions (many docs per collector import → importId check is wrong).
+ */
+export async function transactionIdsWithDocuments(
+  app: AppLikeDb,
+  txIds: string[],
+): Promise<Set<string>> {
+  if (txIds.length === 0) return new Set();
+  const rows = await db(app)
+    .select({ transactionId: documents.transactionId })
+    .from(documents)
+    .where(and(inArray(documents.transactionId, txIds), eq(documents.status, "retained")));
+  return new Set(
+    rows.map((r) => r.transactionId).filter((id): id is string => id !== null),
+  );
+}
+
+/**
+ * Link staged TR postbox documents to their confirmed transactions.
+ * Called at confirm time (after transactions are inserted) — sets `transactionId`
+ * on each staged document by matching `sourceEventId` (= the TR event id = tx.externalId).
+ * Best-effort: errors are logged and swallowed so a linkage failure never blocks confirm.
+ *
+ * Ordering with finalizeReceipts: call this BEFORE finalizeReceipts so the transactionId
+ * is set before the status is flipped from "staged" to "retained" (or the row is deleted).
+ */
+export async function linkTrReceiptsToTransactions(
+  app: AppLike,
+  opts: {
+    importId: string;
+    links: { sourceEventId: string; transactionId: string }[];
+  },
+): Promise<void> {
+  const { importId, links } = opts;
+  if (links.length === 0) return;
+  try {
+    for (const { sourceEventId, transactionId } of links) {
+      await db(app)
+        .update(documents)
+        .set({ transactionId })
+        .where(
+          and(
+            eq(documents.importId, importId),
+            eq(documents.sourceEventId, sourceEventId),
+            eq(documents.status, "staged"),
+          ),
+        );
+    }
+    app.log.debug(
+      { importId, linked: links.length },
+      "tr receipts linked to transactions",
+    );
+  } catch (err) {
+    app.log.warn({ err, importId }, "linkTrReceiptsToTransactions failed (non-fatal)");
+  }
 }
 
 // ---- Internal helpers ------------------------------------------------------

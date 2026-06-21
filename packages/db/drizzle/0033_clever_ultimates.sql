@@ -1,0 +1,1 @@
+ALTER TABLE "documents" ADD COLUMN "source_event_id" text;

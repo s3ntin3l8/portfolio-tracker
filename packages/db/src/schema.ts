@@ -402,6 +402,10 @@ export const documents = pgTable(
     status: text("status").notNull().default("staged"),
     // Parser/source label (claude | ollama | dkb | csv | tr-csv | pytr | …).
     source: text("source"),
+    // TR postbox sync→confirm join key: the TR timeline event id whose documentRefs entry
+    // triggered this download. Null for upload-family docs (screenshot/DKB/CSV). Used to
+    // link the staged doc to its transaction at confirm time via externalId matching.
+    sourceEventId: text("source_event_id"),
     storedAt: timestamp("stored_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

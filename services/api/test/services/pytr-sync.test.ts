@@ -8,19 +8,51 @@ import {
   screenshotImports,
   transactions,
   trResolvedEvents,
+  documents,
 } from "@portfolio/db";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { EncryptionService } from "../../src/services/encryption.js";
 import { syncTrConnection } from "../../src/services/pytr/sync.js";
-import { PytrAuthError, type PytrRunner } from "../../src/services/pytr/runner.js";
+import { PytrAuthError, type PytrRunner, type DocDownloadResult } from "../../src/services/pytr/runner.js";
+import type { StorageProvider } from "../../src/storage/types.js";
 
 const enc = new EncryptionService({ key: crypto.randomBytes(32).toString("base64url") });
 
 // A mock runner whose export() is set per test — no Python, no network.
 function runnerWith(
   exportImpl: PytrRunner["export"],
+  downloadImpl?: PytrRunner["downloadDocuments"],
 ): PytrRunner {
-  return { export: exportImpl } as unknown as PytrRunner;
+  return {
+    export: exportImpl,
+    downloadDocuments: downloadImpl ?? (async () => new Map()),
+  } as unknown as PytrRunner;
+}
+
+/** In-memory storage tracking put/delete calls. */
+function makeTrackingStorage(): StorageProvider & {
+  puts: string[];
+  deletes: string[];
+  data: Map<string, Buffer>;
+} {
+  const puts: string[] = [];
+  const deletes: string[] = [];
+  const data = new Map<string, Buffer>();
+  return {
+    puts,
+    deletes,
+    data,
+    put: async (key, body) => {
+      puts.push(key);
+      data.set(key, body instanceof Buffer ? body : Buffer.from("bytes"));
+    },
+    getSignedUrl: async (key) => `https://fake.storage/${key}?sig=test`,
+    delete: async (key) => {
+      deletes.push(key);
+      data.delete(key);
+    },
+    exists: async (key) => data.has(key),
+  };
 }
 
 const EVENTS = [
@@ -321,5 +353,147 @@ describe("syncTrConnection", () => {
       .where(eq(trConnections.id, conn.id));
     expect(updated.status).toBe("expired");
     expect(updated.lastError).toBeTruthy();
+  });
+
+  // --- document download tests (#243) ---------------------------------------
+
+  it("stages postbox documents for new drafts when documentRetention=true", async () => {
+    const conn = await makeConnection("docs-retention");
+    const db = getDb();
+    // Enable documentRetention on the portfolio.
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const PDF = Buffer.from("%PDF-1.4 fake");
+    let downloadCalled = false;
+    let downloadPairs: { eventId: string; docId: string }[] = [];
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-doc-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "ORDER_EXECUTED",
+            amount: -1000,
+            shares: 10,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-abc", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async (_session, pairs) => {
+        downloadCalled = true;
+        downloadPairs = pairs;
+        const result = new Map<string, DocDownloadResult>();
+        for (const { docId } of pairs) {
+          result.set(docId, { buf: PDF, mimeType: "application/pdf" });
+        }
+        return result;
+      },
+    );
+
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    expect(result.status).toBe("connected");
+    expect(result.drafts).toBe(1);
+    expect(downloadCalled).toBe(true);
+    expect(downloadPairs).toEqual([{ eventId: "tr-doc-1", docId: "doc-abc" }]);
+    // A staged document row was inserted with the correct sourceEventId.
+    const [imp] = await db
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, result.importId!));
+    const docs = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.importId, imp.id));
+    expect(docs).toHaveLength(1);
+    expect(docs[0].sourceEventId).toBe("tr-doc-1");
+    expect(docs[0].status).toBe("staged");
+    expect(docs[0].source).toBe("pytr");
+    // Storage received a put call.
+    expect(storage.puts).toHaveLength(1);
+    expect(storage.puts[0]).toContain("receipts/");
+    expect(storage.puts[0]).toContain("doc-abc.pdf");
+  });
+
+  it("skips document download when documentRetention=false (default)", async () => {
+    const conn = await makeConnection("docs-no-retention");
+    const db = getDb();
+    // documentRetention defaults to false — do NOT enable it.
+
+    let downloadCalled = false;
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-nodoc-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "ORDER_EXECUTED",
+            amount: -1000,
+            shares: 10,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-skip", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async () => {
+        downloadCalled = true;
+        return new Map();
+      },
+    );
+
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    expect(result.status).toBe("connected");
+    // No download attempt when retention is off.
+    expect(downloadCalled).toBe(false);
+    expect(storage.puts).toHaveLength(0);
+  });
+
+  it("continues sync if document download fails (best-effort)", async () => {
+    const conn = await makeConnection("docs-fail");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-fail-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "PAYMENT_INBOUND",
+            amount: 500,
+            currency: "EUR",
+            documentRefs: [{ id: "doc-fail", type: "TAX", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async () => {
+        throw new Error("simulated download failure");
+      },
+    );
+
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    // Sync must complete despite the download failure (AC #3).
+    expect(result.status).toBe("connected");
+    expect(result.drafts).toBe(1);
+    // No document stored.
+    expect(storage.puts).toHaveLength(0);
   });
 });

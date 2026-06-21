@@ -44,6 +44,7 @@ import {
   deleteReceiptsForImport,
   getDocumentForImport,
   getDocumentSummaryForImport,
+  linkTrReceiptsToTransactions,
 } from "../storage/receipts.js";
 
 const csvBodySchema = z.object({
@@ -1356,6 +1357,18 @@ export async function importsRoute(app: FastifyInstance) {
         }
         return written;
       });
+
+      // For TR imports: link each staged document to its confirmed transaction so that
+      // `GET .../document-url` works by transactionId (not just importId).
+      // Must run BEFORE finalizeReceipts (which flips status staged→retained or deletes).
+      if (isPytr && created.length > 0) {
+        const links = created
+          .filter((r): r is typeof r & { externalId: string } => Boolean(r.externalId))
+          .map((r) => ({ sourceEventId: r.externalId, transactionId: r.id }));
+        if (links.length > 0) {
+          await linkTrReceiptsToTransactions(app, { importId: imp.id, links });
+        }
+      }
 
       // Finalize receipt storage: keep if the portfolio has documentRetention=true,
       // else delete the staged bytes (privacy-by-default). Best-effort (#231).

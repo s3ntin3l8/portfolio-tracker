@@ -18,6 +18,8 @@ import { generateKeyPair, SignJWT } from "jose";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 import type { StorageProvider } from "../../src/storage/types.js";
+import { documents, screenshotImports, users } from "@portfolio/db";
+import { eq as _eq } from "drizzle-orm";
 
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const AUDIENCE = "portfolio-tracker";
@@ -433,5 +435,161 @@ describe("document-url requires authentication", () => {
       url: "/portfolios/00000000-0000-0000-0000-000000000000/transactions/00000000-0000-0000-0000-000000000001/document-url",
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+// =============================================================================
+// TR pytr: confirm links staged docs to transactions via sourceEventId (#243)
+// =============================================================================
+
+// Minimal pytr draft shape consumed by the confirm route.
+const PYTR_DRAFT = {
+  externalId: "ev-tr-1",
+  action: "deposit" as const,
+  ticker: null,
+  isin: null,
+  name: null,
+  quantity: "0",
+  price: "0",
+  fees: "0",
+  currency: "EUR",
+  executedAt: "2026-03-01T10:00:00.000Z",
+  assetClass: null,
+  unit: null,
+  confidence: 1,
+  documentRefs: [{ id: "doc-tr-1", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+};
+
+/** Resolve the userId for a test user (registered via /me). */
+async function getUserId(email: string): Promise<string> {
+  const [row] = await app.db
+    .select({ id: users.id })
+    .from(users)
+    .where(_eq(users.email, email))
+    .limit(1);
+  if (!row) throw new Error(`user not found: ${email}`);
+  return row.id;
+}
+
+describe("TR pytr confirm: links staged docs to transactions (AC #1, #2)", () => {
+  it("sets transactionId on staged doc at confirm and document-url resolves by txId", async () => {
+    const { t, portfolioId } = await setup("tr-link-user", true);
+    const userId = await getUserId("tr-link-user@test.example");
+
+    // Insert a fake pytr collector import (mirrors what syncTrConnection creates).
+    const [collector] = await app.db
+      .insert(screenshotImports)
+      .values({
+        userId,
+        portfolioId,
+        parser: "pytr",
+        status: "draft",
+        parsedJson: { drafts: [PYTR_DRAFT], errors: [] },
+      })
+      .returning();
+
+    // Simulate what syncTrConnection would have staged: a doc with sourceEventId.
+    const stagePutKey = `receipts/${userId}/${collector.id}/doc-tr-1.pdf`;
+    await store.put(stagePutKey, Buffer.from("%PDF fake"), { mimeType: "application/pdf" });
+    await app.db.insert(documents).values({
+      userId,
+      importId: collector.id,
+      storageKey: stagePutKey,
+      mimeType: "application/pdf",
+      originalFilename: "doc-tr-1.pdf",
+      sizeBytes: 9,
+      status: "staged",
+      source: "pytr",
+      sourceEventId: "ev-tr-1",
+    });
+
+    // Confirm — triggers linkTrReceiptsToTransactions then finalizeReceipts.
+    const confirmRes = await app.inject({
+      method: "POST",
+      url: `/imports/${collector.id}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: [PYTR_DRAFT] },
+    });
+    expect(confirmRes.statusCode).toBe(201);
+    const { transactions: written } = confirmRes.json() as {
+      confirmed: number;
+      transactions: Array<{ id: string }>;
+    };
+    expect(written).toHaveLength(1);
+    const txId = written[0].id;
+
+    // The document row must have transactionId set and status="retained".
+    const [doc] = await app.db
+      .select()
+      .from(documents)
+      .where(_eq(documents.importId, collector.id));
+    expect(doc.transactionId).toBe(txId);
+    expect(doc.status).toBe("retained");
+
+    // AC #2: GET document-url by transactionId returns a signed URL.
+    const urlRes = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions/${txId}/document-url`,
+      headers: auth(t),
+    });
+    expect(urlRes.statusCode).toBe(200);
+    const body = urlRes.json() as { url: string; mimeType: string };
+    expect(body.url).toMatch(/^https:\/\/fake\.storage\//);
+    expect(body.mimeType).toBe("application/pdf");
+  });
+
+  it("retention=false: TR staged doc is deleted at confirm, document-url 404s", async () => {
+    const { t, portfolioId } = await setup("tr-no-retain-user", false);
+    const userId = await getUserId("tr-no-retain-user@test.example");
+
+    const draft2 = { ...PYTR_DRAFT, externalId: "ev-tr-nore" };
+
+    const [collector] = await app.db
+      .insert(screenshotImports)
+      .values({
+        userId,
+        portfolioId,
+        parser: "pytr",
+        status: "draft",
+        parsedJson: { drafts: [draft2], errors: [] },
+      })
+      .returning();
+
+    const stagePutKey = `receipts/${userId}/${collector.id}/doc-nore.pdf`;
+    await store.put(stagePutKey, Buffer.from("%PDF fake"), { mimeType: "application/pdf" });
+    await app.db.insert(documents).values({
+      userId,
+      importId: collector.id,
+      storageKey: stagePutKey,
+      mimeType: "application/pdf",
+      originalFilename: "doc-nore.pdf",
+      sizeBytes: 9,
+      status: "staged",
+      source: "pytr",
+      sourceEventId: "ev-tr-nore",
+    });
+
+    const deletesBefore = store.deletes.length;
+    const confirmRes = await app.inject({
+      method: "POST",
+      url: `/imports/${collector.id}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: [draft2] },
+    });
+    expect(confirmRes.statusCode).toBe(201);
+    const { transactions: written } = confirmRes.json() as { transactions: Array<{ id: string }> };
+    const txId = written[0].id;
+
+    // The staged doc should have been deleted (retention=false).
+    const newDeletes = store.deletes.slice(deletesBefore);
+    expect(newDeletes).toContain(stagePutKey);
+
+    // document-url must 404 (no retained doc).
+    const urlRes = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions/${txId}/document-url`,
+      headers: auth(t),
+    });
+    expect(urlRes.statusCode).toBe(404);
   });
 });

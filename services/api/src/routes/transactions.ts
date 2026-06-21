@@ -15,6 +15,7 @@ import {
   deleteReceiptsForTransactions,
   getDocumentForTransaction,
   importIdsWithDocuments,
+  transactionIdsWithDocuments,
 } from "../storage/receipts.js";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
@@ -562,15 +563,23 @@ export async function transactionsRoute(app: FastifyInstance) {
         .from(transactions)
         .where(eq(transactions.portfolioId, request.params.portfolioId));
       const meta = await instrumentMeta(rows.map((r) => r.instrumentId));
-      // Batch-check which importIds have a retained document, to embed hasDocument (#231).
+      // Batch-check which transactions have a retained document.
+      // TR transactions carry per-tx docs (linked by transactionId); other sources use
+      // one doc per import (linked by importId). Check both, OR them together.
       const allImportIds = rows
         .map((r) => r.importId)
         .filter((x): x is string => x !== null);
-      const importIdsWithDocs = await importIdsWithDocuments(app, allImportIds);
+      const allTxIds = rows.map((r) => r.id);
+      const [importIdsWithDocs, txIdsWithDocs] = await Promise.all([
+        importIdsWithDocuments(app, allImportIds),
+        transactionIdsWithDocuments(app, allTxIds),
+      ]);
       return rows.map((r) => ({
         ...r,
         instrument: r.instrumentId ? (meta.get(r.instrumentId) ?? null) : null,
-        hasDocument: r.importId ? importIdsWithDocs.has(r.importId) : false,
+        hasDocument:
+          txIdsWithDocs.has(r.id) ||
+          (r.importId ? importIdsWithDocs.has(r.importId) : false),
       }));
     },
   );

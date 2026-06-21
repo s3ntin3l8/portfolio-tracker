@@ -6,6 +6,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyBaseLogger } from "fastify";
 
+export interface DocDownloadResult {
+  buf: Buffer;
+  mimeType: string;
+}
+
 // The injectable spawn seam — tests pass a fake so CI never launches real Python.
 export type SpawnFn = typeof nodeSpawn;
 
@@ -380,6 +385,88 @@ export class PytrRunner {
     }
   }
 
+  /**
+   * Download postbox document bytes for a set of (eventId, docId) pairs.
+   *
+   * Spawns `tr_documents.py --cookies-file COOKIES --out OUTDIR`, feeds pairs as NDJSON
+   * on stdin, reads per-doc results from stdout. Per-doc failures are logged and dropped
+   * (best-effort) — they never throw. Returns a Map of docId → {buf, mimeType} for all
+   * successfully downloaded docs.
+   *
+   * The bytes channel is an `--out` temp dir (mirrors the `--cookies-file` seam) rather
+   * than stdout so binary content never corrupts the NDJSON stream.
+   */
+  async downloadDocuments(
+    session: { phone: string; pin: string; sessionData: string },
+    pairs: { eventId: string; docId: string }[],
+  ): Promise<Map<string, DocDownloadResult>> {
+    if (!this.opts.enabled) throw new PytrUnavailableError();
+    if (pairs.length === 0) return new Map();
+
+    const tmpDir = await mkdtemp(join(tmpdir(), "pytr-docs-"));
+    const cookiesFile = join(tmpDir, "cookies.txt");
+    const outDir = join(tmpDir, "out");
+    // mkdtemp already creates the parent; create the out sub-dir manually.
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(outDir, { recursive: true });
+
+    try {
+      await writeFile(cookiesFile, session.sessionData, "utf8");
+
+      const { code, stdout, stderr } = await this.runWithStdin(
+        this.script("tr_documents.py"),
+        ["--cookies-file", cookiesFile, "--out", outDir],
+        this.opts.exportTimeoutMs,
+        { TR_PHONE: session.phone, TR_PIN: session.pin },
+        pairs.map((p) => JSON.stringify(p)).join("\n") + "\n",
+      );
+
+      if (code === 2) {
+        this.log?.warn({}, "pytr session expired during document download");
+        throw new PytrAuthError(stderr.trim() || undefined);
+      }
+      if (code !== 0) {
+        this.log?.error({ code, stderr: firstLine(stderr) }, "pytr documents download failed");
+        throw new PytrError(stderr.trim() || `tr_documents.py exited with code ${code}`);
+      }
+
+      // Parse NDJSON result lines; load bytes for each ok result.
+      const result = new Map<string, DocDownloadResult>();
+      const lines = stdout
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
+        let parsed: { docId?: string; file?: string; mimeType?: string; ok?: boolean; error?: string };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          this.log?.warn({ line }, "tr_documents: unparseable stdout line");
+          continue;
+        }
+        if (!parsed.ok || !parsed.docId || !parsed.file) {
+          this.log?.warn(
+            { docId: parsed.docId, error: parsed.error },
+            "tr_documents: per-doc failure (non-fatal)",
+          );
+          continue;
+        }
+        try {
+          const buf = await readFile(join(outDir, parsed.file));
+          result.set(parsed.docId, { buf, mimeType: parsed.mimeType ?? "application/pdf" });
+        } catch (err) {
+          this.log?.warn({ docId: parsed.docId, err }, "tr_documents: failed to read output file");
+        }
+      }
+
+      this.log?.debug({ requested: pairs.length, downloaded: result.size }, "pytr documents fetched");
+      return result;
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  }
+
   /** Whether the configured Python interpreter + pytr are importable. */
   async isAvailable(): Promise<boolean> {
     if (!this.opts.enabled) return false;
@@ -398,12 +485,27 @@ export class PytrRunner {
     timeoutMs: number,
     extraEnv: Record<string, string> = {},
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
+    return this.runWithStdin(first, args, timeoutMs, extraEnv, null);
+  }
+
+  /**
+   * Spawn a Python process, optionally writing `stdinData` to its stdin, then collecting
+   * all stdout/stderr. stdin is closed (end) after writing so the child sees EOF.
+   */
+  private runWithStdin(
+    first: string,
+    args: string[],
+    timeoutMs: number,
+    extraEnv: Record<string, string> = {},
+    stdinData: string | null = null,
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       let child: ChildProcess;
       try {
         child = this.opts.spawn(this.opts.pythonBin, [first, ...args], {
           env: { ...process.env, ...extraEnv },
-          stdio: ["ignore", "pipe", "pipe"],
+          // Use "pipe" for stdin so we can write to it; keep stdout/stderr piped.
+          stdio: [stdinData !== null ? "pipe" : "ignore", "pipe", "pipe"],
         });
       } catch (err) {
         reject(
@@ -436,6 +538,11 @@ export class PytrRunner {
         this.log?.debug({ first, code, signal }, "pytr subprocess exited");
         resolve({ code, stdout, stderr });
       });
+      // Write stdin data and close the pipe so the child sees EOF.
+      if (stdinData !== null && child.stdin) {
+        child.stdin.write(stdinData);
+        child.stdin.end();
+      }
     });
   }
 }
