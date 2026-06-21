@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Link } from "@/i18n/navigation";
-import { formatMoney, cn } from "@/lib/utils";
+import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 
@@ -26,9 +26,6 @@ const HOLDINGS_COLS: ColDef<HoldingValuation>[] = [
   { key: "pnl", get: (h) => h.unrealizedPnLDisplay ?? "0", type: "numeric" },
 ];
 
-function formatPct(pct: number): string {
-  return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-}
 
 function computeRowValues(h: HoldingValuation, currency: string, locale: string) {
   const pnl =
@@ -138,10 +135,10 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                       : "—"}
                   </TableCell>
                   <TableCell className={cn("tabular text-right", pnlColor)}>
-                    {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${display(pnl)}`}
+                    {pnl === null ? "—" : formatSignedMoney(pnl, currency, locale)}
                     {pct !== null && (
                       <div className="text-xs">
-                        {formatPct(pct)}
+                        {formatPercent(pct / 100, locale)}
                       </div>
                     )}
                   </TableCell>
@@ -169,9 +166,9 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
               <TableCell colSpan={4}>{t("total")}</TableCell>
               <TableCell className="tabular text-right">{money(totals.value)}</TableCell>
               <TableCell className={cn("tabular text-right", totalPnlColor)}>
-                {`${totals.pnl >= 0 ? "+" : ""}${money(totals.pnl)}`}
+                {formatSignedMoney(totals.pnl, currency, locale)}
                 {totalPct !== null && (
-                  <div className="text-xs">{formatPct(totalPct)}</div>
+                  <div className="text-xs">{formatPercent(totalPct / 100, locale)}</div>
                 )}
               </TableCell>
             </TableRow>
@@ -226,7 +223,7 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                 <div className={cn("text-xs", pnlColor)}>
                   {pnl === null
                     ? "—"
-                    : `${pnl >= 0 ? "+" : ""}${display(pnl)}${pct !== null ? ` ${formatPct(pct)}` : ""}`}
+                    : `${formatSignedMoney(pnl, currency, locale)}${pct !== null ? ` ${formatPercent(pct / 100, locale)}` : ""}`}
                 </div>
               </div>
             </Fragment>
@@ -261,7 +258,7 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
         <div className="text-right tabular py-3 pr-4">
           <div className="text-sm font-medium">{money(totals.value)}</div>
           <div className={cn("text-xs", totalPnlColor)}>
-            {`${totals.pnl >= 0 ? "+" : ""}${money(totals.pnl)}${totalPct !== null ? ` ${formatPct(totalPct)}` : ""}`}
+            {`${formatSignedMoney(totals.pnl, currency, locale)}${totalPct !== null ? ` ${formatPercent(totalPct / 100, locale)}` : ""}`}
           </div>
         </div>
       </div>

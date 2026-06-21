@@ -20,6 +20,19 @@ export function formatMoney(
   }).format(amount);
 }
 
+/**
+ * Money with an explicit leading "+" for non-negatives (negatives already carry "−"),
+ * mirroring the signed style of formatPercent. Zero is rendered as "+0".
+ */
+export function formatSignedMoney(
+  amount: number,
+  currency = "IDR",
+  locale = "en",
+  opts: Intl.NumberFormatOptions = {},
+) {
+  return `${amount >= 0 ? "+" : ""}${formatMoney(amount, currency, locale, opts)}`;
+}
+
 export function formatPercent(value: number, locale = "en") {
   return new Intl.NumberFormat(locale, {
     style: "percent",

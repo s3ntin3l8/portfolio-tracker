@@ -16,7 +16,7 @@ import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId } from "@/lib/server-api";
-import { cn, formatMoney, formatPercent } from "@/lib/utils";
+import { cn, formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
 
 type CostBasisMode = "purchase_price" | "total_paid";
@@ -271,6 +271,7 @@ export default async function DashboardPage({
               <div className="space-y-3">
                 {movers.map((h) => {
                   const pct = Number(h.dayChangePct) / 100;
+                  const holdingDayChange = h.dayChange !== null ? Number(h.dayChange) : null;
                   return (
                     <div
                       key={h.instrumentId}
@@ -284,14 +285,19 @@ export default async function DashboardPage({
                           {h.instrument?.name ?? h.instrumentId}
                         </p>
                       </div>
-                      <p
+                      <div
                         className={cn(
-                          "tabular text-sm",
+                          "tabular text-right text-sm",
                           pct >= 0 ? "text-success" : "text-destructive",
                         )}
                       >
-                        {formatPercent(pct, locale)}
-                      </p>
+                        <p>{formatPercent(pct, locale)}</p>
+                        {holdingDayChange !== null && (
+                          <p className="text-xs">
+                            {formatSignedMoney(holdingDayChange, currency, locale)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
