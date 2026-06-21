@@ -406,7 +406,8 @@
     "duplicates": {
       "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",
       "row": "{name} · {action} · {date} (sudah diimpor dari {source})",
-      "importAnyway": "Tetap impor"
+      "importAnyway": "Tetap impor",
+      "enrichExisting": "Perkaya yang ada"
     },
     "discard": "Buang",
     "confirm": "Konfirmasi",
@@ -435,7 +436,8 @@
     "reviewError": "Terjadi kesalahan. Silakan coba lagi.",
     "duplicates": {
       "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",
-      "importAnyway": "Tetap impor"
+      "importAnyway": "Tetap impor",
+      "enrichExisting": "Perkaya yang ada"
     },
     "discard": "Buang",
     "undo": "Batalkan",
@@ -630,6 +632,12 @@
       "manual": "Manual",
       "pytr": "Trade Republic"
     },
+    "sourcesSection": {
+      "title": "Sumber data",
+      "download": "Unduh PDF sumber",
+      "fullDetailBadge": "Rincian pajak lengkap tersedia dari PDF penyelesaian."
+    },
+    "enrichHint": "Unggah PDF penyelesaian untuk menambahkan rincian pajak lengkap.",
     "batch": {
       "selected": "{count, plural, one {# dipilih} other {# dipilih}}",
       "delete": "Hapus yang dipilih",

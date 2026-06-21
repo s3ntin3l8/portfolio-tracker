@@ -86,6 +86,12 @@ export function ImportFlowClient({
       router.refresh(); // surface the new transactions on other screens
       return res;
     },
+    enrichImport: (importId, enrichments, portfolioId) =>
+      api.enrichImport(
+        importId,
+        enrichments as unknown as Parameters<typeof api.enrichImport>[1],
+        portfolioId,
+      ),
   };
 
   return (

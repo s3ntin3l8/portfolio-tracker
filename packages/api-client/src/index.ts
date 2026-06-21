@@ -7,6 +7,7 @@ import type {
   ParsedTransaction,
   ParsedGoldContract,
   ImportIssue,
+  TaxComponents,
   UserUpdate,
   ProviderSettingUpdate,
   ProviderCredentialInput,
@@ -323,6 +324,20 @@ export interface Quote extends QuoteRef {
   asOf: string;
 }
 
+/** A single source-provenance record for a transaction (#230).
+ * One row per import/upload that contributed data; multiple rows appear for split orders. */
+export interface SourceSummary {
+  id: string;
+  sourceType: string;
+  externalId: string | null;
+  orderRef: string | null;
+  /** documentId links to the stored PDF that produced this source row (null when no PDF was retained). */
+  documentId: string | null;
+  /** Per-component tax breakdown from the settlement PDF (null for CSV/timeline sources). */
+  taxComponents: TaxComponents | null;
+  createdAt: string;
+}
+
 export interface Transaction {
   id: string;
   portfolioId: string;
@@ -346,6 +361,10 @@ export interface Transaction {
   instrument: InstrumentMeta | null;
   /** True when the parent import has a retained source document available for download (#231). */
   hasDocument: boolean;
+  /** True when at least one source row has per-component taxComponents (i.e. a settlement PDF was parsed). */
+  hasFullTaxDetail: boolean;
+  /** All source-provenance rows for this transaction; empty when none have been written yet. */
+  sources: SourceSummary[];
 }
 
 export interface Holding {
@@ -862,7 +881,7 @@ export function accountMismatchFromError(err: unknown): AccountMismatch | null {
   return null;
 }
 
-/** One selected draft that economically matches an already-committed transaction (#217). */
+/** One selected draft that economically matches an already-committed transaction (#217, #230). */
 export interface DuplicateMatch {
   /** Instrument name/ISIN/ticker of the duplicated draft (best-effort, may be null). */
   name: string | null;
@@ -874,6 +893,10 @@ export interface DuplicateMatch {
   matchedSource: string | null;
   /** Execution day of the committed match (YYYY-MM-DD). */
   matchedExecutedAt: string;
+  /** Index of this draft in the submitted confirm-subset (for dropping it after enrich). */
+  draftIndex: number;
+  /** Id of the already-committed transaction — used to target the enrich route. */
+  matchedTransactionId: string;
 }
 
 /** Verdict that a confirm contains cross-source economic duplicates (#217). */
@@ -1198,6 +1221,28 @@ export function createApiClient(config: ApiClientConfig) {
     /** Return a signed URL for the retained source document of a transaction (#231). */
     getTransactionDocumentUrl: (portfolioId: string, txId: string) =>
       request<DocumentUrlResponse>("GET", `/portfolios/${portfolioId}/transactions/${txId}/document-url`),
+    /** Return a signed URL for the PDF linked to a specific transaction_sources row (#230).
+     * Allows per-leg downloads for split orders (each leg has its own documentId). */
+    getSourceDocumentUrl: (portfolioId: string, txId: string, sourceId: string) =>
+      request<DocumentUrlResponse>(
+        "GET",
+        `/portfolios/${portfolioId}/transactions/${txId}/sources/${sourceId}/document-url`,
+      ),
+    /**
+     * Enrich an already-confirmed transaction with a richer draft (e.g. PDF after CSV) (#230).
+     *
+     * Sends the full draft payload rather than a draftIndex — avoids the ambiguity between the
+     * 409's draftIndex (into the confirm-subset) and the enrich route's stored-draft array.
+     */
+    enrichImport: (
+      importId: string,
+      enrichments: Array<{ draft: ParsedTransaction; targetTransactionId: string }>,
+      portfolioId?: string,
+    ) =>
+      request<{ enriched: number; skipped: number[] }>("POST", `/imports/${importId}/enrich`, {
+        portfolioId,
+        enrichments,
+      }),
 
     // --- Trade Republic ---
     getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),

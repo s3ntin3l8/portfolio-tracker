@@ -77,6 +77,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -108,6 +109,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -150,6 +152,7 @@ describe("ImportFlow", () => {
       importScreenshot: vi.fn(async () => ({ importId: "imp2s", drafts: [DRAFT], errors: [] })),
       importCsv: vi.fn(async () => ({ importId: "imp2c", drafts: [DRAFT], errors: [] })),
       confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -169,6 +172,7 @@ describe("ImportFlow", () => {
         .fn()
         .mockResolvedValueOnce({ importId: "imp-csv", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -196,6 +200,7 @@ describe("ImportFlow", () => {
       importScreenshot: vi.fn(),
       importCsv,
       confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -224,6 +229,7 @@ describe("ImportFlow", () => {
       importScreenshot: vi.fn(),
       importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
@@ -276,6 +282,7 @@ describe("ImportFlow", () => {
         ],
       })),
       confirmImport,
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -307,6 +314,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
     };
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -337,6 +345,7 @@ describe("ImportFlow", () => {
       }),
       importCsv: vi.fn(),
       confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -378,6 +387,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 4 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -407,6 +417,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
         .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -450,6 +461,7 @@ describe("ImportFlow", () => {
         })
         .mockResolvedValueOnce({ importId: "imp-c", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -497,6 +509,7 @@ describe("ImportFlow", () => {
         })
         .mockResolvedValueOnce({ importId: "i2", drafts: [], errors: [] }),
       confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -527,6 +540,7 @@ describe("ImportFlow", () => {
         .mockRejectedValueOnce(Object.assign(new Error("large"), { status: 413 })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -557,6 +571,7 @@ describe("ImportFlow", () => {
         errors: [],
       })),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -590,6 +605,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     const { container } = renderFlow(client);
 
@@ -623,6 +639,7 @@ describe("ImportFlow", () => {
       })),
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
     };
     renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
@@ -673,6 +690,7 @@ describe("ImportFlow", () => {
       importScreenshot: vi.fn(async () => ({ importId: "imp-dup2", drafts: [DRAFT], errors: [] })),
       importCsv: vi.fn(),
       confirmImport,
+      enrichImport: vi.fn(),
     };
     renderFlow(client);
 

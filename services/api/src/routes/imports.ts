@@ -1455,12 +1455,20 @@ export async function importsRoute(app: FastifyInstance) {
   // the user chooses "Enrich existing" instead of "Import anyway" or "Skip".
   // Each {draftIndex, targetTransactionId} pair folds the draft onto the target tx.
   // POST /imports/:importId/enrich
+  //
+  // Body carries the FULL draft payload + targetTransactionId — NOT a draftIndex.
+  //
+  // Why: the 409 confirm response's draftIndex indexes the submitted confirm-subset
+  // (`resolved`, which excludes likelyDuplicate rows), but storedDrafts =
+  // imp.parsedJson.drafts is the full set — different arrays. A passed-through draftIndex
+  // would fold the WRONG draft.  Sending the draft payload the frontend already holds
+  // removes the ambiguity entirely.
   const enrichBodySchema = z.object({
     portfolioId: z.string().uuid().optional(),
     enrichments: z
       .array(
         z.object({
-          draftIndex: z.number().int().min(0),
+          draft: parsedTransactionSchema,
           targetTransactionId: z.string().uuid(),
         }),
       )
@@ -1484,10 +1492,6 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
 
-      // Retrieve the import's parsed drafts.
-      const parsed = (imp.parsedJson ?? {}) as { drafts?: unknown[] };
-      const storedDrafts = Array.isArray(parsed.drafts) ? parsed.drafts : [];
-
       const source = imp.parser === "pytr"
         ? "pytr"
         : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
@@ -1497,18 +1501,8 @@ export async function importsRoute(app: FastifyInstance) {
       let enriched = 0;
       const skipped: number[] = [];
 
-      for (const { draftIndex, targetTransactionId } of enrichments) {
-        if (draftIndex < 0 || draftIndex >= storedDrafts.length) {
-          skipped.push(draftIndex);
-          continue;
-        }
-
-        // Parse and validate the draft at the given index.
-        const draftParsed = parsedTransactionSchema.safeParse(storedDrafts[draftIndex]);
-        if (!draftParsed.success) {
-          skipped.push(draftIndex);
-          continue;
-        }
+      for (let i = 0; i < enrichments.length; i++) {
+        const { draft, targetTransactionId } = enrichments[i];
 
         // IDOR: verify the target transaction belongs to the user's portfolio.
         const [targetTx] = await app.db
@@ -1517,14 +1511,14 @@ export async function importsRoute(app: FastifyInstance) {
           .where(eq(transactions.id, targetTransactionId))
           .limit(1);
         if (!targetTx || targetTx.portfolioId !== targetPortfolioId) {
-          skipped.push(draftIndex);
+          skipped.push(i);
           continue;
         }
 
         await enrichTransactionFromDrafts(
           targetTransactionId,
           app.db,
-          [draftParsed.data],
+          [draft],
           { importId: imp.id, importSource: source },
         );
         enriched++;

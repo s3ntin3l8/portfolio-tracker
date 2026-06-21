@@ -406,7 +406,8 @@
     "duplicates": {
       "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
       "row": "{name} · {action} · {date} (already imported from {source})",
-      "importAnyway": "Import anyway"
+      "importAnyway": "Import anyway",
+      "enrichExisting": "Enrich existing"
     },
     "discard": "Discard",
     "confirm": "Confirm",
@@ -435,7 +436,8 @@
     "reviewError": "Something went wrong. Please try again.",
     "duplicates": {
       "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
-      "importAnyway": "Import anyway"
+      "importAnyway": "Import anyway",
+      "enrichExisting": "Enrich existing"
     },
     "discard": "Discard",
     "undo": "Undo",
@@ -630,6 +632,12 @@
       "manual": "Manual",
       "pytr": "Trade Republic"
     },
+    "sourcesSection": {
+      "title": "Data sources",
+      "download": "Download source PDF",
+      "fullDetailBadge": "Full tax breakdown available from settlement PDF."
+    },
+    "enrichHint": "Upload the settlement PDF to add the full tax breakdown.",
     "batch": {
       "selected": "{count, plural, one {# selected} other {# selected}}",
       "delete": "Delete selected",

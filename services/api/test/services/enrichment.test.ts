@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   users,
   portfolios,
@@ -31,7 +31,7 @@ import type { ParsedTransaction } from "@portfolio/schema";
 // so regular top-level const declarations are not yet initialised when they run.
 // ---------------------------------------------------------------------------
 
-const { MINIMAL_TR_TEXT, mockExtractPdfText } = vi.hoisted(() => {
+const { _MINIMAL_TR_TEXT, mockExtractPdfText } = vi.hoisted(() => {
   const text = [
     "Trade Republic Bank GmbH",
     "DATUM 25.02.2025 AUFTRAG abc1-2345 AUSFÜHRUNG def6-7890 DEPOT 1234567890",
@@ -46,7 +46,7 @@ const { MINIMAL_TR_TEXT, mockExtractPdfText } = vi.hoisted(() => {
     "BUCHUNG",
     "WERTSTELLUNG 2025-02-25 999,00 EUR",
   ].join("\n");
-  return { MINIMAL_TR_TEXT: text, mockExtractPdfText: vi.fn().mockResolvedValue(text) };
+  return { _MINIMAL_TR_TEXT: text, mockExtractPdfText: vi.fn().mockResolvedValue(text) };
 });
 
 vi.mock("../../src/services/parsers/pdf-text.js", () => ({
@@ -131,7 +131,7 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
   it("writes a source row and updates tx.tax from one pdf draft", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id);
 
     const d = draft({
@@ -167,7 +167,7 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
   it("second call with leg2 sums tax across both pdf rows (proves read-all-rows)", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id);
 
     const leg1 = draft({
@@ -205,7 +205,7 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
   it("re-running with the same draft is idempotent (no duplicate source rows)", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id);
 
     const d = draft({
@@ -236,7 +236,7 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
   it("csv after pdf does not downgrade the tax rollup", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id);
 
     // PDF draft carries taxComponents → draftSourceType resolves to "pdf" (rank 40).
@@ -271,7 +271,7 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
   it("manual source row prevents scalar update", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id, { tax: "7.00" });
 
     // Write a manual source row directly (simulates a hand-edit).
@@ -307,7 +307,7 @@ describe("txIdsWithFullTaxDetail", () => {
   it("returns ids where at least one source row has non-null taxComponents", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const txA = await makeTx(db, portfolio.id);
     const txB = await makeTx(db, portfolio.id);
 
@@ -347,7 +347,7 @@ describe("sourcesForTransactions", () => {
   it("returns source rows grouped by transactionId", async () => {
     const db = getDb();
     const s = nextSuffix();
-    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const { portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id);
 
     await db.insert(transactionSources).values([

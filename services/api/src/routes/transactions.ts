@@ -5,10 +5,12 @@ import {
   accountHolders,
   corporateActions,
   dividendEvents,
+  documents,
   instruments,
   portfolios,
   portfolioSnapshots,
   transactions,
+  transactionSources,
   users,
 } from "@portfolio/db";
 import {
@@ -1260,6 +1262,60 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!doc) return reply.code(404).send({ error: "document_not_found" });
 
       // IDOR guard: verify document ownership explicitly.
+      if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
+
+      const url = await app.storage.getSignedUrl(doc.storageKey);
+      return {
+        url,
+        filename: doc.originalFilename,
+        mimeType: doc.mimeType,
+      };
+    },
+  );
+
+  // Return a signed URL for the document linked to a specific transaction_sources row.
+  // Allows per-leg PDF downloads for split orders (each leg has its own documentId).
+  // IDOR guard: verify the source row's tx is in a portfolio owned by the user.
+  app.get<{ Params: PortfolioParams & { txId: string; sourceId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId/sources/:sourceId/document-url",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId, sourceId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Verify the transaction belongs to the portfolio (IDOR chain).
+      const [tx] = await app.db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
+        .limit(1);
+      if (!tx) return reply.code(404).send({ error: "transaction_not_found" });
+
+      // Fetch the transaction_sources row and verify it belongs to this transaction.
+      const [sourceRow] = await app.db
+        .select({ id: transactionSources.id, documentId: transactionSources.documentId })
+        .from(transactionSources)
+        .where(and(eq(transactionSources.id, sourceId), eq(transactionSources.transactionId, txId)))
+        .limit(1);
+      if (!sourceRow) return reply.code(404).send({ error: "source_not_found" });
+      if (!sourceRow.documentId) return reply.code(404).send({ error: "document_not_found" });
+
+      // Fetch the linked document.
+      const [doc] = await app.db
+        .select({
+          storageKey: documents.storageKey,
+          originalFilename: documents.originalFilename,
+          mimeType: documents.mimeType,
+          userId: documents.userId,
+        })
+        .from(documents)
+        .where(eq(documents.id, sourceRow.documentId))
+        .limit(1);
+      if (!doc) return reply.code(404).send({ error: "document_not_found" });
+      // IDOR: document must belong to the authenticated user.
       if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
 
       const url = await app.storage.getSignedUrl(doc.storageKey);

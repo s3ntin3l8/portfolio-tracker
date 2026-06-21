@@ -16,7 +16,8 @@ import {
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
-import { duplicatesFromError, type DuplicateConflict } from "@portfolio/api-client";
+import { duplicatesFromError, type DuplicateConflict, type DuplicateMatch } from "@portfolio/api-client";
+import type { ParsedTransaction } from "@portfolio/schema";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -55,6 +56,8 @@ export function DraftReviewClient({
   // the same selection with the acknowledge flag.
   const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
   const pendingUids = useRef<string[] | undefined>(undefined);
+  // Ordered subset sent to the last confirm — the 409 response's draftIndex references it.
+  const pendingSubset = useRef<ReviewDraft[]>([]);
 
   // Portfolio selection: use the stored portfolioId if available, otherwise default to
   // the first portfolio in the list. The picker is only shown when there are multiple
@@ -93,6 +96,8 @@ export function DraftReviewClient({
     pendingUids.current = uids;
     const subset =
       uids && uids.length ? drafts.filter((d) => uids.includes(d.uid)) : drafts;
+    // Store ordered subset for the enrich path (draftIndex resolves into this array).
+    pendingSubset.current = subset;
     // A partial confirm keeps the import open server-side — stay on the page, drop the
     // confirmed rows, and let the user continue in passes. A full confirm closes it.
     const isPartial = subset.length < drafts.length;
@@ -124,6 +129,33 @@ export function DraftReviewClient({
       } else {
         setError(t("reviewError"));
       }
+    }
+  }
+
+  /**
+   * Enrich a matched confirmed transaction with the corresponding draft (#230).
+   * `d.draftIndex` indexes `pendingSubset.current` (the ordered subset sent to the last confirm).
+   */
+  async function enrichOneDuplicate(d: DuplicateMatch) {
+    const draft = pendingSubset.current[d.draftIndex];
+    if (!draft) return;
+    try {
+      await api.enrichImport(
+        importId,
+        [{ draft: stripUid(draft) as unknown as ParsedTransaction, targetTransactionId: d.matchedTransactionId }],
+        portfolioId || undefined,
+      );
+      // Drop the enriched draft, clear the conflict, re-confirm remaining.
+      const remainingUids = pendingSubset.current
+        .filter((_, i) => i !== d.draftIndex)
+        .map((dr) => dr.uid);
+      setDuplicateConflict(null);
+      removeMany([draft.uid]);
+      if (remainingUids.length > 0) {
+        void confirm(remainingUids, false);
+      }
+    } catch {
+      setError(t("reviewError"));
     }
   }
 
@@ -160,19 +192,42 @@ export function DraftReviewClient({
       {duplicateConflict && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
+          className="space-y-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
         >
-          <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <span className="flex-1">
-            {t("duplicates.warning", { count: duplicateConflict.count })}
-          </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void confirm(pendingUids.current, true)}
-          >
-            {t("duplicates.importAnyway")}
-          </Button>
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <div className="flex-1 space-y-1">
+              <p>{t("duplicates.warning", { count: duplicateConflict.count })}</p>
+              {duplicateConflict.duplicates.length > 0 && (
+                <ul className="space-y-1.5 pl-4 text-xs">
+                  {duplicateConflict.duplicates.slice(0, 5).map((d, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="flex-1 text-warning/90">
+                        {d.name ?? "—"} · {d.action} · {d.executedAt}
+                      </span>
+                      {d.matchedTransactionId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 shrink-0 text-xs"
+                          onClick={() => void enrichOneDuplicate(d)}
+                        >
+                          {t("duplicates.enrichExisting")}
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void confirm(pendingUids.current, true)}
+            >
+              {t("duplicates.importAnyway")}
+            </Button>
+          </div>
         </div>
       )}
       {portfolios.length > 1 && (

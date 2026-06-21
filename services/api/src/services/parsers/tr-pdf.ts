@@ -296,9 +296,9 @@ function parseTrDividend(text: string): TrPdfResult {
   // ISIN: bare (no label) in dividend docs, sitting between the name and the quantity.
   // Pattern: "<name> <ISIN_12> <qty> Stücke <ertrag> <currency>"
   const isin = text.match(TR_ISIN_LABELED_RE)?.[1] ?? text.match(BARE_ISIN_RE)?.[1];
-  // Quantity (US decimal): "0.459173 Stücke"
+  // Quantity (US decimal): "0.459173 Stücke" — captured for completeness; dividend tx uses price=netEur.
   const qtyM = text.match(/([\d.]+)\s+Stücke/);
-  const quantity = parseUs(qtyM?.[1]);
+  const _quantity = parseUs(qtyM?.[1]);
 
   // Name: everything before the bare ISIN (on the position line after BETRAG header).
   let name: string | undefined;

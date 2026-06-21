@@ -33,7 +33,7 @@ import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
 
-const SOURCE_ICON: Record<string, LucideIcon> = {
+export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
   csv: FileSpreadsheet,
   manual: PencilLine,

@@ -40,12 +40,17 @@ export interface ImportDraft {
   unit: string;
   price: string;
   fees?: string | null;
+  tax?: string | null;
   total?: string | null;
   currency: string;
   executedAt: string;
   confidence: number;
-  /** Stable source id (TR event id) — set when a draft is mapped from an issue. */
+  /** Stable source id (TR event id / AUSFÜHRUNG) — set by TR/DKB parsers. */
   externalId?: string | null;
+  /** TR AUFTRAG (order-level grouping key). */
+  orderRef?: string | null;
+  /** Per-component tax breakdown from settlement PDFs (null for CSV/timeline drafts). */
+  taxComponents?: Record<string, string> | null;
   /** Set when this draft economically matches a transaction already imported (#196);
    *  the review screen badges it and excludes it from the default "Confirm". */
   likelyDuplicate?: LikelyDuplicate | null;
@@ -140,6 +145,11 @@ export interface ImportClient {
     acknowledgeAccountMismatch?: boolean,
     acknowledgeDuplicates?: boolean,
   ): Promise<{ confirmed: number }>;
+  enrichImport(
+    importId: string,
+    enrichments: Array<{ draft: ImportDraft; targetTransactionId: string }>,
+    portfolioId?: string,
+  ): Promise<{ enriched: number; skipped: number[] }>;
 }
 
 type Step = "upload" | "parsing" | "review" | "done";
@@ -184,6 +194,7 @@ const demoClient: ImportClient = {
   confirmImport: async (_id, drafts, contracts) => ({
     confirmed: drafts.length + (contracts?.length ?? 0),
   }),
+  enrichImport: async () => ({ enriched: 0, skipped: [] }),
 };
 
 /** Type map for per-import-group portfolio selection (importId → portfolioId). */
@@ -275,6 +286,9 @@ export function ImportFlow({
   const pendingConfirm = useRef<{ uids?: string[]; acknowledgeMismatch: boolean }>({
     acknowledgeMismatch: false,
   });
+  // The ordered subset of drafts that was sent to the last confirm — the 409 response's
+  // draftIndex references this array, so we store it to resolve the correct draft for enrich.
+  const pendingSubset = useRef<ReviewDraft[]>([]);
   const [confirmedCount, setConfirmedCount] = useState(0);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -514,6 +528,8 @@ export function ImportFlow({
         uids && uids.length
           ? drafts.filter((d) => uids.includes(d.uid))
           : drafts.filter((d) => !d.likelyDuplicate);
+      // Store the ordered subset so the 409 banner can resolve draftIndex → draft.
+      pendingSubset.current = subset;
 
       if (groups.size <= 1) {
         // ── Single-import fast path ──────────────────────────────────────
@@ -576,6 +592,34 @@ export function ImportFlow({
         setError(errorMessage(err));
       }
       setStep("review");
+    }
+  }
+
+  /**
+   * Enrich an already-confirmed transaction with the draft that matched it (#230).
+   * `d.draftIndex` is an index into `pendingSubset.current` (the ordered subset sent to
+   * the last confirm). On success, drop that draft from the selection and re-confirm the rest.
+   */
+  async function enrichOneDuplicate(d: { draftIndex: number; matchedTransactionId: string }) {
+    const draft = pendingSubset.current[d.draftIndex];
+    if (!draft) return;
+    try {
+      await client.enrichImport(
+        draft.importId,
+        [{ draft: stripUid(draft), targetTransactionId: d.matchedTransactionId }],
+        portfolioByImport.get(draft.importId),
+      );
+      // Drop the draft that was enriched; clear the conflict; re-confirm remaining.
+      const remainingUids = (pendingSubset.current ?? [])
+        .filter((_, i) => i !== d.draftIndex)
+        .map((dr) => dr.uid);
+      setDuplicateConflict(null);
+      setDrafts((ds) => ds.filter((dr) => dr.uid !== draft.uid));
+      if (remainingUids.length > 0) {
+        void confirm(remainingUids, pendingConfirm.current.acknowledgeMismatch, false);
+      }
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
@@ -776,7 +820,9 @@ export function ImportFlow({
             </div>
           )}
 
-          {/* Duplicate warning (#217): selected drafts already exist from another source. */}
+          {/* Duplicate warning (#217/#230): selected drafts already exist from another source.
+              Each match offers "Enrich existing" (fold the richer PDF detail onto the committed
+              tx) or "Import anyway" for the whole batch. */}
           {duplicateConflict && (
             <div
               role="alert"
@@ -786,15 +832,27 @@ export function ImportFlow({
                 <AlertCircle className="mt-0.5 size-4 shrink-0" />
                 <div className="flex-1 space-y-1">
                   <p>{t("duplicates.warning", { count: duplicateConflict.count })}</p>
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning/90">
+                  <ul className="space-y-1.5 pl-4 text-xs">
                     {duplicateConflict.duplicates.slice(0, 5).map((d, i) => (
-                      <li key={i}>
-                        {t("duplicates.row", {
-                          name: d.name ?? "—",
-                          action: d.action,
-                          date: d.executedAt,
-                          source: d.matchedSource ?? "—",
-                        })}
+                      <li key={i} className="flex items-center gap-2">
+                        <span className="flex-1 text-warning/90">
+                          {t("duplicates.row", {
+                            name: d.name ?? "—",
+                            action: d.action,
+                            date: d.executedAt,
+                            source: d.matchedSource ?? "—",
+                          })}
+                        </span>
+                        {d.matchedTransactionId && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 shrink-0 text-xs"
+                            onClick={() => void enrichOneDuplicate(d)}
+                          >
+                            {t("duplicates.enrichExisting")}
+                          </Button>
+                        )}
                       </li>
                     ))}
                   </ul>

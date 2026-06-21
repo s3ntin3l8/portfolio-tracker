@@ -75,6 +75,8 @@ export default async function EditTransactionPage({
           tags: tx.tags,
           currency: tx.currency,
           executedAt: tx.executedAt,
+          sources: tx.sources,
+          hasFullTaxDetail: tx.hasFullTaxDetail,
         }}
       />
     </div>
