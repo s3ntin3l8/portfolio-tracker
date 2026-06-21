@@ -200,6 +200,11 @@ export interface HoldingsView {
   status: "ok" | "empty" | "unavailable";
   holdings: HoldingValuation[];
   displayCurrency: string;
+  /** Native-currency cash balances, keyed by currency code. Non-empty only when
+   *  the portfolio (or aggregate) has cashTracked = true. */
+  cash: Record<string, string>;
+  /** True when at least one portfolio in scope is cashCounted and has cash movement. */
+  cashTracked: boolean;
 }
 
 /**
@@ -211,11 +216,24 @@ export async function loadHoldings(
   costBasis?: "purchase_price" | "total_paid",
 ): Promise<HoldingsView> {
   const api = await getServerApi();
-  if (!api) return { status: "unavailable", holdings: [], displayCurrency: "IDR" };
+  if (!api)
+    return {
+      status: "unavailable",
+      holdings: [],
+      displayCurrency: "IDR",
+      cash: {},
+      cashTracked: false,
+    };
   try {
     const portfolios = await api.listPortfolios();
     if (portfolios.length === 0) {
-      return { status: "empty", holdings: [], displayCurrency: "IDR" };
+      return {
+        status: "empty",
+        holdings: [],
+        displayCurrency: "IDR",
+        cash: {},
+        cashTracked: false,
+      };
     }
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -226,9 +244,17 @@ export async function loadHoldings(
       status: "ok",
       holdings: data.holdings,
       displayCurrency: data.displayCurrency,
+      cash: data.cash,
+      cashTracked: data.cashTracked,
     };
   } catch {
-    return { status: "unavailable", holdings: [], displayCurrency: "IDR" };
+    return {
+      status: "unavailable",
+      holdings: [],
+      displayCurrency: "IDR",
+      cash: {},
+      cashTracked: false,
+    };
   }
 }
 

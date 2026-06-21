@@ -59,10 +59,13 @@ const ROWS: HoldingValuation[] = [
   makeHolding("BBCA", "100", "800"),
 ];
 
-function renderTable() {
+function renderTable(
+  opts: { cash?: Record<string, string>; rows?: typeof ROWS } = {},
+) {
+  const rows = opts.rows ?? ROWS;
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <HoldingsTable rows={ROWS} currency="IDR" />
+      <HoldingsTable rows={rows} currency="IDR" cash={opts.cash} />
     </NextIntlClientProvider>,
   );
 }
@@ -125,5 +128,44 @@ describe("HoldingsTable", () => {
     expect(screen.getAllByText("Total").length).toBeGreaterThan(0);
     // Market values: 50*100 + 10*100 + 100*100 = 16,000 in the display currency.
     expect(screen.getAllByText(/16,000/).length).toBeGreaterThan(0);
+  });
+
+  it("does not render a Cash row when no cash prop is provided", () => {
+    renderTable();
+    expect(screen.queryByText("Cash")).not.toBeInTheDocument();
+  });
+
+  it("renders a Cash row when cash prop is provided", () => {
+    renderTable({ cash: { IDR: "5000000" } });
+    // "Cash" label appears in both desktop and mobile layouts.
+    expect(screen.getAllByText("Cash").length).toBeGreaterThan(0);
+    // The currency sub-label appears.
+    expect(screen.getAllByText("IDR").length).toBeGreaterThan(0);
+    // Balance is formatted and appears somewhere in the document.
+    expect(screen.getAllByText(/5,000,000/).length).toBeGreaterThan(0);
+  });
+
+  it("includes cash in the footer total", () => {
+    // Securities total: 50*100 + 10*100 + 100*100 = 16,000
+    // Cash: 4,000 → combined total: 20,000
+    renderTable({ cash: { IDR: "4000" } });
+    expect(screen.getAllByText(/20,000/).length).toBeGreaterThan(0);
+  });
+
+  it("renders only a Cash row when rows is empty but cash is provided (pure-cash portfolio)", () => {
+    renderTable({ rows: [], cash: { IDR: "10000000" } });
+    expect(screen.getAllByText("Cash").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/10,000,000/).length).toBeGreaterThan(0);
+    // No security rows.
+    expect(screen.queryByText("AAPL")).not.toBeInTheDocument();
+  });
+
+  it("skips zero-balance cash entries", () => {
+    renderTable({ cash: { IDR: "0", USD: "5000" } });
+    // IDR row should NOT appear (zero balance), USD row should appear.
+    const cashLabels = screen.queryAllByText("Cash");
+    // Only USD entry renders
+    expect(cashLabels.length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("USD").length).toBeGreaterThan(0);
   });
 });

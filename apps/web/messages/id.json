@@ -549,6 +549,7 @@
     "pnl": "Untung/Rugi",
     "all": "Semua",
     "total": "Total",
+    "cash": "Kas",
     "exportCsv": "Ekspor CSV",
     "costBasisPurchasePrice": "Harga beli",
     "costBasisTotalPaid": "Total dibayar"

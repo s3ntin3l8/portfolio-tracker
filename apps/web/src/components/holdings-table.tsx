@@ -45,19 +45,29 @@ function computeRowValues(h: HoldingValuation, currency: string, locale: string)
 export interface HoldingsTableProps {
   rows: HoldingValuation[];
   currency: string;
+  /** Per-currency cash balances for cash-inclusive portfolios. When provided, a pinned
+   *  Cash row is rendered after the security rows (one row per currency). Cash is
+   *  included in the footer total, assuming cash currency == display currency (true for
+   *  virtually all cash-counted portfolios; no FX conversion is applied). */
+  cash?: Record<string, string>;
 }
 
-export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
+export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
   const t = useTranslations("Holdings");
   const locale = useLocale();
   const { sortKey, sortDir, toggle, sort } = useTableSort<HoldingValuation>(HOLDINGS_COLS);
 
   const sorted = sort(rows);
 
+  // Non-zero cash entries to render as pinned rows (one per currency).
+  const cashEntries = Object.entries(cash ?? {}).filter(([, v]) => Number(v) !== 0);
+
   // Column totals across the (already class-filtered) visible rows. Market value and
   // P&L sum only the priced holdings — unpriced ones (marketValueDisplay === null) are
   // skipped, matching how net worth ignores instruments without a live quote. The total
   // P&L % is taken against summed cost basis so it stays consistent with the rows.
+  // Cash is included in the value total (assumes cash currency == display currency,
+  // true for virtually all cash-counted portfolios; no FX conversion is applied).
   const totals = rows.reduce(
     (acc, h) => {
       if (h.marketValueDisplay !== null) acc.value += Number(h.marketValueDisplay);
@@ -65,7 +75,11 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
       acc.cost += Number(h.costBasisDisplay);
       return acc;
     },
-    { value: 0, pnl: 0, cost: 0 },
+    {
+      value: cashEntries.reduce((s, [, v]) => s + Number(v), 0),
+      pnl: 0,
+      cost: 0,
+    },
   );
   const totalPct = totals.cost !== 0 ? (totals.pnl / totals.cost) * 100 : null;
   const totalPnlColor =
@@ -134,6 +148,21 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
                 </TableRow>
               );
             })}
+            {cashEntries.map(([ccy, balance]) => (
+              <TableRow key={`cash-${ccy}`}>
+                <TableCell>
+                  <span className="font-medium">{t("cash")}</span>
+                  <div className="text-xs text-muted-foreground">{ccy}</div>
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
+                <TableCell className="tabular text-right">
+                  {formatMoney(Number(balance), ccy, locale)}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
+              </TableRow>
+            ))}
           </TableBody>
           <TableFooter>
             <TableRow className="hover:bg-transparent">
@@ -203,6 +232,27 @@ export function HoldingsTable({ rows, currency }: HoldingsTableProps) {
             </Fragment>
           );
         })}
+
+        {cashEntries.map(([ccy, balance]) => (
+          <Fragment key={`cash-${ccy}`}>
+            <div className="col-span-3 border-t border-border" />
+
+            {/* Col 1: Cash label + currency */}
+            <div className="min-w-0 overflow-hidden py-3 pl-4">
+              <span className="font-medium">{t("cash")}</span>
+              <div className="text-xs text-muted-foreground">{ccy}</div>
+            </div>
+
+            {/* Col 2: empty (no avg cost / quantity) */}
+            <div aria-hidden />
+
+            {/* Col 3: balance */}
+            <div className="text-right tabular py-3 pr-4">
+              <div className="text-sm">{formatMoney(Number(balance), ccy, locale)}</div>
+              <div className="text-xs text-muted-foreground">—</div>
+            </div>
+          </Fragment>
+        ))}
 
         {/* Totals row */}
         <div className="col-span-3 border-t-2 border-border" />
