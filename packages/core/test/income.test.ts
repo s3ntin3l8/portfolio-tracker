@@ -108,6 +108,53 @@ describe("aggregateIncome", () => {
     expect(empty.forecastRestOfYear).toBe("0");
     expect(empty.forecastFullYear).toBe("0");
   });
+
+  it("scales the TTM dividend run-rate by the current/historical quantity ratio for forecastNextYear", () => {
+    const statsScaled = aggregateIncome({
+      events,
+      displayCurrency: "IDR",
+      fx,
+      now: NOW,
+      forecastCoupons: [{ amount: "50", currency: "IDR" }],
+      heldQty: new Map([
+        ["bbca", "200"],
+        ["vwrl", "5"],
+      ]),
+      qtyAt: (instId, _at) => {
+        if (instId === "bbca") {
+          return "100";
+        }
+        if (instId === "vwrl") {
+          return "1";
+        }
+        return "0";
+      },
+    });
+
+    // BBCA: TTM actual 300 IDR * (200 / 100) = 600 IDR
+    // VWRL: TTM actual 17000 IDR * (5 / 1) = 85000 IDR
+    // Total: 85600 IDR + 50 IDR coupons = 85650 IDR
+    expect(statsScaled.forecastNextYear).toBe("85650");
+  });
+
+  it("scales TTM dividends to 0 for positions that are no longer held", () => {
+    const statsScaled = aggregateIncome({
+      events,
+      displayCurrency: "IDR",
+      fx,
+      now: NOW,
+      forecastCoupons: [],
+      heldQty: new Map([
+        ["bbca", "100"],
+      ]),
+      qtyAt: (_instId, _at) => "100",
+    });
+
+    // BBCA: TTM actual 300 IDR * (100 / 100) = 300 IDR
+    // VWRL: not in heldQty -> 0 IDR
+    // Total: 300 IDR
+    expect(statsScaled.forecastNextYear).toBe("300");
+  });
 });
 
 describe("aggregateIncome — forecastRestOfYear / forecastFullYear", () => {

@@ -301,6 +301,10 @@ export interface AggregateIncomeInput {
    * Used in `forecastRestOfYear`.
    */
   projectedDividends?: { amount: string; currency: string }[];
+  /** Current holding quantities (decimal string) keyed by instrument ID. */
+  heldQty?: Map<string, string>;
+  /** Function to get holding quantity (decimal string) at a historical date. */
+  qtyAt?: (instrumentId: string, at: Date) => string;
 }
 
 const ZERO = () => new Decimal(0);
@@ -367,7 +371,23 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
 
     if (e.executedAt >= ttmStart) {
       ttm = ttm.add(amount);
-      if (e.type === "dividend") ttmDividends = ttmDividends.add(amount);
+      if (e.type === "dividend") {
+        let scaledAmount = amount;
+        if (e.instrumentId && input.heldQty) {
+          const currentQtyStr = input.heldQty.get(e.instrumentId);
+          if (currentQtyStr) {
+            const currentQty = new Decimal(currentQtyStr);
+            const histQtyStr = input.qtyAt ? input.qtyAt(e.instrumentId, e.executedAt) : "0";
+            const histQty = new Decimal(histQtyStr);
+            if (histQty.gt(0)) {
+              scaledAmount = amount.mul(currentQty).div(histQty);
+            }
+          } else {
+            scaledAmount = ZERO();
+          }
+        }
+        ttmDividends = ttmDividends.add(scaledAmount);
+      }
     }
     if (e.executedAt.getUTCFullYear() === currentYear) thisYear = thisYear.add(amount);
     else if (e.executedAt.getUTCFullYear() === currentYear - 1)

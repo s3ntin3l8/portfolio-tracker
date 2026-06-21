@@ -488,6 +488,8 @@ export async function transactionsRoute(app: FastifyInstance) {
       forecastCoupons: upcomingCoupons12mo,
       restOfYearCoupons,
       projectedDividends: allRestOfYearDividends,
+      heldQty: heldQtyMap,
+      qtyAt,
     });
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
