@@ -490,7 +490,7 @@ describe("TR pytr confirm: links staged docs to transactions (AC #1, #2)", () =>
 
     // Simulate what syncTrConnection would have staged: a doc with sourceEventId.
     const stagePutKey = `receipts/${userId}/${collector.id}/doc-tr-1.pdf`;
-    await store.put(stagePutKey, Buffer.from("%PDF fake"));
+    await store.put(stagePutKey, Buffer.from("%PDF fake"), { mimeType: "application/pdf" });
     await app.db.insert(documents).values({
       userId,
       importId: collector.id,
@@ -556,7 +556,7 @@ describe("TR pytr confirm: links staged docs to transactions (AC #1, #2)", () =>
       .returning();
 
     const stagePutKey = `receipts/${userId}/${collector.id}/doc-nore.pdf`;
-    await store.put(stagePutKey, Buffer.from("%PDF fake"));
+    await store.put(stagePutKey, Buffer.from("%PDF fake"), { mimeType: "application/pdf" });
     await app.db.insert(documents).values({
       userId,
       importId: collector.id,
