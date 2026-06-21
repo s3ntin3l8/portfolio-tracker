@@ -265,9 +265,10 @@ export type ContributionsView =
 
 /**
  * Contribution analytics for the active scope: a single portfolio when one is
- * selected, else the cross-portfolio aggregate. Mirrors {@link loadHoldings}.
+ * selected, else the cross-portfolio aggregate (optionally narrowed to one holder).
+ * The single-portfolio cookie wins; `holderId` only applies in the "all" state.
  */
-export async function loadContributions(): Promise<ContributionsView> {
+export async function loadContributions(holderId?: string): Promise<ContributionsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
@@ -277,7 +278,7 @@ export async function loadContributions(): Promise<ContributionsView> {
     const selected = portfolios.find((p) => p.id === wanted);
     const data = selected
       ? await api.getPortfolioContributions(selected.id)
-      : await api.getContributions();
+      : await api.getContributions(holderId);
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
@@ -421,9 +422,10 @@ export type IncomeStatsView =
 
 /**
  * Income analytics for the active scope: a single portfolio when one is selected,
- * else the cross-portfolio aggregate. Mirrors {@link loadContributions}.
+ * else the cross-portfolio aggregate (optionally narrowed to one holder).
+ * The single-portfolio cookie wins; `holderId` only applies in the "all" state.
  */
-export async function loadIncomeStats(): Promise<IncomeStatsView> {
+export async function loadIncomeStats(holderId?: string): Promise<IncomeStatsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
@@ -433,7 +435,7 @@ export async function loadIncomeStats(): Promise<IncomeStatsView> {
     const selected = portfolios.find((p) => p.id === wanted);
     const data = selected
       ? await api.getPortfolioIncome(selected.id)
-      : await api.getIncome();
+      : await api.getIncome(holderId);
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };

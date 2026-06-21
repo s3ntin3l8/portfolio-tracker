@@ -189,6 +189,10 @@
     "deleteWarning": "Portfolios using this holder will become unassigned.",
     "confirmDelete": "Delete"
   },
+  "HolderFilter": {
+    "label": "Account holder",
+    "all": "All holders"
+  },
   "PortfolioSwitcher": {
     "label": "Portfolio",
     "all": "All portfolios"

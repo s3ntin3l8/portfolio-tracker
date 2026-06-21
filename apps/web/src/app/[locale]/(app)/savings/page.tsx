@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PiggyBank } from "lucide-react";
 import {
@@ -10,25 +11,66 @@ import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
 import { ForecastPanel } from "@/components/savings/forecast-panel";
 import { EmptyState } from "@/components/empty-state";
-import { loadContributions } from "@/lib/server-api";
+import { HolderFilter, type FilterableHolder } from "@/components/holder-filter";
+import {
+  loadContributions,
+  loadAccountHolders,
+  resolveSelection,
+} from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function SavingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ holder?: string }>;
 }) {
   const { locale } = await params;
+  const { holder: holderParam } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("Savings");
   const te = await getTranslations("Empty");
 
-  const result = await loadContributions();
+  // Resolve the global scope and holder list to compute the filter options.
+  // The single-portfolio cookie (selectedId ≠ null) wins — the holder filter
+  // is only shown in the "all portfolios" aggregate mode.
+  const [selection, holders] = await Promise.all([resolveSelection(), loadAccountHolders()]);
+
+  // Qualify holders that own ≥2 portfolios — a 1-portfolio holder's "all" equals
+  // the portfolio view already covered by the global switcher.
+  const portfolioCountByHolder = new Map<string, number>();
+  for (const p of selection.portfolios) {
+    if (p.accountHolderId) {
+      portfolioCountByHolder.set(
+        p.accountHolderId,
+        (portfolioCountByHolder.get(p.accountHolderId) ?? 0) + 1,
+      );
+    }
+  }
+  const qualifyingHolders: FilterableHolder[] = holders
+    .filter((h) => (portfolioCountByHolder.get(h.id) ?? 0) >= 2)
+    .map((h) => ({ id: h.id, name: h.name }));
+
+  const showFilter = selection.selectedId === null && qualifyingHolders.length > 0;
+  const validatedHolderId =
+    showFilter && holderParam && qualifyingHolders.some((h) => h.id === holderParam)
+      ? holderParam
+      : undefined;
+
+  const result = await loadContributions(validatedHolderId);
 
   const heading = (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+      </div>
+      {showFilter && (
+        <Suspense>
+          <HolderFilter holders={qualifyingHolders} selectedId={validatedHolderId ?? null} />
+        </Suspense>
+      )}
     </div>
   );
 

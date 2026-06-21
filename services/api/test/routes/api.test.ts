@@ -1884,4 +1884,102 @@ describe("auth + portfolios + transactions", () => {
     expect(typeof perf.xirr).toBe("number");
     expect(Number.isFinite(perf.xirr)).toBe(true);
   });
+
+  it("filters /networth/income by holderId", async () => {
+    const t = await token("holder-income");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    const childHolder = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Income Child", type: "child", birthYear: 2018 },
+      })
+    ).json();
+    const selfHolder = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Income Self", type: "self" },
+      })
+    ).json();
+
+    const childPf = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Child income pf", baseCurrency: "IDR", accountHolderId: childHolder.id },
+      })
+    ).json().id;
+    const selfPf = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Self income pf", baseCurrency: "IDR", accountHolderId: selfHolder.id },
+      })
+    ).json().id;
+
+    const [div] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBCA2", market: "IDX", assetClass: "equity", currency: "IDR", name: "BCA2" })
+      .returning();
+
+    // Child portfolio: a buy + a dividend.
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${childPf}/transactions`,
+      headers: auth(t),
+      payload: { type: "buy", instrumentId: div.id, quantity: "100", price: "9000", currency: "IDR", executedAt: "2025-01-01T00:00:00.000Z" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${childPf}/transactions`,
+      headers: auth(t),
+      payload: { type: "dividend", instrumentId: div.id, quantity: "0", price: "500", currency: "IDR", executedAt: "2025-06-01T00:00:00.000Z" },
+    });
+
+    // Self portfolio: a different dividend amount.
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${selfPf}/transactions`,
+      headers: auth(t),
+      payload: { type: "buy", instrumentId: div.id, quantity: "50", price: "9000", currency: "IDR", executedAt: "2025-01-01T00:00:00.000Z" },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${selfPf}/transactions`,
+      headers: auth(t),
+      payload: { type: "dividend", instrumentId: div.id, quantity: "0", price: "200", currency: "IDR", executedAt: "2025-06-01T00:00:00.000Z" },
+    });
+
+    // Unfiltered aggregate = 500 + 200 = 700.
+    const allRes = (
+      await app.inject({ method: "GET", url: "/networth/income", headers: auth(t) })
+    ).json();
+    expect(Number(allRes.lifetimeTotal)).toBe(700);
+
+    // Filtered by child holder = 500 only.
+    const childRes = (
+      await app.inject({ method: "GET", url: `/networth/income?holderId=${childHolder.id}`, headers: auth(t) })
+    ).json();
+    expect(childRes.lifetimeTotal).toBe("500");
+
+    // Filtered by self holder = 200 only.
+    const selfRes = (
+      await app.inject({ method: "GET", url: `/networth/income?holderId=${selfHolder.id}`, headers: auth(t) })
+    ).json();
+    expect(selfRes.lifetimeTotal).toBe("200");
+
+    // Unknown holder → 404.
+    const bad = await app.inject({
+      method: "GET",
+      url: "/networth/income?holderId=00000000-0000-0000-0000-000000000000",
+      headers: auth(t),
+    });
+    expect(bad.statusCode).toBe(404);
+  });
 });

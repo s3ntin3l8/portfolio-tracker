@@ -481,4 +481,86 @@ describe("contribution analytics", () => {
     const anon = await app.inject({ method: "GET", url: "/networth/contributions" });
     expect(anon.statusCode).toBe(401);
   });
+
+  it("filters /networth/contributions by holderId and seeds child forecast fields", async () => {
+    const t = await token("holder-contributions");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    // Create two holders: a child and a self.
+    const childHolder = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Child A", type: "child", birthYear: 2020 },
+      })
+    ).json();
+    const selfHolder = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Me", type: "self" },
+      })
+    ).json();
+
+    // Two cash-inside portfolios for the child, one for self. cash-inside counts
+    // deposits as contributions (cash-outside only counts invested capital).
+    const childPf1 = await createPortfolioWithHolder(t, "Child depot 1", childHolder.id, true);
+    const childPf2 = await createPortfolioWithHolder(t, "Child depot 2", childHolder.id, true);
+    const selfPf = await createPortfolioWithHolder(t, "Self depot", selfHolder.id, true);
+
+    // Deposit 1000 into child portfolio 1, 2000 into child portfolio 2, 500 into self.
+    await postTx(t, childPf1, { type: "deposit", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+    await postTx(t, childPf2, { type: "deposit", price: "2000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+    await postTx(t, selfPf, { type: "deposit", price: "500", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+
+    // Filtered by child holder: should include only the 1000 + 2000 = 3000 child contribution.
+    const childRes = (
+      await app.inject({
+        method: "GET",
+        url: `/networth/contributions?holderId=${childHolder.id}`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(childRes.totalContributed).toBe("3000");
+    // birthYear and portfolioType propagated from the child holder.
+    expect(childRes.birthYear).toBe(2020);
+    expect(childRes.portfolioType).toBe("child");
+
+    // Filtered by self holder: only 500.
+    const selfRes = (
+      await app.inject({
+        method: "GET",
+        url: `/networth/contributions?holderId=${selfHolder.id}`,
+        headers: auth(t),
+      })
+    ).json();
+    expect(selfRes.totalContributed).toBe("500");
+    expect(selfRes.birthYear).toBeNull();
+    expect(selfRes.portfolioType).toBe("standard");
+
+    // Unknown / other-user holder → 404.
+    const bad = await app.inject({
+      method: "GET",
+      url: "/networth/contributions?holderId=00000000-0000-0000-0000-000000000000",
+      headers: auth(t),
+    });
+    expect(bad.statusCode).toBe(404);
+  });
 });
+
+async function createPortfolioWithHolder(
+  t: string,
+  name: string,
+  accountHolderId: string,
+  cashCounted = false,
+) {
+  const res = await app.inject({
+    method: "POST",
+    url: "/portfolios",
+    headers: auth(t),
+    payload: { name, baseCurrency: "idr", accountHolderId, cashCounted },
+  });
+  return res.json().id as string;
+}

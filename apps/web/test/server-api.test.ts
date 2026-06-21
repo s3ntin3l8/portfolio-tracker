@@ -292,24 +292,67 @@ describe("aggregate + misc loaders", () => {
     h.client.getIncome = getIncome;
     h.client.getPortfolioIncome = getPortfolioIncome;
 
-    // No selection → aggregate.
+    // No selection → aggregate (no holderId).
     let res = await api.loadIncomeStats();
     expect(res).toMatchObject({ status: "ok" });
-    expect(getIncome).toHaveBeenCalled();
+    expect(getIncome).toHaveBeenCalledWith(undefined);
     expect(getPortfolioIncome).not.toHaveBeenCalled();
 
-    // A selected portfolio → the scoped endpoint.
+    // holderId in "all" scope → passes holderId to getIncome.
+    getIncome.mockClear();
+    res = await api.loadIncomeStats("holder-abc");
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getIncome).toHaveBeenCalledWith("holder-abc");
+    expect(getPortfolioIncome).not.toHaveBeenCalled();
+
+    // A selected portfolio → cookie wins, holderId is ignored.
     h.cookies = { pf: "p2" };
-    res = await api.loadIncomeStats();
+    getIncome.mockClear();
+    res = await api.loadIncomeStats("holder-abc");
     expect(res).toMatchObject({ status: "ok" });
     expect(getPortfolioIncome).toHaveBeenCalledWith("p2");
+    expect(getIncome).not.toHaveBeenCalled();
 
+    h.cookies = {};
     h.client.listPortfolios = async () => [];
     expect(await api.loadIncomeStats()).toMatchObject({ status: "empty" });
     h.client.listPortfolios = async () => {
       throw new Error("x");
     };
     expect(await api.loadIncomeStats()).toMatchObject({ status: "unavailable" });
+  });
+
+  it("loadContributions passes holderId to the aggregate; cookie wins over holderId", async () => {
+    h.client.listPortfolios = async () => PF;
+    const getContributions = vi.fn(async () => ({ displayCurrency: "IDR", netContributed: "500" }));
+    const getPortfolioContributions = vi.fn(async (id: string) => ({
+      displayCurrency: "EUR",
+      netContributed: "100",
+      _id: id,
+    }));
+    h.client.getContributions = getContributions;
+    h.client.getPortfolioContributions = getPortfolioContributions;
+
+    // No selection, no holderId → aggregate with undefined.
+    let res = await api.loadContributions();
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getContributions).toHaveBeenCalledWith(undefined);
+
+    // No selection + holderId → aggregate with holderId.
+    getContributions.mockClear();
+    res = await api.loadContributions("holder-xyz");
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getContributions).toHaveBeenCalledWith("holder-xyz");
+
+    // Portfolio selected → cookie wins; holderId ignored.
+    h.cookies = { pf: "p1" };
+    getContributions.mockClear();
+    res = await api.loadContributions("holder-xyz");
+    expect(res).toMatchObject({ status: "ok" });
+    expect(getPortfolioContributions).toHaveBeenCalledWith("p1");
+    expect(getContributions).not.toHaveBeenCalled();
+
+    h.cookies = {};
   });
 
   it("loadInstrument returns the detail bundle or null on error", async () => {

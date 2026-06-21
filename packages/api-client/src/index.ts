@@ -923,10 +923,20 @@ export function createApiClient(config: ApiClientConfig) {
 
     getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
       request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),
-    getIncome: () => request<IncomeStats>("GET", "/networth/income"),
+    getIncome: (holderId?: string) =>
+      request<IncomeStats>(
+        "GET",
+        holderId ? `/networth/income?holderId=${encodeURIComponent(holderId)}` : "/networth/income",
+      ),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
-    getContributions: () => request<ContributionStats>("GET", "/networth/contributions"),
+    getContributions: (holderId?: string) =>
+      request<ContributionStats>(
+        "GET",
+        holderId
+          ? `/networth/contributions?holderId=${encodeURIComponent(holderId)}`
+          : "/networth/contributions",
+      ),
     getPortfolioContributions: (portfolioId: string) =>
       request<ContributionStats>("GET", `/portfolios/${portfolioId}/contributions`),
     getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[] }) => {

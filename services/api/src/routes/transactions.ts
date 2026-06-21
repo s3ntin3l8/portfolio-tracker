@@ -920,33 +920,53 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
-  // Income analytics across all of the user's portfolios, in their display currency:
-  // per-period totals, forecast, delta, breakdowns, yields, upcoming coupons + events.
-  app.get("/networth/income", { preHandler: app.authenticate }, async (request) => {
-    const { id } = requireUser(request);
-    const [u] = await app.db
-      .select({ displayCurrency: users.displayCurrency })
-      .from(users)
-      .where(eq(users.id, id))
-      .limit(1);
-    const display = u?.displayCurrency ?? "IDR";
+  // Income analytics across all of the user's portfolios (or a holder subset), in their
+  // display currency: per-period totals, forecast, delta, breakdowns, yields, upcoming
+  // coupons + events. Optional `holderId` narrows the result to portfolios linked to that
+  // account holder (must be owned by the requesting user).
+  app.get<{ Querystring: { holderId?: string } }>(
+    "/networth/income",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { holderId } = request.query;
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
 
-    const pfs = await app.db
-      .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
-      .from(portfolios)
-      .where(eq(portfolios.userId, id));
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.code(404).send({ error: "holder_not_found" });
+      }
 
-    const summaries = [];
-    const allTxns: CoreTransaction[] = [];
-    for (const p of pfs) {
-      const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-      summaries.push(summary);
-      allTxns.push(...coreTxns);
-    }
-    const aggregated = aggregatePortfolios(summaries, display);
+      const pfs = await app.db
+        .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
+        .from(portfolios)
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
 
-    return buildIncomeStats(allTxns, aggregated, display);
-  });
+      const summaries = [];
+      const allTxns: CoreTransaction[] = [];
+      for (const p of pfs) {
+        const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
+        summaries.push(summary);
+        allTxns.push(...coreTxns);
+      }
+      const aggregated = aggregatePortfolios(summaries, display);
+
+      return buildIncomeStats(allTxns, aggregated, display);
+    },
+  );
 
   // Aggregate trade log across all of the user's portfolios, in their display
   // currency. Each portfolio's trades are computed under its own settings, then merged
@@ -1007,52 +1027,78 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
-  // Aggregate contribution analytics across all of the user's portfolios, in
-  // their display currency.
-  app.get("/networth/contributions", { preHandler: app.authenticate }, async (request) => {
-    const { id } = requireUser(request);
-    const [u] = await app.db
-      .select({ displayCurrency: users.displayCurrency })
-      .from(users)
-      .where(eq(users.id, id))
-      .limit(1);
-    const display = u?.displayCurrency ?? "IDR";
+  // Aggregate contribution analytics across all of the user's portfolios (or a holder
+  // subset), in their display currency. Optional `holderId` narrows the result to
+  // portfolios linked to that account holder and seeds `birthYear`/`portfolioType` from
+  // the holder so the child-savings forecast panel works correctly.
+  app.get<{ Querystring: { holderId?: string } }>(
+    "/networth/contributions",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { holderId } = request.query;
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
 
-    const pfs = await app.db
-      .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
-      .from(portfolios)
-      .where(eq(portfolios.userId, id));
+      let holderBirthYear: number | null = null;
+      let holderPortfolioType: "standard" | "child" = "standard";
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.code(404).send({ error: "holder_not_found" });
+        holderBirthYear = holder.birthYear;
+        holderPortfolioType = holder.type === "child" ? "child" : "standard";
+      }
 
-    const summaries: PortfolioSummary[] = [];
-    const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = [];
-    const allTxns: CoreTransaction[] = [];
-    for (const p of pfs) {
-      const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-      summaries.push(summary);
-      loaded.push({ txns: coreTxns, boundary: p.cashCounted ? "inside" : "outside" });
-      allTxns.push(...coreTxns);
-    }
-    const fx = makeFxRateFn(
-      await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
-      display,
-    );
-    // Compute each portfolio under ITS boundary, then merge — so each portfolio keeps its
-    // own boundary instead of being collapsed into one cross-portfolio bucket.
-    const perPortfolio = loaded.map(({ txns, boundary }) =>
-      contributionStats({ txns, displayCurrency: display, fx, boundary }),
-    );
-    // Money-weighted flows: each portfolio under its boundary, concatenated.
-    const flows: CashFlowPoint[] = [];
-    for (const { txns, boundary } of loaded) {
-      flows.push(...(await boundaryFlows(txns, boundary, display)));
-    }
-    const aggregated = aggregatePortfolios(summaries, display);
-    return enrichContributions(
-      mergeContributionStats(perPortfolio, display),
-      aggregated.netWorth,
-      flows,
-    );
-  });
+      const pfs = await app.db
+        .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
+        .from(portfolios)
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
+
+      const summaries: PortfolioSummary[] = [];
+      const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = [];
+      const allTxns: CoreTransaction[] = [];
+      for (const p of pfs) {
+        const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
+        summaries.push(summary);
+        loaded.push({ txns: coreTxns, boundary: p.cashCounted ? "inside" : "outside" });
+        allTxns.push(...coreTxns);
+      }
+      const fx = makeFxRateFn(
+        await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
+        display,
+      );
+      // Compute each portfolio under ITS boundary, then merge — so each portfolio keeps its
+      // own boundary instead of being collapsed into one cross-portfolio bucket.
+      const perPortfolio = loaded.map(({ txns, boundary }) =>
+        contributionStats({ txns, displayCurrency: display, fx, boundary }),
+      );
+      // Money-weighted flows: each portfolio under its boundary, concatenated.
+      const flows: CashFlowPoint[] = [];
+      for (const { txns, boundary } of loaded) {
+        flows.push(...(await boundaryFlows(txns, boundary, display)));
+      }
+      const aggregated = aggregatePortfolios(summaries, display);
+      return enrichContributions(
+        mergeContributionStats(perPortfolio, display),
+        aggregated.netWorth,
+        flows,
+        holderBirthYear,
+        holderPortfolioType,
+      );
+    },
+  );
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
   // day's snapshots converted to the display currency.
