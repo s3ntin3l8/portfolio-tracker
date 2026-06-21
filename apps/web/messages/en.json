@@ -549,6 +549,7 @@
     "pnl": "P&L",
     "all": "All",
     "total": "Total",
+    "cash": "Cash",
     "exportCsv": "Export CSV",
     "costBasisPurchasePrice": "Purchase price",
     "costBasisTotalPaid": "Total paid"

@@ -40,6 +40,12 @@ export default async function HoldingsPage({
       : [];
   const currency = result.status === "ok" ? result.displayCurrency : "IDR";
 
+  // Cash for cash-inclusive portfolios (cashTracked = cashCounted && hasCashMovement).
+  const cash = result.status === "ok" ? result.cash : {};
+  const cashTracked = result.status === "ok" ? result.cashTracked : false;
+  const hasCash =
+    cashTracked && Object.values(cash).some((v) => Number(v) !== 0);
+
   // Count holdings per asset class to determine which tabs to disable.
   const classCounts = holdings.reduce<Record<string, number>>((acc, h) => {
     const c = h.instrument?.assetClass;
@@ -49,19 +55,37 @@ export default async function HoldingsPage({
 
   // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
   // value/P&L are in the display currency (the trailing Currency column).
-  const exportRows: (string | number)[][] = holdings.map((h) => [
-    h.instrument?.symbol ?? "",
-    h.instrument?.name ?? "",
-    h.instrument?.assetClass ?? "",
-    Number(h.quantity),
-    h.instrument?.unit ?? "",
-    h.avgCost,
-    h.price ?? "",
-    h.currency ?? currency,
-    h.marketValueDisplay ?? "",
-    h.unrealizedPnLDisplay ?? "",
-    currency,
-  ]);
+  const exportRows: (string | number)[][] = [
+    ...holdings.map((h) => [
+      h.instrument?.symbol ?? "",
+      h.instrument?.name ?? "",
+      h.instrument?.assetClass ?? "",
+      Number(h.quantity),
+      h.instrument?.unit ?? "",
+      h.avgCost,
+      h.price ?? "",
+      h.currency ?? currency,
+      h.marketValueDisplay ?? "",
+      h.unrealizedPnLDisplay ?? "",
+      currency,
+    ]),
+    // Cash rows for cash-inclusive portfolios (one row per currency).
+    ...Object.entries(cash)
+      .filter(([, v]) => Number(v) !== 0)
+      .map(([ccy, balance]) => [
+        "Cash",
+        t("cash"),
+        "cash",
+        "",
+        "",
+        "",
+        "",
+        ccy,
+        balance,
+        "",
+        ccy,
+      ]),
+  ];
 
   const Heading = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -114,7 +138,7 @@ export default async function HoldingsPage({
     );
   }
 
-  if (holdings.length === 0) {
+  if (holdings.length === 0 && !hasCash) {
     return (
       <div className="space-y-6">
         {Heading}
@@ -178,6 +202,7 @@ export default async function HoldingsPage({
                     : holdings.filter((h) => h.instrument?.assetClass === key)
                 }
                 currency={currency}
+                cash={key === "all" && hasCash ? cash : undefined}
               />
             </div>
           </TabsContent>
