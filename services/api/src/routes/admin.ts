@@ -554,7 +554,15 @@ export async function adminRoute(app: FastifyInstance) {
    * are Postgres catalog functions not available under PGlite (used in tests).
    * Returns nulls when `NODE_ENV === "test"` so the route stays testable.
    */
-  app.get("/admin/stats", { preHandler: app.requireAdmin }, async () => {
+  app.get(
+    "/admin/stats",
+    {
+      // Explicit rate limit: admin-only but the handler does a filesystem walk (storage
+      // stats), so tighten beyond the global default to prevent DoS via repeated calls.
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      preHandler: app.requireAdmin,
+    },
+    async () => {
     // The key user-data tables whose size we surface in the UI. Admin/config tables
     // (provider_settings, audit_log, etc.) are omitted — they stay small by design.
     const TABLES = [
