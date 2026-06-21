@@ -49,6 +49,7 @@ function makeTrackingStorage(): StorageProvider & {
       data.delete(key);
     },
     exists: async (key) => data.has(key),
+    get: async (key) => data.get(key) ?? null,
   };
 }
 

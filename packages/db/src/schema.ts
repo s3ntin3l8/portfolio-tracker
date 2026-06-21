@@ -62,6 +62,17 @@ export const txSourceEnum = pgEnum("transaction_source", [
   "pytr",
 ]);
 
+// Source-type enum for transaction_sources rows. Richer than txSourceEnum: `pdf`
+// distinguishes a deterministic-parser settlement PDF from a generic `screenshot`
+// (LLM-based). All prior pytr/csv/manual sources stay unchanged.
+export const txSourceTypeEnum = pgEnum("tx_source_type", [
+  "csv",
+  "pdf",
+  "screenshot",
+  "pytr",
+  "manual",
+]);
+
 export const corpActionTypeEnum = pgEnum("corporate_action_type", [
   "split",
   "bonus",
@@ -477,6 +488,68 @@ export const transactions = pgTable(
   ],
 );
 
+// Provenance + per-component tax breakdown for every source that contributed to a
+// transaction. Always written (even with documentRetention=off) — this is provenance,
+// not a stored file.  One row per distinct contributing source:
+//   - `pytr` : the timeline-synced row (first-import; externalId = TR event id)
+//   - `pdf`  : one row per settlement-PDF leg (`externalId = tr:exec:<AUSFÜHRUNG>`)
+//   - `csv`  : CSV import (externalId = broker ref)
+//   - `manual` : user-edited / manual entry (always protected; recomputeRollup skips it)
+//
+// Idempotency: a partial unique index on (transactionId, sourceType, externalId)
+// WHERE externalId IS NOT NULL mirrors the main transactions_dedup_idx; re-importing the
+// same AUSFÜHRUNG is a no-op.
+//
+// Rollup rule: recomputeRollup(sourceRows) → for each gold-standard scalar (tax, fees,
+// executedPrice, fxRate, venue) pick the highest-rank source present; `manual` always
+// wins, then `pdf`, `pytr`, `csv`, `screenshot`. Tax/fees are SUMMED across all rows
+// of the winning rank so both legs of a split order contribute.
+export const transactionSources = pgTable(
+  "transaction_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    sourceType: txSourceTypeEnum("source_type").notNull(),
+    // FK to the import that produced this source row (null for auto-enrichment path).
+    importId: uuid("import_id").references(() => screenshotImports.id, {
+      onDelete: "set null",
+    }),
+    // FK to the stored settlement PDF (null when no storage, e.g. retention=off pytr leg).
+    documentId: uuid("document_id").references(() => documents.id, {
+      onDelete: "set null",
+    }),
+    // Per-source idempotency key. For TR settlement PDFs: `tr:exec:<AUSFÜHRUNG>`.
+    // For CSV: broker booking ref. Null for pytr (event id lives on the transaction).
+    externalId: text("external_id"),
+    // TR AUFTRAG order reference — shared across split-order legs. Null for non-TR sources.
+    orderRef: text("order_ref"),
+    // Rollup scalars — the authoritative values THIS source contributes. Used by
+    // recomputeRollup to derive the transaction-level rollup from ALL source rows
+    // without reading currentTx (which would collapse rank information). These mirror
+    // transactions.tax / .fees / .executedPrice / .fxRate / .venue exactly.
+    tax: numeric("tax"),
+    fees: numeric("fees"),
+    executedPrice: numeric("executed_price"),
+    fxRate: numeric("fx_rate"),
+    venue: text("venue"),
+    // Per-component tax breakdown (display + provenance; summed into transactions.tax).
+    taxComponents: jsonb("tax_components"),
+    // Raw extraction payload for debugging/audit. Not queried.
+    rawData: jsonb("raw_data"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("transaction_sources_tx_id_idx").on(t.transactionId),
+    index("transaction_sources_document_id_idx").on(t.documentId),
+    // Prevents re-importing the same source (e.g. same AUSFÜHRUNG twice).
+    uniqueIndex("transaction_sources_dedup_idx")
+      .on(t.transactionId, t.sourceType, t.externalId)
+      .where(sql`${t.externalId} is not null`),
+  ],
+);
+
 export const corporateActions = pgTable("corporate_actions", {
   id: uuid("id").primaryKey().defaultRandom(),
   instrumentId: uuid("instrument_id")
@@ -667,7 +740,7 @@ export const instrumentsRelations = relations(instruments, ({ many }) => ({
   loans: many(loans),
 }));
 
-export const transactionsRelations = relations(transactions, ({ one }) => ({
+export const transactionsRelations = relations(transactions, ({ one, many }) => ({
   portfolio: one(portfolios, {
     fields: [transactions.portfolioId],
     references: [portfolios.id],
@@ -679,6 +752,22 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   loan: one(loans, {
     fields: [transactions.loanId],
     references: [loans.id],
+  }),
+  sources: many(transactionSources),
+}));
+
+export const transactionSourcesRelations = relations(transactionSources, ({ one }) => ({
+  transaction: one(transactions, {
+    fields: [transactionSources.transactionId],
+    references: [transactions.id],
+  }),
+  import: one(screenshotImports, {
+    fields: [transactionSources.importId],
+    references: [screenshotImports.id],
+  }),
+  document: one(documents, {
+    fields: [transactionSources.documentId],
+    references: [documents.id],
   }),
 }));
 

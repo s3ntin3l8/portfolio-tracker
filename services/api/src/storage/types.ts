@@ -31,6 +31,12 @@ export interface StorageProvider {
   exists(key: string): Promise<boolean>;
 
   /**
+   * Return the raw bytes for the object at `key`, or `null` when the key does not exist.
+   * Used by the enrichment service to read back stored settlement PDFs for parsing.
+   */
+  get(key: string): Promise<Buffer | null>;
+
+  /**
    * Usage statistics for the admin UI.
    * Optional — providers that don't support it (e.g. test fakes) may omit this method.
    * `freeBytes` / `diskTotalBytes` are only meaningful for the folder provider (disk stat);

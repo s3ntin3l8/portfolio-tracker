@@ -7,6 +7,7 @@ import {
   portfolios,
   screenshotImports,
   transactions,
+  transactionSources,
   trResolvedEvents,
 } from "@portfolio/db";
 import {
@@ -23,6 +24,11 @@ import {
 import { parseCsv } from "../services/parsers/csv.js";
 import { parseDkb } from "../services/parsers/dkb.js";
 import { detectDkbPdf, parseDkbPdf } from "../services/parsers/dkb-pdf.js";
+import { detectTrPdf, parseTrPdf } from "../services/parsers/tr-pdf.js";
+import {
+  enrichTransactionFromDrafts,
+  enrichTransactionsFromStoredDocuments,
+} from "../services/enrichment.js";
 import { extractPdfText } from "../services/parsers/pdf-text.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
@@ -600,9 +606,20 @@ export async function importsRoute(app: FastifyInstance) {
               request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
               parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
             }
+          } else if (!parsed && detectTrPdf(text)) {
+            // TR settlement PDFs: deterministic parse — same fast-path as DKB.
+            // Cost-information / order-confirmation docs return false from detectTrPdf.
+            const { drafts: trDrafts, errors: trErrors } = parseTrPdf(text);
+            if (trDrafts.length > 0) {
+              request.log.info({ drafts: trDrafts.length }, "TR PDF parsed deterministically");
+              parsed = { drafts: trDrafts, contracts: [], accountNumber: null };
+              if (trErrors.length > 0) {
+                request.log.warn({ errors: trErrors }, "TR PDF parse had errors");
+              }
+            }
           }
         } catch (err) {
-          request.log.warn({ err }, "DKB PDF text parse failed; falling back to vision");
+          request.log.warn({ err }, "DKB/TR PDF text parse failed; falling back to vision");
         }
       }
       try {
@@ -1081,6 +1098,7 @@ export async function importsRoute(app: FastifyInstance) {
       duplicateCheck: {
         const committed = await app.db
           .select({
+            id: transactions.id,
             instrumentId: transactions.instrumentId,
             type: transactions.type,
             executedAt: transactions.executedAt,
@@ -1103,6 +1121,7 @@ export async function importsRoute(app: FastifyInstance) {
         );
 
         const committedCandidates = committed.map((r) => ({
+          id: r.id,
           key: r.instrumentId,
           action: r.type,
           quantity: r.quantity,
@@ -1143,6 +1162,8 @@ export async function importsRoute(app: FastifyInstance) {
             duplicates: matches.map(({ draftIndex, matched }) => {
               const d = resolved[draftIndex].draft;
               return {
+                draftIndex,
+                matchedTransactionId: matched.id,
                 name: d.name ?? d.isin ?? d.ticker ?? null,
                 action: d.action,
                 quantity: d.quantity,
@@ -1196,8 +1217,34 @@ export async function importsRoute(app: FastifyInstance) {
             })
             .onConflictDoNothing()
             .returning();
-          if (row) written.push(row);
-          else request.log.debug({ externalId }, "duplicate skipped");
+          if (row) {
+            written.push(row);
+            // Write the first-import source row for provenance + enrichment rollup.
+            // sourceType: draft with taxComponents = pdf (e.g. TR/DKB PDF); else mapped from source.
+            const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
+            const srcType = (
+              hasTaxComponents ? "pdf"
+              : source === "pytr" ? "pytr"
+              : source === "screenshot" ? "screenshot"
+              : "csv"
+            ) as "pdf" | "pytr" | "screenshot" | "csv" | "manual";
+            await tx
+              .insert(transactionSources)
+              .values({
+                transactionId: row.id,
+                sourceType: srcType,
+                importId: imp.id,
+                externalId: d.externalId ?? null,
+                orderRef: d.orderRef ?? null,
+                tax: d.tax ?? null,
+                fees: d.fees ?? null,
+                executedPrice: d.executedPrice ?? null,
+                fxRate: d.fxRate ?? null,
+                venue: d.venue ?? null,
+                taxComponents: hasTaxComponents ? (d.taxComponents as Record<string, unknown>) : null,
+              })
+              .onConflictDoNothing();
+          } else request.log.debug({ externalId }, "duplicate skipped");
         }
 
         // Financed gold contracts: create the gold instrument + loan, then insert
@@ -1368,6 +1415,15 @@ export async function importsRoute(app: FastifyInstance) {
         if (links.length > 0) {
           await linkTrReceiptsToTransactions(app, { importId: imp.id, links });
         }
+        // Auto-enrich: fold settlement-PDF tax/fee detail into the newly-confirmed
+        // transactions. Must run BEFORE finalizeReceipts (which may delete the staged
+        // bytes that enrichment reads). Best-effort: swallow errors so enrichment failure
+        // never blocks the confirm response.
+        try {
+          await enrichTransactionsFromStoredDocuments(app, created.map((r) => r.id));
+        } catch (err) {
+          request.log.warn({ err }, "auto TR enrichment failed (non-fatal)");
+        }
       }
 
       // Finalize receipt storage: keep if the portfolio has documentRetention=true,
@@ -1391,6 +1447,94 @@ export async function importsRoute(app: FastifyInstance) {
       );
       reply.code(201);
       return { confirmed: created.length, transactions: created, likelyDuplicates };
+    },
+  );
+
+  // Enrich existing confirmed transactions with richer detail from an import's drafts.
+  // Used when a draft matches a committed transaction (409 duplicate_transactions) and
+  // the user chooses "Enrich existing" instead of "Import anyway" or "Skip".
+  // Each {draftIndex, targetTransactionId} pair folds the draft onto the target tx.
+  // POST /imports/:importId/enrich
+  const enrichBodySchema = z.object({
+    portfolioId: z.string().uuid().optional(),
+    enrichments: z
+      .array(
+        z.object({
+          draftIndex: z.number().int().min(0),
+          targetTransactionId: z.string().uuid(),
+        }),
+      )
+      .min(1),
+  });
+
+  app.post<{ Params: { importId: string } }>(
+    "/imports/:importId/enrich",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+
+      const { portfolioId: bodyPortfolioId, enrichments } = enrichBodySchema.parse(request.body);
+      const targetPortfolioId = bodyPortfolioId ?? imp.portfolioId;
+      if (!targetPortfolioId) {
+        return reply.code(400).send({ error: "portfolio_required" });
+      }
+      if (!(await ownedPortfolio(id, targetPortfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Retrieve the import's parsed drafts.
+      const parsed = (imp.parsedJson ?? {}) as { drafts?: unknown[] };
+      const storedDrafts = Array.isArray(parsed.drafts) ? parsed.drafts : [];
+
+      const source = imp.parser === "pytr"
+        ? "pytr"
+        : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
+          ? "csv"
+          : "screenshot";
+
+      let enriched = 0;
+      const skipped: number[] = [];
+
+      for (const { draftIndex, targetTransactionId } of enrichments) {
+        if (draftIndex < 0 || draftIndex >= storedDrafts.length) {
+          skipped.push(draftIndex);
+          continue;
+        }
+
+        // Parse and validate the draft at the given index.
+        const draftParsed = parsedTransactionSchema.safeParse(storedDrafts[draftIndex]);
+        if (!draftParsed.success) {
+          skipped.push(draftIndex);
+          continue;
+        }
+
+        // IDOR: verify the target transaction belongs to the user's portfolio.
+        const [targetTx] = await app.db
+          .select({ id: transactions.id, portfolioId: transactions.portfolioId })
+          .from(transactions)
+          .where(eq(transactions.id, targetTransactionId))
+          .limit(1);
+        if (!targetTx || targetTx.portfolioId !== targetPortfolioId) {
+          skipped.push(draftIndex);
+          continue;
+        }
+
+        await enrichTransactionFromDrafts(
+          targetTransactionId,
+          app.db,
+          [draftParsed.data],
+          { importId: imp.id, importSource: source },
+        );
+        enriched++;
+      }
+
+      request.log.info(
+        { importId: imp.id, enriched, skipped: skipped.length },
+        "enrich complete",
+      );
+      return { enriched, skipped };
     },
   );
 

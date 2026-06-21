@@ -17,6 +17,10 @@ import {
   importIdsWithDocuments,
   transactionIdsWithDocuments,
 } from "../storage/receipts.js";
+import {
+  txIdsWithFullTaxDetail,
+  sourcesForTransactions,
+} from "../services/enrichment.js";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
@@ -570,9 +574,11 @@ export async function transactionsRoute(app: FastifyInstance) {
         .map((r) => r.importId)
         .filter((x): x is string => x !== null);
       const allTxIds = rows.map((r) => r.id);
-      const [importIdsWithDocs, txIdsWithDocs] = await Promise.all([
+      const [importIdsWithDocs, txIdsWithDocs, fullTaxDetail, sourcesMap] = await Promise.all([
         importIdsWithDocuments(app, allImportIds),
         transactionIdsWithDocuments(app, allTxIds),
+        txIdsWithFullTaxDetail(app, allTxIds),
+        sourcesForTransactions(app, allTxIds),
       ]);
       return rows.map((r) => ({
         ...r,
@@ -580,6 +586,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         hasDocument:
           txIdsWithDocs.has(r.id) ||
           (r.importId ? importIdsWithDocs.has(r.importId) : false),
+        hasFullTaxDetail: fullTaxDetail.has(r.id),
+        sources: sourcesMap.get(r.id) ?? [],
       }));
     },
   );

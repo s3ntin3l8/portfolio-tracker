@@ -1,5 +1,5 @@
 import { Decimal } from "decimal.js";
-import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
+import { parsedTransactionSchema, type ParsedTransaction, type TaxComponents } from "@portfolio/schema";
 import { parseEuroDecimal, parseDkbDate } from "./dkb.js";
 
 /**
@@ -191,8 +191,15 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
     const quellensteuer = deductedAfter(text, "Einbehaltene Quellensteuer", true);
     const kapst = deductedAfter(text, "\\bKapitalertragsteuer");
     const solz = deductedAfter(text, "Solidaritätszuschlag");
-    const tax = addMoney(quellensteuer, kapst, solz);
+    const kirche = deductedAfter(text, "Kirchensteuer");
+    const tax = addMoney(quellensteuer, kapst, solz, kirche);
     const total = addMoney(net, tax);
+    // Build per-component breakdown (preserved instead of discarded).
+    const incomeTaxComponents: TaxComponents = {};
+    if (quellensteuer && Number(quellensteuer) > 0) incomeTaxComponents.quellensteuer = quellensteuer;
+    if (kapst && Number(kapst) > 0) incomeTaxComponents.kapitalertragsteuer = kapst;
+    if (solz && Number(solz) > 0) incomeTaxComponents.solidaritaetszuschlag = solz;
+    if (kirche && Number(kirche) > 0) incomeTaxComponents.kirchensteuer = kirche;
     const fxRate = parseEuroDecimal(
       text.match(/Devisenkurs\s+[A-Z]{3}\s*\/\s*[A-Z]{3}\s+([\d.,]+)/)?.[1],
     );
@@ -210,6 +217,7 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
         price: net ?? "",
         total,
         tax: Number(tax) > 0 ? tax : undefined,
+        taxComponents: Object.keys(incomeTaxComponents).length > 0 ? incomeTaxComponents : undefined,
         fxRate: fxRate ?? undefined,
         currency: "EUR",
         executedAt: valueDate ?? undefined,
@@ -235,6 +243,9 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
   const price = parseEuroDecimal(text.match(/Ausführungskurs\s+([\d.,]+)\s*EUR/)?.[1]);
   const fees = amountAfter(text, "Provision") ?? "0";
   const total = amountAfter(text, "Ausmachender Betrag");
+  // Bond accrued interest (Stückzinsen) — a cost component, not exactly a tax, but
+  // stored in taxComponents for display/provenance. Appears on bond buy/sell PDFs.
+  const stueckzinsen = deductedAfter(text, "Stückzinsen");
   const tradeDate =
     parseDkbDate(text.match(/Schlusstag(?:\/-?Zeit)?\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? docDate;
   // venue: prefer the named counterparty, else the execution venue.
@@ -246,6 +257,9 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
     );
   const auftrag = text.match(/Auftragsnummer\s+(\S+)/)?.[1];
   const externalId = auftrag ? `dkb:${auftrag.replace(/\D/g, "")}` : undefined;
+
+  const tradeTaxComponents: TaxComponents = {};
+  if (stueckzinsen && Number(stueckzinsen) > 0) tradeTaxComponents.stueckzinsen = stueckzinsen;
 
   pushDraft(
     {
@@ -259,6 +273,7 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
       price: price ?? "",
       fees,
       total: total ?? undefined,
+      taxComponents: Object.keys(tradeTaxComponents).length > 0 ? tradeTaxComponents : undefined,
       venue: venue || undefined,
       currency: "EUR",
       executedAt: tradeDate ?? undefined,

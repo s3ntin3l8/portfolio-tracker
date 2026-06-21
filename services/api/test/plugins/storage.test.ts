@@ -12,6 +12,7 @@ function makeInertStorage(): StorageProvider & { puts: string[] } {
     getSignedUrl: async (key) => `https://fake.storage/${key}?signed=1`,
     delete: async () => {},
     exists: async () => false,
+    get: async () => null,
   };
 }
 

@@ -129,6 +129,16 @@ export class FolderProvider implements StorageProvider {
     }
   }
 
+  async get(key: string): Promise<Buffer | null> {
+    const filePath = this.resolveSafe(key);
+    try {
+      return await fs.readFile(filePath);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw e;
+    }
+  }
+
   async stats(): Promise<StorageStats> {
     let objectCount = 0;
     let totalBytes = 0;

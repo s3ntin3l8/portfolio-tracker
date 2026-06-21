@@ -35,6 +35,10 @@ export const storagePlugin = fp(async (app: FastifyInstance) => {
       const p = await getStorageProvider(app);
       return p.exists(key);
     },
+    async get(key) {
+      const p = await getStorageProvider(app);
+      return p.get(key);
+    },
     async stats(): Promise<StorageStats> {
       const p = await getStorageProvider(app);
       if (!p.stats) return { objectCount: 0, totalBytes: 0 };

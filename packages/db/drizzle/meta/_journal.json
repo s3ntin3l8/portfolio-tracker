@@ -239,6 +239,13 @@
       "when": 1782035540035,
       "tag": "0033_clever_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1782055224393,
+      "tag": "0034_slippery_fixer",
+      "breakpoints": true
     }
   ]
 }

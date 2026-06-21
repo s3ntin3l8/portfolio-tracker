@@ -96,6 +96,24 @@ export class S3Provider implements StorageProvider {
     }
   }
 
+  async get(key: string): Promise<Buffer | null> {
+    try {
+      const resp = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!resp.Body) return null;
+      // ReadableStream from AWS SDK v3 — collect into Buffer.
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of resp.Body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      return Buffer.concat(chunks);
+    } catch (err: unknown) {
+      if (isNotFound(err)) return null;
+      throw err;
+    }
+  }
+
   /**
    * Usage statistics: paginated scan of the bucket, summing object count + total bytes.
    * S3 has no capacity concept, so `freeBytes`/`diskTotalBytes` are not returned.

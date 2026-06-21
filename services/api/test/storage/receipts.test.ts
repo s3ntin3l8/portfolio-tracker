@@ -53,6 +53,7 @@ function makeFailingStorage(): StorageProvider {
     getSignedUrl: async (k) => k,
     delete: async () => {},
     exists: async () => false,
+    get: async () => null,
   };
 }
 

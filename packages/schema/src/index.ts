@@ -276,6 +276,19 @@ export type MergerInput = z.infer<typeof mergerInputSchema>;
 
 // --- Screenshot / CSV parse output ---------------------------------------
 
+// Per-component tax breakdown emitted by PDF parsers.  Stored as jsonb on
+// transaction_sources (open-ended set — brokers add components over time) and
+// forwarded through the draft pipeline so the enrichment layer can persist them.
+// All values are decimal strings (same convention as the parent parsedTransactionSchema).
+export const taxComponentsSchema = z.object({
+  kapitalertragsteuer: decimalString.nullish(),
+  solidaritaetszuschlag: decimalString.nullish(),
+  kirchensteuer: decimalString.nullish(),
+  quellensteuer: decimalString.nullish(),
+  stueckzinsen: decimalString.nullish(),
+});
+export type TaxComponents = z.infer<typeof taxComponentsSchema>;
+
 // Actions a parser can emit. Securities trades + income (buy/sell/dividend/coupon),
 // plus the cash/savings-plan flows the DKB Girokonto import produces (a savings-plan
 // execution behaves as a buy; deposit/withdrawal are instrument-less cash movements).
@@ -337,6 +350,12 @@ export const parsedTransactionSchema = z.object({
     )
     .nullish(),
   confidence: z.number().min(0).max(1),
+  // Per-component tax breakdown (PDF parsers only). Stored on transaction_sources;
+  // `tax` stays the gold-standard summed rollup on the transaction itself.
+  taxComponents: taxComponentsSchema.nullish(),
+  // TR AUFTRAG order reference, shared across split-order legs. Groups legs for
+  // aggregation (aggregateByOrderRef) and stored on transaction_sources.orderRef.
+  orderRef: z.string().nullish(),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;
 
