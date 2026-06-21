@@ -14,7 +14,7 @@ import {
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "@/i18n/navigation";
-import { formatMoney, formatPercent, cn } from "@/lib/utils";
+import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 
 type Filter = "all" | "open" | "closed";
@@ -53,7 +53,7 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
   const heldLabel = (days: number) =>
     days >= 365 ? `${(days / 365).toFixed(1)}${t("yearsAbbr")}` : `${days}${t("daysAbbr")}`;
   const money = (n: number, ccy = currency) => formatMoney(n, ccy, locale);
-  const signed = (n: number) => `${n >= 0 ? "+" : ""}${money(n)}`;
+  const signed = (n: number) => formatSignedMoney(n, currency, locale);
 
   const visible = useMemo(() => {
     const filtered = trades.filter((tr) =>

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TradesTable } from "@/components/trades-table";
 import { TradeMethodToggle } from "@/components/trade-method-toggle";
 import { loadTrades } from "@/lib/server-api";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 
 type Method = "average" | "fifo";
 
@@ -71,6 +71,9 @@ export default async function TradesPage({
 
   const totalReturn = Number(log.totalReturn);
   const returnTone = totalReturn > 0 ? "up" : totalReturn < 0 ? "down" : "neutral";
+  // Capital-weighted return across all trades (same formula as per-row totalReturnPct).
+  const totalInvested = log.trades.reduce((s, tr) => s + Number(tr.invested), 0);
+  const totalReturnPct = totalInvested > 0 ? totalReturn / totalInvested : null;
 
   return (
     <div className="space-y-6">
@@ -79,7 +82,8 @@ export default async function TradesPage({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label={t("totalReturn")}
-          value={`${totalReturn >= 0 ? "+" : ""}${money(totalReturn)}`}
+          value={formatSignedMoney(totalReturn, currency, locale)}
+          delta={totalReturnPct !== null ? formatPercent(totalReturnPct, locale) : undefined}
           deltaTone={returnTone}
         />
         <StatCard label={t("totalRealized")} value={money(log.totalRealized)} />
@@ -105,7 +109,7 @@ export default async function TradesPage({
                   <div key={r.year} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{r.year}</span>
                     <span className={Number(r.amount) >= 0 ? "tabular text-success" : "tabular text-destructive"}>
-                      {Number(r.amount) >= 0 ? "+" : ""}{money(r.amount)}
+                      {formatSignedMoney(Number(r.amount), currency, locale)}
                     </span>
                   </div>
                 ))}
