@@ -29,6 +29,7 @@ function run(
   return computeTrades({
     transactions: txns,
     prices: { [INST]: { price: "100", currency: "EUR" } },
+    instruments: { [INST]: { assetClass: "gold" } },
     displayCurrency: "EUR",
     now: new Date("2024-01-01"),
     ...opts,
@@ -218,6 +219,17 @@ describe("computeTrades — holding period & tax flags", () => {
     const t = run(txns).trades[0];
     expect(t.longTerm).toBe(false);
     expect(t.holdingDays).toBe(59);
+  });
+
+  it("does not flag an equity held ≥ 1 year as long-term", () => {
+    const txns = [
+      tx({ type: "buy", quantity: "1", price: "100", executedAt: new Date("2021-01-01") }),
+      tx({ type: "sell", quantity: "1", price: "120", executedAt: new Date("2022-06-01") }),
+    ];
+    const res = run(txns, {
+      instruments: { [INST]: { assetClass: "equity" } },
+    });
+    expect(res.trades[0].longTerm).toBe(false);
   });
 });
 
