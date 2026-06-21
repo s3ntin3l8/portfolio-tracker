@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import os from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -78,6 +78,31 @@ describe("GET /storage/:key — folder provider serving", () => {
   it("returns 403 when exp or sig is missing", async () => {
     const res = await app.inject({ method: "GET", url: "/storage/receipts/test.pdf" });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 403 when exp is non-numeric (NaN)", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/storage/receipts/test.pdf?exp=not-a-number&sig=anysig",
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: "invalid_token" });
+  });
+
+  it("propagates non-ENOENT filesystem errors as 500", async () => {
+    const permError = Object.assign(new Error("permission denied"), {
+      code: "EACCES",
+    });
+    const spy = vi.spyOn(provider, "readFile").mockRejectedValueOnce(permError);
+
+    const signedUrl = await provider.getSignedUrl("receipts/test.pdf", TTL);
+    const urlPath = signedUrl.startsWith("http")
+      ? new URL(signedUrl).pathname + "?" + new URL(signedUrl).search
+      : signedUrl;
+
+    const res = await app.inject({ method: "GET", url: urlPath });
+    expect(res.statusCode).toBe(500);
+    spy.mockRestore();
   });
 
   it("returns 404 for a key that does not exist (valid token)", async () => {

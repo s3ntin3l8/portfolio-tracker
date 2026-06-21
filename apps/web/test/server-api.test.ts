@@ -334,6 +334,39 @@ describe("aggregate + misc loaders", () => {
   });
 });
 
+describe("loadAdminStorageProviders", () => {
+  it("returns ok with storage config on success", async () => {
+    h.client.getAdminStorageProviders = async () => ({
+      activeProvider: "s3",
+      s3: { endpoint: "", region: "eu-central-1", bucket: "test", hasSecret: false },
+      folder: { path: "./.storage" },
+      encryptionEnabled: false,
+    });
+    const res = await api.loadAdminStorageProviders();
+    expect(res).toMatchObject({ status: "ok" });
+    expect((res as { status: "ok"; storage: unknown }).storage).toHaveProperty(
+      "activeProvider",
+      "s3",
+    );
+  });
+
+  it("returns unavailable when the API throws", async () => {
+    h.client.getAdminStorageProviders = async () => {
+      throw new Error("forbidden");
+    };
+    expect(await api.loadAdminStorageProviders()).toMatchObject({
+      status: "unavailable",
+    });
+  });
+
+  it("returns unavailable when not signed in", async () => {
+    h.session = null;
+    expect(await api.loadAdminStorageProviders()).toMatchObject({
+      status: "unavailable",
+    });
+  });
+});
+
 describe("getServerApi when auth is not configured", () => {
   it("returns unavailable even with a session", async () => {
     vi.resetModules();

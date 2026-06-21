@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { createApiClient, ApiError, apiErrorCode } from "../src/index.js";
+import {
+  createApiClient,
+  ApiError,
+  apiErrorCode,
+  accountMismatchFromError,
+  duplicatesFromError,
+} from "../src/index.js";
 
 function mockFetch(
   responder: (url: string, init: RequestInit) => { status: number; body: unknown },
@@ -145,6 +151,88 @@ describe("apiErrorCode", () => {
   it("returns null when the body is not JSON or has no string error field", () => {
     expect(apiErrorCode(new ApiError(500, "Internal Server Error"))).toBeNull();
     expect(apiErrorCode(new ApiError(400, JSON.stringify({ error: 42 })))).toBeNull();
+  });
+});
+
+describe("accountMismatchFromError", () => {
+  it("returns null for non-ApiErrors", () => {
+    expect(accountMismatchFromError(new Error("boom"))).toBeNull();
+    expect(accountMismatchFromError(null)).toBeNull();
+  });
+
+  it("returns null for ApiErrors with status other than 409", () => {
+    expect(
+      accountMismatchFromError(
+        new ApiError(400, JSON.stringify({ error: "account_mismatch" })),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when body is not JSON or error key doesn't match", () => {
+    expect(accountMismatchFromError(new ApiError(409, "not-json"))).toBeNull();
+    expect(
+      accountMismatchFromError(
+        new ApiError(409, JSON.stringify({ error: "duplicate_transactions" })),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns the mismatch payload (minus the error key) on a valid 409", () => {
+    const body = {
+      error: "account_mismatch",
+      existingOwner: "alice",
+      incomingOwner: "bob",
+    };
+    const result = accountMismatchFromError(new ApiError(409, JSON.stringify(body)));
+    expect(result).toEqual({ existingOwner: "alice", incomingOwner: "bob" });
+    expect(result).not.toHaveProperty("error");
+  });
+});
+
+describe("duplicatesFromError", () => {
+  it("returns null for non-ApiErrors and non-409 status", () => {
+    expect(duplicatesFromError(new Error("boom"))).toBeNull();
+    expect(
+      duplicatesFromError(
+        new ApiError(400, JSON.stringify({ error: "duplicate_transactions" })),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when body is not JSON or error key doesn't match", () => {
+    expect(duplicatesFromError(new ApiError(409, "not-json"))).toBeNull();
+    expect(
+      duplicatesFromError(
+        new ApiError(409, JSON.stringify({ error: "account_mismatch" })),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns the duplicate conflict with count and duplicates on a valid 409", () => {
+    const body = {
+      error: "duplicate_transactions",
+      count: 2,
+      duplicates: [
+        {
+          name: "BBCA",
+          action: "buy",
+          quantity: "100",
+          executedAt: "2026-01-01",
+          matchedSource: "csv",
+          matchedExecutedAt: "2026-01-01",
+        },
+      ],
+    };
+    const result = duplicatesFromError(new ApiError(409, JSON.stringify(body)));
+    expect(result).toMatchObject({ count: 2 });
+    expect(result?.duplicates).toHaveLength(1);
+    expect(result?.duplicates[0].name).toBe("BBCA");
+  });
+
+  it("defaults count to 0 and duplicates to [] when fields are missing", () => {
+    const body = { error: "duplicate_transactions" };
+    const result = duplicatesFromError(new ApiError(409, JSON.stringify(body)));
+    expect(result).toEqual({ count: 0, duplicates: [] });
   });
 });
 
