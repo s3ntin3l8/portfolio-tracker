@@ -75,4 +75,25 @@ describe("ForecastPanel", () => {
     renderPanel({ birthYear: 2017, portfolioType: "standard" });
     expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
   });
+
+  it("accounts for historical contributions and growth in the metrics and subtitles", () => {
+    // Starting value: €10,000, of which €8,000 is net contributed (so €2,000 is historical growth).
+    // Future projection: 10 years at €100/mo, 0% return.
+    // Projected future contribution: 120 * €100 = €12,000.
+    // Projected future growth: 0.
+    // Total contributed: €8,000 (historical) + €12,000 (future) = €20,000.
+    // Total growth: (€10,000 + €12,000) - €20,000 = €2,000 (which is exactly historical growth + 0 future growth).
+    // Total projected value: €22,000.
+    renderPanel({
+      currentValue: "10000",
+      netContributed: "8000",
+    });
+
+    expect(screen.getByTestId("projected-value")).toHaveTextContent("€22,000");
+    expect(screen.getByTestId("projected-contributed")).toHaveTextContent("€20,000");
+    expect(screen.getByTestId("projected-growth")).toHaveTextContent("€2,000");
+
+    expect(screen.getByText("incl. €8,000.00 contributed so far")).toBeInTheDocument();
+    expect(screen.getByText("incl. €2,000.00 growth so far")).toBeInTheDocument();
+  });
 });

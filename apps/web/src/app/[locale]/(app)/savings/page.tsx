@@ -141,6 +141,7 @@ export default async function SavingsPage({
 
       <ForecastPanel
         currentValue={c.currentValue}
+        netContributed={c.netContributed}
         monthlyAverage={c.monthlyAverage}
         seedAnnualReturn={c.seedAnnualReturn}
         currency={currency}

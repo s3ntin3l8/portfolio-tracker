@@ -24,6 +24,7 @@ function num(v: string, min: number, max: number): number {
  */
 export function ForecastPanel({
   currentValue,
+  netContributed = "0",
   monthlyAverage,
   seedAnnualReturn,
   currency,
@@ -31,6 +32,7 @@ export function ForecastPanel({
   portfolioType = "standard",
 }: {
   currentValue: string;
+  netContributed?: string;
   monthlyAverage: string;
   seedAnnualReturn: string;
   currency: string;
@@ -67,7 +69,9 @@ export function ForecastPanel({
   const last = series[series.length - 1];
   const contributed = Number(last.contributed);
   const value = Number(last.value);
-  const growth = Math.max(0, value - Number(currentValue) - contributed);
+  const totalContributed = Number(netContributed) + contributed;
+  const totalGrowth = Math.max(0, value - totalContributed);
+  const historicalGrowth = Math.max(0, Number(currentValue) - Number(netContributed));
   const m = (n: number) => formatMoney(n, currency, locale);
 
   return (
@@ -145,11 +149,25 @@ export function ForecastPanel({
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{t("projectedContributed")}</p>
-            <p className="tabular mt-1 text-2xl font-semibold">{m(contributed)}</p>
+            <p className="tabular mt-1 text-2xl font-semibold" data-testid="projected-contributed">
+              {m(totalContributed)}
+            </p>
+            {Number(netContributed) > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("contributedSoFar", { amount: m(Number(netContributed)) })}
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{t("projectedGrowth")}</p>
-            <p className="tabular mt-1 text-2xl font-semibold text-success">{m(growth)}</p>
+            <p className="tabular mt-1 text-2xl font-semibold text-success" data-testid="projected-growth">
+              {m(totalGrowth)}
+            </p>
+            {historicalGrowth > 0 && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("growthSoFar", { amount: m(historicalGrowth) })}
+              </p>
+            )}
           </div>
         </div>
 

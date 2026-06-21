@@ -205,6 +205,8 @@
     "projectedContributed": "Setoran Anda",
     "projectedGrowth": "Pertumbuhan",
     "toAge18": "Hingga usia 18",
+    "contributedSoFar": "termasuk {amount} setoran sejauh ini",
+    "growthSoFar": "termasuk {amount} pertumbuhan sejauh ini",
     "emptyTitle": "Belum ada setoran",
     "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini."
   },
