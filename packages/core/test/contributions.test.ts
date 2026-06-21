@@ -200,4 +200,22 @@ describe("contributionStats — shared", () => {
     expect(s.monthlyAverage).toBe("0");
     expect(s.series).toEqual([]);
   });
+
+  it("monthlyAverage uses elapsed months (first tx → now), diluting idle months", () => {
+    // Two contributions in Jan and Feb; now is frozen at April → 4 elapsed months.
+    const txns: CoreTransaction[] = [
+      tx({ type: "deposit", price: "400", executedAt: new Date("2026-01-05") }),
+      tx({ type: "deposit", price: "400", executedAt: new Date("2026-02-05") }),
+    ];
+    const s = contributionStats({
+      txns,
+      displayCurrency: "EUR",
+      boundary: "inside",
+      now: new Date("2026-04-30"),
+    });
+    // monthsElapsed: Jan(1)→Apr(4) = 4; monthlyAverage = 800 / 4 = 200
+    expect(s.monthsElapsed).toBe(4);
+    expect(s.monthsActive).toBe(2);
+    expect(s.monthlyAverage).toBe("200");
+  });
 });
