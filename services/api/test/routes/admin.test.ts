@@ -393,14 +393,13 @@ describe("admin provider config", () => {
     expect(ok.statusCode).toBe(200);
     const body = ok.json() as {
       db: { sizeBytes: number | null; tables: unknown[] };
-      objectStorage: { configured: boolean; note: string };
+      objectStorage: { configured: boolean };
     };
     // Under PGlite (test env) catalog queries are skipped → nulls/empty.
     expect(body.db.sizeBytes).toBeNull();
     expect(body.db.tables).toEqual([]);
-    // Object storage is always reported as "not configured".
+    // Object storage stats are skipped under NODE_ENV=test (same guard as pg catalog queries).
     expect(body.objectStorage.configured).toBe(false);
-    expect(typeof body.objectStorage.note).toBe("string");
   });
 
   // ─── Background jobs panel (#105 + Slice 5) ──────────────────────────────

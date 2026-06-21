@@ -25,6 +25,7 @@ import {
   type AdminStats,
   type AdminJobsResponse,
   type ImportStrategy,
+  type AdminStorageResponse,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
@@ -508,6 +509,20 @@ export async function loadAdminStats(): Promise<
   try {
     const stats = await api.getAdminStats();
     return { status: "ok", stats };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+/** Admin: storage provider config, or "unavailable" (signed out / non-admin / down). */
+export async function loadAdminStorageProviders(): Promise<
+  { status: "ok"; storage: AdminStorageResponse } | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const storage = await api.getAdminStorageProviders();
+    return { status: "ok", storage };
   } catch {
     return { status: "unavailable" };
   }

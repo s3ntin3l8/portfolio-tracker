@@ -29,11 +29,12 @@ describe("AdminMenu", () => {
     const element = await AdminMenu();
     const { container } = render(element as React.ReactElement);
     const links = container.querySelectorAll("a");
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(6);
     const hrefs = Array.from(links).map((l) => l.getAttribute("href"));
     expect(hrefs).toContain("/admin/providers");
     expect(hrefs).toContain("/admin/vision");
     expect(hrefs).toContain("/admin/imports");
+    expect(hrefs).toContain("/admin/storage");
     expect(hrefs).toContain("/admin/database");
     expect(hrefs).toContain("/admin/jobs");
   });

@@ -171,6 +171,31 @@ export const importSettingsUpdateSchema = z.object({
 });
 export type ImportSettingsUpdate = z.infer<typeof importSettingsUpdateSchema>;
 
+// Admin storage provider config (GET/PATCH /admin/storage-providers).
+// Single-active selection: the admin picks one backend at a time.
+export const storageProviderSchema = z.enum(["s3", "folder"]);
+export type StorageProviderType = z.infer<typeof storageProviderSchema>;
+
+// Update body for PATCH /admin/storage-providers (non-secret fields only).
+// Null values clear the DB override and revert to the env default.
+export const storageSettingsUpdateSchema = z.object({
+  activeProvider: storageProviderSchema.optional(),
+  s3Endpoint: z.string().nullable().optional(),
+  s3Region: z.string().min(1).nullable().optional(),
+  s3Bucket: z.string().min(1).nullable().optional(),
+  s3AccessKeyId: z.string().nullable().optional(),
+  s3ForcePathStyle: z.boolean().nullable().optional(),
+  s3SignedUrlTtl: z.number().int().positive().nullable().optional(),
+  folderPath: z.string().nullable().optional(),
+});
+export type StorageSettingsUpdate = z.infer<typeof storageSettingsUpdateSchema>;
+
+// Body for PUT /admin/storage-providers/s3/secret.
+export const storageSecretSchema = z.object({
+  apiKey: z.string().min(1),
+});
+export type StorageSecretInput = z.infer<typeof storageSecretSchema>;
+
 export const corporateActionTypeSchema = z.enum(["split", "bonus", "rights"]);
 export type CorporateActionType = z.infer<typeof corporateActionTypeSchema>;
 

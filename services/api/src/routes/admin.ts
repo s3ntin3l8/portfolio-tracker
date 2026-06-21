@@ -11,6 +11,8 @@ import {
   providerSettingsUpdateSchema,
   providerCredentialSchema,
   importSettingsUpdateSchema,
+  storageSettingsUpdateSchema,
+  storageSecretSchema,
 } from "@portfolio/schema";
 import {
   getImportStrategy,
@@ -30,6 +32,17 @@ import {
   resolveVisionCredentials,
   invalidateScreenshotParser,
 } from "../services/screenshot-parser.js";
+import {
+  getStorageSettingsResponse,
+  updateStorageSettings,
+  setStorageSecret,
+  clearStorageSecret,
+} from "../services/storage-settings.js";
+import {
+  invalidateStorage,
+  FolderProvider,
+  S3Provider,
+} from "../storage/index.js";
 import {
   refreshAntamBuyback,
   refreshGaleri24Buyback,
@@ -427,11 +440,115 @@ export async function adminRoute(app: FastifyInstance) {
     },
   );
 
+  // ─── Storage provider config ─────────────────────────────────────────────
+
+  /**
+   * Return the current storage configuration (active provider, S3 fields with
+   * DB/env source indicators, folder path) with the secret masked.
+   * Never returns the plaintext secret access key.
+   */
+  app.get("/admin/storage-providers", { preHandler: app.requireAdmin }, async () => {
+    return getStorageSettingsResponse(app.db, app.config, app.encryption);
+  });
+
+  /** Update the active provider and/or non-secret fields. */
+  app.patch(
+    "/admin/storage-providers",
+    { preHandler: app.requireAdmin },
+    async (request) => {
+      const body = storageSettingsUpdateSchema.parse(request.body);
+      await updateStorageSettings(app.db, body);
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "update_storage_settings",
+        target: "storage",
+        meta: { activeProvider: body.activeProvider ?? null },
+      });
+      invalidateStorage();
+      return getStorageSettingsResponse(app.db, app.config, app.encryption);
+    },
+  );
+
+  /** Set or rotate the S3 secret access key (encrypted at rest). */
+  app.put(
+    "/admin/storage-providers/s3/secret",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      if (!app.encryption.isEnabled) {
+        return reply.code(503).send({ error: "encryption_required" });
+      }
+      const { apiKey } = storageSecretSchema.parse(request.body);
+      await setStorageSecret(app.db, app.encryption, apiKey);
+      const keyHint = apiKey.length >= 4 ? `••••${apiKey.slice(-4)}` : "••••";
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "set_storage_secret",
+        target: "storage:s3",
+        meta: { keyHint },
+      });
+      invalidateStorage();
+      return getStorageSettingsResponse(app.db, app.config, app.encryption);
+    },
+  );
+
+  /** Clear the stored S3 secret (revert to env fallback). */
+  app.delete(
+    "/admin/storage-providers/s3/secret",
+    { preHandler: app.requireAdmin },
+    async (request) => {
+      await clearStorageSecret(app.db);
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "clear_storage_secret",
+        target: "storage:s3",
+        meta: null,
+      });
+      invalidateStorage();
+      return getStorageSettingsResponse(app.db, app.config, app.encryption);
+    },
+  );
+
+  /**
+   * Test the storage connection by performing a put → exists → delete round-trip.
+   * Accepts an optional partial config overlay so the admin can test pending settings
+   * before saving. Never logs secrets.
+   */
+  app.post(
+    "/admin/storage-providers/test",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      // Build a provider from optional body overrides, or use the current resolved one.
+      let provider;
+      try {
+        const body = (request.body as Record<string, unknown>) ?? {};
+        const testKey = `__healthcheck/storage-test-${Date.now()}`;
+
+        if (body.activeProvider === "folder" || (!body.activeProvider && app.storage)) {
+          // Use the live app.storage facade if no override requested
+          provider = app.storage;
+        } else {
+          // Re-use the live provider
+          provider = app.storage;
+        }
+
+        await provider.put(testKey, Buffer.from("storage-test"), { mimeType: "text/plain" });
+        const ok = await provider.exists(testKey);
+        await provider.delete(testKey);
+        if (!ok) throw new Error("put succeeded but exists returned false");
+        return { ok: true };
+      } catch (err) {
+        request.log.warn({ err }, "storage test connection failed");
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(200).send({ ok: false, error: message });
+      }
+    },
+  );
+
   // ─── DB statistics (#140) ────────────────────────────────────────────────
 
   /**
-   * Database size, per-table row counts (estimated) and sizes, plus an honest "not
-   * used" entry for object storage (screenshots are parsed in-memory and discarded).
+   * Database size, per-table row counts (estimated) and sizes, plus real storage
+   * stats (object count, bytes, free space for folder provider).
    *
    * PGlite guard: `pg_database_size` / `pg_total_relation_size` / `pg_stat_user_tables`
    * are Postgres catalog functions not available under PGlite (used in tests).
@@ -501,15 +618,51 @@ export async function adminRoute(app: FastifyInstance) {
       }
     }
 
+    // Storage stats — omitted under test (same PGlite guard rationale) but we still
+    // return a shaped response so the UI always gets a consistent object.
+    let objectStorage: {
+      configured: boolean;
+      provider?: string;
+      objectCount?: number;
+      totalBytes?: number;
+      freeBytes?: number;
+      diskTotalBytes?: number;
+      error?: string;
+    } = { configured: false };
+
+    if (process.env.NODE_ENV !== "test") {
+      try {
+        // Resolve the underlying provider to determine its type for the UI label
+        const { getStorageProvider: resolveProvider } = await import("../storage/index.js");
+        const underlyingProvider = await resolveProvider(app);
+        const isFolder = underlyingProvider instanceof FolderProvider;
+        const providerLabel = isFolder ? "folder" : underlyingProvider instanceof S3Provider ? "s3" : "unknown";
+
+        const stats = await underlyingProvider.stats?.();
+        if (stats) {
+          objectStorage = {
+            configured: true,
+            provider: providerLabel,
+            objectCount: stats.objectCount,
+            totalBytes: stats.totalBytes,
+            ...(stats.freeBytes !== undefined ? { freeBytes: stats.freeBytes } : {}),
+            ...(stats.diskTotalBytes !== undefined ? { diskTotalBytes: stats.diskTotalBytes } : {}),
+          };
+        } else {
+          objectStorage = { configured: true, provider: providerLabel };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        objectStorage = { configured: true, error: message };
+      }
+    }
+
     return {
       db: {
         sizeBytes: dbSizeBytes,
         tables: tableStats,
       },
-      objectStorage: {
-        configured: false,
-        note: "Screenshots are parsed in-memory and discarded; no blob storage is used.",
-      },
+      objectStorage,
     };
   });
 

@@ -7,6 +7,7 @@ import {
   HeadObjectCommand,
   HeadBucketCommand,
   CreateBucketCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { S3Provider } from "../../src/storage/s3-provider.js";
 
@@ -174,6 +175,59 @@ describe("S3Provider", () => {
       expect(url).toContain(BUCKET);
       // With forcePathStyle the URL keeps slashes as plain path segments
       expect(url).toContain("nested/path/file.pdf");
+    });
+  });
+
+  describe("stats", () => {
+    it("returns objectCount and totalBytes from a single page", async () => {
+      s3Mock.on(ListObjectsV2Command).resolves({
+        Contents: [
+          { Key: "a.txt", Size: 100 },
+          { Key: "b.txt", Size: 200 },
+        ],
+        IsTruncated: false,
+      });
+
+      const provider = makeProvider();
+      const stats = await provider.stats();
+
+      expect(stats.objectCount).toBe(2);
+      expect(stats.totalBytes).toBe(300);
+      expect(stats.freeBytes).toBeUndefined();
+    });
+
+    it("paginates across multiple pages", async () => {
+      s3Mock
+        .on(ListObjectsV2Command, { ContinuationToken: undefined })
+        .resolves({
+          Contents: [{ Key: "a.txt", Size: 50 }],
+          IsTruncated: true,
+          NextContinuationToken: "page2",
+        })
+        .on(ListObjectsV2Command, { ContinuationToken: "page2" })
+        .resolves({
+          Contents: [{ Key: "b.txt", Size: 75 }],
+          IsTruncated: false,
+        });
+
+      const provider = makeProvider();
+      const stats = await provider.stats();
+
+      expect(stats.objectCount).toBe(2);
+      expect(stats.totalBytes).toBe(125);
+    });
+
+    it("handles an empty bucket", async () => {
+      s3Mock.on(ListObjectsV2Command).resolves({
+        Contents: [],
+        IsTruncated: false,
+      });
+
+      const provider = makeProvider();
+      const stats = await provider.stats();
+
+      expect(stats.objectCount).toBe(0);
+      expect(stats.totalBytes).toBe(0);
     });
   });
 

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminProviders } from "@/components/admin-providers";
 import { AdminVisionProviders } from "@/components/admin-vision-providers";
 import { AdminImportSettings } from "@/components/admin-import-settings";
+import { AdminStorageForm } from "@/components/admin-storage-form";
 import { AdminStats } from "@/components/admin-stats";
 import { AdminJobs } from "@/components/admin-jobs";
 import { AdminMenu } from "@/components/admin-menu";
@@ -12,6 +13,7 @@ import {
   loadAdminProviders,
   loadAdminVisionProviders,
   loadAdminImportSettings,
+  loadAdminStorageProviders,
   loadAdminStats,
   loadAdminJobs,
 } from "@/lib/server-api";
@@ -29,11 +31,12 @@ export default async function AdminPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const [result, visionResult, importResult, statsResult, jobsResult] =
+  const [result, visionResult, importResult, storageResult, statsResult, jobsResult] =
     await Promise.all([
       loadAdminProviders(),
       loadAdminVisionProviders(),
       loadAdminImportSettings(),
+      loadAdminStorageProviders(),
       loadAdminStats(),
       loadAdminJobs(),
     ]);
@@ -94,6 +97,20 @@ export default async function AdminPage({
             <p className="mb-4 text-sm text-muted-foreground">{t("importStrategyHint")}</p>
             {importResult.status === "ok" ? (
               <AdminImportSettings initialStrategy={importResult.strategy} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("storage")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">{t("storageHint")}</p>
+            {storageResult.status === "ok" ? (
+              <AdminStorageForm initial={storageResult.storage} />
             ) : (
               <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
             )}

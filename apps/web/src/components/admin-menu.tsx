@@ -6,6 +6,7 @@ const SECTIONS = [
   { key: "providers", titleKey: "providers", hintKey: "providersHint", href: "/admin/providers" },
   { key: "vision", titleKey: "visionProviders", hintKey: "visionProvidersHint", href: "/admin/vision" },
   { key: "imports", titleKey: "importStrategy", hintKey: "importStrategyHint", href: "/admin/imports" },
+  { key: "storage", titleKey: "storage", hintKey: "storageHint", href: "/admin/storage" },
   { key: "database", titleKey: "stats", hintKey: "statsHint", href: "/admin/database" },
   { key: "jobs", titleKey: "jobs", hintKey: "jobsHint", href: "/admin/jobs" },
 ] as const;

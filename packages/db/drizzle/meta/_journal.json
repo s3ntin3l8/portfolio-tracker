@@ -218,6 +218,13 @@
       "when": 1781990100000,
       "tag": "0030_backfill_bonus_cash",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1782003820301,
+      "tag": "0031_yummy_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

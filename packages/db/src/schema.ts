@@ -320,7 +320,7 @@ export const visionProviderSettings = pgTable("vision_provider_settings", {
 export const adminAuditLog = pgTable("admin_audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   actorSub: text("actor_sub").notNull(),
-  // "set_credential" | "clear_credential" | "update_providers" | "update_vision_providers" | "update_import_settings"
+  // "set_credential" | "clear_credential" | "update_providers" | "update_vision_providers" | "update_import_settings" | "update_storage_settings" | "set_storage_secret" | "clear_storage_secret"
   action: text("action").notNull(),
   target: text("target").notNull(), // provider id, e.g. "twelvedata" or "vision:gemini"
   meta: jsonb("meta"),              // non-secret context, e.g. { keyHint: "••••abc1" }
@@ -338,6 +338,26 @@ export const adminAuditLog = pgTable("admin_audit_log", {
 export const importSettings = pgTable("import_settings", {
   id: integer("id").primaryKey().default(1), // enforced singleton (always id=1)
   strategy: text("strategy").notNull().default("parser_first"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Admin-editable storage backend configuration. Singleton (always id=1) — the active
+// provider is "s3" (any S3-compatible endpoint) or "folder" (local disk). Each provider's
+// fields are DB overrides; a null value falls back to the matching STORAGE_* env var.
+// Only the S3 secret access key is stored encrypted (EncryptionService, `enc:` prefix).
+export const storageSettings = pgTable("storage_settings", {
+  id: integer("id").primaryKey().default(1),              // enforced singleton
+  activeProvider: text("active_provider").notNull().default("s3"), // "s3" | "folder"
+  // S3 / S3-compatible (MinIO, Supabase Storage, R2, AWS). Null ⇒ env fallback.
+  s3Endpoint: text("s3_endpoint"),
+  s3Region: text("s3_region"),
+  s3Bucket: text("s3_bucket"),
+  s3AccessKeyId: text("s3_access_key_id"),
+  s3ForcePathStyle: boolean("s3_force_path_style"),
+  s3SignedUrlTtl: integer("s3_signed_url_ttl"),
+  s3SecretAccessKeyEnc: text("s3_secret_access_key_enc"), // encrypted at rest
+  // Folder (local-disk) provider.
+  folderPath: text("folder_path"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

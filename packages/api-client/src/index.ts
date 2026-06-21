@@ -12,10 +12,13 @@ import type {
   ProviderCredentialInput,
   ImportStrategy,
   ImportSettingsUpdate,
+  StorageSettingsUpdate,
+  StorageSecretInput,
 } from "@portfolio/schema";
 
 export type { ImportIssue, ParsedGoldContract, ProviderCredentialInput } from "@portfolio/schema";
 export type { ImportStrategy, ImportSettingsUpdate } from "@portfolio/schema";
+export type { StorageSettingsUpdate, StorageSecretInput } from "@portfolio/schema";
 
 export interface AdminImportSettingsResponse {
   strategy: ImportStrategy;
@@ -156,11 +159,54 @@ export interface AdminStats {
     /** Per-table breakdown (key user-data tables only). Empty under PGlite. */
     tables: AdminStatsTable[];
   };
-  objectStorage: {
-    /** Always false — screenshots are parsed in-memory and discarded. */
-    configured: false;
-    note: string;
+  objectStorage:
+    | { configured: false }
+    | {
+        configured: true;
+        provider?: string;
+        objectCount?: number;
+        totalBytes?: number;
+        /** Free bytes on the underlying filesystem (folder provider only). */
+        freeBytes?: number;
+        /** Total filesystem capacity (folder provider only). */
+        diskTotalBytes?: number;
+        /** Error message when the stats fetch failed. */
+        error?: string;
+      };
+}
+
+/** Storage provider admin config (GET /admin/storage-providers). */
+export interface AdminStorageS3Config {
+  endpoint: string;
+  endpointSource: "db" | "env";
+  region: string;
+  regionSource: "db" | "env";
+  bucket: string;
+  bucketSource: "db" | "env";
+  accessKeyId: string;
+  accessKeyIdSource: "db" | "env";
+  forcePathStyle: boolean;
+  forcePathStyleSource: "db" | "env";
+  signedUrlTtl: number;
+  signedUrlTtlSource: "db" | "env";
+  hasSecret: boolean;
+  secretHint: string;
+  secretSource: "db" | "env";
+}
+
+export interface AdminStorageResponse {
+  activeProvider: "s3" | "folder";
+  s3: AdminStorageS3Config;
+  folder: {
+    path: string;
+    pathSource: "db" | "env";
   };
+  encryptionEnabled: boolean;
+}
+
+export interface AdminStorageTestResult {
+  ok: boolean;
+  error?: string;
 }
 
 /** "self" | "child" | "other". A portfolio whose holder is "child" is a Kinderdepot. */
@@ -909,6 +955,18 @@ export function createApiClient(config: ApiClientConfig) {
       request<AdminImportSettingsResponse>("GET", "/admin/import-settings"),
     updateAdminImportSettings: (input: ImportSettingsUpdate) =>
       request<AdminImportSettingsResponse>("PATCH", "/admin/import-settings", input),
+
+    // Admin: storage provider config (single-active S3 or folder, DB overrides env).
+    getAdminStorageProviders: () =>
+      request<AdminStorageResponse>("GET", "/admin/storage-providers"),
+    updateAdminStorageProviders: (input: StorageSettingsUpdate) =>
+      request<AdminStorageResponse>("PATCH", "/admin/storage-providers", input),
+    setAdminStorageS3Secret: (body: StorageSecretInput) =>
+      request<AdminStorageResponse>("PUT", "/admin/storage-providers/s3/secret", body),
+    clearAdminStorageS3Secret: () =>
+      request<AdminStorageResponse>("DELETE", "/admin/storage-providers/s3/secret"),
+    testAdminStorageProvider: () =>
+      request<AdminStorageTestResult>("POST", "/admin/storage-providers/test"),
 
     // Admin: server statistics (#140).
     getAdminStats: () => request<AdminStats>("GET", "/admin/stats"),

@@ -114,6 +114,18 @@ const schema = {
       type: "number",
       default: 3600,
     },
+    // Base directory for the folder (local-disk) storage provider.
+    // Resolved relative to the API working directory; use an absolute path for production.
+    STORAGE_FOLDER_PATH: {
+      type: "string",
+      default: "./.storage",
+    },
+    // External origin used to build folder-provider signed URLs (e.g. https://api.example.com).
+    // Empty ⇒ root-relative path (/storage/…) — correct for same-origin reverse-proxy topology.
+    STORAGE_PUBLIC_URL: {
+      type: "string",
+      default: "",
+    },
   },
 };
 
@@ -151,6 +163,8 @@ declare module "fastify" {
       STORAGE_SECRET_KEY: string;
       STORAGE_FORCE_PATH_STYLE: boolean;
       STORAGE_SIGNED_URL_TTL: number;
+      STORAGE_FOLDER_PATH: string;
+      STORAGE_PUBLIC_URL: string;
     };
   }
 }
