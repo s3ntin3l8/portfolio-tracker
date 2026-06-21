@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Eye, EyeOff, Loader2, Trash2, Undo2 } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Trash2, Undo2 } from "lucide-react";
 import type { ImportRecord } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,6 +96,15 @@ export function ImportHistory({
       router.refresh();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function downloadDocument(id: string) {
+    try {
+      const { url } = await api.getImportDocumentUrl(id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      // Silently ignore — document may have been deleted or storage unavailable.
     }
   }
 
@@ -270,14 +279,27 @@ export function ImportHistory({
                             </Button>
                           </>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmId(imp.id)}
-                          >
-                            <Undo2 className="size-3.5" />
-                            {t("undo")}
-                          </Button>
+                          <>
+                            {imp.document && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                title={imp.document.originalFilename ?? t("downloadReceipt")}
+                                onClick={() => downloadDocument(imp.id)}
+                              >
+                                <Download className="size-3.5" />
+                                {t("downloadReceipt")}
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmId(imp.id)}
+                            >
+                              <Undo2 className="size-3.5" />
+                              {t("undo")}
+                            </Button>
+                          </>
                         ))}
                     </span>
                   </TableCell>

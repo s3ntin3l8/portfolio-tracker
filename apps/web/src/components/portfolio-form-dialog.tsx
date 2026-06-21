@@ -35,7 +35,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
  * (derived from the holder) and only used to gate the TR connection section. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "includeInAggregate" | "cashCounted"
+  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "includeInAggregate" | "cashCounted" | "documentRetention"
 >;
 
 // Sentinel select value for "create a new holder inline".
@@ -85,6 +85,7 @@ export function PortfolioFormDialog({
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
   const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
   const [cashCounted, setCashCounted] = useState(portfolio?.cashCounted ?? false);
+  const [documentRetention, setDocumentRetention] = useState(portfolio?.documentRetention ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -179,6 +180,7 @@ export function PortfolioFormDialog({
       setAccountNumber(portfolio?.accountNumber ?? "");
       setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
       setCashCounted(portfolio?.cashCounted ?? false);
+      setDocumentRetention(portfolio?.documentRetention ?? false);
       setError(false);
       setConfirmDelete(false);
       setCreatedPortfolio(null);
@@ -223,6 +225,7 @@ export function PortfolioFormDialog({
         accountNumber: accountNumber.trim() || null,
         includeInAggregate,
         cashCounted,
+        documentRetention,
       };
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
@@ -441,6 +444,20 @@ export function PortfolioFormDialog({
             <div>
               <Label htmlFor="portfolio-cash-counted">{t("cashCounted")}</Label>
               <p className="text-xs text-muted-foreground">{t("cashCountedHint")}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              id="portfolio-document-retention"
+              type="checkbox"
+              checked={documentRetention}
+              onChange={(e) => setDocumentRetention(e.target.checked)}
+              className="size-4 rounded border-input accent-primary"
+            />
+            <div>
+              <Label htmlFor="portfolio-document-retention">{t("documentRetention")}</Label>
+              <p className="text-xs text-muted-foreground">{t("documentRetentionHint")}</p>
             </div>
           </div>
 

@@ -10,6 +10,7 @@ import {
   Pencil,
   Loader2,
   Trash2,
+  Download,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -58,6 +59,8 @@ export interface TxRow {
   executedAt: string;
   source: string;
   instrument: { symbol?: string | null; name?: string | null } | null;
+  /** True when the parent import has a retained source document (#231). */
+  hasDocument?: boolean;
 }
 
 /** Compute the signed cash-flow (actual cash movement) for a TxRow via core. */
@@ -350,6 +353,23 @@ export function TransactionsTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {tx.hasDocument && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={tm("downloadReceipt")}
+                          onClick={async () => {
+                            try {
+                              const { url } = await api.getTransactionDocumentUrl(tx.portfolioId, tx.id);
+                              window.open(url, "_blank", "noopener,noreferrer");
+                            } catch {
+                              // Signed URL fetch failed — silently ignore (e.g. doc deleted).
+                            }
+                          }}
+                        >
+                          <Download className="size-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"

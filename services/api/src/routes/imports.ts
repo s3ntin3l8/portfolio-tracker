@@ -38,6 +38,13 @@ import {
 import { getMarketData } from "../services/market-data.js";
 import { getImportStrategy } from "../services/import-settings.js";
 import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS, isIdxEtfSymbol } from "@portfolio/market-data";
+import {
+  storeReceipt,
+  finalizeReceipts,
+  deleteReceiptsForImport,
+  getDocumentForImport,
+  getDocumentSummaryForImport,
+} from "../storage/receipts.js";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -428,6 +435,17 @@ export async function importsRoute(app: FastifyInstance) {
         })
         .returning();
 
+      // Stage the raw CSV for potential post-confirm retention (#231).
+      // Best-effort: a storage failure never breaks the parse (see receipts.ts).
+      await storeReceipt(app, {
+        userId: id,
+        importId: imp.id,
+        buf: Buffer.from(content, "utf8"),
+        mimeType: "text/csv",
+        originalFilename: null,
+        source: PARSER_TAG[resolved] ?? "csv",
+      });
+
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length, matchedPortfolioId },
         "csv parse complete",
@@ -644,6 +662,17 @@ export async function importsRoute(app: FastifyInstance) {
         })
         .returning();
 
+      // Stage the raw file for potential post-confirm retention (#231).
+      // Best-effort: a storage failure never breaks the parse (see receipts.ts).
+      await storeReceipt(app, {
+        userId: id,
+        importId: imp.id,
+        buf,
+        mimeType,
+        originalFilename: part.filename ?? null,
+        source: app.screenshotParser.name,
+      });
+
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence, matchedPortfolioId },
         "screenshot parse stored",
@@ -674,7 +703,8 @@ export async function importsRoute(app: FastifyInstance) {
     return imp ?? null;
   }
 
-  // List the current user's imports (newest first) — id, status, parser, draft count.
+  // List the current user's imports (newest first) — id, status, parser, draft count,
+  // and document summary if one has been retained (#231).
   app.get("/imports", { preHandler: app.authenticate }, async (request) => {
     const { id } = requireUser(request);
     const rows = await app.db
@@ -682,18 +712,24 @@ export async function importsRoute(app: FastifyInstance) {
       .from(screenshotImports)
       .where(eq(screenshotImports.userId, id))
       .orderBy(desc(screenshotImports.createdAt));
-    return rows.map((r) => {
-      const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
-      return {
-        id: r.id,
-        portfolioId: r.portfolioId,
-        parser: r.parser,
-        status: r.status,
-        confidence: r.confidence,
-        count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
-        createdAt: r.createdAt,
-      };
-    });
+    return Promise.all(
+      rows.map(async (r) => {
+        const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
+        const document = r.status === "confirmed"
+          ? await getDocumentSummaryForImport(app, r.id)
+          : null;
+        return {
+          id: r.id,
+          portfolioId: r.portfolioId,
+          parser: r.parser,
+          status: r.status,
+          confidence: r.confidence,
+          count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
+          createdAt: r.createdAt,
+          document,
+        };
+      }),
+    );
   });
 
   // Discard a draft import (draft → discarded). Confirmed imports are undone via DELETE.
@@ -733,6 +769,8 @@ export async function importsRoute(app: FastifyInstance) {
           resolvedEventsRecorded = ids.length;
         }
       }
+      // Clean up any staged/retained documents before marking discarded (#231).
+      await deleteReceiptsForImport(app, imp.id);
       await app.db
         .update(screenshotImports)
         .set({ status: "discarded" })
@@ -760,6 +798,8 @@ export async function importsRoute(app: FastifyInstance) {
         .returning();
       // Remove any loans the import created (transactions referencing them are gone).
       await app.db.delete(loans).where(eq(loans.importId, imp.id));
+      // Clean up any staged/retained documents for this import (#231).
+      await deleteReceiptsForImport(app, imp.id);
       await app.db
         .update(screenshotImports)
         .set({ status: "discarded" })
@@ -1317,6 +1357,15 @@ export async function importsRoute(app: FastifyInstance) {
         return written;
       });
 
+      // Finalize receipt storage: keep if the portfolio has documentRetention=true,
+      // else delete the staged bytes (privacy-by-default). Best-effort (#231).
+      const portfolio = await ownedPortfolio(id, targetPortfolioId);
+      await finalizeReceipts(app, {
+        importId: imp.id,
+        portfolioId: targetPortfolioId,
+        retain: portfolio?.documentRetention ?? false,
+      });
+
       request.log.info(
         {
           importId: imp.id,
@@ -1329,6 +1378,31 @@ export async function importsRoute(app: FastifyInstance) {
       );
       reply.code(201);
       return { confirmed: created.length, transactions: created, likelyDuplicates };
+    },
+  );
+
+  // Return a signed URL for the retained source document of an import (#231).
+  // IDOR guard: only the document owner can obtain a URL.
+  app.get<{ Params: { importId: string } }>(
+    "/imports/:importId/document-url",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+
+      const doc = await getDocumentForImport(app, imp.id);
+      if (!doc) return reply.code(404).send({ error: "document_not_found" });
+
+      // IDOR guard: verify document ownership explicitly (belt-and-suspenders).
+      if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
+
+      const url = await app.storage.getSignedUrl(doc.storageKey);
+      return {
+        url,
+        filename: doc.originalFilename,
+        mimeType: doc.mimeType,
+      };
     },
   );
 }

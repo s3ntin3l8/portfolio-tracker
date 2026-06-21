@@ -67,6 +67,7 @@ const baseInput = {
   accountNumber: null,
   includeInAggregate: true,
   cashCounted: false,
+  documentRetention: false,
 };
 
 function renderCreate() {
@@ -88,6 +89,7 @@ function renderEdit(
     accountNumber: null,
     includeInAggregate: true,
     cashCounted: false,
+    documentRetention: false,
   },
 ) {
   return render(
@@ -277,6 +279,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -300,6 +303,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -320,6 +324,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -342,6 +347,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -364,6 +370,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 
@@ -382,6 +389,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     // Dialog is closed on mount — the fetch must be gated on `open`.
     expect(getTrConnection).not.toHaveBeenCalled();
@@ -409,6 +417,7 @@ describe("PortfolioFormDialog", () => {
       accountNumber: null,
       includeInAggregate: true,
       cashCounted: false,
+    documentRetention: false,
     });
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
 

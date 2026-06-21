@@ -152,6 +152,10 @@ export const portfolios = pgTable(
     // contribution = net invested capital, cash is excluded from this portfolio's
     // net worth. Income is never a contribution in either case.
     cashCounted: boolean("cash_counted").notNull().default(false),
+    // Opt-in per-portfolio source-document retention. When false (default), uploaded
+    // PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
+    // When true, staged bytes are retained after import confirmation — see issue #231.
+    documentRetention: boolean("document_retention").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -360,6 +364,52 @@ export const storageSettings = pgTable("storage_settings", {
   folderPath: text("folder_path"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Stored source documents for imports (PDFs, screenshots, CSVs). Created when an import
+// is uploaded (status="staged") and finalised at confirm-time: retained if the portfolio
+// has documentRetention=true, deleted otherwise. Keyed by
+// `receipts/{userId}/{importId}/{filename}` in the configured StorageProvider.
+//
+// Dual linkage: upload-family docs (screenshot, DKB, CSV) link to importId (one file →
+// one import → many transactions); future TR postbox docs will link to transactionId.
+// Per-transaction download resolves: docs WHERE transactionId=:txId OR importId=:tx.importId.
+//
+// NOTE: FK onDelete:cascade removes the *row* but NOT the storage object — app code must
+// call storage.delete(storageKey) before/around the owning row delete (see receipts.ts).
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    portfolioId: uuid("portfolio_id").references(() => portfolios.id, {
+      onDelete: "cascade",
+    }),
+    importId: uuid("import_id").references(() => screenshotImports.id, {
+      onDelete: "cascade",
+    }),
+    // TR future: per-transaction postbox document link (null during phase-1).
+    transactionId: uuid("transaction_id").references(() => transactions.id, {
+      onDelete: "cascade",
+    }),
+    // Relative key within the StorageProvider bucket, e.g. receipts/{userId}/{importId}/name.pdf
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    originalFilename: text("original_filename"),
+    sizeBytes: integer("size_bytes"),
+    // "staged" = uploaded, not yet confirmed; "retained" = confirm-time keep decision made.
+    status: text("status").notNull().default("staged"),
+    // Parser/source label (claude | ollama | dkb | csv | tr-csv | pytr | …).
+    source: text("source"),
+    storedAt: timestamp("stored_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("documents_import_id_idx").on(t.importId),
+    index("documents_transaction_id_idx").on(t.transactionId),
+    index("documents_user_id_idx").on(t.userId),
+  ],
+);
 
 // The source of truth. Holdings, P&L, cash balance, XIRR and net worth are derived
 // from these rows (in @portfolio/core), never stored.
@@ -638,4 +688,20 @@ export const loansRelations = relations(loans, ({ one, many }) => ({
     references: [instruments.id],
   }),
   transactions: many(transactions),
+}));
+
+export const documentsRelations = relations(documents, ({ one }) => ({
+  user: one(users, { fields: [documents.userId], references: [users.id] }),
+  portfolio: one(portfolios, {
+    fields: [documents.portfolioId],
+    references: [portfolios.id],
+  }),
+  import: one(screenshotImports, {
+    fields: [documents.importId],
+    references: [screenshotImports.id],
+  }),
+  transaction: one(transactions, {
+    fields: [documents.transactionId],
+    references: [transactions.id],
+  }),
 }));

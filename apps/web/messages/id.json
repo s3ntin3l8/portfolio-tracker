@@ -263,6 +263,8 @@
     "includeInAggregateHint": "Hilangkan centang untuk mengecualikan portofolio ini dari perhitungan total kekayaan bersih.",
     "cashCounted": "Kas adalah bagian dari portofolio ini",
     "cashCountedHint": "Centang untuk rekening tabungan/deposito (Tagesgeld, Festgeld, depot tabungan anak): kas dihitung sebagai uang yang ditabung dan masuk ke kekayaan bersih. Biarkan kosong untuk rekening sekuritas atau giro/campuran: hanya modal yang diinvestasikan yang dihitung dan kas menganggur dikecualikan — default yang tepat untuk akun yang kasnya hanya numpang lewat.",
+    "documentRetention": "Simpan dokumen sumber",
+    "documentRetentionHint": "Saat diaktifkan, PDF dan tangkapan layar yang diunggah akan disimpan setelah konfirmasi sehingga dapat diunduh nanti. Nonaktif secara default — dokumen dihapus setelah parsing untuk melindungi privasi Anda.",
     "trSectionTitle": "Koneksi Trade Republic",
     "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
     "trChildUnsupported": "Trade Republic belum bisa menyinkronkan akun anak (Kinderdepot) — impor lewat CSV atau PDF saja.",
@@ -445,7 +447,8 @@
     "clearAll": "Bersihkan semua yang dibuang",
     "showCompleted": "Tampilkan yang selesai ({count})",
     "hideCompleted": "Sembunyikan yang selesai",
-    "onlyCompleted": "{count, plural, other {# impor selesai disembunyikan}}"
+    "onlyCompleted": "{count, plural, other {# impor selesai disembunyikan}}",
+    "downloadReceipt": "Unduh tanda terima"
   },
   "Dashboard": {
     "title": "Dasbor",
@@ -639,6 +642,7 @@
     "back": "Kembali",
     "actions": "Tindakan",
     "edit": "Ubah transaksi",
+    "downloadReceipt": "Unduh tanda terima",
     "delete": {
       "label": "Hapus transaksi",
       "confirm": "Hapus",

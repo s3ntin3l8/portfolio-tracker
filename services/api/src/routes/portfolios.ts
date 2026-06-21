@@ -4,6 +4,7 @@ import { accountHolders, portfolios } from "@portfolio/db";
 import { portfolioInputSchema, portfolioPatchSchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { flattenJoinRow, flattenPortfolio } from "../lib/portfolio.js";
+import { deleteReceiptsForPortfolio } from "../storage/receipts.js";
 
 export async function portfoliosRoute(app: FastifyInstance) {
   // Confirm an account holder (if one is given) exists and belongs to the user, so a
@@ -47,6 +48,7 @@ export async function portfoliosRoute(app: FastifyInstance) {
         accountNumber: input.accountNumber ?? null,
         includeInAggregate: input.includeInAggregate,
         cashCounted: input.cashCounted,
+        documentRetention: input.documentRetention,
       })
       .returning();
     reply.code(201);
@@ -84,6 +86,9 @@ export async function portfoliosRoute(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = requireUser(request);
       const { portfolioId } = request.params;
+      // Pre-query and delete storage objects before the portfolio row is removed,
+      // since DB cascade removes document rows but not the storage objects (#231).
+      await deleteReceiptsForPortfolio(app, portfolioId);
       const [deleted] = await app.db
         .delete(portfolios)
         .where(and(eq(portfolios.id, portfolioId), eq(portfolios.userId, id)))

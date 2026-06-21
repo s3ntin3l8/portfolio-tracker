@@ -11,6 +11,11 @@ import {
   transactions,
   users,
 } from "@portfolio/db";
+import {
+  deleteReceiptsForTransactions,
+  getDocumentForTransaction,
+  importIdsWithDocuments,
+} from "../storage/receipts.js";
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
@@ -557,9 +562,15 @@ export async function transactionsRoute(app: FastifyInstance) {
         .from(transactions)
         .where(eq(transactions.portfolioId, request.params.portfolioId));
       const meta = await instrumentMeta(rows.map((r) => r.instrumentId));
+      // Batch-check which importIds have a retained document, to embed hasDocument (#231).
+      const allImportIds = rows
+        .map((r) => r.importId)
+        .filter((x): x is string => x !== null);
+      const importIdsWithDocs = await importIdsWithDocuments(app, allImportIds);
       return rows.map((r) => ({
         ...r,
         instrument: r.instrumentId ? (meta.get(r.instrumentId) ?? null) : null,
+        hasDocument: r.importId ? importIdsWithDocs.has(r.importId) : false,
       }));
     },
   );
@@ -620,6 +631,12 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!deleted) {
         return reply.code(404).send({ error: "transaction_not_found" });
       }
+      // Clean up any linked documents (#231). Best-effort — never blocks the response.
+      await deleteReceiptsForTransactions(
+        app,
+        [deleted.id],
+        deleted.importId ? [deleted.importId] : [],
+      );
       await enqueueRecompute(portfolioId, deleted.executedAt.toISOString().slice(0, 10));
       return reply.code(204).send();
     },
@@ -640,7 +657,15 @@ export async function transactionsRoute(app: FastifyInstance) {
       const deleted = await app.db
         .delete(transactions)
         .where(and(eq(transactions.portfolioId, portfolioId), inArray(transactions.id, ids)))
-        .returning({ id: transactions.id });
+        .returning({ id: transactions.id, importId: transactions.importId });
+      // Clean up any linked documents (#231). Best-effort.
+      if (deleted.length > 0) {
+        await deleteReceiptsForTransactions(
+          app,
+          deleted.map((d) => d.id),
+          deleted.map((d) => d.importId).filter((x): x is string => x !== null),
+        );
+      }
       return { deleted: deleted.length };
     },
   );
@@ -1144,6 +1169,42 @@ export async function transactionsRoute(app: FastifyInstance) {
         index: indexById.get(p.date)?.index ?? "100",
         pct: indexById.get(p.date)?.pct ?? "0",
       }));
+    },
+  );
+
+  // Return a signed URL for the retained source document of a transaction (#231).
+  // Resolves first by transactionId (TR future), then by the transaction's importId
+  // (DKB, screenshot, CSV). IDOR guard: only the document owner can obtain a URL.
+  app.get<{ Params: PortfolioParams & { txId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId/document-url",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Fetch the transaction to get its importId.
+      const [tx] = await app.db
+        .select({ id: transactions.id, importId: transactions.importId })
+        .from(transactions)
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
+        .limit(1);
+      if (!tx) return reply.code(404).send({ error: "transaction_not_found" });
+
+      const doc = await getDocumentForTransaction(app, tx.id, tx.importId);
+      if (!doc) return reply.code(404).send({ error: "document_not_found" });
+
+      // IDOR guard: verify document ownership explicitly.
+      if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
+
+      const url = await app.storage.getSignedUrl(doc.storageKey);
+      return {
+        url,
+        filename: doc.originalFilename,
+        mimeType: doc.mimeType,
+      };
     },
   );
 }

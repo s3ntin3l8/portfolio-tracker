@@ -212,7 +212,7 @@ export async function trRoute(app: FastifyInstance) {
         return reply.code(409).send({ error: "not_connected" });
       }
       try {
-        const result = await syncTrConnection(app.db, app.encryption, app.pytr, conn, request.log);
+        const result = await syncTrConnection(app.db, app.encryption, app.pytr, conn, request.log, app.storage);
         request.log.info(
           { userId: id, status: result.status, importId: result.importId, drafts: result.drafts, errors: result.errors, cancelled: result.cancelled },
           "tr manual sync done",
