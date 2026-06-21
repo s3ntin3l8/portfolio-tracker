@@ -23,6 +23,7 @@ function makeInertStorage(): StorageProvider & { calls: string[] } {
     delete: async (key) => { calls.push(`delete:${key}`); },
     exists: async () => true,
     get: async () => null,
+    move: async () => {},
     stats: async () => ({ objectCount: 3, totalBytes: 1024 }),
   };
 }

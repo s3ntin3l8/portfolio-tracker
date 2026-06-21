@@ -52,6 +52,7 @@ import {
   getDocumentSummaryForImport,
   linkTrReceiptsToTransactions,
 } from "../storage/receipts.js";
+import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -1604,12 +1605,21 @@ export async function importsRoute(app: FastifyInstance) {
       // IDOR guard: verify document ownership explicitly (belt-and-suspenders).
       if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
 
-      const url = await app.storage.getSignedUrl(doc.storageKey);
-      return {
-        url,
-        filename: doc.originalFilename,
-        mimeType: doc.mimeType,
-      };
+      // Build a structured, date-first download filename (statement scope for imports).
+      let filename: string | null = doc.originalFilename;
+      if (doc.portfolioId) {
+        try {
+          const parts = await gatherDocumentNaming(app, { doc, portfolioId: doc.portfolioId });
+          filename = buildDocumentName(parts);
+        } catch {
+          // Non-fatal: fall back to originalFilename.
+        }
+      }
+
+      const url = await app.storage.getSignedUrl(doc.storageKey, undefined, {
+        downloadName: filename ?? undefined,
+      });
+      return { url, filename, mimeType: doc.mimeType };
     },
   );
 }

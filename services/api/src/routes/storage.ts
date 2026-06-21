@@ -24,7 +24,7 @@ import { getStorageProvider } from "../storage/index.js";
 export const storageRoute = fp(async (app: FastifyInstance) => {
   app.get<{
     Params: { "*": string };
-    Querystring: { exp?: string; sig?: string };
+    Querystring: { exp?: string; sig?: string; download?: string };
   }>(
     "/storage/*",
     {
@@ -43,13 +43,16 @@ export const storageRoute = fp(async (app: FastifyInstance) => {
           properties: {
             exp: { type: "string" },
             sig: { type: "string" },
+            // Structured download filename (overrides the stored originalFilename).
+            // Set by FolderProvider.getSignedUrl when a downloadName is supplied.
+            download: { type: "string" },
           },
         },
       },
     },
     async (request, reply) => {
       const key = request.params["*"];
-      const { exp: expStr, sig } = request.query;
+      const { exp: expStr, sig, download } = request.query;
 
       // Resolve the folder provider, supporting both:
       // (a) direct injection in tests: app.storage IS the FolderProvider
@@ -86,10 +89,13 @@ export const storageRoute = fp(async (app: FastifyInstance) => {
         const { data, meta } = await folderProvider.readFile(key);
         void reply.header("Content-Type", meta.mimeType);
         void reply.header("Content-Length", String(data.length));
-        if (meta.originalFilename) {
+        // `download` query param takes precedence (structured name from naming.ts);
+        // fall back to the stored originalFilename, then omit the header entirely.
+        const dispositionName = download || meta.originalFilename;
+        if (dispositionName) {
           void reply.header(
             "Content-Disposition",
-            `attachment; filename="${meta.originalFilename}"`,
+            `attachment; filename="${dispositionName}"`,
           );
         }
         // Browsers may cache signed files for a short time but should revalidate.

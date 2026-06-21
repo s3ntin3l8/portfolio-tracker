@@ -53,6 +53,10 @@ function makeTrackingStorage(): StorageProvider & {
     },
     exists: async (key) => data.has(key),
     get: async (key) => data.get(key) ?? null,
+    move: async (src: string, dest: string) => {
+      const buf = data.get(src);
+      if (buf) { data.set(dest, buf); data.delete(src); }
+    },
   };
 }
 

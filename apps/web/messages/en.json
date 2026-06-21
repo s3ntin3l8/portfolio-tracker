@@ -628,6 +628,7 @@
     "source": "Source",
     "empty": "No transactions.",
     "exportCsv": "Export CSV",
+    "exportDocuments": "Export Documents",
     "sources": {
       "screenshot": "Screenshot",
       "csv": "CSV",

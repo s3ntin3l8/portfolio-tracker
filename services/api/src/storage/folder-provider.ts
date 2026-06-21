@@ -94,7 +94,11 @@ export class FolderProvider implements StorageProvider {
     );
   }
 
-  async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    expiresInSeconds?: number,
+    opts?: { downloadName?: string },
+  ): Promise<string> {
     if (!this.signingSecret) {
       throw new Error(
         "FolderProvider: getSignedUrl requires a signing secret (set DB_ENCRYPTION_KEY or configure via admin UI)",
@@ -104,7 +108,39 @@ export class FolderProvider implements StorageProvider {
     const exp = Math.floor(Date.now() / 1000) + ttl;
     const sig = sign(this.signingSecret, key, exp);
     const encodedKey = key.split("/").map(encodeURIComponent).join("/");
-    return `${this.publicUrl}/storage/${encodedKey}?exp=${exp}&sig=${sig}`;
+    const base = `${this.publicUrl}/storage/${encodedKey}?exp=${exp}&sig=${sig}`;
+    if (opts?.downloadName) {
+      return `${base}&download=${encodeURIComponent(opts.downloadName)}`;
+    }
+    return base;
+  }
+
+  async move(
+    srcKey: string,
+    destKey: string,
+    meta: { mimeType: string; originalFilename?: string },
+  ): Promise<void> {
+    const srcPath = this.resolveSafe(srcKey);
+    const destPath = this.resolveSafe(destKey);
+    await fs.mkdir(path.dirname(destPath), { recursive: true });
+
+    // Copy the file bytes first — safe if dest already exists (overwrites).
+    await fs.copyFile(srcPath, destPath);
+
+    // Copy the sidecar metadata, updating it with the new meta.
+    const fileMeta: { mimeType: string; originalFilename?: string } = { mimeType: meta.mimeType };
+    if (meta.originalFilename) fileMeta.originalFilename = meta.originalFilename;
+    await fs.writeFile(this.metaPath(destPath), JSON.stringify(fileMeta), "utf8");
+
+    // Only delete source after dest is confirmed written.
+    await Promise.all([
+      fs.unlink(srcPath).catch((e: NodeJS.ErrnoException) => {
+        if (e.code !== "ENOENT") throw e;
+      }),
+      fs.unlink(this.metaPath(srcPath)).catch(() => {
+        // Sidecar may not exist; ignore.
+      }),
+    ]);
   }
 
   async delete(key: string): Promise<void> {

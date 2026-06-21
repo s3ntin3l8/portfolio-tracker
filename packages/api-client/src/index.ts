@@ -967,6 +967,19 @@ export function createApiClient(config: ApiClientConfig) {
     return (await res.json()) as T;
   }
 
+  /** Like `request` but returns a Blob — for binary downloads (zip exports etc.). */
+  async function requestBlob(method: string, path: string): Promise<Blob> {
+    const token = await config.getToken?.();
+    const res = await doFetch(`${config.baseUrl}${path}`, {
+      method,
+      headers: { ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok) {
+      throw new ApiError(res.status, await res.text());
+    }
+    return res.blob();
+  }
+
   return {
     me: () => request<User>("GET", "/me"),
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
@@ -1228,6 +1241,14 @@ export function createApiClient(config: ApiClientConfig) {
         "GET",
         `/portfolios/${portfolioId}/transactions/${txId}/sources/${sourceId}/document-url`,
       ),
+    /**
+     * Download all retained documents for a portfolio as a single zip archive.
+     * Each entry carries a structured, date-first filename so its contents are
+     * immediately identifiable (e.g. `2024-03-15_DKB-Depot_buy_VTI.pdf`).
+     * Returns a Blob (application/zip) ready for client-side save.
+     */
+    exportPortfolioDocuments: (portfolioId: string) =>
+      requestBlob("GET", `/portfolios/${portfolioId}/documents/export`),
     /**
      * Enrich an already-confirmed transaction with a richer draft (e.g. PDF after CSV) (#230).
      *

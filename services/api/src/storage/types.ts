@@ -21,8 +21,27 @@ export interface StorageProvider {
   /**
    * Return a pre-signed GET URL valid for `expiresInSeconds` seconds.
    * Defaults to the configured `STORAGE_SIGNED_URL_TTL` (3600 s).
+   *
+   * When `opts.downloadName` is supplied the URL (or the object it points at) will
+   * carry `Content-Disposition: attachment; filename="<downloadName>"` so browsers use
+   * that name instead of the raw storage key when the file is saved.
    */
-  getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  getSignedUrl(
+    key: string,
+    expiresInSeconds?: number,
+    opts?: { downloadName?: string },
+  ): Promise<string>;
+
+  /**
+   * Atomically move an object to a new key by copying it with the given metadata
+   * and then deleting the source. Used to re-key documents at confirm time.
+   * If the copy fails the source is left untouched (no data loss).
+   */
+  move(
+    srcKey: string,
+    destKey: string,
+    meta: { mimeType: string; originalFilename?: string },
+  ): Promise<void>;
 
   /** Permanently delete the object. No-ops silently if the key does not exist. */
   delete(key: string): Promise<void>;

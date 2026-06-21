@@ -628,6 +628,7 @@
     "source": "Sumber",
     "empty": "Tidak ada transaksi.",
     "exportCsv": "Ekspor CSV",
+    "exportDocuments": "Ekspor Dokumen",
     "sources": {
       "screenshot": "Tangkapan layar",
       "csv": "CSV",

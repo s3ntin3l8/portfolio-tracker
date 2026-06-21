@@ -23,9 +23,13 @@ export const storagePlugin = fp(async (app: FastifyInstance) => {
       const p = await getStorageProvider(app);
       return p.put(key, body, meta);
     },
-    async getSignedUrl(key, expiresInSeconds) {
+    async getSignedUrl(key, expiresInSeconds, opts) {
       const p = await getStorageProvider(app);
-      return p.getSignedUrl(key, expiresInSeconds);
+      return p.getSignedUrl(key, expiresInSeconds, opts);
+    },
+    async move(srcKey, destKey, meta) {
+      const p = await getStorageProvider(app);
+      return p.move(srcKey, destKey, meta);
     },
     async delete(key) {
       const p = await getStorageProvider(app);
