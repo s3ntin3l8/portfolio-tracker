@@ -661,6 +661,121 @@ describe("ImportFlow", () => {
     expect(client.confirmImport).toHaveBeenCalledWith("imp-mm", [DRAFT], [], "p1", true, false);
   });
 
+  // ── Multi-group partial-commit & 2.4 re-import ─────────────────────────────
+
+  it("multi-group partial-409: successful group drops from review; failed group stays visible (#fix-2.1)", async () => {
+    // Two groups (imp-a=DRAFT/Antam Gold, imp-b=DRAFT_B/BBCA).
+    // imp-a succeeds; imp-b hits a 409 duplicate.
+    // Expected: DRAFT (Antam Gold) is removed from review; DRAFT_B (BBCA) remains; duplicate
+    // banner appears. Guards the Promise.allSettled partial-commit fix — before the fix,
+    // both groups' drafts stayed in review even when one group confirmed successfully.
+    const dupPayload = {
+      error: "duplicate_transactions",
+      count: 1,
+      duplicates: [
+        {
+          name: "BBCA",
+          action: "buy",
+          quantity: "100",
+          executedAt: "2026-03-01",
+          matchedSource: "csv",
+          matchedExecutedAt: "2026-03-01",
+        },
+      ],
+    };
+    const confirmImport = vi.fn().mockImplementation(async (iid: string) => {
+      if (iid === "imp-b") throw new ApiError(409, JSON.stringify(dupPayload));
+      return { confirmed: 1 };
+    });
+    const client: ImportClient = {
+      importScreenshot: vi.fn(),
+      importCsv: vi
+        .fn()
+        .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
+        .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
+      confirmImport,
+      enrichImport: vi.fn(async () => ({ enriched: 0, skipped: [] })),
+    };
+    const { container } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), {
+      target: { files: [csvFile("broker-a.csv", "a"), csvFile("broker-b.csv", "b")] },
+    });
+
+    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+
+    // Wait for the duplicate banner from imp-b's 409.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: messages.Duplicates.importAnyway }),
+      ).toBeInTheDocument(),
+    );
+
+    // imp-a confirmed → its draft (Antam Gold) must be gone from review.
+    expect(screen.queryByText("Antam Gold")).not.toBeInTheDocument();
+    // imp-b failed → its draft (BBCA) must still be in review.
+    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+
+    // Both confirm calls were fired (parallel fan-out).
+    expect(confirmImport).toHaveBeenCalledTimes(2);
+    expect(confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
+    expect(confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false, false);
+  });
+
+  it("per-file 'Re-import anyway' re-uploads an alreadyConfirmed screenshot with force=true (#fix-2.4)", async () => {
+    // Multi-file batch: file1 succeeds, file2 returns alreadyConfirmed.
+    // The skipped banner must show a per-file "Re-import anyway" button for file2.
+    // Clicking it calls importScreenshot(file2, true) and adds the new draft to review.
+    const importScreenshot = vi
+      .fn()
+      .mockResolvedValueOnce({ importId: "imp-ok", drafts: [DRAFT], errors: [] })
+      // Second upload: already confirmed on first attempt.
+      .mockResolvedValueOnce({ importId: "imp-dup", drafts: [], errors: [], alreadyConfirmed: true })
+      // Force re-import: succeeds, returns BBCA draft.
+      .mockResolvedValueOnce({ importId: "imp-force", drafts: [DRAFT_B], errors: [] });
+
+    const client: ImportClient = {
+      importScreenshot,
+      importCsv: vi.fn(),
+      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+      enrichImport: vi.fn(),
+    };
+    const { container } = renderFlow(client);
+
+    const file1 = pngFile();
+    const file2 = new File([new Uint8Array([4, 5])], "dup.png", { type: "image/png" });
+    fireEvent.change(fileInput(container), { target: { files: [file1, file2] } });
+
+    // Wait for review: file1's draft (Antam Gold) is visible.
+    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
+
+    // The skipped banner shows the already-confirmed message for dup.png.
+    expect(
+      screen.getByText(messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.png")),
+    ).toBeInTheDocument();
+
+    // The per-file "Re-import anyway" button is present.
+    const reImportBtn = screen.getByRole("button", { name: messages.Import.reImportAnyway });
+    expect(reImportBtn).toBeInTheDocument();
+
+    // Click it — should re-call importScreenshot with force=true.
+    fireEvent.click(reImportBtn);
+
+    // After force re-import, BBCA draft should appear in review.
+    await waitFor(() => expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0));
+
+    // Verify the force flag was set on the third call.
+    expect(importScreenshot).toHaveBeenNthCalledWith(3, expect.any(File), true);
+
+    // The skipped notice for dup.png should be cleared.
+    expect(
+      screen.queryByText(messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.png")),
+    ).not.toBeInTheDocument();
+  });
+
   it("surfaces a cross-source duplicate 409 and re-confirms with acknowledgement (#217)", async () => {
     const confirmImport = vi
       .fn()

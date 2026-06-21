@@ -8,7 +8,7 @@ import { GeminiVisionParser } from "../../src/services/parsers/gemini.js";
 import { OpenRouterVisionParser } from "../../src/services/parsers/openrouter.js";
 import { OllamaVisionParser } from "../../src/services/parsers/ollama.js";
 import { buildScreenshotParser } from "../../src/services/screenshot-parser.js";
-import { TRANSACTIONS_TOOL_SCHEMA } from "../../src/services/parsers/shared.js";
+import { TRANSACTIONS_TOOL_SCHEMA, validateDrafts } from "../../src/services/parsers/shared.js";
 
 const IMAGE = { data: Buffer.from("img"), mimeType: "image/png" } as const;
 
@@ -486,5 +486,147 @@ describe("OpenRouterVisionParser", () => {
   it("throws on a non-200 response", async () => {
     const parser = new OpenRouterVisionParser("or-test", { fetch: mockFetch({}, false, 402) });
     await expect(parser.parse(IMAGE)).rejects.toThrow("openrouter_vision_error_402");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateDrafts — resilient row-by-row validation (fix 1.1)
+// ---------------------------------------------------------------------------
+describe("validateDrafts", () => {
+  const GOOD = {
+    assetClass: "equity",
+    action: "buy",
+    quantity: "10",
+    unit: "shares",
+    price: "190.50",
+    currency: "USD",
+    executedAt: "2026-01-15T00:00:00.000Z",
+    confidence: 0.95,
+  };
+
+  it("returns all rows when every row is valid", () => {
+    const drafts = validateDrafts([GOOD, { ...GOOD, quantity: "5" }]);
+    expect(drafts).toHaveLength(2);
+  });
+
+  it("skips a single bad row and keeps the good ones (does NOT throw)", () => {
+    const bad = { not: "a transaction at all" };
+    const drafts = validateDrafts([GOOD, bad, { ...GOOD, quantity: "3" }]);
+    // One bad row skipped — two valid rows survive.
+    expect(drafts).toHaveLength(2);
+    expect(drafts.every((d) => d.quantity !== undefined)).toBe(true);
+  });
+
+  it("collects per-row errors into the out-parameter when provided", () => {
+    const bad = { not: "a transaction" };
+    const errors: { line: number; message: string }[] = [];
+    validateDrafts([GOOD, bad, { ...GOOD, ticker: "TSLA" }], errors);
+    // Only the middle (index 1 → line 2) is invalid.
+    expect(errors).toHaveLength(1);
+    expect(errors[0].line).toBe(2);
+    expect(typeof errors[0].message).toBe("string");
+  });
+
+  it("returns an empty array for non-array input (null / undefined / string)", () => {
+    expect(validateDrafts(null)).toHaveLength(0);
+    expect(validateDrafts(undefined)).toHaveLength(0);
+    expect(validateDrafts("not an array")).toHaveLength(0);
+  });
+
+  it("collects multiple errors when multiple rows are invalid", () => {
+    const errors: { line: number; message: string }[] = [];
+    validateDrafts([GOOD, { a: 1 }, { b: 2 }, GOOD], errors);
+    expect(errors).toHaveLength(2);
+    expect(errors[0].line).toBe(2);
+    expect(errors[1].line).toBe(3);
+  });
+
+  it("propagates errors from the vision parser into ParseResult.errors", async () => {
+    const bad = { not: "valid" };
+    const parser = new ClaudeVisionParser("sk-test", {
+      fetch: mockFetch({
+        content: [{ type: "tool_use", input: { transactions: [DRAFT, bad, DRAFT] } }],
+      }),
+    });
+    const result = await parser.parse(IMAGE);
+    // Two good rows survive; one bad row → one error.
+    expect(result.drafts).toHaveLength(2);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors![0].line).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseIbkr — content-hash externalId stable across row shifts (fix 1.3)
+// ---------------------------------------------------------------------------
+describe("parseIbkr — externalId stability", () => {
+  const IBKR_TRADES = [
+    "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass,Description,TradeID",
+    'AAPL,"20260115;093000",10,190.50,-1.00,USD,STK,"APPLE INC",111',
+    'TSLA,"2026-01-16, 10:00:00",-5,250.00,-1.25,USD,STK,"TESLA INC",112',
+  ].join("\n");
+
+  it("uses the tradeId as externalId when present (stable, broker-assigned)", () => {
+    const { drafts } = parseIbkr(IBKR_TRADES);
+    expect(drafts[0].externalId).toBe("ibkr:111");
+    expect(drafts[1].externalId).toBe("ibkr:112");
+  });
+
+  it("falls back to a content hash (not row index) when tradeId is absent", () => {
+    const noId = [
+      "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass,Description,TradeID",
+      // TradeID column present but empty → falls back to content hash
+      'MSFT,"20260120;100000",3,420.00,-0.75,USD,STK,"MICROSOFT","',
+    ].join("\n");
+    const { drafts } = parseIbkr(noId);
+    expect(drafts).toHaveLength(1);
+    const id = drafts[0].externalId ?? "";
+    expect(id.startsWith("ibkr:")).toBe(true);
+    // Must NOT contain the row index (no bare number after the prefix)
+    expect(/^ibkr:\d+$/.test(id)).toBe(false);
+  });
+
+  it("produces the same externalId even when a blank preamble row is added", () => {
+    const noId = [
+      "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass",
+      'MSFT,"20260120;100000",3,420.00,-0.75,USD,STK',
+    ].join("\n");
+    const shifted = [
+      "# extra comment line",
+      "Symbol,DateTime,Quantity,TradePrice,IBCommission,CurrencyPrimary,AssetClass",
+      'MSFT,"20260120;100000",3,420.00,-0.75,USD,STK',
+    ].join("\n");
+    const { drafts: d1 } = parseIbkr(noId);
+    const { drafts: d2 } = parseIbkr(shifted);
+    expect(d1[0].externalId).toBe(d2[0].externalId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseCoinbase — content-hash externalId stable across row shifts (fix 1.3)
+// ---------------------------------------------------------------------------
+describe("parseCoinbase — externalId stability", () => {
+  const ROW = "2026-01-15T12:00:00Z,Buy,BTC,0.1,USD,60000,6000,6010,10,Bought 0.1 BTC";
+  const HEADER =
+    "Timestamp,Transaction Type,Asset,Quantity Transacted,Spot Price Currency,Spot Price at Transaction,Subtotal,Total,Fees and/or Spread,Notes";
+
+  it("content-hash id does NOT contain the row index", () => {
+    const csv = [HEADER, ROW].join("\n");
+    const { drafts } = parseCoinbase(csv);
+    expect(drafts).toHaveLength(1);
+    const id = drafts[0].externalId ?? "";
+    expect(id.startsWith("coinbase:")).toBe(true);
+    // Old format was `coinbase:${when}:${asset}:${rowIndex}` — the index is gone.
+    expect(id.split(":").length).toBe(2); // just "coinbase" + hash
+  });
+
+  it("produces the same externalId regardless of how many preamble rows precede it", () => {
+    const withPreamble = ["", "Extra info row", "", HEADER, ROW].join("\n");
+    const withoutPreamble = [HEADER, ROW].join("\n");
+    const { drafts: d1 } = parseCoinbase(withPreamble);
+    const { drafts: d2 } = parseCoinbase(withoutPreamble);
+    expect(d1).toHaveLength(1);
+    expect(d2).toHaveLength(1);
+    expect(d1[0].externalId).toBe(d2[0].externalId);
   });
 });

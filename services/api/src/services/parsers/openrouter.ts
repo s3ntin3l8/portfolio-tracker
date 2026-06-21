@@ -101,10 +101,12 @@ export class OpenRouterVisionParser implements ScreenshotParser {
       goldContracts?: unknown;
       accountNumber?: unknown;
     };
+    const parseErrors: { line: number; message: string }[] = [];
     const result = {
-      drafts: validateDrafts(obj.transactions),
+      drafts: validateDrafts(obj.transactions, parseErrors),
       contracts: validateContracts(obj.goldContracts),
       accountNumber: typeof obj.accountNumber === "string" ? obj.accountNumber : null,
+      errors: parseErrors,
     };
     log?.info(
       { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },

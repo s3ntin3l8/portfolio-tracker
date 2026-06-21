@@ -361,7 +361,8 @@
       "wkn": "WKN",
       "total": "Total",
       "fees": "Fees",
-      "currency": "Currency"
+      "currency": "Currency",
+      "tax": "Tax"
     },
     "review": {
       "filters": {
@@ -450,7 +451,9 @@
     "showCompleted": "Show completed ({count})",
     "hideCompleted": "Hide completed",
     "onlyCompleted": "{count, plural, one {# completed import hidden} other {# completed imports hidden}}",
-    "downloadReceipt": "Download receipt"
+    "downloadReceipt": "Download receipt",
+    "actionError": "Something went wrong. Please try again.",
+    "downloadError": "Receipt unavailable — it may have been deleted or storage is down."
   },
   "Dashboard": {
     "title": "Dashboard",
@@ -538,7 +541,10 @@
     "edit": "Edit",
     "delete": "Delete",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "savedResults": "Your portfolios",
+    "discoveredResults": "Market discovery",
+    "notInPortfolios": "{symbol} was found in market data but is not in your portfolios yet. Import a transaction for it first."
   },
   "Merger": {
     "link": "Merger",

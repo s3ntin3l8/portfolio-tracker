@@ -202,24 +202,35 @@ export const instruments = pgTable(
 
 // Screenshot/CSV import drafts. The raw image is deleted after a confirmed parse;
 // the parsed JSON + audit link are retained.
-export const screenshotImports = pgTable("screenshot_imports", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  portfolioId: uuid("portfolio_id").references(() => portfolios.id, {
-    onDelete: "set null",
-  }),
-  storagePath: text("storage_path"), // null once the image is deleted
-  parser: text("parser"), // claude | ollama | gemini | openrouter
-  model: text("model"),
-  parsedJson: jsonb("parsed_json"),
-  confidence: numeric("confidence"),
-  /** djb2 hash of the raw upload bytes — used to detect re-uploads of the same file. */
-  contentHash: text("content_hash"),
-  status: importStatusEnum("status").notNull().default("draft"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const screenshotImports = pgTable(
+  "screenshot_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    portfolioId: uuid("portfolio_id").references(() => portfolios.id, {
+      onDelete: "set null",
+    }),
+    storagePath: text("storage_path"), // null once the image is deleted
+    parser: text("parser"), // claude | ollama | gemini | openrouter
+    model: text("model"),
+    parsedJson: jsonb("parsed_json"),
+    confidence: numeric("confidence"),
+    /** djb2 hash of the raw upload bytes — used to detect re-uploads of the same file. */
+    contentHash: text("content_hash"),
+    status: importStatusEnum("status").notNull().default("draft"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Prevent two concurrent identical uploads from both passing the existingImport
+    // check-then-insert TOCTOU race (fix 4.1). The WHERE clause excludes discarded rows
+    // so a force-reimport after discarding is allowed without violating the constraint.
+    uniqueIndex("screenshot_imports_user_content_hash_idx")
+      .on(t.userId, t.contentHash)
+      .where(sql`${t.status} <> 'discarded' AND ${t.contentHash} IS NOT NULL`),
+  ],
+);
 
 // A user's link to their Trade Republic account (one per user for v1). Phone, PIN and
 // the pytr cookie session are encrypted at rest (EncryptionService) — never plaintext.

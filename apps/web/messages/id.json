@@ -361,7 +361,8 @@
       "wkn": "WKN",
       "total": "Total",
       "fees": "Biaya",
-      "currency": "Mata Uang"
+      "currency": "Mata Uang",
+      "tax": "Pajak"
     },
     "review": {
       "filters": {
@@ -450,7 +451,9 @@
     "showCompleted": "Tampilkan yang selesai ({count})",
     "hideCompleted": "Sembunyikan yang selesai",
     "onlyCompleted": "{count, plural, other {# impor selesai disembunyikan}}",
-    "downloadReceipt": "Unduh tanda terima"
+    "downloadReceipt": "Unduh tanda terima",
+    "actionError": "Terjadi kesalahan. Silakan coba lagi.",
+    "downloadError": "Tanda terima tidak tersedia — mungkin sudah dihapus atau penyimpanan sedang bermasalah."
   },
   "Dashboard": {
     "title": "Dasbor",
@@ -538,7 +541,10 @@
     "edit": "Ubah",
     "delete": "Hapus",
     "save": "Simpan",
-    "cancel": "Batal"
+    "cancel": "Batal",
+    "savedResults": "Portofolio Anda",
+    "discoveredResults": "Pencarian pasar",
+    "notInPortfolios": "{symbol} ditemukan di data pasar tetapi belum ada di portofolio Anda. Import transaksi untuk instrumen ini terlebih dahulu."
   },
   "Merger": {
     "link": "Merger",

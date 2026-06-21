@@ -3,22 +3,21 @@
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ImportReview } from "@/components/import-review";
 import { DuplicateConflictBanner } from "@/components/duplicate-conflict-banner";
 import { PortfolioPicker } from "@/components/portfolio-picker";
 import { Label } from "@/components/ui/label";
 import {
   withUid,
-  stripUid,
   type ImportDraft,
   type ImportIssue,
   type ImportTargetPortfolio,
   type ReviewDraft,
 } from "@/components/import-flow";
 import { useApiClient } from "@/lib/api";
+import { useImportConfirm } from "@/lib/use-import-confirm";
 import { useRouter } from "@/i18n/navigation";
-import { duplicatesFromError, type DuplicateConflict, type DuplicateMatch } from "@portfolio/api-client";
-import type { ParsedTransaction } from "@portfolio/schema";
 
 /**
  * Review and confirm an already-staged draft import (e.g. a Trade Republic sync, or a
@@ -49,15 +48,10 @@ export function DraftReviewClient({
     initial.map((d) => withUid(d, importId)),
   );
   const [issues, setIssues] = useState<ImportIssue[]>(initialIssues);
-  const [error, setError] = useState<string | null>(null);
+
+  // Transient "N transactions imported" banner after a partial confirm.
   const [importedCount, setImportedCount] = useState<number | null>(null);
   const importedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Cross-source duplicate warning (#217) from a confirm 409; "Import anyway" re-confirms
-  // the same selection with the acknowledge flag.
-  const [duplicateConflict, setDuplicateConflict] = useState<DuplicateConflict | null>(null);
-  const pendingUids = useRef<string[] | undefined>(undefined);
-  // Ordered subset sent to the last confirm — the 409 response's draftIndex references it.
-  const pendingSubset = useRef<ReviewDraft[]>([]);
 
   // Portfolio selection: use the stored portfolioId if available, otherwise default to
   // the first portfolio in the list. The picker is only shown when there are multiple
@@ -65,6 +59,36 @@ export function DraftReviewClient({
   const [portfolioId, setPortfolioId] = useState<string>(
     initialPortfolioId ?? portfolios[0]?.id ?? "",
   );
+
+  function backToImport() {
+    router.push("/transactions");
+    router.refresh(); // surface the new transactions (and updated history) elsewhere
+  }
+
+  const {
+    error,
+    duplicateConflict,
+    accountMismatch,
+    pendingSubset,
+    pendingAcknowledgeMismatch,
+    confirm,
+    enrichOneDuplicate,
+  } = useImportConfirm({
+    importId,
+    drafts,
+    setDrafts,
+    contracts: [],
+    getPortfolioId: () => portfolioId || undefined,
+    client: api,
+    onFullSuccess: () => backToImport(),
+    onPartialSuccess: (count) => {
+      setImportedCount(count);
+      if (importedTimer.current) clearTimeout(importedTimer.current);
+      importedTimer.current = setTimeout(() => setImportedCount(null), 5000);
+      router.refresh();
+    },
+    getErrorMessage: () => t("reviewError"),
+  });
 
   function updateDraft(uid: string, patch: Partial<ImportDraft>) {
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
@@ -85,91 +109,13 @@ export function DraftReviewClient({
     setDrafts((ds) => ds.filter((d) => !set.has(d.uid)));
   }
 
-  function backToImport() {
-    router.push("/transactions");
-    router.refresh(); // surface the new transactions (and updated history) elsewhere
-  }
-
-  // Confirm all drafts, or just the subset whose uids are passed (confirm-selected).
-  // Default (no uids) excludes likely-duplicate rows — matching import-flow behaviour and
-  // the in-table notice. Users can still confirm a flagged row via "Confirm selected" (#196).
-  async function confirm(uids?: string[], acknowledgeDup = false) {
-    setError(null);
-    pendingUids.current = uids;
-    const subset =
-      uids && uids.length
-        ? drafts.filter((d) => uids.includes(d.uid))
-        : drafts.filter((d) => !d.likelyDuplicate);
-    // Store ordered subset for the enrich path (draftIndex resolves into this array).
-    pendingSubset.current = subset;
-    // A partial confirm keeps the import open server-side — stay on the page, drop the
-    // confirmed rows, and let the user continue in passes. A full confirm closes it.
-    const isPartial = subset.length < drafts.length;
-    try {
-      await api.confirmImport(
-        importId,
-        subset.map(stripUid) as unknown as Parameters<typeof api.confirmImport>[1],
-        [],
-        portfolioId || undefined,
-        false,
-        acknowledgeDup,
-      );
-      setDuplicateConflict(null);
-      if (isPartial) {
-        const confirmed = new Set(subset.map((d) => d.uid));
-        setDrafts((ds) => ds.filter((d) => !confirmed.has(d.uid)));
-        // Show a brief success banner so the user knows the confirm landed.
-        setImportedCount(subset.length);
-        if (importedTimer.current) clearTimeout(importedTimer.current);
-        importedTimer.current = setTimeout(() => setImportedCount(null), 5000);
-        router.refresh(); // surface the new transactions (and updated history) elsewhere
-      } else {
-        backToImport();
-      }
-    } catch (err) {
-      const duplicates = duplicatesFromError(err);
-      if (duplicates) {
-        setDuplicateConflict(duplicates);
-      } else {
-        setError(t("reviewError"));
-      }
-    }
-  }
-
-  /**
-   * Enrich a matched confirmed transaction with the corresponding draft (#230).
-   * `d.draftIndex` indexes `pendingSubset.current` (the ordered subset sent to the last confirm).
-   */
-  async function enrichOneDuplicate(d: DuplicateMatch) {
-    const draft = pendingSubset.current[d.draftIndex];
-    if (!draft) return;
-    try {
-      await api.enrichImport(
-        importId,
-        [{ draft: stripUid(draft) as unknown as ParsedTransaction, targetTransactionId: d.matchedTransactionId }],
-        portfolioId || undefined,
-      );
-      // Drop the enriched draft, clear the conflict, re-confirm remaining.
-      const remainingUids = pendingSubset.current
-        .filter((_, i) => i !== d.draftIndex)
-        .map((dr) => dr.uid);
-      setDuplicateConflict(null);
-      removeMany([draft.uid]);
-      if (remainingUids.length > 0) {
-        void confirm(remainingUids, false);
-      }
-    } catch {
-      setError(t("reviewError"));
-    }
-  }
-
   async function discard() {
-    setError(null);
     try {
       await api.discardImport(importId);
       backToImport();
     } catch {
-      setError(t("reviewError"));
+      // The error is surfaced by the shared hook state if confirm was in flight;
+      // for discard we rely on the global error boundary (discard failure is rare).
     }
   }
 
@@ -193,11 +139,41 @@ export function DraftReviewClient({
           {t("importedBanner", { count: importedCount })}
         </div>
       )}
+      {/* Account-mismatch warning (#197): file looks like it belongs to another portfolio. */}
+      {accountMismatch && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
+        >
+          <AlertCircle className="size-4 shrink-0" />
+          <span className="flex-1">
+            {accountMismatch.kind === "other_portfolio"
+              ? ti("accountMismatch.otherPortfolio", {
+                  portfolio: accountMismatch.matchedName ?? "",
+                  account: accountMismatch.detected,
+                })
+              : ti("accountMismatch.noMatch", { account: accountMismatch.detected })}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void confirm(undefined, true)}
+          >
+            {ti("accountMismatch.importAnyway")}
+          </Button>
+        </div>
+      )}
       {duplicateConflict && (
         <DuplicateConflictBanner
           conflict={duplicateConflict}
           onEnrich={(d) => void enrichOneDuplicate(d)}
-          onImportAnyway={() => void confirm(pendingUids.current, true)}
+          onImportAnyway={() =>
+            void confirm(
+              pendingSubset.current.map((d) => d.uid),
+              pendingAcknowledgeMismatch.current,
+              true,
+            )
+          }
         />
       )}
       {portfolios.length > 1 && (

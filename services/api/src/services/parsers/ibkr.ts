@@ -5,6 +5,7 @@ import {
 } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
+import { shortHash } from "./hash.js";
 
 // Interactive Brokers Flex Query "Trades" CSV (with header). Columns vary by query,
 // so we look them up by name. Quantity is signed (buy positive, sell negative);
@@ -78,6 +79,14 @@ export function parseIbkr(content: string): CsvParseResult {
     const assetClass = ASSET_CLASS[get(cols.asset).toUpperCase()] ?? "equity";
     const symbol = get(cols.symbol);
 
+    const tradeId = get(cols.tradeId);
+    // Derive the externalId from economic content when no stable tradeId is present.
+    // Row-index fallbacks (`ibkr:${i}`) break re-import idempotency: if the export
+    // gains or loses a leading row the index shifts and the dedup index no longer
+    // matches, creating duplicate transactions.
+    const externalId = tradeId
+      ? `ibkr:${tradeId}`
+      : `ibkr:${shortHash([symbol, action, executedAt, String(Math.abs(qty)), num(get(cols.price)), get(cols.currency) || "USD"].join("|"))}`;
     const parsed = parsedTransactionSchema.safeParse({
       assetClass,
       action,
@@ -89,8 +98,7 @@ export function parseIbkr(content: string): CsvParseResult {
       fees: String(Math.abs(Number(num(get(cols.commission)) || "0"))),
       currency: get(cols.currency) || "USD",
       executedAt,
-      externalId:
-        get(cols.tradeId) ? `ibkr:${get(cols.tradeId)}` : `ibkr:${i}`,
+      externalId,
       confidence: 1,
     });
     if (parsed.success) drafts.push(parsed.data);

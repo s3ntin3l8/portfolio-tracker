@@ -64,15 +64,19 @@ export function ImportHistory({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   // Completed (confirmed) imports are an audit trail, not an action queue — hide them by
   // default so the list surfaces only what still needs attention, with a toggle to reveal.
   const [showCompleted, setShowCompleted] = useState(false);
 
   async function discard(id: string) {
     setBusyId(id);
+    setActionError(null);
     try {
       await api.discardImport(id);
       router.refresh();
+    } catch {
+      setActionError(t("actionError"));
     } finally {
       setBusyId(null);
     }
@@ -80,9 +84,12 @@ export function ImportHistory({
 
   async function undo(id: string) {
     setBusyId(id);
+    setActionError(null);
     try {
       await api.deleteImport(id);
       router.refresh();
+    } catch {
+      setActionError(t("actionError"));
     } finally {
       setBusyId(null);
       setConfirmId(null);
@@ -91,9 +98,12 @@ export function ImportHistory({
 
   async function clear(id: string) {
     setBusyId(id);
+    setActionError(null);
     try {
       await api.clearImport(id);
       router.refresh();
+    } catch {
+      setActionError(t("actionError"));
     } finally {
       setBusyId(null);
     }
@@ -104,7 +114,7 @@ export function ImportHistory({
       const { url } = await api.getImportDocumentUrl(id);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch {
-      // Silently ignore — document may have been deleted or storage unavailable.
+      setActionError(t("downloadError"));
     }
   }
 
@@ -118,9 +128,12 @@ export function ImportHistory({
 
   async function clearAllDiscarded() {
     setClearingAll(true);
+    setActionError(null);
     try {
       await api.bulkClearImports(discardedIds);
       router.refresh();
+    } catch {
+      setActionError(t("actionError"));
     } finally {
       setClearingAll(false);
     }
@@ -166,6 +179,14 @@ export function ImportHistory({
             )}
           </div>
         </CardHeader>
+      )}
+      {actionError && (
+        <div
+          role="alert"
+          className="mx-6 mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {actionError}
+        </div>
       )}
       <CardContent className="p-0">
         <Table>

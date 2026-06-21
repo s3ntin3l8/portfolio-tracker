@@ -188,10 +188,21 @@ export async function importsRoute(app: FastifyInstance) {
     const supersede =
       force || (existing.status === "confirmed" && !(await importHasLiveRecords(existing.id)));
     if (!supersede) return existing;
+    // Discard the matched row — and any other rows with the same (userId, contentHash) that
+    // may exist from a pre-migration TOCTOU race (fix 4.4). The unique index (fix 4.1)
+    // prevents new duplicates, but old data may have them.
     await app.db
       .update(screenshotImports)
       .set({ status: "discarded" })
-      .where(eq(screenshotImports.id, existing.id));
+      .where(
+        existing.contentHash
+          ? and(
+              eq(screenshotImports.userId, existing.userId),
+              eq(screenshotImports.contentHash, existing.contentHash),
+              ne(screenshotImports.status, "discarded"),
+            )
+          : eq(screenshotImports.id, existing.id),
+      );
     return null;
   }
 
@@ -427,7 +438,10 @@ export async function importsRoute(app: FastifyInstance) {
         ? await accountMismatchVerdict(id, detected, candidate)
         : null;
 
-      const [imp] = await app.db
+      // onConflictDoNothing handles the TOCTOU race where two concurrent identical uploads
+      // both pass the existingImport check before either inserts (fix 4.1). When it fires,
+      // we fetch the winning row and use its id for the response.
+      let imp = (await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
@@ -440,7 +454,25 @@ export async function importsRoute(app: FastifyInstance) {
           contentHash,
           status: "draft",
         })
-        .returning();
+        .onConflictDoNothing()
+        .returning())[0];
+
+      if (!imp) {
+        // Race: another upload of the same file won. Find its row.
+        const [existing] = await app.db
+          .select()
+          .from(screenshotImports)
+          .where(
+            and(
+              eq(screenshotImports.userId, id),
+              eq(screenshotImports.contentHash, contentHash),
+              ne(screenshotImports.status, "discarded"),
+            ),
+          )
+          .limit(1);
+        if (!existing) throw app.httpErrors.internalServerError("import race recovery failed");
+        imp = existing;
+      }
 
       // Stage the raw CSV for potential post-confirm retention (#231).
       // Best-effort: a storage failure never breaks the parse (see receipts.ts).
@@ -665,7 +697,8 @@ export async function importsRoute(app: FastifyInstance) {
         ? await accountMismatchVerdict(id, detectedAccountNumber, candidate)
         : null;
 
-      const [imp] = await app.db
+      // onConflictDoNothing handles the TOCTOU race (fix 4.1) — see the CSV path above.
+      let imp = (await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
@@ -678,7 +711,24 @@ export async function importsRoute(app: FastifyInstance) {
           contentHash,
           status: "draft",
         })
-        .returning();
+        .onConflictDoNothing()
+        .returning())[0];
+
+      if (!imp) {
+        const [existing] = await app.db
+          .select()
+          .from(screenshotImports)
+          .where(
+            and(
+              eq(screenshotImports.userId, id),
+              eq(screenshotImports.contentHash, contentHash),
+              ne(screenshotImports.status, "discarded"),
+            ),
+          )
+          .limit(1);
+        if (!existing) throw app.httpErrors.internalServerError("import race recovery failed");
+        imp = existing;
+      }
 
       // Stage the raw file for potential post-confirm retention (#231).
       // Best-effort: a storage failure never breaks the parse (see receipts.ts).
@@ -1094,6 +1144,12 @@ export async function importsRoute(app: FastifyInstance) {
       // instrumentId). Unlike before, this is authoritative — an *un-acknowledged* economic
       // duplicate blocks the confirm with a 409 so the user consciously sees it and can either
       // drop the row or re-confirm with `acknowledgeDuplicates`. It never silently drops a row.
+      //
+      // KNOWN RACE (4.3): this SELECT runs outside the write transaction below. Two concurrent
+      // confirms of overlapping sources can both clear the 409 and both write. The practical
+      // risk is low (same user, two concurrent confirms in sub-second window), and the fallback
+      // is the same-source `(portfolioId, source, externalId)` unique index which absorbs true
+      // re-imports silently. A future hardening pass can re-run this check inside the transaction.
       let likelyDuplicates = 0;
       duplicateCheck: {
         const committed = await app.db

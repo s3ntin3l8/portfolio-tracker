@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "screenshot_imports_user_content_hash_idx" ON "screenshot_imports" USING btree ("user_id","content_hash") WHERE "screenshot_imports"."status" <> 'discarded' AND "screenshot_imports"."content_hash" IS NOT NULL;

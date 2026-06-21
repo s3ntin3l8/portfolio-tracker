@@ -227,6 +227,8 @@ function isCsvFile(file: File): boolean {
 interface SkippedFile {
   file: string;
   reason: ImportSkipReason;
+  /** Original File object — present only for alreadyConfirmed so the user can force-reimport it. */
+  originalFile?: File;
 }
 
 /** Per-file parse status (shown during multi-file parsing). */
@@ -290,6 +292,11 @@ export function ImportFlow({
   // The ordered subset of drafts that was sent to the last confirm — the 409 response's
   // draftIndex references this array, so we store it to resolve the correct draft for enrich.
   const pendingSubset = useRef<ReviewDraft[]>([]);
+  // Multi-group: offset into pendingSubset where the failing group's slice starts.
+  // This is needed because the server's 409 draftIndex is relative to the per-group
+  // slice sent to that confirm call, not the merged pendingSubset array. Stored per-run
+  // so enrichOneDuplicate can map back to the correct draft in pendingSubset.
+  const pendingErrorGroupOffset = useRef(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -394,7 +401,8 @@ export function ImportFlow({
           : await client.importScreenshot(file, force);
 
         if (result.alreadyConfirmed) {
-          newSkipped.push({ file: file.name, reason: "alreadyConfirmed" });
+          // Store the original File so the per-file "Re-import anyway" button can force-reimport it.
+          newSkipped.push({ file: file.name, reason: "alreadyConfirmed", originalFile: file });
           setFileStatuses((prev) =>
             prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
           );
@@ -556,11 +564,33 @@ export function ImportFlow({
         for (const iid of groups.keys()) {
           if (!byImport.has(iid)) byImport.set(iid, []);
         }
-        // Fire all confirms concurrently, passing the per-group portfolio selection.
-        // Skip groups with nothing to write (all drafts removed or excluded as duplicates,
-        // and no contracts) — the confirm endpoint 400s on an empty body, which would reject
-        // the whole Promise.all and fail the other groups too.
-        const results = await Promise.all(
+
+        // Re-lay pendingSubset in group-contiguous order so that the per-group
+        // offsets computed below align with what's actually at each index.
+        // The original `subset` preserves append order (e.g. mapIssue puts a promoted
+        // draft at the END regardless of which group it belongs to), so it can be
+        // interleaved: [A1, A2, B1, B2, A3]. After grouping, byImport has A→[A1,A2,A3]
+        // and B→[B1,B2]; flattening gives the contiguous layout [A1,A2,A3,B1,B2]
+        // that groupOffsets below assumes.
+        pendingSubset.current = Array.from(byImport.values()).flat();
+
+        // Compute per-group start offsets into the merged `pendingSubset.current` array
+        // so that if a group 409s, enrichOneDuplicate can map the server's per-group
+        // draftIndex back to the correct entry in pendingSubset.current.
+        const groupOffsets = new Map<string, number>();
+        let offset = 0;
+        for (const [iid, ds] of byImport.entries()) {
+          groupOffsets.set(iid, offset);
+          offset += ds.length;
+        }
+
+        // Fire all confirms concurrently. Use allSettled so a 409 from one group
+        // doesn't abort the successful writes of other groups (Promise.all would do
+        // that). Each call is annotated with its importId so we can map 409 errors
+        // back to the right group offset.
+        // Skip groups with nothing to write — the confirm endpoint 400s on an empty
+        // body, which would fail the whole batch under the old Promise.all pattern.
+        const settled = await Promise.allSettled(
           Array.from(byImport.entries())
             .filter(([iid, ds]) => ds.length > 0 || iid === contractImportId)
             .map(([iid, ds]) =>
@@ -571,10 +601,40 @@ export function ImportFlow({
                 portfolioByImport.get(iid),
                 acknowledgeMismatch,
                 acknowledgeDup,
-              ),
+              ).then((r) => ({ iid, confirmed: r.confirmed }))
+               .catch((err: unknown) => Promise.reject({ iid, err }))
             ),
         );
-        setConfirmedCount(results.reduce((s, r) => s + r.confirmed, 0));
+
+        // Remove drafts from groups that confirmed successfully.
+        const committedUids = new Set<string>();
+        let newConfirmed = 0;
+        for (const result of settled) {
+          if (result.status === "fulfilled") {
+            for (const d of byImport.get(result.value.iid) ?? []) {
+              committedUids.add(d.uid);
+            }
+            newConfirmed += result.value.confirmed;
+          }
+        }
+        if (committedUids.size > 0) {
+          setDrafts((ds) => ds.filter((d) => !committedUids.has(d.uid)));
+          setConfirmedCount((c) => c + newConfirmed);
+        }
+
+        // Surface the first group error (mismatch/dup/generic). Record its offset so
+        // enrichOneDuplicate can resolve draftIndex correctly.
+        const firstFailure = settled.find((r) => r.status === "rejected");
+        if (firstFailure && firstFailure.status === "rejected") {
+          const { iid, err } = firstFailure.reason as { iid: string; err: unknown };
+          pendingErrorGroupOffset.current = groupOffsets.get(iid) ?? 0;
+          throw err; // re-throw so the outer catch handles mismatch/dup/generic
+        }
+        // All groups confirmed — accumulate into the total count.
+        if (committedUids.size === 0) {
+          // No drafts were dropped (only empty groups present), but record the count.
+          setConfirmedCount((c) => c + newConfirmed);
+        }
       }
       setAccountMismatch(null);
       setDuplicateConflict(null);
@@ -598,11 +658,14 @@ export function ImportFlow({
 
   /**
    * Enrich an already-confirmed transaction with the draft that matched it (#230).
-   * `d.draftIndex` is an index into `pendingSubset.current` (the ordered subset sent to
-   * the last confirm). On success, drop that draft from the selection and re-confirm the rest.
+   * `d.draftIndex` is the server's index **within the per-group slice** sent to the failing
+   * confirmImport call. We add `pendingErrorGroupOffset.current` to translate it to the
+   * absolute position in `pendingSubset.current` (the merged subset across all groups).
+   * On success, drop that draft from the selection and re-confirm the rest.
    */
   async function enrichOneDuplicate(d: { draftIndex: number; matchedTransactionId: string }) {
-    const draft = pendingSubset.current[d.draftIndex];
+    const absoluteIndex = pendingErrorGroupOffset.current + d.draftIndex;
+    const draft = pendingSubset.current[absoluteIndex];
     if (!draft) return;
     try {
       await client.enrichImport(
@@ -612,7 +675,7 @@ export function ImportFlow({
       );
       // Drop the draft that was enriched; clear the conflict; re-confirm remaining.
       const remainingUids = (pendingSubset.current ?? [])
-        .filter((_, i) => i !== d.draftIndex)
+        .filter((_, i) => i !== absoluteIndex)
         .map((dr) => dr.uid);
       setDuplicateConflict(null);
       setDrafts((ds) => ds.filter((dr) => dr.uid !== draft.uid));
@@ -637,6 +700,7 @@ export function ImportFlow({
     setError(null);
     setAccountMismatch(null);
     setDuplicateConflict(null);
+    setConfirmedCount(0);
     setStep("upload");
   }
 
@@ -846,9 +910,27 @@ export function ImportFlow({
                 <span className="flex-1">{t("errorBanner.summary", { count: skipped.length })}</span>
                 <ChevronDown className="size-3.5 shrink-0 transition-transform [[open]_&]:rotate-180" />
               </summary>
-              <ul className="border-t border-border px-3 pb-2.5 pt-2 space-y-1">
+              <ul className="border-t border-border px-3 pb-2.5 pt-2 space-y-1.5">
                 {skipped.map((s) => (
-                  <li key={s.file}>{t(`skipped.${s.reason}`, { file: s.file })}</li>
+                  <li key={s.file} className="flex flex-wrap items-center gap-2">
+                    <span className="flex-1">{t(`skipped.${s.reason}`, { file: s.file })}</span>
+                    {s.reason === "alreadyConfirmed" && s.originalFile && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => {
+                          const f = s.originalFile!;
+                          // Remove this entry from the skipped list before re-importing.
+                          setSkipped((prev) => prev.filter((x) => x.file !== s.file));
+                          void handleFiles([f], true);
+                        }}
+                      >
+                        {t("reImportAnyway")}
+                      </Button>
+                    )}
+                  </li>
                 ))}
               </ul>
             </details>
