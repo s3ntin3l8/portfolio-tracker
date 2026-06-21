@@ -7,6 +7,7 @@ import {
   type TxRow,
 } from "@/components/transactions-table";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { ExportDocumentsButton } from "@/components/export-documents-button";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { RecentImportsSection } from "@/components/recent-imports-section";
 import { Link } from "@/i18n/navigation";
@@ -37,6 +38,7 @@ export default async function TransactionsPage({
   // For a single cash-outside portfolio, default the list to "Investments only" so the
   // cash/spending noise is hidden; aggregate and cash-inside views default to "All".
   let defaultInvestmentsOnly = false;
+  let singlePortfolio: { id: string; name: string; documentRetention: boolean } | null = null;
   if (aggregate) {
     const result = await loadTransactionsAcrossPortfolios();
     status = result.status;
@@ -47,7 +49,14 @@ export default async function TransactionsPage({
     );
     status = result.status;
     rows = result.status === "ok" ? result.data : [];
-    if (result.status === "ok") defaultInvestmentsOnly = !result.portfolio.cashCounted;
+    if (result.status === "ok") {
+      defaultInvestmentsOnly = !result.portfolio.cashCounted;
+      singlePortfolio = {
+        id: result.portfolio.id,
+        name: result.portfolio.name,
+        documentRetention: result.portfolio.documentRetention,
+      };
+    }
   }
 
   // Newest first.
@@ -85,14 +94,23 @@ export default async function TransactionsPage({
   ]);
 
   // Adding is handled by the global add-entry menu in the app-shell header, so this page
-  // header only carries the export action (no redundant second Add button).
+  // header only carries the export actions (no redundant second Add button).
   const addButton = (
-    <ExportCsvButton
-      filename="transactions.csv"
-      headers={exportHeaders}
-      rows={exportRows}
-      label={t("exportCsv")}
-    />
+    <div className="flex items-center gap-2">
+      <ExportCsvButton
+        filename="transactions.csv"
+        headers={exportHeaders}
+        rows={exportRows}
+        label={t("exportCsv")}
+      />
+      {singlePortfolio?.documentRetention && (
+        <ExportDocumentsButton
+          portfolioId={singlePortfolio.id}
+          portfolioName={singlePortfolio.name}
+          label={t("exportDocuments")}
+        />
+      )}
+    </div>
   );
 
   const heading = (action?: React.ReactNode) => (

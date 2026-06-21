@@ -23,6 +23,11 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { documents, transactions } from "@portfolio/db";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { schema } from "@portfolio/db";
+import {
+  extFromMime as _extFromMime,
+  buildStructuredKey,
+  gatherDocumentNaming,
+} from "./naming.js";
 
 // ---- Key building ----------------------------------------------------------
 
@@ -30,20 +35,6 @@ import type { schema } from "@portfolio/db";
 function sanitiseFilename(name: string): string {
   const base = path.basename(name).replace(/[^\w.-]/g, "_").slice(0, 200);
   return base || "document";
-}
-
-/** Extension derived from mimeType, used when originalFilename is absent. */
-function extFromMime(mimeType: string): string {
-  const map: Record<string, string> = {
-    "application/pdf": ".pdf",
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/webp": ".webp",
-    "image/gif": ".gif",
-    "text/csv": ".csv",
-    "text/plain": ".txt",
-  };
-  return map[mimeType] ?? "";
 }
 
 export function buildReceiptKey(
@@ -54,7 +45,7 @@ export function buildReceiptKey(
 ): string {
   const filename = originalFilename
     ? sanitiseFilename(originalFilename)
-    : `document${mimeType ? extFromMime(mimeType) : ""}`;
+    : `document${mimeType ? _extFromMime(mimeType) : ""}`;
   return `receipts/${userId}/${importId}/${filename}`;
 }
 
@@ -97,6 +88,7 @@ export interface DocumentMeta {
   source: string | null;
   importId: string | null;
   transactionId: string | null;
+  portfolioId: string | null;
   userId: string;
 }
 
@@ -158,7 +150,8 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
 
 /**
  * At confirm time: keep or delete staged documents for an import.
- * Best-effort storage deletion — a missing object is not an error.
+ * When retaining, also re-keys each object to a structured, human-readable path
+ * (via naming.ts). Best-effort storage deletion — a missing object is not an error.
  */
 export async function finalizeReceipts(
   app: AppLike,
@@ -167,17 +160,61 @@ export async function finalizeReceipts(
   const { importId, portfolioId, retain } = opts;
 
   const rows = await db(app)
-    .select({ id: documents.id, storageKey: documents.storageKey })
+    .select({
+      id: documents.id,
+      storageKey: documents.storageKey,
+      mimeType: documents.mimeType,
+      originalFilename: documents.originalFilename,
+      source: documents.source,
+      storedAt: documents.storedAt,
+      transactionId: documents.transactionId,
+      userId: documents.userId,
+    })
     .from(documents)
     .where(and(eq(documents.importId, importId), eq(documents.status, "staged")));
 
   if (rows.length === 0) return;
 
   if (retain) {
+    // Mark all staged docs retained and set their portfolio link first.
     await db(app)
       .update(documents)
       .set({ status: "retained", portfolioId })
       .where(and(eq(documents.importId, importId), eq(documents.status, "staged")));
+
+    // Re-key each object to a structured path. Best-effort: a failure logs and leaves
+    // the old key in place (the row still has status="retained"; download still works).
+    for (const row of rows) {
+      try {
+        const parts = await gatherDocumentNaming(app, {
+          doc: { ...row, importId },
+          portfolioId,
+          // txId: row.transactionId already set on TR docs by linkTrReceiptsToTransactions
+        });
+        const newKey = buildStructuredKey(row.userId, parts);
+        if (newKey === row.storageKey) continue; // already structured (idempotent)
+
+        await app.storage.move(row.storageKey, newKey, {
+          mimeType: row.mimeType,
+          originalFilename: row.originalFilename ?? undefined,
+        });
+        await db(app)
+          .update(documents)
+          .set({ storageKey: newKey })
+          .where(eq(documents.id, row.id));
+
+        app.log.debug(
+          { docId: row.id, oldKey: row.storageKey, newKey },
+          "receipt re-keyed to structured path",
+        );
+      } catch (err) {
+        app.log.warn(
+          { err, docId: row.id, key: row.storageKey },
+          "receipt re-key failed (non-fatal) — keeping old key",
+        );
+      }
+    }
+
     app.log.debug({ importId, portfolioId, count: rows.length }, "receipts retained");
   } else {
     await _deleteStorageObjects(app, rows, `finalize importId=${importId}`);

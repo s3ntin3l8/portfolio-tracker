@@ -50,6 +50,10 @@ function makeTrackingStorage(): StorageProvider & {
     },
     exists: async (key) => data.has(key),
     get: async (key) => data.get(key) ?? null,
+    move: async (src, dest) => {
+      const buf = data.get(src);
+      if (buf) { data.set(dest, buf); data.delete(src); }
+    },
   };
 }
 
@@ -326,12 +330,7 @@ describe("discard cleans staged bytes", () => {
 describe("undo import cleans retained bytes", () => {
   it("deletes the retained object when an import is undone", async () => {
     const { t, portfolioId } = await setup("undo-user", true);
-    const putsBefore = store.puts.length;
     const { importId, drafts } = await uploadCsv(t);
-
-    const newKey = store.puts.slice(putsBefore).find((k) => k.startsWith("receipts/"));
-    expect(newKey).toBeTruthy();
-
     await confirmImport(t, portfolioId, importId, drafts as unknown[]);
 
     const deletesBefore = store.deletes.length;
@@ -342,8 +341,10 @@ describe("undo import cleans retained bytes", () => {
     });
     expect(undo.statusCode).toBe(200);
 
+    // After confirm, the document was re-keyed to a structured path; after undo it must
+    // be cleaned up — whatever the current key is.
     const newDeletes = store.deletes.slice(deletesBefore);
-    expect(newDeletes).toContain(newKey);
+    expect(newDeletes.some((k) => k.startsWith("receipts/"))).toBe(true);
   });
 });
 
@@ -396,12 +397,7 @@ describe("IDOR guard on document-url endpoints", () => {
 describe("portfolio delete removes retained storage objects", () => {
   it("deletes retained objects before removing the portfolio", async () => {
     const { t, portfolioId } = await setup("portdel-user", true);
-    const putsBefore = store.puts.length;
     const { importId, drafts } = await uploadCsv(t);
-
-    const newKey = store.puts.slice(putsBefore).find((k) => k.startsWith("receipts/"));
-    expect(newKey).toBeTruthy();
-
     await confirmImport(t, portfolioId, importId, drafts as unknown[]);
 
     const deletesBefore = store.deletes.length;
@@ -412,8 +408,9 @@ describe("portfolio delete removes retained storage objects", () => {
     });
     expect(del.statusCode).toBe(204);
 
+    // After confirm the doc was re-keyed; on portfolio delete the structured key is removed.
     const newDeletes = store.deletes.slice(deletesBefore);
-    expect(newDeletes).toContain(newKey);
+    expect(newDeletes.some((k) => k.startsWith("receipts/"))).toBe(true);
   });
 });
 

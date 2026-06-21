@@ -19,6 +19,7 @@ import {
   importIdsWithDocuments,
   transactionIdsWithDocuments,
 } from "../storage/receipts.js";
+import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 import {
   txIdsWithFullTaxDetail,
   sourcesForTransactions,
@@ -1264,12 +1265,23 @@ export async function transactionsRoute(app: FastifyInstance) {
       // IDOR guard: verify document ownership explicitly.
       if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
 
-      const url = await app.storage.getSignedUrl(doc.storageKey);
-      return {
-        url,
-        filename: doc.originalFilename,
-        mimeType: doc.mimeType,
-      };
+      // Build structured, date-first download filename using transaction scope.
+      let filename: string | null = doc.originalFilename;
+      try {
+        const parts = await gatherDocumentNaming(app, {
+          doc,
+          portfolioId,
+          txId: tx.id, // force transaction scope even for import-linked (DKB/CSV) docs
+        });
+        filename = buildDocumentName(parts);
+      } catch {
+        // Non-fatal: fall back to originalFilename.
+      }
+
+      const url = await app.storage.getSignedUrl(doc.storageKey, undefined, {
+        downloadName: filename ?? undefined,
+      });
+      return { url, filename, mimeType: doc.mimeType };
     },
   );
 
@@ -1306,9 +1318,14 @@ export async function transactionsRoute(app: FastifyInstance) {
       // Fetch the linked document.
       const [doc] = await app.db
         .select({
+          id: documents.id,
           storageKey: documents.storageKey,
           originalFilename: documents.originalFilename,
           mimeType: documents.mimeType,
+          source: documents.source,
+          storedAt: documents.storedAt,
+          importId: documents.importId,
+          transactionId: documents.transactionId,
           userId: documents.userId,
         })
         .from(documents)
@@ -1318,12 +1335,125 @@ export async function transactionsRoute(app: FastifyInstance) {
       // IDOR: document must belong to the authenticated user.
       if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
 
-      const url = await app.storage.getSignedUrl(doc.storageKey);
-      return {
-        url,
-        filename: doc.originalFilename,
-        mimeType: doc.mimeType,
-      };
+      // Build structured, date-first download filename using transaction scope.
+      let filename: string | null = doc.originalFilename;
+      try {
+        const parts = await gatherDocumentNaming(app, {
+          doc,
+          portfolioId,
+          txId, // force transaction scope for per-leg downloads
+        });
+        filename = buildDocumentName(parts);
+      } catch {
+        // Non-fatal: fall back to originalFilename.
+      }
+
+      const url = await app.storage.getSignedUrl(doc.storageKey, undefined, {
+        downloadName: filename ?? undefined,
+      });
+      return { url, filename, mimeType: doc.mimeType };
+    },
+  );
+
+  // Bulk-export all retained documents for a portfolio as a zip archive (#structured-naming).
+  // Each entry gets a structured, date-first name. Documents shared by many transactions
+  // (DKB/CSV/screenshot statement imports) appear once with a statement-level name.
+  // IDOR guard: portfolio must be owned by the authenticated user.
+  app.get<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/documents/export",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Fetch all retained docs for this portfolio. De-dup by document id (a statement
+      // doc shared across N transactions must appear only once in the archive).
+      const docs = await app.db
+        .select({
+          id: documents.id,
+          storageKey: documents.storageKey,
+          mimeType: documents.mimeType,
+          originalFilename: documents.originalFilename,
+          source: documents.source,
+          storedAt: documents.storedAt,
+          importId: documents.importId,
+          transactionId: documents.transactionId,
+          userId: documents.userId,
+        })
+        .from(documents)
+        .where(
+          and(eq(documents.portfolioId, portfolioId), eq(documents.status, "retained")),
+        );
+
+      if (docs.length === 0) {
+        return reply.code(404).send({ error: "no_documents" });
+      }
+
+      // Build structured names and collect bytes. Names must be unique within the archive;
+      // append a numeric suffix (-2, -3, …) on collision.
+      const usedNames = new Set<string>();
+
+      function dedupeFilename(name: string): string {
+        if (!usedNames.has(name)) {
+          usedNames.add(name);
+          return name;
+        }
+        // Split at the last dot for extension-safe suffix insertion.
+        const dotIdx = name.lastIndexOf(".");
+        const base = dotIdx >= 0 ? name.slice(0, dotIdx) : name;
+        const ext = dotIdx >= 0 ? name.slice(dotIdx) : "";
+        let n = 2;
+        let candidate = `${base}-${n}${ext}`;
+        while (usedNames.has(candidate)) {
+          n++;
+          candidate = `${base}-${n}${ext}`;
+        }
+        usedNames.add(candidate);
+        return candidate;
+      }
+
+      // Dynamically import fflate to avoid bundling it into every route if unused.
+      const { zipSync } = await import("fflate");
+
+      const entries: Record<string, Uint8Array> = {};
+
+      for (const doc of docs) {
+        let entryName: string;
+        try {
+          const parts = await gatherDocumentNaming(app, { doc, portfolioId });
+          entryName = buildDocumentName(parts);
+        } catch {
+          entryName = doc.originalFilename ?? `document_${doc.id.slice(0, 8)}`;
+        }
+        entryName = dedupeFilename(entryName);
+
+        const buf = await app.storage.get(doc.storageKey);
+        if (!buf) {
+          app.log.warn({ docId: doc.id, key: doc.storageKey }, "export: object not found, skipping");
+          continue;
+        }
+        entries[entryName] = new Uint8Array(buf);
+      }
+
+      const [portfolio] = await app.db
+        .select({ name: portfolios.name })
+        .from(portfolios)
+        .where(eq(portfolios.id, portfolioId))
+        .limit(1);
+
+      const archiveName = portfolio
+        ? `${portfolio.name.replace(/[^\w-]/g, "-")}_documents.zip`
+        : "documents.zip";
+
+      const zipped = zipSync(entries);
+
+      void reply.header("Content-Type", "application/zip");
+      void reply.header("Content-Disposition", `attachment; filename="${archiveName}"`);
+      void reply.header("Content-Length", String(zipped.length));
+      return reply.code(200).send(Buffer.from(zipped));
     },
   );
 }

@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand,
   GetObjectCommand,
+  CopyObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
@@ -68,11 +69,45 @@ export class S3Provider implements StorageProvider {
     );
   }
 
-  async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
+  async getSignedUrl(
+    key: string,
+    expiresInSeconds?: number,
+    opts?: { downloadName?: string },
+  ): Promise<string> {
     return s3GetSignedUrl(
       this.client,
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ...(opts?.downloadName
+          ? { ResponseContentDisposition: `attachment; filename="${opts.downloadName}"` }
+          : {}),
+      }),
       { expiresIn: expiresInSeconds ?? this.signedUrlTtl },
+    );
+  }
+
+  async move(
+    srcKey: string,
+    destKey: string,
+    meta: { mimeType: string; originalFilename?: string },
+  ): Promise<void> {
+    // Copy first — if this fails the source is untouched (safe to leave and retry).
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        CopySource: `${this.bucket}/${srcKey}`,
+        Key: destKey,
+        ContentType: meta.mimeType,
+        MetadataDirective: "REPLACE",
+        ...(meta.originalFilename
+          ? { ContentDisposition: `attachment; filename="${meta.originalFilename}"` }
+          : {}),
+      }),
+    );
+    // Copy succeeded — delete the source.
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: srcKey }),
     );
   }
 

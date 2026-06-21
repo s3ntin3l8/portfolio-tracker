@@ -44,6 +44,10 @@ function makeStorage(): StorageProvider & { data: Map<string, Buffer> } {
     delete: async (key) => { data.delete(key); },
     exists: async (key) => data.has(key),
     get: async (key) => data.get(key) ?? null,
+    move: async (src, dest) => {
+      const buf = data.get(src);
+      if (buf) { data.set(dest, buf); data.delete(src); }
+    },
   };
 }
 
@@ -324,7 +328,9 @@ describe("GET …/sources/:sourceId/document-url", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { url: string; filename: string; mimeType: string };
     expect(body.url).toContain(storageKey);
-    expect(body.filename).toBe("settlement.pdf");
+    // filename is now a structured date-first name (the original "settlement.pdf" is no
+    // longer returned — the endpoint builds a human-readable name from the transaction).
+    expect(body.filename).toMatch(/^\d{4}-\d{2}-\d{2}_.*\.pdf$/);
     expect(body.mimeType).toBe("application/pdf");
   });
 
