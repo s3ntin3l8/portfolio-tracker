@@ -606,7 +606,7 @@ export async function importsRoute(app: FastifyInstance) {
               request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
               parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
             }
-          } else if (!parsed && detectTrPdf(text)) {
+          } else if (detectTrPdf(text)) {
             // TR settlement PDFs: deterministic parse — same fast-path as DKB.
             // Cost-information / order-confirmation docs return false from detectTrPdf.
             const { drafts: trDrafts, errors: trErrors } = parseTrPdf(text);
