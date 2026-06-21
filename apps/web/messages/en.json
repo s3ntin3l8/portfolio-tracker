@@ -361,7 +361,8 @@
       "wkn": "WKN",
       "total": "Total",
       "fees": "Fees",
-      "currency": "Currency"
+      "currency": "Currency",
+      "tax": "Tax"
     },
     "review": {
       "filters": {
@@ -540,7 +541,10 @@
     "edit": "Edit",
     "delete": "Delete",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "savedResults": "Your portfolios",
+    "discoveredResults": "Market discovery",
+    "notInPortfolios": "{symbol} was found in market data but is not in your portfolios yet. Import a transaction for it first."
   },
   "Merger": {
     "link": "Merger",

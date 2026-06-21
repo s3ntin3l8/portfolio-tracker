@@ -29,6 +29,13 @@ self.addEventListener("fetch", (event: FetchEvent) => {
 
   event.respondWith(
     (async () => {
+      // Read the active locale from the NEXT_LOCALE cookie (set by next-intl's middleware).
+      // The share-target POST comes from the OS, so the cookie should be present on the
+      // request. Fall back to "" (no prefix) which next-intl maps to the default locale.
+      const cookieHeader = event.request.headers.get("cookie") ?? "";
+      const localeMatch = /(?:^|;\s*)NEXT_LOCALE=([^;]+)/.exec(cookieHeader);
+      const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
+
       try {
         const form = await event.request.formData();
         const image = form.get("image");
@@ -40,12 +47,12 @@ self.addEventListener("fetch", (event: FetchEvent) => {
               headers: { "content-type": image.type || "image/png" },
             }),
           );
-          return Response.redirect("/transactions?shared=1", 303);
+          return Response.redirect(`${localePrefix}/transactions?shared=1`, 303);
         }
       } catch {
         // Fall through to a plain redirect so the user still lands on the transactions page.
       }
-      return Response.redirect("/transactions", 303);
+      return Response.redirect(`${localePrefix}/transactions`, 303);
     })(),
   );
 });

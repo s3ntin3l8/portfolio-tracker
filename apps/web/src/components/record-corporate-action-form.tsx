@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, X } from "lucide-react";
-import type { ApiClient, Instrument } from "@portfolio/api-client";
+import { AlertCircle, Loader2, Sparkles, X } from "lucide-react";
+import type { ApiClient, Instrument, InstrumentSearchResult } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 /** The slice of the API client this form needs (injectable for tests). */
 export type RecordCorpActionClient = Pick<
   ApiClient,
-  "searchInstruments" | "createCorporateAction"
+  "searchInstruments" | "lookupInstruments" | "createCorporateAction"
 >;
 
 const TYPES = ["split", "bonus", "rights"] as const;
@@ -30,24 +30,69 @@ export function RecordCorporateActionForm({
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Instrument[]>([]);
+  // Market-data discovery results (not yet in the local DB).
+  const [discovered, setDiscovered] = useState<InstrumentSearchResult[]>([]);
+  const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [type, setType] = useState<CaType>("split");
   const [ratio, setRatio] = useState("");
   const [exDate, setExDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Informational notice (not an error) — shown when a market-data hit isn't in any portfolio yet.
+  const [info, setInfo] = useState<string | null>(null);
 
-  async function runSearch(q: string) {
+  function runSearch(q: string) {
     setQuery(q);
     setSelected(null);
-    if (!q.trim()) {
+    setInfo(null);
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    const trimmed = q.trim();
+    if (!trimmed) {
       setResults([]);
+      setDiscovered([]);
       return;
     }
+    // Local reference data is fast; query it immediately.
+    void client
+      .searchInstruments(trimmed)
+      .then(setResults)
+      .catch(() => setResults([]));
+    // Market-data discovery hits the network — debounce it.
+    lookupTimer.current = setTimeout(() => {
+      void client
+        .lookupInstruments(trimmed)
+        .then(setDiscovered)
+        .catch(() => setDiscovered([]));
+    }, 300);
+  }
+
+  /**
+   * When a discovered (market-data) result is picked, try to resolve it to a
+   * local DB instrument via its ISIN or symbol. If found, auto-select it.
+   * If not, populate the search field so the user can refine or browse.
+   */
+  async function selectDiscovered(found: InstrumentSearchResult) {
+    const key = found.isin ?? found.symbol;
     try {
-      setResults(await client.searchInstruments(q.trim()));
+      const matches = await client.searchInstruments(key);
+      if (matches.length > 0) {
+        setSelected(matches[0]);
+        setResults([]);
+        setDiscovered([]);
+        setQuery("");
+      } else {
+        // Instrument not in portfolios yet — surface the discovery hit in the
+        // query field so the user sees it and can retry with a different term.
+        // Show as informational (not destructive) since this isn't an error.
+        setQuery(found.symbol);
+        setResults([]);
+        setDiscovered([]);
+        setInfo(t("notInPortfolios", { symbol: found.symbol }));
+      }
     } catch {
       setResults([]);
+      setDiscovered([]);
     }
   }
 
@@ -60,6 +105,7 @@ export function RecordCorporateActionForm({
     }
     setBusy(true);
     setError(null);
+    setInfo(null);
     try {
       await client.createCorporateAction({
         instrumentId: selected.id,
@@ -77,6 +123,13 @@ export function RecordCorporateActionForm({
 
   return (
     <form onSubmit={submit} className="max-w-lg space-y-5">
+      {info && (
+        <div
+          className="flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground"
+        >
+          {info}
+        </div>
+      )}
       {error && (
         <div
           role="alert"
@@ -114,23 +167,54 @@ export function RecordCorporateActionForm({
               aria-label={t("search")}
             />
             {results.length > 0 && (
-              <ul className="divide-y divide-border rounded-md border border-border">
-                {results.map((i) => (
-                  <li key={i.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelected(i);
-                        setResults([]);
-                      }}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                    >
-                      <span className="font-medium">{i.symbol}</span>
-                      <span className="text-muted-foreground">{i.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {t("savedResults")}
+                </p>
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {results.map((i) => (
+                    <li key={i.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelected(i);
+                          setResults([]);
+                          setDiscovered([]);
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="font-medium">{i.symbol}</span>
+                        <span className="text-muted-foreground">{i.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {discovered.length > 0 && (
+              <div className="space-y-1">
+                <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                  <Sparkles className="size-3" />
+                  {t("discoveredResults")}
+                </p>
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {discovered.map((i) => (
+                    <li key={`${i.market}:${i.symbol}:${i.source}`}>
+                      <button
+                        type="button"
+                        onClick={() => void selectDiscovered(i)}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="font-medium">{i.symbol}</span>
+                        <span className="truncate text-muted-foreground">{i.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {i.currency}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </>
         )}

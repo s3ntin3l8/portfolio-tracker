@@ -6,7 +6,7 @@
  */
 export type ImportSkipReason =
   | "notConfigured" // 503 — vision parser has no API key
-  | "tooLarge"      // 413 — file exceeds the 25 MB limit
+  | "tooLarge"      // 413 — file exceeds the 5 MB body limit (imports.ts:bodyLimit)
   | "parseFailed"   // 502 / 415 — provider rejected the file
   | "fileRead"      // browser FileReader failure
   | "alreadyConfirmed"

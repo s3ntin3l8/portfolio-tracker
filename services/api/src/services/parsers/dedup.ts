@@ -1,4 +1,4 @@
-import type { TaxComponents, ParsedTransaction } from "@portfolio/schema";
+import type { TaxComponents } from "@portfolio/schema";
 
 /**
  * Cross-source economic duplicate detection (#196, hardened in #217).
@@ -238,97 +238,13 @@ export function recomputeRollup(rows: SourceRow[]): {
   };
 }
 
-/**
- * Aggregate split-order PDF legs that share an `orderRef` into one combined draft.
- *
- * A TR split order has two settlement PDFs (whole + fractional execution) with the same
- * AUFTRAG but different AUSFÜHRUNG. `findCrossSourceDuplicates` keyed on quantity would
- * see the fractional leg and miss the combined timeline transaction. This function:
- *  1. Groups drafts by `orderRef` (for those that carry one).
- *  2. Within each group, collapses into ONE combined draft:
- *     - quantity = sum of all legs
- *     - tax/fees = sum of all legs (additive)
- *     - taxComponents = merged (union)
- *     - price = the **stated per-share price from the PDF** (never a recomputed
- *       total/quantity) — a recomputed fee-inclusive price drifts past the matcher's
- *       0.2% tolerance on small orders with a Fremdkostenzuschlag.
- *     - All other fields: taken from the first leg (ISIN, name, currency, executedAt, …).
- *  3. Singletons (no orderRef, or unique orderRef) pass through unchanged.
- *
- * Returns a NEW array of drafts (aggregated), plus a map from each returned draft's
- * index to the original draft indices (for source-row bookkeeping: one transaction_sources
- * row per original leg, keyed by its AUSFÜHRUNG externalId).
- */
-export function aggregateByOrderRef(drafts: ParsedTransaction[]): {
-  aggregated: ParsedTransaction[];
-  legMap: Map<number, number[]>; // aggregated index → [original indices]
-} {
-  // Group by orderRef.
-  const byRef = new Map<string, number[]>();
-  const noRef: number[] = [];
-  for (let i = 0; i < drafts.length; i++) {
-    const ref = drafts[i].orderRef;
-    if (ref) {
-      const bucket = byRef.get(ref);
-      if (bucket) bucket.push(i);
-      else byRef.set(ref, [i]);
-    } else {
-      noRef.push(i);
-    }
-  }
-
-  const aggregated: ParsedTransaction[] = [];
-  const legMap = new Map<number, number[]>();
-
-  // Pass singletons through.
-  for (const idx of noRef) {
-    const outIdx = aggregated.length;
-    aggregated.push(drafts[idx]);
-    legMap.set(outIdx, [idx]);
-  }
-
-  for (const [, indices] of byRef) {
-    if (indices.length === 1) {
-      // Unique orderRef — no aggregation needed.
-      const outIdx = aggregated.length;
-      aggregated.push(drafts[indices[0]]);
-      legMap.set(outIdx, [indices[0]]);
-      continue;
-    }
-
-    // Multi-leg: aggregate.
-    const legs = indices.map((i) => drafts[i]);
-    const first = legs[0];
-    let qtySum = 0;
-    let taxSum = 0;
-    let feesSum = 0;
-    const mergedComponents: TaxComponents = {};
-
-    for (const leg of legs) {
-      const qty = parseFloat(leg.quantity);
-      if (Number.isFinite(qty)) qtySum += qty;
-      const tax = leg.tax ? parseFloat(leg.tax) : 0;
-      if (Number.isFinite(tax)) taxSum += tax;
-      const fees = leg.fees ? parseFloat(leg.fees) : 0;
-      if (Number.isFinite(fees)) feesSum += fees;
-      if (leg.taxComponents) Object.assign(mergedComponents, leg.taxComponents);
-    }
-
-    // Use the first leg's stated per-share price (from PDF PREIS column).
-    // Must NOT recompute as total/quantity — fee inclusion drifts past 0.2% tolerance.
-    const combined: ParsedTransaction = {
-      ...first,
-      quantity: qtySum.toString(),
-      tax: taxSum > 0 ? taxSum.toFixed(2) : first.tax,
-      fees: feesSum.toFixed(2),
-      taxComponents: Object.keys(mergedComponents).length > 0 ? mergedComponents : first.taxComponents,
-      // price stays from first leg — the PDF-stated per-share price.
-    };
-
-    const outIdx = aggregated.length;
-    aggregated.push(combined);
-    legMap.set(outIdx, indices);
-  }
-
-  return { aggregated, legMap };
-}
+// NOTE: aggregateByOrderRef was removed (fix 4.2).
+// A TR split order (two settlement PDFs, same AUFTRAG/different AUSFÜHRUNG) imports as two
+// separate transactions. This is CORRECT — each PDF represents a real settlement (fills at
+// different prices/quantities). `packages/core` derives P&L per-transaction, so two legs =
+// two real fills = correct cost basis and realized gain.
+// The function was never wired into the confirm pipeline (see enrichment.ts, intentionally
+// not called). It is removed here to prevent stale "pipeline" documentation from implying
+// it runs. If combined timeline rows become desirable in the future, the implementation
+// history is available in git. The `orderRef` field remains on `transaction_sources` for
+// bookkeeping.

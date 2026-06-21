@@ -492,6 +492,8 @@ export function AddTransactionForm({
               inputMode="decimal"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
+              required
+              min="0.000001"
             />
           </Field>
         )}

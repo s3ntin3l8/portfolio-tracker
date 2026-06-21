@@ -85,9 +85,10 @@ export async function enrichTransactionFromDrafts(
   const { importId, importSource = "csv", documentsByExternalId } = opts;
 
   // Write a source row per draft (by AUSFÜHRUNG externalId — the per-leg idempotency key).
-  // Split-order aggregation (aggregateByOrderRef) is intentionally NOT called here:
-  // each leg creates its own source row, and recomputeRollup sums tax/fees across
-  // same-rank rows, giving the correct combined rollup without pre-aggregating drafts.
+  // Split-order legs (same AUFTRAG, different AUSFÜHRUNG) each create their own source row.
+  // `recomputeRollup` sums tax/fees across same-rank rows for the informational rollup.
+  // TR split orders intentionally import as two separate transactions (one per settlement
+  // PDF), which is correct — each represents a real fill at its stated price/quantity.
 
   const writtenIds: string[] = [];
 

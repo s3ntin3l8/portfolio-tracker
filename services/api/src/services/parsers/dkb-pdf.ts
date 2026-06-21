@@ -183,10 +183,12 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
 
   if (isIncome) {
     // NET amount credited drives the cash flow; gross = net + withheld tax (self-consistent).
-    // `tax` is informational (display-only; cashFlow never subtracts it) and tuned to the
-    // common case where German KapSt is absorbed by the Sparer-Pauschbetrag (so the only
-    // withholding is foreign Quellensteuer). A doc with actually-withheld KapSt/SolZ may
-    // under-report `tax`, but `price` (the directly-parsed Ausmachender Betrag) stays correct.
+    // `tax` is informational (display-only; packages/core never reads it — cashFlow uses
+    // `price` directly). The parser attempts to extract KapSt/SolZ/Kirche/Quellensteuer via
+    // `deductedAfter` below, but a PDF whose format deviates from the expected regex may
+    // miss one of these lines. In that case `tax` under-reports the withheld amount.
+    // KNOWN LIMITATION (4.5): `price` (Ausmachender Betrag, line below) always stays correct,
+    // so cashflow is unaffected. A future pass could add broader KapSt-line patterns.
     const net = amountAfter(text, "Ausmachender Betrag");
     const quellensteuer = deductedAfter(text, "Einbehaltene Quellensteuer", true);
     const kapst = deductedAfter(text, "\\bKapitalertragsteuer");

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   actionClass,
-  aggregateByOrderRef,
   decimalsClose,
   findCrossSourceDuplicates,
   parseLooseDecimal,
@@ -220,90 +219,6 @@ describe("recomputeRollup", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// aggregateByOrderRef
-// ---------------------------------------------------------------------------
-
-function makeDraft(overrides: {
-  orderRef?: string;
-  quantity: string;
-  tax?: string;
-  fees?: string;
-  price?: string;
-  externalId?: string;
-  isin?: string;
-}) {
-  return {
-    action: "buy" as const,
-    quantity: overrides.quantity,
-    price: overrides.price ?? "100.00",
-    fees: overrides.fees ?? "0",
-    tax: overrides.tax,
-    currency: "EUR" as const,
-    executedAt: new Date("2025-02-25"),
-    confidence: 1,
-    unit: "shares" as const,
-    isin: overrides.isin ?? "IE00B5BMR087",
-    orderRef: overrides.orderRef,
-    externalId: overrides.externalId,
-  };
-}
-
-describe("aggregateByOrderRef", () => {
-  it("passes through singletons with no orderRef unchanged", () => {
-    const draft = makeDraft({ quantity: "10" });
-    const { aggregated, legMap } = aggregateByOrderRef([draft]);
-    expect(aggregated).toHaveLength(1);
-    expect(aggregated[0].quantity).toBe("10");
-    expect(legMap.get(0)).toEqual([0]);
-  });
-
-  it("passes through a singleton with a unique orderRef unchanged", () => {
-    const draft = makeDraft({ quantity: "5", orderRef: "abc-123" });
-    const { aggregated } = aggregateByOrderRef([draft]);
-    expect(aggregated).toHaveLength(1);
-    expect(aggregated[0].quantity).toBe("5");
-  });
-
-  it("aggregates two legs sharing an orderRef into one combined draft", () => {
-    const leg1 = makeDraft({ orderRef: "ref-A", quantity: "27", tax: "3.00", fees: "1.00", externalId: "tr:exec:aaa" });
-    const leg2 = makeDraft({ orderRef: "ref-A", quantity: "0.526515", tax: "0.05", fees: "0.00", externalId: "tr:exec:bbb" });
-    const { aggregated, legMap } = aggregateByOrderRef([leg1, leg2]);
-    expect(aggregated).toHaveLength(1);
-    const combined = aggregated[0];
-    // Quantity summed.
-    expect(parseFloat(combined.quantity)).toBeCloseTo(27.526515, 4);
-    // Tax and fees summed.
-    expect(Number(combined.tax)).toBeCloseTo(3.05, 2);
-    expect(Number(combined.fees)).toBeCloseTo(1.00, 2);
-    // Price carried from the first leg (not recomputed).
-    expect(combined.price).toBe("100.00");
-    // legMap records both original indices.
-    expect(legMap.get(0)?.sort()).toEqual([0, 1]);
-  });
-
-  it("does not mix legs with different orderRefs", () => {
-    const leg1 = makeDraft({ orderRef: "ref-A", quantity: "10" });
-    const leg2 = makeDraft({ orderRef: "ref-B", quantity: "5" });
-    const { aggregated } = aggregateByOrderRef([leg1, leg2]);
-    expect(aggregated).toHaveLength(2);
-  });
-
-  it("mixed: singleton + aggregated pair produces correct legMap entries", () => {
-    const solo = makeDraft({ quantity: "3" }); // no orderRef
-    const legA = makeDraft({ orderRef: "ord-1", quantity: "20", externalId: "tr:exec:x" });
-    const legB = makeDraft({ orderRef: "ord-1", quantity: "0.1", externalId: "tr:exec:y" });
-    const { aggregated, legMap } = aggregateByOrderRef([solo, legA, legB]);
-    // Singleton + aggregated pair = 2 output drafts.
-    expect(aggregated).toHaveLength(2);
-    // The combined draft has summed quantity.
-    const combined = aggregated.find((d) => parseFloat(d.quantity) > 3)!;
-    expect(parseFloat(combined.quantity)).toBeCloseTo(20.1, 1);
-    // legMap covers both output slots.
-    let foundPair = false;
-    for (const [, origIndices] of legMap) {
-      if (origIndices.length === 2) foundPair = true;
-    }
-    expect(foundPair).toBe(true);
-  });
-});
+// aggregateByOrderRef was removed (fix 4.2). A TR split order imports as two separate
+// transactions — one per settlement PDF — which is correct because each represents a real
+// fill. See the NOTE in dedup.ts and services/enrichment.ts for background.

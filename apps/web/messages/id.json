@@ -361,7 +361,8 @@
       "wkn": "WKN",
       "total": "Total",
       "fees": "Biaya",
-      "currency": "Mata Uang"
+      "currency": "Mata Uang",
+      "tax": "Pajak"
     },
     "review": {
       "filters": {
@@ -540,7 +541,10 @@
     "edit": "Ubah",
     "delete": "Hapus",
     "save": "Simpan",
-    "cancel": "Batal"
+    "cancel": "Batal",
+    "savedResults": "Portofolio Anda",
+    "discoveredResults": "Pencarian pasar",
+    "notInPortfolios": "{symbol} ditemukan di data pasar tetapi belum ada di portofolio Anda. Import transaksi untuk instrumen ini terlebih dahulu."
   },
   "Merger": {
     "link": "Merger",

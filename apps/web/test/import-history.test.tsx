@@ -342,7 +342,7 @@ describe("ImportHistory", () => {
       confidence: null,
       count: 2,
       createdAt: "2026-06-09T10:00:00.000Z",
-      document: { originalFilename: "export.pdf" },
+      document: { id: "doc1", originalFilename: "export.pdf", mimeType: "application/pdf", sizeBytes: 12345, storedAt: "2026-06-09T10:00:00.000Z" },
     };
     render(
       <NextIntlClientProvider locale="en" messages={messages}>

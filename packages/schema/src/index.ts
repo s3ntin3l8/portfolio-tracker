@@ -353,8 +353,9 @@ export const parsedTransactionSchema = z.object({
   // Per-component tax breakdown (PDF parsers only). Stored on transaction_sources;
   // `tax` stays the gold-standard summed rollup on the transaction itself.
   taxComponents: taxComponentsSchema.nullish(),
-  // TR AUFTRAG order reference, shared across split-order legs. Groups legs for
-  // aggregation (aggregateByOrderRef) and stored on transaction_sources.orderRef.
+  // TR AUFTRAG order reference, shared across split-order legs. Stored on
+  // transaction_sources.orderRef for bookkeeping; each leg imports as a separate
+  // transaction (one per settlement PDF — the intended behavior).
   orderRef: z.string().nullish(),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;

@@ -450,9 +450,9 @@ export function ImportReview({
             type="checkbox"
             className="size-4 align-middle opacity-40"
             disabled
+            readOnly
             aria-label={t("review.selectRow")}
             checked={false}
-            onChange={() => undefined}
           />
         </TableCell>
         <TableCell>
@@ -925,6 +925,28 @@ export function ImportReview({
           </DialogHeader>
           {editingDraft && (
             <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("review.columns.action")}>
+                <Select
+                  value={editingDraft.action}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { action: e.target.value })
+                  }
+                >
+                  {MAP_ACTIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("fields.currency")}>
+                <Input
+                  value={editingDraft.currency}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { currency: e.target.value })
+                  }
+                />
+              </Field>
               <Field label={t("fields.name")}>
                 <Input
                   value={editingDraft.name ?? ""}
@@ -971,6 +993,22 @@ export function ImportReview({
                   value={editingDraft.price}
                   onChange={(e) =>
                     onUpdate(editingDraft.uid, { price: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label={t("fields.fees")}>
+                <Input
+                  value={editingDraft.fees ?? ""}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { fees: e.target.value || null })
+                  }
+                />
+              </Field>
+              <Field label={t("fields.tax")}>
+                <Input
+                  value={editingDraft.tax ?? ""}
+                  onChange={(e) =>
+                    onUpdate(editingDraft.uid, { tax: e.target.value || null })
                   }
                 />
               </Field>

@@ -25,6 +25,7 @@ const INSTRUMENT: Instrument = {
 function makeClient(over: Partial<RecordCorpActionClient> = {}): RecordCorpActionClient {
   return {
     searchInstruments: vi.fn(async () => [INSTRUMENT]),
+    lookupInstruments: vi.fn(async () => []),
     createCorporateAction: vi.fn(async () => ({}) as never),
     ...over,
   };
