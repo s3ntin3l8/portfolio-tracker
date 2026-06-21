@@ -34,6 +34,7 @@ const items: ImportRecord[] = [
     confidence: null,
     count: 2,
     createdAt: "2026-06-10T10:00:00.000Z",
+    document: null,
   },
   {
     id: "conf1",
@@ -43,6 +44,7 @@ const items: ImportRecord[] = [
     confidence: null,
     count: 4,
     createdAt: "2026-06-09T10:00:00.000Z",
+    document: null,
   },
 ];
 
@@ -55,6 +57,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 10,
     createdAt: "2026-06-12T10:00:00.000Z",
+    document: null,
   },
   {
     id: "i2",
@@ -64,6 +67,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 1,
     createdAt: "2026-06-11T10:00:00.000Z",
+    document: null,
   },
   {
     id: "i3",
@@ -73,6 +77,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 5,
     createdAt: "2026-06-10T10:00:00.000Z",
+    document: null,
   },
 ];
 
@@ -92,6 +97,7 @@ const discardedItem: ImportRecord = {
   confidence: null,
   count: 1,
   createdAt: "2026-06-08T10:00:00.000Z",
+  document: null,
 };
 
 const itemsWithDiscarded: ImportRecord[] = [...items, discardedItem];

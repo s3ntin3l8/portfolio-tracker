@@ -47,3 +47,5 @@ export type ImportSettingsRow = typeof schema.importSettings.$inferSelect;
 export type NewImportSettingsRow = typeof schema.importSettings.$inferInsert;
 export type StorageSettingsRow = typeof schema.storageSettings.$inferSelect;
 export type NewStorageSettingsRow = typeof schema.storageSettings.$inferInsert;
+export type Document = typeof schema.documents.$inferSelect;
+export type NewDocument = typeof schema.documents.$inferInsert;

@@ -14,6 +14,8 @@ import { PytrAuthError } from "./runner.js";
 import type { PytrRunner, TrExportSummary } from "./runner.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
+import type { StorageProvider } from "../../storage/types.js";
+import { deleteReceiptsForTransactions } from "../../storage/receipts.js";
 
 type TrConnectionRow = typeof trConnections.$inferSelect;
 
@@ -117,6 +119,8 @@ export async function syncTrConnection(
   runner: PytrRunner,
   connection: TrConnectionRow,
   log?: FastifyBaseLogger,
+  /** Optional storage provider for document cleanup on cancellation (#231). */
+  storage?: StorageProvider,
 ): Promise<SyncResult> {
   if (!connection.sessionEnc || !connection.portfolioId) {
     log?.warn({ connectionId: connection.id }, "tr sync skipped: missing session/portfolio");
@@ -185,8 +189,18 @@ export async function syncTrConnection(
           inArray(transactions.externalId, [...cancelledIds]),
         ),
       )
-      .returning({ id: transactions.id });
+      .returning({ id: transactions.id, importId: transactions.importId });
     cancelled = removed.length;
+    // Clean up any linked documents (#231). Best-effort — no-op in phase 1 since
+    // TR per-tx docs aren't stored yet; forward-compatible for phase 2.
+    if (storage && removed.length > 0) {
+      const storageApp = { storage, db, log: log ?? console } as Parameters<typeof deleteReceiptsForTransactions>[0];
+      await deleteReceiptsForTransactions(
+        storageApp,
+        removed.map((r) => r.id),
+        removed.map((r) => r.importId).filter((x): x is string => x !== null),
+      );
+    }
     await db
       .delete(trResolvedEvents)
       .where(

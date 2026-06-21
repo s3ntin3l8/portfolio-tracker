@@ -10,6 +10,7 @@ import { recordDailySnapshots } from "./snapshots.js";
 import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
 import { backfillPortfolioHistory } from "./backfill.js";
+import { gcStagedReceipts } from "../storage/receipts.js";
 
 const QUEUE = "refresh-prices";
 const SCHEDULE_CRON = "*/5 * * * *"; // every 5 minutes; the job self-gates on market hours
@@ -33,6 +34,10 @@ const DIVIDEND_QUEUE = "refresh-dividends";
 // Weekly on Monday morning UTC — dividend ex-dates change slowly; daily would burn
 // API quota for no practical gain. Runs early before the IDX open.
 const DIVIDEND_CRON = "0 6 * * 1";
+
+const GC_RECEIPTS_QUEUE = "gc-staged-receipts";
+// Daily at 03:00 UTC — clean up staged documents from abandoned draft imports (>7d).
+const GC_RECEIPTS_CRON = "0 3 * * *";
 
 const RECOMPUTE_QUEUE = "recompute-history";
 const RECOMPUTE_SINGLETON_SECONDS = 30; // collapse rapid edits per portfolio
@@ -85,6 +90,12 @@ export const JOB_DESCRIPTORS = [
     label: "Dividend refresh",
     description: "Pull announced and historical dividend events from market-data providers.",
     cron: DIVIDEND_CRON,
+  },
+  {
+    name: GC_RECEIPTS_QUEUE,
+    label: "Receipt GC",
+    description: "Delete staged receipt documents from abandoned draft imports (older than 7 days).",
+    cron: GC_RECEIPTS_CRON,
   },
 ] as const;
 
@@ -185,7 +196,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         .from(trConnections)
         .where(eq(trConnections.status, "connected"));
       for (const conn of conns) {
-        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log);
+        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log, app.storage);
         if (result.status === "connected") {
           app.log.info({ connectionId: conn.id, result }, "tr sync complete");
         } else {
@@ -240,6 +251,17 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(DIVIDEND_QUEUE, DIVIDEND_CRON);
 
+  // GC sweep: delete staged receipt documents from abandoned draft imports (#231).
+  await boss.work(GC_RECEIPTS_QUEUE, async () => {
+    try {
+      const deleted = await gcStagedReceipts(app);
+      app.log.info({ deleted }, "gc-staged-receipts complete");
+    } catch (err) {
+      app.log.error({ err }, "gc-staged-receipts failed");
+    }
+  });
+  await boss.schedule(GC_RECEIPTS_QUEUE, GC_RECEIPTS_CRON);
+
   // On-demand recompute after transaction mutations. Debounced per portfolio so bulk
   // imports collapse to one job; fromDate bounds the work to the affected window.
   await boss.createQueue(RECOMPUTE_QUEUE);
@@ -273,6 +295,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
       navCron: NAV_CRON,
       dividendCron: DIVIDEND_CRON,
       recomputeQueue: RECOMPUTE_QUEUE,
+      gcReceiptsCron: GC_RECEIPTS_CRON,
     },
     "Schedulers started",
   );

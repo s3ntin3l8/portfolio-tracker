@@ -109,6 +109,10 @@ export const portfolioInputSchema = z.object({
   // includes cash. `false` (default) = cash outside (mixed/invest-only): contribution
   // = net invested capital, cash excluded from net worth.
   cashCounted: z.boolean().default(false),
+  // Opt-in source-document retention (issue #231). When false (default), uploaded
+  // PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
+  // When true, the source file is kept after import confirmation.
+  documentRetention: z.boolean().default(false),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
@@ -123,6 +127,7 @@ export const portfolioPatchSchema = z.object({
   accountNumber: z.string().trim().nullable().optional(),
   includeInAggregate: z.boolean().optional(),
   cashCounted: z.boolean().optional(),
+  documentRetention: z.boolean().optional(),
 });
 export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 

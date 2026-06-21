@@ -253,6 +253,10 @@ export interface Portfolio {
    * deposit account (contribution = net external cash, net worth includes cash);
    * `false` = mixed/invest-only (contribution = net invested capital, cash excluded). */
   cashCounted: boolean;
+  /** Opt-in per-portfolio source-document retention (issue #231). When false (default),
+   * uploaded PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
+   * When true, the source file is kept after import confirmation. */
+  documentRetention: boolean;
 }
 
 /** Presentation metadata for an instrument; `null` on cash (instrument-less) rows. */
@@ -338,7 +342,10 @@ export interface Transaction {
   currency: string;
   executedAt: string;
   source: string;
+  importId: string | null;
   instrument: InstrumentMeta | null;
+  /** True when the parent import has a retained source document available for download (#231). */
+  hasDocument: boolean;
 }
 
 export interface Holding {
@@ -711,6 +718,15 @@ export interface ScreenshotImportResult {
   accountMismatch?: AccountMismatch | null;
 }
 
+/** Brief summary of a retained source document, embedded on ImportRecord (#231). */
+export interface ImportDocumentSummary {
+  id: string;
+  originalFilename: string | null;
+  mimeType: string;
+  sizeBytes: number | null;
+  storedAt: string;
+}
+
 /** A past import in the user's history (draft, confirmed, or discarded). */
 export interface ImportRecord {
   id: string;
@@ -720,6 +736,15 @@ export interface ImportRecord {
   confidence: string | null;
   count: number;
   createdAt: string;
+  /** Retained source document, if one exists and the portfolio has retention enabled. */
+  document: ImportDocumentSummary | null;
+}
+
+/** Signed-URL response for a retained source document. */
+export interface DocumentUrlResponse {
+  url: string;
+  filename: string | null;
+  mimeType: string;
 }
 
 /** A single import with its parsed drafts — used to review a staged draft. */
@@ -1167,6 +1192,12 @@ export function createApiClient(config: ApiClientConfig) {
     /** Batch hard-delete of discarded imports (one request — used by "clear all"). */
     bulkClearImports: (ids: string[]) =>
       request<{ cleared: number }>("POST", `/imports/bulk-clear`, { ids }),
+    /** Return a signed URL for the retained source document of an import (#231). */
+    getImportDocumentUrl: (importId: string) =>
+      request<DocumentUrlResponse>("GET", `/imports/${importId}/document-url`),
+    /** Return a signed URL for the retained source document of a transaction (#231). */
+    getTransactionDocumentUrl: (portfolioId: string, txId: string) =>
+      request<DocumentUrlResponse>("GET", `/portfolios/${portfolioId}/transactions/${txId}/document-url`),
 
     // --- Trade Republic ---
     getTrConnection: () => request<TrConnection>("GET", "/tr/connection"),

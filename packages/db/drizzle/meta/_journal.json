@@ -225,6 +225,13 @@
       "when": 1782003820301,
       "tag": "0031_yummy_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1782031780071,
+      "tag": "0032_dry_lifeguard",
+      "breakpoints": true
     }
   ]
 }
