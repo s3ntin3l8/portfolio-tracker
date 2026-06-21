@@ -28,6 +28,10 @@ export const storageRoute = fp(async (app: FastifyInstance) => {
   }>(
     "/storage/*",
     {
+      // Explicit per-route rate limit: public unauthenticated route deserves a tighter
+      // ceiling than the global default. The global @fastify/rate-limit (fp-hoisted from
+      // securityPlugin) is also in effect as a backstop.
+      config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
       schema: {
         // No auth preHandler — token is in the query string
         params: {

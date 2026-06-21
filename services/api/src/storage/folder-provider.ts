@@ -52,7 +52,11 @@ export class FolderProvider implements StorageProvider {
       throw new Error(`Storage key must be relative, got: ${key}`);
     }
     const resolved = path.resolve(this.basePath, key);
-    if (!resolved.startsWith(this.basePath + path.sep) && resolved !== this.basePath) {
+    // Use path.relative so the containment check is structurally unambiguous: if the
+    // relative path from basePath to the resolved value starts with ".." (or is itself
+    // absolute), the key has escaped the base directory.
+    const rel = path.relative(this.basePath, resolved);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
       throw new Error(`Storage key escapes base directory: ${key}`);
     }
     return resolved;
