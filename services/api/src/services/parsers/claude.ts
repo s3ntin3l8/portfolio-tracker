@@ -102,13 +102,15 @@ export class ClaudeVisionParser implements ScreenshotParser {
       }[];
     };
     const toolUse = data.content?.find((c) => c.type === "tool_use");
+    const parseErrors: { line: number; message: string }[] = [];
     const result = {
-      drafts: validateDrafts(toolUse?.input?.transactions),
+      drafts: validateDrafts(toolUse?.input?.transactions, parseErrors),
       contracts: validateContracts(toolUse?.input?.goldContracts),
       accountNumber:
         typeof toolUse?.input?.accountNumber === "string"
           ? toolUse.input.accountNumber
           : null,
+      errors: parseErrors,
     };
     log?.info(
       { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },

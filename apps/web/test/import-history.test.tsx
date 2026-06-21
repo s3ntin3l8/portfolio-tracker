@@ -10,6 +10,7 @@ const discardImport = vi.fn(async () => undefined);
 const deleteImport = vi.fn(async () => ({ removed: 1 }));
 const clearImport = vi.fn(async () => undefined);
 const bulkClearImports = vi.fn(async () => ({ cleared: 2 }));
+const getImportDocumentUrl = vi.fn(async () => ({ url: "https://example.com/doc.pdf" }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -18,7 +19,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ discardImport, deleteImport, clearImport, bulkClearImports }),
+  useApiClient: () => ({ discardImport, deleteImport, clearImport, bulkClearImports, getImportDocumentUrl }),
 }));
 
 import { ImportHistory } from "../src/components/import-history";
@@ -109,6 +110,7 @@ describe("ImportHistory", () => {
     deleteImport.mockClear();
     clearImport.mockClear();
     bulkClearImports.mockClear();
+    getImportDocumentUrl.mockClear();
   });
 
   it("discards a draft import", async () => {
@@ -272,5 +274,85 @@ describe("ImportHistory", () => {
     });
     expect(clearImport).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // Error handling — fix 1.2: action failures must show an inline error banner
+  // -------------------------------------------------------------------------
+  it("shows an error banner when discard fails", async () => {
+    discardImport.mockRejectedValueOnce(new Error("network error"));
+    renderHistory();
+    fireEvent.click(screen.getByRole("button", { name: m.discard }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
+    );
+    // The spinner resolves — the button is no longer spinning.
+    expect(discardImport).toHaveBeenCalled();
+  });
+
+  it("shows an error banner when undo fails", async () => {
+    deleteImport.mockRejectedValueOnce(new Error("network error"));
+    renderHistory();
+    fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+    fireEvent.click(screen.getByRole("button", { name: m.undo }));
+    // Two-step: first click shows warning; second triggers the delete.
+    fireEvent.click(screen.getByRole("button", { name: m.undo }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
+    );
+  });
+
+  it("shows an error banner when clear fails", async () => {
+    clearImport.mockRejectedValueOnce(new Error("network error"));
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={itemsWithDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: m.clear }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
+    );
+  });
+
+  it("shows an error banner when clearAllDiscarded fails", async () => {
+    bulkClearImports.mockRejectedValueOnce(new Error("rate limited"));
+    const twoDiscarded: ImportRecord[] = [
+      { ...discardedItem, id: "disc1" },
+      { ...discardedItem, id: "disc2" },
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={twoDiscarded} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: m.clearAll }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
+    );
+  });
+
+  it("shows a download error banner when receipt fetch fails", async () => {
+    getImportDocumentUrl.mockRejectedValueOnce(new Error("storage unavailable"));
+    const confirmedWithDoc: ImportRecord = {
+      id: "conf-doc",
+      portfolioId: "p1",
+      parser: "dkb",
+      status: "confirmed",
+      confidence: null,
+      count: 2,
+      createdAt: "2026-06-09T10:00:00.000Z",
+      document: { originalFilename: "export.pdf" },
+    };
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={[confirmedWithDoc]} showTitle />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+    fireEvent.click(screen.getByRole("button", { name: m.downloadReceipt }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(m.downloadError),
+    );
   });
 });

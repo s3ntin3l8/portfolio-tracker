@@ -208,10 +208,30 @@ export function parseJsonObject(text: string): unknown {
   return JSON.parse(trimmed);
 }
 
-/** Validate raw model output into draft transactions. */
-export function validateDrafts(raw: unknown): ParsedTransaction[] {
+/**
+ * Validate raw model output into draft transactions.
+ *
+ * Rows that fail Zod validation are **skipped** (not thrown) so that one
+ * hallucinated field doesn't discard an otherwise-valid document. Callers that
+ * want to surface per-row errors to the user can pass in a mutable `errors` array;
+ * if omitted the bad rows are silently dropped (preserving backward-compat with
+ * callers that don't propagate errors).
+ */
+export function validateDrafts(
+  raw: unknown,
+  errors: { line: number; message: string }[] = [],
+): ParsedTransaction[] {
   const list = Array.isArray(raw) ? raw : [];
-  return list.map((r) => parsedTransactionSchema.parse(r));
+  const drafts: ParsedTransaction[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const result = parsedTransactionSchema.safeParse(list[i]);
+    if (result.success) {
+      drafts.push(result.data);
+    } else {
+      errors.push({ line: i + 1, message: result.error.issues[0]?.message ?? "invalid row" });
+    }
+  }
+  return drafts;
 }
 
 /** Validate raw model output into gold-contract drafts, skipping malformed entries. */

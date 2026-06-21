@@ -1,6 +1,7 @@
 import { parsedTransactionSchema, type ParsedAction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
+import { shortHash } from "./hash.js";
 
 // Coinbase "Transaction history" CSV. The real export carries a preamble before the
 // header row, which contains "Quantity Transacted" and a spot-price column. Only Buy
@@ -44,18 +45,26 @@ export function parseCoinbase(content: string): CsvParseResult {
     if (!action) continue; // skip Send/Receive/Convert/Rewards/etc.
 
     const asset = get(cols.asset);
+    const when = get(cols.when);
+    const qty = num(get(cols.qty));
+    const price = num(get(cols.price)) || "0";
+    const currency = get(cols.currency) || "USD";
+    // Derive a stable content-hash id rather than `coinbase:${when}:${asset}:${i}`.
+    // The row-index suffix meant that re-uploading an export with any preamble-row
+    // difference would shift every subsequent index, bypassing the dedup unique index.
+    const externalId = `coinbase:${shortHash([when, action, asset, qty, price, currency].join("|"))}`;
     const parsed = parsedTransactionSchema.safeParse({
       assetClass: "crypto",
       action,
       ticker: asset || undefined,
       name: asset || undefined,
-      quantity: num(get(cols.qty)),
+      quantity: qty,
       unit: "units",
-      price: num(get(cols.price)) || "0",
+      price,
       fees: num(get(cols.fees)) || "0",
-      currency: get(cols.currency) || "USD",
-      executedAt: get(cols.when),
-      externalId: `coinbase:${get(cols.when)}:${asset}:${i}`,
+      currency,
+      executedAt: when,
+      externalId,
       confidence: 1,
     });
     if (parsed.success) drafts.push(parsed.data);

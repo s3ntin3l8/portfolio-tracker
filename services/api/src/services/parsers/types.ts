@@ -15,6 +15,12 @@ export interface ParseResult {
   contracts: ParsedGoldContract[];
   /** Account number found on the document (e.g. SID, IBAN), used for portfolio auto-detect. */
   accountNumber?: string | null;
+  /**
+   * Per-row validation errors from the LLM output — rows that failed Zod validation
+   * are skipped rather than aborting the whole parse. Line numbers are 1-based indices
+   * into the raw `transactions` array from the model response.
+   */
+  errors?: { line: number; message: string }[];
 }
 
 /**

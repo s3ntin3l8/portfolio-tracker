@@ -450,7 +450,9 @@
     "showCompleted": "Show completed ({count})",
     "hideCompleted": "Hide completed",
     "onlyCompleted": "{count, plural, one {# completed import hidden} other {# completed imports hidden}}",
-    "downloadReceipt": "Download receipt"
+    "downloadReceipt": "Download receipt",
+    "actionError": "Something went wrong. Please try again.",
+    "downloadError": "Receipt unavailable — it may have been deleted or storage is down."
   },
   "Dashboard": {
     "title": "Dashboard",
