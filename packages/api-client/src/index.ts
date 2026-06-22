@@ -506,6 +506,8 @@ export interface CorporateAction {
 export interface Candle {
   date: string; // YYYY-MM-DD
   close: string;
+  /** Native quote currency; absent for gold/crypto whose currency is encoded in the symbol pair. */
+  currency?: string;
 }
 
 export interface QuoteRef {

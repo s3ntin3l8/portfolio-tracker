@@ -13,6 +13,7 @@ export {
   mapExchange,
   assetClassFromType,
   isIdxEtfSymbol,
+  normalizeQuoteCurrency,
   yahooSuffixForMarket,
   eodhdExchangeForMarket,
   resolveCryptoIsin,

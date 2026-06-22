@@ -17,6 +17,7 @@ import {
   assetClassFromType,
   isIdxEtfSymbol,
   mapExchange,
+  normalizeQuoteCurrency,
   resolveCryptoIsin,
   PRICEABLE_FOREIGN_MARKETS,
   isKnownMarket,
@@ -46,6 +47,38 @@ describe("asset classes", () => {
     expect(ASSET_CLASSES).toContain("gold");
     expect(isAssetClass("bond")).toBe(true);
     expect(isAssetClass("nope")).toBe(false);
+  });
+});
+
+describe("normalizeQuoteCurrency", () => {
+  it("passes through standard major-currency codes unchanged (divisor 1)", () => {
+    expect(normalizeQuoteCurrency("USD")).toEqual({ currency: "USD", divisor: 1 });
+    expect(normalizeQuoteCurrency("EUR")).toEqual({ currency: "EUR", divisor: 1 });
+    expect(normalizeQuoteCurrency("GBP")).toEqual({ currency: "GBP", divisor: 1 });
+    expect(normalizeQuoteCurrency("IDR")).toEqual({ currency: "IDR", divisor: 1 });
+    expect(normalizeQuoteCurrency("ILS")).toEqual({ currency: "ILS", divisor: 1 });
+  });
+
+  it("folds GBp pence (Yahoo format) to GBP with divisor 100", () => {
+    expect(normalizeQuoteCurrency("GBp")).toEqual({ currency: "GBP", divisor: 100 });
+  });
+
+  it("folds GBX pence (alternate/EODHD format) to GBP with divisor 100", () => {
+    expect(normalizeQuoteCurrency("GBX")).toEqual({ currency: "GBP", divisor: 100 });
+  });
+
+  it("folds South African cents (ZAc) to ZAR with divisor 100", () => {
+    expect(normalizeQuoteCurrency("ZAc")).toEqual({ currency: "ZAR", divisor: 100 });
+  });
+
+  it("folds Israeli agorot (ILA / ILs) to ILS with divisor 100", () => {
+    expect(normalizeQuoteCurrency("ILA")).toEqual({ currency: "ILS", divisor: 100 });
+    expect(normalizeQuoteCurrency("ILs")).toEqual({ currency: "ILS", divisor: 100 });
+  });
+
+  it("preserves leading/trailing whitespace-trimmed codes", () => {
+    expect(normalizeQuoteCurrency(" USD ")).toEqual({ currency: "USD", divisor: 1 });
+    expect(normalizeQuoteCurrency(" GBp ")).toEqual({ currency: "GBP", divisor: 100 });
   });
 });
 
@@ -325,13 +358,14 @@ describe("MarketDataService", () => {
 });
 
 describe("YahooFinanceProvider", () => {
-  const chartBody = (price: number) => ({
+  /** Build a chart response. `currency` defaults to `"IDR"` to match the IDX fixture. */
+  const chartBody = (price: number, currency = "IDR") => ({
     chart: {
       result: [
         {
           meta: {
             regularMarketPrice: price,
-            currency: "IDR",
+            currency,
             regularMarketTime: 1738972800,
             previousClose: 9000,
           },
@@ -375,7 +409,7 @@ describe("YahooFinanceProvider", () => {
     const provider = new YahooFinanceProvider({
       fetch: mockFetch((url) => {
         calledUrl = url;
-        return { body: chartBody(50) };
+        return { body: chartBody(50, "EUR") };
       }),
     });
     const xetra: InstrumentRef = {
@@ -393,13 +427,100 @@ describe("YahooFinanceProvider", () => {
     expect(calledUrl).not.toContain("AEMD.DE.DE");
   });
 
-  it("returns history candles, skipping null closes", async () => {
+  it("adopts meta.currency when the listing trades in a different currency than declared", async () => {
+    // MWOF is declared EUR (Xetra execution currency) but Yahoo quotes it in USD —
+    // the quote should reflect the real USD denomination so downstream FX can convert.
+    const mwof: InstrumentRef = {
+      symbol: "MWOF",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: chartBody(17.973, "USD") })),
+    });
+    const quote = await provider.getQuote(mwof);
+    expect(quote?.currency).toBe("USD");
+    expect(quote?.price).toBe("17.973");
+    expect(quote?.previousClose).toBe("9000"); // previousClose also left in USD (÷1)
+  });
+
+  it("normalises GBp pence: divides price and previousClose by 100 and reports GBP", async () => {
+    const gbEtf: InstrumentRef = {
+      symbol: "VWRL",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "GBP",
+    };
+    const gbpBody = chartBody(13549, "GBp"); // 13549p = £135.49; previousClose = 9000p = £90.00
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: gbpBody })),
+    });
+    const quote = await provider.getQuote(gbEtf);
+    expect(quote?.currency).toBe("GBP");
+    expect(quote?.price).toBe("135.49");
+    expect(quote?.previousClose).toBe("90");
+  });
+
+  it("leaves gold and crypto currency determined by the symbol pair, not meta.currency", async () => {
+    const xau: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "EUR" };
+    // meta.currency would say "EUR" from the XAUEUR=X pair; toGram conversion runs first
+    const goldBody = {
+      chart: {
+        result: [{
+          meta: { regularMarketPrice: 2800 * 31.1034768, currency: "EUR", regularMarketTime: 1738972800 },
+          timestamp: [],
+          indicators: { quote: [{ close: [] }] },
+        }],
+      },
+    };
+    const provider = new YahooFinanceProvider({ fetch: mockFetch(() => ({ body: goldBody })) });
+    const quote = await provider.getQuote(xau);
+    expect(quote?.currency).toBe("EUR"); // ref.currency, not meta.currency (consistent)
+    expect(Number(quote?.price)).toBeCloseTo(2800, 2); // per-gram
+  });
+
+  it("returns history candles with currency from meta, skipping null closes", async () => {
     const provider = new YahooFinanceProvider({
       fetch: mockFetch(() => ({ body: chartBody(9500) })),
     });
     const candles = await provider.getHistory(bbca, "1mo");
     expect(candles).toHaveLength(1); // second close is null → skipped
-    expect(candles[0]).toMatchObject({ close: "9500" });
+    expect(candles[0]).toMatchObject({ close: "9500", currency: "IDR" });
+  });
+
+  it("stamps candle currency from meta.currency (USD for USD-priced Xetra ETF)", async () => {
+    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: chartBody(17.5, "USD") })),
+    });
+    const candles = await provider.getHistory(mwof, "1mo");
+    expect(candles[0]).toMatchObject({ close: "17.5", currency: "USD" });
+  });
+
+  it("divides GBp candle closes by 100 and stamps GBP", async () => {
+    const gbEtf: InstrumentRef = { symbol: "VWRL", market: "XETRA", assetClass: "etf", currency: "GBP" };
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: chartBody(13549, "GBp") })),
+    });
+    const candles = await provider.getHistory(gbEtf, "1mo");
+    expect(candles[0]).toMatchObject({ close: "135.49", currency: "GBP" });
+  });
+
+  it("omits currency from gold/crypto candles (encoded in the symbol pair)", async () => {
+    const xau: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "EUR" };
+    const goldHistBody = {
+      chart: {
+        result: [{
+          meta: { regularMarketPrice: 0, currency: "EUR", regularMarketTime: 1738972800 },
+          timestamp: [1738972800],
+          indicators: { quote: [{ close: [2800 * 31.1034768] }] },
+        }],
+      },
+    };
+    const provider = new YahooFinanceProvider({ fetch: mockFetch(() => ({ body: goldHistBody })) });
+    const candles = await provider.getHistory(xau, "1mo");
+    expect(candles[0].currency).toBeUndefined();
   });
 
   it("returns null on a non-200 and empty history when unavailable", async () => {
@@ -899,19 +1020,22 @@ describe("EodhdProvider", () => {
     expect(p.supports("gold", "XAU")).toBe(false);
   });
 
-  it("quotes a Xetra ETF via <code>.XETRA real-time and maps the payload", async () => {
-    let seenUrl = "";
+  it("quotes a Xetra ETF via <code>.XETRA real-time, resolving currency via /search", async () => {
+    const urls: string[] = [];
     let token: string | undefined;
     const p = new EodhdProvider({
       apiKey: "eodhd-key",
       fetch: mockFetch((url) => {
-        seenUrl = url;
+        urls.push(url);
         token = new URL(url).searchParams.get("api_token") ?? undefined;
+        if (url.includes("/search/")) {
+          return { body: [{ Code: "AEMD", Exchange: "XETRA", Currency: "EUR" }] };
+        }
         return { body: { close: 50.5, previousClose: 49, timestamp: 1738972800 } };
       }),
     });
     const quote = await p.getQuote(xetra);
-    expect(seenUrl).toContain("/real-time/AEMD.XETRA");
+    expect(urls.some((u) => u.includes("/real-time/AEMD.XETRA"))).toBe(true);
     expect(token).toBe("eodhd-key");
     expect(quote).toMatchObject({
       price: "50.5",
@@ -919,6 +1043,38 @@ describe("EodhdProvider", () => {
       previousClose: "49",
     });
     expect(quote?.asOf).toBe(new Date(1738972800 * 1000).toISOString());
+  });
+
+  it("resolves the native USD currency for a USD-priced Xetra ETF via /search", async () => {
+    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const p = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch((url) => {
+        if (url.includes("/search/")) {
+          return { body: [{ Code: "MWOF", Exchange: "XETRA", Currency: "USD" }] };
+        }
+        return { body: { close: 17.973, previousClose: 17.5, timestamp: 1738972800 } };
+      }),
+    });
+    const quote = await p.getQuote(mwof);
+    expect(quote?.currency).toBe("USD");
+    expect(quote?.price).toBe("17.973");
+    expect(quote?.previousClose).toBe("17.5");
+  });
+
+  it("memoises ticker currency and does not re-call /search on repeated getQuote", async () => {
+    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    let searchCalls = 0;
+    const p = new EodhdProvider({
+      apiKey: "k",
+      fetch: mockFetch((url) => {
+        if (url.includes("/search/")) { searchCalls++; return { body: [{ Code: "MWOF", Exchange: "XETRA", Currency: "USD" }] }; }
+        return { body: { close: 17.973 } };
+      }),
+    });
+    await p.getQuote(mwof);
+    await p.getQuote(mwof);
+    expect(searchCalls).toBe(1); // memoised after first call
   });
 
   it("resolves an ISIN-as-symbol to a ticker via search, preferring the Xetra listing", async () => {
@@ -940,8 +1096,12 @@ describe("EodhdProvider", () => {
     });
     const quote = await p.getQuote({ ...xetra, symbol: "IE00B4L5Y983" });
     expect(quote?.price).toBe("51");
+    // Currency comes from the ISIN resolution search hit — no extra /search call needed.
+    expect(quote?.currency).toBe("EUR");
     expect(urls.some((u) => u.includes("/search/IE00B4L5Y983"))).toBe(true);
     expect(urls.at(-1)).toContain("/real-time/AEMD.XETRA");
+    // Only one /search call (ISIN resolution) — currency resolution reused its result.
+    expect(urls.filter((u) => u.includes("/search/")).length).toBe(1);
   });
 
   it("memoises ISIN resolution and returns null on a missing/NA close", async () => {

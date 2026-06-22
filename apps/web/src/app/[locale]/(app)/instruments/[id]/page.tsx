@@ -87,7 +87,7 @@ export default async function InstrumentPage({
         </CardHeader>
         <CardContent>
           {history.length > 0 ? (
-            <PriceChart data={history} currency={instrument.currency} />
+            <PriceChart data={history} currency={history[0]?.currency ?? instrument.currency} />
           ) : (
             <EmptyState
               icon={LineChart}

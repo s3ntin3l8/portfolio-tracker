@@ -150,6 +150,36 @@ export function eodhdExchangeForMarket(market: string): string | undefined {
 }
 
 /**
+ * Some providers quote prices in a **minor (sub-unit) currency** — e.g. Yahoo Finance returns
+ * London / Xetra GBP listings in pence as `"GBp"` (100 pence = 1 GBP). These are 100× the
+ * major unit. This helper normalises such codes to the major ISO currency and returns the
+ * divisor to apply to every price/close before storing or displaying.
+ *
+ * Keys are **exact** strings (case-sensitive). `"GBP"` (all-caps) = major pounds → not in the
+ * table. `"GBp"` (mixed case) and `"GBX"` (a pence alias used by some providers) → pence.
+ * Add new codes here as one-liners.
+ */
+const MINOR_UNIT_CODES: Record<string, { currency: string; divisor: number }> = {
+  GBp: { currency: "GBP", divisor: 100 }, // pence (Yahoo Finance format)
+  GBX: { currency: "GBP", divisor: 100 }, // pence (EODHD / alternate format)
+  ZAc: { currency: "ZAR", divisor: 100 }, // South African cents
+  ILA: { currency: "ILS", divisor: 100 }, // Israeli agorot
+  ILs: { currency: "ILS", divisor: 100 }, // Israeli agorot (alternate)
+};
+
+/**
+ * Normalise a provider's raw quote-currency code to a major ISO currency + a price divisor.
+ *
+ * - Major currencies (`USD`, `EUR`, `GBP`, `IDR`, …) → `{ currency, divisor: 1 }`.
+ * - Minor / sub-unit codes (`GBp`, `GBX`, `ZAc`, `ILA`, …) → major currency + `divisor: 100`
+ *   (caller must divide the raw price/close by this divisor before storing or displaying).
+ */
+export function normalizeQuoteCurrency(code: string): { currency: string; divisor: number } {
+  const trimmed = code.trim();
+  return MINOR_UNIT_CODES[trimmed] ?? { currency: trimmed, divisor: 1 };
+}
+
+/**
  * IDX KIK ETFs (exchange-traded reksa dana) carry a "Reksa Dana" type with no ETF token,
  * but their tickers follow IDX's ETF convention: an "R-" prefix (e.g. R-LQ45X) or an
  * "X"-prefixed 4-char code (XIIT, XIJI, XIIC, XISC, XNVE). Open-end reksa dana are
