@@ -18,7 +18,7 @@
  */
 
 import { Decimal } from "decimal.js";
-import type { TradeLog, Trade } from "./trade-log.js";
+import type { TradeLog, Trade, YearTax } from "./trade-log.js";
 
 const D = (v: string | number) => new Decimal(v);
 const ZERO = new Decimal(0);
@@ -35,7 +35,7 @@ export interface AllowanceUsage {
   allowanceAnnual: string;
   /** Tf-adjusted realized gains from FIFO lots closed this year (display currency). */
   realizedGainsAdjusted: string;
-  /** Dividend/interest/coupon income received this year (display currency). */
+  /** Gross dividend/interest/coupon income this year (net received + withholding, display currency). */
   incomeYtd: string;
   /** Total used = realizedGainsAdjusted + incomeYtd, clamped to [0, allowanceAnnual]. */
   usedYtd: string;
@@ -114,7 +114,7 @@ export interface HarvestSuggestionsInput extends AllowanceUsageInput {
  * Algorithm:
  *   1. Walk every CLOSED trade; for each leg whose taxYear === year, tf-adjust the gain
  *      (gain × (1 − tfRate)).  Accumulate per-trade (keyed by instrumentId).
- *   2. Sum dividendsByYear for `year` (already includes interest/coupons).
+ *   2. Sum dividendsByYear for `year` (gross = net + withholding; includes interest/coupons).
  *   3. used = tf-adjusted gains + income, clamped to [0, allowanceAnnual].
  *   4. remaining = allowanceAnnual − used.
  */
@@ -142,10 +142,16 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
     }
   }
 
-  // Step 2: income this year (dividends + interest + coupons) from dividendsByYear.
-  const incomeEntry = input.tradeLog.dividendsByYear.find((e) => e.year === year);
-  const incomeYtd = incomeEntry ? D(incomeEntry.amount) : ZERO;
-  const positiveIncome = Decimal.max(ZERO, incomeYtd);
+  // Step 2: gross income this year (dividends + interest + coupons) from dividendsByYear.
+  // YearTax.amount is net-received; .tax is the withheld amount.  The Sparerpauschbetrag
+  // is consumed by GROSS Kapitalerträge (§20 EStG), so we must add withholding back.
+  const incomeEntry: YearTax | undefined = input.tradeLog.dividendsByYear.find(
+    (e) => e.year === year,
+  );
+  const incomeGross = incomeEntry
+    ? D(incomeEntry.amount).plus(D(incomeEntry.tax))
+    : ZERO;
+  const positiveIncome = Decimal.max(ZERO, incomeGross);
 
   // Step 3: total used, clamped to [0, allowance].
   const rawUsed = realizedAdjusted.plus(positiveIncome);

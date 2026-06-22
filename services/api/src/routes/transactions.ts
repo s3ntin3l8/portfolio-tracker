@@ -1905,21 +1905,41 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   /**
    * Build a per-instrumentId Teilfreistellung rate map for a set of instrument ids.
-   * Reads the `partial_exemption_rate` column from the DB.  Falls back to 0 for
-   * instruments not found or without a rate.
+   *
+   * Priority:
+   *   1. `partial_exemption_rate` column (explicit per-instrument override).
+   *   2. Asset-class default under German InvStG §20 Abs. 9:
+   *        etf          → 30 % (equity ETF — the overwhelming common case)
+   *        mutual_fund  → 15 % (mixed fund; equity funds also qualify at 30 %, but
+   *                             we conservatively default to 15 % for unclassified
+   *                             mutual funds; users can override via the column)
+   *        all others   → 0 % (stocks, bonds, gold, cash — no exemption)
+   *
+   * Only instruments with a non-zero rate appear in the returned map; absent =
+   * core treats as 0 (correct for stocks/bonds/gold).
    */
   async function tfRatesFor(instrumentIds: (string | null)[]): Promise<Record<string, string>> {
     const ids = [...new Set(instrumentIds.filter((x): x is string => x !== null))];
     if (ids.length === 0) return {};
     const rows = await app.db
-      .select({ id: instruments.id, partialExemptionRate: instruments.partialExemptionRate })
+      .select({
+        id: instruments.id,
+        partialExemptionRate: instruments.partialExemptionRate,
+        assetClass: instruments.assetClass,
+      })
       .from(instruments)
       .where(inArray(instruments.id, ids));
     const map: Record<string, string> = {};
     for (const r of rows) {
       if (r.partialExemptionRate !== null) {
+        // Explicit per-instrument override always wins.
         map[r.id] = r.partialExemptionRate;
+      } else if (r.assetClass === "etf") {
+        map[r.id] = "0.30"; // §20 Abs. 9 InvStG — equity ETF
+      } else if (r.assetClass === "mutual_fund") {
+        map[r.id] = "0.15"; // §20 Abs. 9 InvStG — mixed/unclassified fund
       }
+      // stocks, bonds, gold, cash → omit (core defaults to 0 %)
     }
     return map;
   }

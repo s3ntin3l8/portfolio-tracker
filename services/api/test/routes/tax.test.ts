@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
+import { instruments } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 
@@ -158,6 +159,72 @@ describe("tax routes", () => {
         headers: auth(t2),
       });
       expect(res.statusCode).toBe(404);
+    });
+
+    it("applies 30% Teilfreistellung for ETF by asset-class fallback (no explicit rate)", async () => {
+      // Verify that an ETF instrument with null partial_exemption_rate still gets
+      // the 30% statutory exemption via the assetClass fallback in tfRatesFor.
+      const t = await token("tax-etf-fallback");
+
+      // Insert an ETF with NO explicit partialExemptionRate.
+      const [etf] = await app.db
+        .insert(instruments)
+        .values({ symbol: "WORLD-ETF", market: "XETRA", assetClass: "etf", currency: "EUR", name: "World ETF" })
+        .returning();
+
+      const holderId = await createHolder(t, {
+        name: "ETF Holder",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+        taxResidence: "DE",
+      });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      // Upsert the user and create a buy + sell for a 1000 EUR gross gain.
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+      const buy = await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: etf.id,
+          quantity: "10",
+          price: "100",
+          currency: "EUR",
+          executedAt: "2025-01-15T00:00:00.000Z",
+        },
+      });
+      expect(buy.statusCode).toBe(201);
+
+      const sell = await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "sell",
+          instrumentId: etf.id,
+          quantity: "10",
+          price: "200", // gain = (200-100)*10 = 1000 gross
+          currency: "EUR",
+          executedAt: "2025-06-15T00:00:00.000Z",
+        },
+      });
+      expect(sell.statusCode).toBe(201);
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/tax?year=2025`,
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      // Gross gain = 1000. With 30% Teilfreistellung: adjusted = 1000 × 0.70 = 700.
+      // allowance = 1000, so usedYtd = 700, remaining = 300.
+      expect(body.allowanceUsage.realizedGainsAdjusted).toBe("700.00");
+      expect(body.allowanceUsage.usedYtd).toBe("700.00");
+      expect(body.allowanceUsage.remaining).toBe("300.00");
     });
   });
 

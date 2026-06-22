@@ -165,6 +165,26 @@ describe("allowanceUsageYTD", () => {
     expect(result.remaining).toBe("800.00");
   });
 
+  it("uses GROSS dividend income (net + withholding) for Sparerpauschbetrag", () => {
+    // net received = 150, withholding = 50 → gross = 200
+    // The Sparerpauschbetrag is consumed by gross Kapitalerträge (§20 EStG),
+    // so incomeYtd must be 200, not 150.
+    const log = makeTradeLog({
+      dividendsByYear: [{ year: 2025, amount: "150", tax: "50" }],
+    });
+
+    const result = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+    });
+
+    expect(result.incomeYtd).toBe("200.00"); // gross, not net
+    expect(result.usedYtd).toBe("200.00");
+    expect(result.remaining).toBe("800.00");
+  });
+
   it("combines realized gains and income", () => {
     const log = makeTradeLog({
       trades: [
