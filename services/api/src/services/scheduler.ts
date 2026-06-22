@@ -10,7 +10,7 @@ import { refreshInstrumentMetadata } from "./instrument-metadata.js";
 import { recordDailySnapshots } from "./snapshots.js";
 import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
-import { backfillPortfolioHistory } from "./backfill.js";
+import { backfillPortfolioHistory, backfillStalePortfolios } from "./backfill.js";
 import { gcStagedReceipts } from "../storage/receipts.js";
 
 const QUEUE = "refresh-prices";
@@ -48,6 +48,12 @@ const GC_RECEIPTS_CRON = "0 3 * * *";
 
 const RECOMPUTE_QUEUE = "recompute-history";
 const RECOMPUTE_SINGLETON_SECONDS = 30; // collapse rapid edits per portfolio
+
+const BACKFILL_STALE_QUEUE = "backfill-stale-history";
+// Daily at 05:00 UTC — runs after the previous-day NAV/buyback scrapes (01:00/04:00 UTC)
+// so flat proxies (mutual funds, ANTAM) use the freshest available rate. Near-no-op once
+// all portfolios are healed; continues to self-heal any portfolio imported but never mutated.
+const BACKFILL_STALE_CRON = "0 5 * * *";
 
 let activeBoss: PgBoss | null = null;
 
@@ -109,6 +115,13 @@ export const JOB_DESCRIPTORS = [
     label: "Receipt GC",
     description: "Delete staged receipt documents from abandoned draft imports (older than 7 days).",
     cron: GC_RECEIPTS_CRON,
+  },
+  {
+    name: BACKFILL_STALE_QUEUE,
+    label: "Backfill stale history",
+    description:
+      "Find portfolios whose value-over-time history doesn't reach back to inception and backfill them. Idempotent — near-no-op once all portfolios are healed.",
+    cron: BACKFILL_STALE_CRON,
   },
 ] as const;
 
@@ -290,6 +303,29 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(GC_RECEIPTS_QUEUE, GC_RECEIPTS_CRON);
 
+  // Self-healing sweep: find portfolios whose snapshot history doesn't reach back to
+  // inception (pre-existing portfolios that pre-date the backfill engine) and run a
+  // full inception backfill. Near-no-op once every portfolio is healed; continues to
+  // catch any portfolio that is imported but never mutated.
+  await boss.createQueue(BACKFILL_STALE_QUEUE);
+  await boss.work(BACKFILL_STALE_QUEUE, async () => {
+    try {
+      const result = await backfillStalePortfolios(
+        getDb(),
+        await getMarketData(),
+        app.config.MARKET_DATA_TTL_MS,
+      );
+      await flushUsage();
+      app.log.info(
+        { scanned: result.scanned, healed: result.healed },
+        "backfill-stale-history complete",
+      );
+    } catch (err) {
+      app.log.error({ err }, "backfill-stale-history failed");
+    }
+  });
+  await boss.schedule(BACKFILL_STALE_QUEUE, BACKFILL_STALE_CRON);
+
   // On-demand recompute after transaction mutations. Debounced per portfolio so bulk
   // imports collapse to one job; fromDate bounds the work to the affected window.
   await boss.createQueue(RECOMPUTE_QUEUE);
@@ -324,6 +360,7 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
       dividendCron: DIVIDEND_CRON,
       recomputeQueue: RECOMPUTE_QUEUE,
       gcReceiptsCron: GC_RECEIPTS_CRON,
+      backfillStaleCron: BACKFILL_STALE_CRON,
     },
     "Schedulers started",
   );

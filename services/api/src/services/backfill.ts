@@ -9,7 +9,7 @@
  * - bond: flat at faceValue
  * - mutual_fund: flat at today's latest price (NAV carried back)
  */
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, min, isNotNull } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import {
   corporateActions,
@@ -220,6 +220,14 @@ export async function backfillPortfolioHistory(
     let candles = await marketData.getHistoryFrom(ref, fetchFrom).catch(() => []);
     if (candles.length === 0) {
       candles = await marketData.getHistory(ref, "max").catch(() => []);
+    }
+
+    if (candles.length === 0) {
+      // No provider returned history for this instrument — the value-over-time chart
+      // will have gaps for it. This is expected for delisted or unsupported instruments.
+      console.warn(
+        `[backfill] no price history for instrument ${instr.id} (${instr.symbol}/${instr.market}); skipping`,
+      );
     }
 
     if (candles.length > 0) {
@@ -436,4 +444,68 @@ export async function backfillPortfolioHistory(
   }
 
   return { instruments: instrRows.length, days: count, truncated };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stale-history sweep
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SweepResult {
+  scanned: number;
+  healed: number;
+  portfolios: Array<{ portfolioId: string; result: BackfillResult }>;
+}
+
+/**
+ * Find portfolios whose snapshot history does not reach back to their inception
+ * date (or that have no snapshots at all) and run a full inception backfill for
+ * each.  Safe to call repeatedly — once healed, earliest snapshot == inception
+ * so the portfolio is skipped on subsequent runs.
+ *
+ * This is the self-healing companion to the on-mutation `enqueueRecompute` hook:
+ * the mutation path keeps actively-edited portfolios current; this sweep catches
+ * portfolios that were populated before the backfill engine existed and have
+ * never been mutated since.
+ */
+export async function backfillStalePortfolios(
+  db: DB,
+  marketData: MarketDataService,
+  ttlMs: number,
+): Promise<SweepResult> {
+  // For every portfolio that has ≥1 transaction, find its inception date and its
+  // earliest snapshot date (NULL when no snapshots exist).
+  const rows = await db
+    .select({
+      portfolioId: transactions.portfolioId,
+      inception: min(transactions.executedAt),
+      earliestSnapshot: min(portfolioSnapshots.date),
+    })
+    .from(transactions)
+    .leftJoin(
+      portfolioSnapshots,
+      eq(transactions.portfolioId, portfolioSnapshots.portfolioId),
+    )
+    .where(isNotNull(transactions.portfolioId))
+    .groupBy(transactions.portfolioId);
+
+  const stale = rows.filter((r) => {
+    if (!r.portfolioId || !r.inception) return false;
+    const inceptionDate = r.inception.toISOString().slice(0, 10);
+    // No snapshots at all → stale
+    if (!r.earliestSnapshot) return true;
+    // Earliest snapshot is later than inception → incomplete history
+    return r.earliestSnapshot > inceptionDate;
+  });
+
+  const result: SweepResult = { scanned: rows.length, healed: 0, portfolios: [] };
+
+  for (const { portfolioId } of stale) {
+    if (!portfolioId) continue;
+    // Omit fromDate to backfill from true inception
+    const backfillResult = await backfillPortfolioHistory(db, marketData, ttlMs, portfolioId);
+    result.healed++;
+    result.portfolios.push({ portfolioId, result: backfillResult });
+  }
+
+  return result;
 }
