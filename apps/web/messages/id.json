@@ -671,6 +671,7 @@
   "Transactions": {
     "title": "Transaksi",
     "subtitle": "Setiap beli, jual, dividen, dan arus kas.",
+    "filterScope": "Cakupan",
     "filterAll": "Semua aktivitas",
     "filterInvestments": "Investasi saja",
     "filterType": "Jenis",
