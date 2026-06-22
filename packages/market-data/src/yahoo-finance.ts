@@ -11,6 +11,7 @@ import type {
 import {
   assetClassFromType,
   mapExchange,
+  normalizeQuoteCurrency,
   yahooSuffixForMarket,
 } from "./instrument-mapping.js";
 import { isIsin } from "./types.js";
@@ -149,6 +150,29 @@ export class YahooFinanceProvider implements MarketDataProvider {
   }
 
   /**
+   * Resolve the effective currency + price divisor for an equity/ETF quote.
+   *
+   * For gold and crypto the currency is already encoded in the symbol pair (e.g. `XAUEUR=X`,
+   * `BTC-USD`) — leave those alone. For equity/ETF we trust the provider-reported
+   * `meta.currency` (which tells us the listing's real denomination, e.g. `"USD"` for a
+   * USD-priced UCITS ETF on Xetra) over `ref.currency` (the instrument's declared/execution
+   * currency). We also normalise pence codes: Yahoo returns `"GBp"` for London/Xetra GBP
+   * listings priced in pence, which must be ÷100 and relabelled as `"GBP"`.
+   *
+   * Falls back to `ref.currency` + divisor 1 when `metaCurrency` is absent.
+   */
+  private resolveCurrency(
+    ref: InstrumentRef,
+    metaCurrency?: string,
+  ): { currency: string; divisor: number } {
+    if (ref.assetClass === "gold" || ref.assetClass === "crypto") {
+      return { currency: ref.currency, divisor: 1 };
+    }
+    if (!metaCurrency) return { currency: ref.currency, divisor: 1 };
+    return normalizeQuoteCurrency(metaCurrency);
+  }
+
+  /**
    * Resolve an instrument's ISIN to a Yahoo symbol via the search endpoint, preferring the
    * listing whose venue matches the instrument's market, then its currency. A listing we
    * can't tie to the market or currency is rejected (no blind "first quote" fallback): the
@@ -198,11 +222,16 @@ export class YahooFinanceProvider implements MarketDataProvider {
     // Gold pairs quote per troy ounce; the rest of the app values gold per gram.
     const toGram = (v: number) =>
       ref.assetClass === "gold" ? v / TROY_OUNCE_GRAMS : v;
+    // Adopt the provider's reported quote currency (e.g. "USD" for a USD-priced UCITS ETF on
+    // Xetra) instead of the instrument's declared currency ("EUR"). Normalise pence codes
+    // (GBp/GBX → GBP, divisor 100). Gold/crypto are handled by toGram/symbol-pair; ref.currency
+    // is their correct label and their divisor is 1.
+    const { currency, divisor } = this.resolveCurrency(ref, result?.meta?.currency);
     return {
-      price: String(toGram(price)),
-      currency: ref.currency,
+      price: String(toGram(price) / divisor),
+      currency,
       asOf,
-      previousClose: prev === undefined ? null : String(toGram(prev)),
+      previousClose: prev === undefined ? null : String(toGram(prev) / divisor),
     };
   }
 
@@ -284,14 +313,23 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const timestamps = result?.timestamp ?? [];
     const closes = result?.indicators?.quote?.[0]?.close ?? [];
     // Gold pairs quote per troy ounce; convert each close to per-gram like the quote path.
-    const factor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
+    const gramFactor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
+    // Adopt the provider's reported quote currency (USD for USD-priced Xetra ETFs, etc.)
+    // and apply the pence divisor if needed. Gold/crypto leave currency undefined so callers
+    // fall back to instrument.currency (which correctly encodes the pair's denomination).
+    const { currency, divisor } = this.resolveCurrency(ref, result?.meta?.currency);
+    const stampCurrency = ref.assetClass === "gold" || ref.assetClass === "crypto"
+      ? undefined
+      : currency;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];
       if (close === null || close === undefined) continue;
+      const adjusted = gramFactor === 1 ? close / divisor : close / gramFactor;
       candles.push({
         date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
-        close: factor === 1 ? String(close) : String(close / factor),
+        close: String(adjusted),
+        ...(stampCurrency !== undefined ? { currency: stampCurrency } : {}),
       });
     }
     return candles;
@@ -429,14 +467,20 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const result = await this.chartFromDate(this.yahooSymbol(ref), fromDate);
     const timestamps = result?.timestamp ?? [];
     const closes = result?.indicators?.quote?.[0]?.close ?? [];
-    const factor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
+    const gramFactor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
+    const { currency, divisor } = this.resolveCurrency(ref, result?.meta?.currency);
+    const stampCurrency = ref.assetClass === "gold" || ref.assetClass === "crypto"
+      ? undefined
+      : currency;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];
       if (close === null || close === undefined) continue;
+      const adjusted = gramFactor === 1 ? close / divisor : close / gramFactor;
       candles.push({
         date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
-        close: factor === 1 ? String(close) : String(close / factor),
+        close: String(adjusted),
+        ...(stampCurrency !== undefined ? { currency: stampCurrency } : {}),
       });
     }
     return candles;

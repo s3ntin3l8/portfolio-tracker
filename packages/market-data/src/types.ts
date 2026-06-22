@@ -34,6 +34,10 @@ export interface Quote {
 export interface Candle {
   date: string; // YYYY-MM-DD
   close: string;
+  /** Native quote currency (e.g. `"USD"` for a USD-denominated listing on Xetra).
+   *  Absent when the provider encodes currency in the symbol pair (gold, crypto).
+   *  Callers should fall back to `instrument.currency` when this is absent. */
+  currency?: string;
 }
 
 /** A discovered instrument's metadata, enough to prefill the manual-entry form. */

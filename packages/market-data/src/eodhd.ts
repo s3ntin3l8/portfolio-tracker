@@ -8,7 +8,7 @@ import type {
   Quote,
 } from "./types.js";
 import { isIsin } from "./types.js";
-import { eodhdExchangeForMarket, mapExchange } from "./instrument-mapping.js";
+import { eodhdExchangeForMarket, mapExchange, normalizeQuoteCurrency } from "./instrument-mapping.js";
 
 export interface EodhdOptions {
   apiKey: string;
@@ -37,6 +37,13 @@ export class EodhdProvider implements MarketDataProvider {
   private readonly baseUrl: string;
   private readonly doFetch: typeof fetch;
   private readonly isinTickerCache = new Map<string, string | null>();
+  /**
+   * Resolved native trading currency per EODHD ticker (e.g. `"MWOF.XETRA"` → `"USD"`).
+   * Populated from the `/search` hit's `Currency` field — either as a side-effect of
+   * `resolveIsinTicker` (zero extra calls on the ISIN path) or via a dedicated `/search`
+   * lookup on the direct-ticker path. Keyed by the full `<code>.<exchange>` ticker.
+   */
+  private readonly tickerCurrencyCache = new Map<string, string>();
 
   constructor(opts: EodhdOptions) {
     this.apiKey = opts.apiKey;
@@ -81,9 +88,51 @@ export class EodhdProvider implements MarketDataProvider {
       );
       const hit = byMarket ?? byCurrency ?? usable[0];
       ticker = hit ? `${hit.Code}.${hit.Exchange}` : null;
+      // Opportunistically cache the chosen hit's trading currency so getQuote can stamp it
+      // without an extra /search call (zero additional API cost on the ISIN path).
+      if (ticker && hit?.Currency) {
+        this.tickerCurrencyCache.set(ticker, hit.Currency);
+      }
     }
     this.isinTickerCache.set(ref.isin, ticker);
     return ticker;
+  }
+
+  /**
+   * Resolve the native trading currency for an EODHD ticker string.
+   *
+   * The EODHD `/real-time` endpoint carries no currency field — the currency must be looked
+   * up separately. On the ISIN path the chosen hit's `Currency` is already cached by
+   * `resolveIsinTicker` (no extra calls). On the direct-ticker path (used by the scheduled
+   * `refresh-prices` job which builds refs without an ISIN) we issue one memoised `/search`
+   * by the bare symbol (e.g. `"MWOF"`) and find the hit whose `Code.Exchange` matches the
+   * ticker (`"MWOF.XETRA"`). Falls back to `ref.currency` on any miss / error.
+   */
+  private async resolveTickerCurrency(ref: InstrumentRef, ticker: string): Promise<string> {
+    const cached = this.tickerCurrencyCache.get(ticker);
+    if (cached !== undefined) return cached;
+
+    const searchTerm = isIsin(ref.symbol) ? ref.isin ?? ref.symbol : ref.symbol;
+    try {
+      const res = await this.doFetch(
+        `${this.baseUrl}/search/${encodeURIComponent(searchTerm)}?api_token=${this.apiKey}&fmt=json`,
+      );
+      if (res.ok) {
+        const hits = (await res.json()) as EodhdSearchHit[];
+        const match = (hits ?? []).find(
+          (h) => h.Code && h.Exchange && `${h.Code}.${h.Exchange}` === ticker,
+        );
+        if (match?.Currency) {
+          this.tickerCurrencyCache.set(ticker, match.Currency);
+          return match.Currency;
+        }
+      }
+    } catch {
+      // network error — fall through to ref.currency
+    }
+    // Cache the fallback so we don't keep retrying on every refresh tick.
+    this.tickerCurrencyCache.set(ticker, ref.currency);
+    return ref.currency;
   }
 
   async getUsage(): Promise<ProviderUsage | null> {
@@ -141,6 +190,13 @@ export class EodhdProvider implements MarketDataProvider {
     const ticker = this.directTicker(ref) ?? (await this.resolveIsinTicker(ref));
     if (!ticker) return null;
 
+    // Resolve the ticker's native trading currency before fetching the price.
+    // The /real-time endpoint carries no currency field, so we look it up via /search.
+    // On the ISIN path this is a cache hit (resolveIsinTicker populates it for free);
+    // on the direct-ticker path it may issue one memoised /search call.
+    const rawCurrency = await this.resolveTickerCurrency(ref, ticker);
+    const { currency, divisor } = normalizeQuoteCurrency(rawCurrency);
+
     const res = await this.doFetch(
       `${this.baseUrl}/real-time/${encodeURIComponent(ticker)}?api_token=${this.apiKey}&fmt=json`,
     );
@@ -153,16 +209,18 @@ export class EodhdProvider implements MarketDataProvider {
     // EODHD returns "NA" (or omits the field) when there's no quote for the ticker.
     if (data.close === undefined || data.close === "NA") return null;
 
+    const close = Number(data.close) / divisor;
+    const prevClose = data.previousClose === undefined || data.previousClose === "NA"
+      ? null
+      : String(Number(data.previousClose) / divisor);
+
     return {
-      price: String(data.close),
-      currency: ref.currency,
+      price: String(close),
+      currency,
       asOf: data.timestamp
         ? new Date(data.timestamp * 1000).toISOString()
         : new Date().toISOString(),
-      previousClose:
-        data.previousClose === undefined || data.previousClose === "NA"
-          ? null
-          : String(data.previousClose),
+      previousClose: prevClose,
     };
   }
 
