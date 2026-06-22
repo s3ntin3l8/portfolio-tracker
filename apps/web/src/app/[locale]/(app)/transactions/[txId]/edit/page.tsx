@@ -77,6 +77,9 @@ export default async function EditTransactionPage({
           executedAt: tx.executedAt,
           sources: tx.sources,
           hasFullTaxDetail: tx.hasFullTaxDetail,
+          kind: tx.kind,
+          source: tx.source,
+          externalId: tx.externalId,
         }}
       />
     </div>

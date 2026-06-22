@@ -769,7 +769,13 @@
         "grams": "Gram",
         "units": "Unit"
       },
-      "enrichHint": "Unggah PDF penyelesaian untuk menambahkan rincian pajak lengkap."
+      "enrichHint": "Unggah PDF penyelesaian untuk menambahkan rincian pajak lengkap.",
+      "subType": "Sub-jenis",
+      "subTypeNone": "(tidak ada)",
+      "subTypeSaveback": "Saveback",
+      "subTypeRoundup": "Pembulatan",
+      "subTypeTransferIn": "Transfer masuk (gratis)",
+      "subTypeMerger": "Merger"
     }
   },
   "TxType": {

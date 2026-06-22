@@ -771,7 +771,13 @@
         "grams": "Grams",
         "units": "Units"
       },
-      "enrichHint": "Upload the settlement PDF to add the full tax breakdown."
+      "enrichHint": "Upload the settlement PDF to add the full tax breakdown.",
+      "subType": "Sub-type",
+      "subTypeNone": "(none)",
+      "subTypeSaveback": "Saveback",
+      "subTypeRoundup": "Round-up",
+      "subTypeTransferIn": "Transfer-in (free)",
+      "subTypeMerger": "Merger"
     }
   },
   "TxType": {
