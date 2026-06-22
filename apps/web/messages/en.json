@@ -997,12 +997,12 @@
     },
     "forecast": {
       "label": "Expected dividends & coupons",
-      "labelDesc": "Rest of year (est.)",
+      "labelDesc": "Rest of year, gross (est.)",
       "projectedUsed": "Projected used",
       "projectedUsedDesc": "Incl. expected payments",
       "projectedRemaining": "Projected remaining",
       "projectedTaxSaving": "Projected tax saving",
-      "disclaimer": "Estimates based on last year's payments and announced dates. Actual amounts may differ."
+      "disclaimer": "Gross estimates (pre-tax, before deducting withholding) based on last year's payments and announced dates. The income page shows net cash received — the difference is withholding tax."
     },
     "harvest": {
       "title": "Harvest suggestions",

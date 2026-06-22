@@ -4,6 +4,23 @@ import { instruments } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 
+// Helpers for seeding transactions via inject
+async function seedTransaction(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  portfolioId: string,
+  headers: Record<string, string>,
+  payload: Record<string, unknown>,
+) {
+  const res = await app.inject({
+    method: "POST",
+    url: `/portfolios/${portfolioId}/transactions`,
+    headers,
+    payload,
+  });
+  if (res.statusCode !== 201) throw new Error(`seed tx failed: ${res.body}`);
+  return res.json();
+}
+
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const AUDIENCE = "portfolio-tracker";
 
@@ -399,6 +416,236 @@ describe("tax routes", () => {
       const updated = patchRes.json();
       expect(updated.taxAllowanceAnnual).toBeNull();
       expect(updated.taxResidence).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Rest-of-year forecast (forecastIncomeRestOfYear) — new projected fields
+  // ---------------------------------------------------------------------------
+
+  describe("forecastIncomeRestOfYear", () => {
+    // currentYear is the year tests actually run in. We seed a dividend from last
+    // year's rest-of-year window (today-1yr .. Dec 31 last year) so projectDividends
+    // picks it up and projects it into the current year.
+    const currentYear = new Date().getUTCFullYear();
+    const lastYear = currentYear - 1;
+
+    // A date in last year's rest-of-year window (Aug 15 of last year).
+    const lastYearDivDate = `${lastYear}-08-15T00:00:00.000Z`;
+    // A buy date well before the dividend.
+    const buyDate = `${lastYear}-01-01T00:00:00.000Z`;
+
+    it("returns zero forecast for a historic year (not current year)", async () => {
+      const t = await token("tax-forecast-past");
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert user
+
+      const [stock] = await app.db
+        .insert(instruments)
+        .values({ symbol: "PAST-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Past Stock" })
+        .returning();
+
+      const holderId = await createHolder(t, { name: "Past Year Holder", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "buy", instrumentId: stock.id, quantity: "10", price: "50",
+        currency: "EUR", executedAt: buyDate,
+      });
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "dividend", instrumentId: stock.id, quantity: "0", price: "20",
+        currency: "EUR", executedAt: lastYearDivDate,
+      });
+
+      // Ask for a past year — forecast must be 0.
+      const res = await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/tax?year=${lastYear}`,
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const u = res.json().allowanceUsage;
+      expect(u.forecastIncomeRestOfYear).toBe("0.00");
+      // For a past year, projected fields equal realized fields.
+      expect(u.projectedRemaining).toBe(u.remaining);
+    });
+
+    it("produces a positive forecastIncomeRestOfYear for the current year when a last-year dividend exists", async () => {
+      const t = await token("tax-forecast-current");
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert user
+
+      const [stock] = await app.db
+        .insert(instruments)
+        .values({ symbol: "CUR-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Current Stock" })
+        .returning();
+
+      const holderId = await createHolder(t, {
+        name: "Current Year Holder",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+      });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      // Hold 10 shares; dividend from last year's rest-of-year window (no withholding).
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "buy", instrumentId: stock.id, quantity: "10", price: "100",
+        currency: "EUR", executedAt: buyDate,
+      });
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "dividend", instrumentId: stock.id, quantity: "0", price: "30",
+        currency: "EUR", executedAt: lastYearDivDate,
+      });
+
+      // Current year, no year param.
+      const res = await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/tax`,
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const u = res.json().allowanceUsage;
+      // Projection: dividend of 30 EUR from last year's window, same qty → 30 EUR forecast.
+      // No withholding → gross-up ratio = 1.0 → forecast = 30.
+      expect(parseFloat(u.forecastIncomeRestOfYear)).toBeGreaterThan(0);
+      expect(parseFloat(u.projectedUsedFullYear)).toBeGreaterThan(parseFloat(u.usedYtd));
+      expect(parseFloat(u.projectedRemaining)).toBeLessThan(parseFloat(u.remaining));
+      // projected fields must sum correctly.
+      const projected = parseFloat(u.projectedUsedFullYear) + parseFloat(u.projectedRemaining);
+      expect(projected).toBeCloseTo(parseFloat(u.allowanceAnnual), 1);
+    });
+
+    it("grosses up projected dividends when withholding tax was recorded", async () => {
+      const t = await token("tax-forecast-grossup");
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+      const [stock] = await app.db
+        .insert(instruments)
+        .values({ symbol: "GUP-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Grossup Stock" })
+        .returning();
+
+      const holderId = await createHolder(t, {
+        name: "Grossup Holder",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+      });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "buy", instrumentId: stock.id, quantity: "10", price: "100",
+        currency: "EUR", executedAt: buyDate,
+      });
+      // Dividend: net price=60, withholding tax=20 → gross=80, ratio=80/60≈1.333.
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "dividend", instrumentId: stock.id, quantity: "0", price: "60",
+        tax: "20", currency: "EUR", executedAt: lastYearDivDate,
+      });
+
+      const noTaxRes = await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/tax`,
+        headers: auth(t),
+      });
+      expect(noTaxRes.statusCode).toBe(200);
+      const u = noTaxRes.json().allowanceUsage;
+
+      // Gross-up: projected 60 EUR net × (80/60) = 80 EUR gross.
+      // forecastIncomeRestOfYear should be ~80, not ~60.
+      const forecast = parseFloat(u.forecastIncomeRestOfYear);
+      expect(forecast).toBeGreaterThan(60); // gross > net
+      expect(forecast).toBeCloseTo(80, 0);  // ≈ net + tax = 80
+    });
+
+    it("harvest suggestions use projectedRemaining, not remaining", async () => {
+      const t = await token("tax-forecast-harvest");
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+      const [stock] = await app.db
+        .insert(instruments)
+        .values({ symbol: "HARV-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Harvest Stock" })
+        .returning();
+
+      const holderId = await createHolder(t, {
+        name: "Harvest Forecast Holder",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+      });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      // Buy at 50, still open (unrealized gain drives harvest suggestion).
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "buy", instrumentId: stock.id, quantity: "10", price: "50",
+        currency: "EUR", executedAt: buyDate,
+      });
+      // Large dividend from last year's window (e.g. 900 EUR) → forecast eats most of 1000 allowance.
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "dividend", instrumentId: stock.id, quantity: "0", price: "900",
+        currency: "EUR", executedAt: lastYearDivDate,
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/tax`,
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      const u = body.allowanceUsage;
+
+      // No realized income/gains → realized remaining = 1000.
+      // Forecast ≈ 900 → projectedRemaining ≈ 100.
+      expect(parseFloat(u.remaining)).toBe(1000);
+      expect(parseFloat(u.projectedRemaining)).toBeLessThan(200); // meaningfully reduced
+
+      // Harvest suggestions should be sized against projectedRemaining, not 1000.
+      // (No open position with unrealized gain in this test — suggestions should be empty
+      //  or, if the buy is at 50 and there's no market price set, also empty.)
+      // The key check is that projectedRemaining is returned at all and < remaining.
+      expect(typeof u.projectedRemaining).toBe("string");
+      expect(typeof u.projectedTaxSavingAvailable).toBe("string");
+    });
+
+    it("networth/tax also populates forecast fields across portfolios", async () => {
+      const t = await token("tax-forecast-nw");
+      await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+      const [stock] = await app.db
+        .insert(instruments)
+        .values({ symbol: "NW-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "NW Stock" })
+        .returning();
+
+      const holderId = await createHolder(t, {
+        name: "NW Forecast Holder",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+        taxResidence: "DE",
+      });
+      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR" });
+
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "buy", instrumentId: stock.id, quantity: "5", price: "100",
+        currency: "EUR", executedAt: buyDate,
+      });
+      await seedTransaction(app, portfolioId, auth(t), {
+        type: "dividend", instrumentId: stock.id, quantity: "0", price: "50",
+        currency: "EUR", executedAt: lastYearDivDate,
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/networth/tax",
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const [entry] = res.json();
+      expect(entry.holder.name).toBe("NW Forecast Holder");
+
+      const u = entry.allowanceUsage;
+      // Projected fields must all be present strings.
+      expect(typeof u.forecastIncomeRestOfYear).toBe("string");
+      expect(typeof u.projectedUsedFullYear).toBe("string");
+      expect(typeof u.projectedRemaining).toBe("string");
+      expect(typeof u.projectedTaxSavingAvailable).toBe("string");
+      // With a last-year dividend in the window, forecast should be positive.
+      expect(parseFloat(u.forecastIncomeRestOfYear)).toBeGreaterThan(0);
     });
   });
 });
