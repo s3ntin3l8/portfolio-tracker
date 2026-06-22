@@ -65,7 +65,11 @@ export function AppShell({
     ? [...NAV, { href: "/admin", icon: ShieldCheck, key: "admin" } as const]
     : NAV;
 
-  const switcher = (
+  const hideSelector = ["/portfolios", "/settings", "/admin"].some((p) =>
+    pathname === p || pathname.startsWith(p + "/"),
+  );
+
+  const switcher = hideSelector ? null : (
     <PortfolioSwitcher
       portfolios={portfolios}
       holders={holders}
