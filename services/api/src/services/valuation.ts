@@ -18,6 +18,10 @@ export interface InstrumentMeta {
   name: string;
   assetClass: string;
   unit: string;
+  /** Exchange/venue code (IDX, XETRA, XAU, …). Used for region breakdown in allocation analytics. */
+  market: string;
+  /** GICS-style sector populated by the refresh-instrument-metadata job; null until enriched. */
+  sector: string | null;
 }
 
 export interface Valuation {
@@ -63,7 +67,7 @@ export async function valuePortfolio(
   const metaById = new Map<string, InstrumentMeta>(
     instrumentRows.map((i) => [
       i.id,
-      { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit },
+      { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit, market: i.market, sector: i.sector ?? null },
     ]),
   );
 

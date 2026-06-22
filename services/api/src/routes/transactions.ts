@@ -28,6 +28,7 @@ import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
   aggregatePortfolios,
+  allocationBreakdown,
   xirr,
   projectCoupons,
   projectDividends,
@@ -108,7 +109,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     return new Map(
       rows.map((i) => [
         i.id,
-        { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit },
+        { symbol: i.symbol, name: i.name, assetClass: i.assetClass, unit: i.unit, market: i.market, sector: i.sector ?? null },
       ]),
     );
   }
@@ -940,6 +941,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           ...h,
           instrument: metaById.get(h.instrumentId) ?? null,
         })),
+        allocation: allocationBreakdown(summary, metaById),
       };
     },
   );
@@ -1140,6 +1142,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       return {
         ...aggregated,
         holdings,
+        allocation: allocationBreakdown(aggregated, meta),
         xirr: Number.isFinite(rate) ? rate : null,
         portfolioCount: pfs.length,
         asOf: asOf.toISOString(),

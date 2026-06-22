@@ -188,6 +188,11 @@ export const instruments = pgTable(
     unit: unitEnum("unit").notNull().default("shares"),
     currency: text("currency").notNull(),
     name: text("name").notNull(),
+    /** GICS-style sector (e.g. "Financials", "Technology"). Populated by the
+     *  refresh-instrument-metadata background job via a market-data provider.
+     *  Null until enriched; instruments where sector is not meaningful (gold,
+     *  cash, mutual funds) are intentionally left null. */
+    sector: text("sector"),
     // Bond-specific (nullable for non-bonds).
     faceValue: numeric("face_value"),
     couponRate: numeric("coupon_rate"),

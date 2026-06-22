@@ -50,6 +50,8 @@ const makeHolding = (
     name: symbol + " Corp",
     assetClass: "equity",
     unit: "shares",
+    market: "IDX",
+    sector: null,
   },
 });
 

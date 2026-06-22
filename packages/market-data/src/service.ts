@@ -2,6 +2,7 @@ import type {
   AssetClass,
   Candle,
   DividendEvent,
+  InstrumentProfile,
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
@@ -78,6 +79,24 @@ export class MarketDataService {
       if (events.length > 0) return events;
     }
     return [];
+  }
+
+  /**
+   * Fetch instrument profile metadata (sector, industry, country). Tries all supporting
+   * providers in registration order, returning the first non-null result.
+   */
+  async getProfile(ref: InstrumentRef): Promise<InstrumentProfile | null> {
+    for (const provider of this.providersFor(ref.assetClass, ref.market)) {
+      if (!provider.getProfile) continue;
+      try {
+        this.opts.onCall?.(provider.name);
+        const profile = await provider.getProfile(ref);
+        if (profile != null) return profile;
+      } catch {
+        // A failing provider shouldn't block the others.
+      }
+    }
+    return null;
   }
 
   /**

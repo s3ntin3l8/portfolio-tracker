@@ -60,6 +60,19 @@ export interface ProviderUsage {
   resetAt?: string;
 }
 
+/**
+ * Instrument profile data returned by a market-data provider, used to enrich
+ * the `instruments.sector` column in the background metadata job.
+ */
+export interface InstrumentProfile {
+  /** GICS-style sector (e.g. "Financials", "Technology"). */
+  sector?: string | null;
+  /** GICS industry (sub-sector). Informational; not stored in the DB yet. */
+  industry?: string | null;
+  /** Country of incorporation / primary listing. */
+  country?: string | null;
+}
+
 /** A dividend event for an instrument, as returned by a market-data provider. */
 export interface DividendEvent {
   /** Ex-dividend date: YYYY-MM-DD. */
@@ -99,6 +112,13 @@ export interface MarketDataProvider {
    * `fromDate` (YYYY-MM-DD) limits the window; defaults to 2 years back.
    */
   getDividends?(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]>;
+  /**
+   * Fetch instrument profile metadata (sector, industry, country). Used by the
+   * background `refresh-instrument-metadata` job to populate `instruments.sector`.
+   * Returns null when the provider does not support profile lookups or the
+   * instrument is not found.
+   */
+  getProfile?(ref: InstrumentRef): Promise<InstrumentProfile | null>;
 }
 
 /** A 12-char ISIN: 2-letter country, 9 alphanumerics, 1 check digit. */

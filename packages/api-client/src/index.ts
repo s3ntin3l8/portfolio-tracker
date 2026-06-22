@@ -266,6 +266,53 @@ export interface InstrumentMeta {
   name: string;
   assetClass: string;
   unit: string;
+  /** Exchange/venue (IDX, XETRA, XAU, …). Used for region breakdown in allocation analytics. */
+  market: string;
+  /** GICS-style sector populated by the sector-enrichment job; null until enriched. */
+  sector: string | null;
+}
+
+/** A single slice in an allocation breakdown (one category in one dimension). */
+export interface AllocationSlice {
+  /** Canonical category key (asset-class name, currency code, region code, sector name, …). */
+  key: string;
+  /** Value in the display currency (decimal string). */
+  value: string;
+  /** Percentage of total, 0–100, rounded to 4 dp. */
+  pct: number;
+}
+
+/** An individual holding ranked by portfolio weight. */
+export interface AllocationTopHolding {
+  instrumentId: string;
+  name?: string;
+  assetClass?: string;
+  /** Market value in the display currency (decimal string). */
+  value: string;
+  /** Percentage of total, 0–100. */
+  pct: number;
+}
+
+/** HHI-based concentration summary. */
+export interface ConcentrationInfo {
+  /** Herfindahl-Hirschman Index, 0–10 000. */
+  hhi: number;
+  top1Pct: number;
+  top5Pct: number;
+  label: "diversified" | "moderate" | "concentrated";
+}
+
+/**
+ * Full allocation breakdown across four dimensions + concentration analytics.
+ * All monetary values are in the portfolio's display currency (decimal strings).
+ */
+export interface AllocationBreakdown {
+  byAssetClass: AllocationSlice[];
+  byCurrency: AllocationSlice[];
+  byRegion: AllocationSlice[];
+  bySector: AllocationSlice[];
+  topHoldings: AllocationTopHolding[];
+  concentration: ConcentrationInfo;
 }
 
 export interface Instrument {
@@ -414,6 +461,8 @@ export interface PortfolioSummary {
   totalDayChange: string;
   /** Wealth denominated in each currency (display-currency magnitudes). */
   exposureByCurrency: Record<string, string>;
+  /** Allocation breakdown across asset class, currency, region, sector + concentration. */
+  allocation?: AllocationBreakdown;
 }
 
 export interface PortfolioPerformance {
@@ -442,6 +491,8 @@ export interface NetWorth {
   totalDayChange: string;
   /** Wealth denominated in each currency (display-currency magnitudes). */
   exposureByCurrency: Record<string, string>;
+  /** Allocation breakdown across asset class, currency, region, sector + concentration. */
+  allocation?: AllocationBreakdown;
   xirr: number | null;
   portfolioCount: number;
   asOf: string;

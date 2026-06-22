@@ -1,6 +1,7 @@
 import type {
   AssetClass,
   DividendEvent,
+  InstrumentProfile,
   InstrumentRef,
   MarketDataProvider,
   ProviderUsage,
@@ -163,5 +164,42 @@ export class EodhdProvider implements MarketDataProvider {
           ? null
           : String(data.previousClose),
     };
+  }
+
+  /**
+   * Fetch instrument profile (sector, industry, country) from the EODHD
+   * `/fundamentals/<ticker>` endpoint. Uses `filter=General` to limit the
+   * response to the top-level metadata object and avoid transferring the full
+   * fundamentals payload (~100 KB+).
+   *
+   * Only supports equity and ETF — returns null for other asset classes.
+   */
+  async getProfile(ref: InstrumentRef): Promise<InstrumentProfile | null> {
+    const ticker = this.directTicker(ref) ?? (await this.resolveIsinTicker(ref));
+    if (!ticker) return null;
+
+    try {
+      const res = await this.doFetch(
+        `${this.baseUrl}/fundamentals/${encodeURIComponent(ticker)}?api_token=${this.apiKey}&fmt=json&filter=General`,
+      );
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        Sector?: string;
+        Industry?: string;
+        CountryName?: string;
+        // When filter=General is used EODHD flattens the General object to the root.
+        // Without the filter, it would be nested as data.General.Sector.
+      } | null;
+      if (!data || typeof data !== "object") return null;
+
+      const sector = data.Sector && data.Sector !== "N/A" ? data.Sector : null;
+      const industry = data.Industry && data.Industry !== "N/A" ? data.Industry : null;
+      const country = data.CountryName && data.CountryName !== "N/A" ? data.CountryName : null;
+
+      if (!sector && !industry && !country) return null;
+      return { sector, industry, country };
+    } catch {
+      return null;
+    }
   }
 }

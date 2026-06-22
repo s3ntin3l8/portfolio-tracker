@@ -346,6 +346,8 @@ describe("auth + portfolios + transactions", () => {
       name: "BCA",
       assetClass: "equity",
       unit: "shares",
+      market: "IDX",
+      sector: null,
     });
   });
 
@@ -370,6 +372,8 @@ describe("auth + portfolios + transactions", () => {
       name: "BCA",
       assetClass: "equity",
       unit: "shares",
+      market: "IDX",
+      sector: null,
     });
     expect(summary.totalUnrealizedPnL).toBe("0");
     // Default boundary is cash-outside: uninvested (here negative) cash is excluded, so

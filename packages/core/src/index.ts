@@ -85,3 +85,12 @@ export {
   type YearTax,
   type ComputeTradesInput,
 } from "./trade-log.js";
+export {
+  allocationBreakdown,
+  concentration,
+  type AllocationInstrumentMeta,
+  type AllocationSlice,
+  type TopHolding,
+  type ConcentrationInfo,
+  type AllocationBreakdown,
+} from "./allocation.js";

@@ -1,6 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Plus, TrendingUp, Wallet } from "lucide-react";
-import type { AllocationSlice } from "@/lib/mock-data";
 import {
   Card,
   CardContent,
@@ -8,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
-import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { AllocationTabs, ConcentrationBadge } from "@/components/charts/allocation-tabs";
 import { NetWorthHistoryChart } from "@/components/charts/net-worth-history-chart";
 import { EmptyState } from "@/components/empty-state";
 import { GoldTicker } from "@/components/gold-ticker";
@@ -34,7 +33,6 @@ export default async function DashboardPage({
     costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
   setRequestLocale(locale);
   const t = await getTranslations("Dashboard");
-  const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
   const th = await getTranslations("Holdings");
@@ -132,33 +130,13 @@ export default async function DashboardPage({
     )
     .slice(0, 5);
 
-  // Allocation by asset class (priced where possible, else at cost) plus cash.
-  const byClass = new Map<string, number>();
-  for (const h of openHoldings) {
-    const cls = h.instrument?.assetClass ?? "equity";
-    byClass.set(cls, (byClass.get(cls) ?? 0) + holdingValue(h));
-  }
-  const allocation: AllocationSlice[] = [
-    ...[...byClass.entries()].map(([key, value]) => ({
-      key: key as AllocationSlice["key"],
-      label: tc(key),
-      value,
-    })),
-    ...(cashTotal > 0
-      ? [{ key: "cash" as AllocationSlice["key"], label: tc("cash"), value: cashTotal }]
-      : []),
-  ].filter((s) => s.value > 0);
-
   const topHoldings = [...openHoldings]
     .sort((a, b) => holdingValue(b) - holdingValue(a))
     .slice(0, 4);
 
-  // Currency exposure (display-currency magnitudes). Only meaningful with a mix.
-  const exposure = Object.entries(summary.exposureByCurrency)
-    .map(([key, value]) => ({ key, label: key, value: Number(value) }))
-    .filter((s) => s.value > 0)
-    .sort((a, b) => b.value - a.value);
-  const showExposure = exposure.length > 1;
+  // Use server-computed allocation breakdown when available; fall back to an
+  // empty state (allocation is optional on PortfolioSummary for back-compat).
+  const allocation = summary.allocation;
 
   return (
     <div className="space-y-6">
@@ -219,26 +197,22 @@ export default async function DashboardPage({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>{t("allocation")}</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>{t("allocation")}</CardTitle>
+              {allocation && (
+                <ConcentrationBadge label={allocation.concentration.label} />
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <AllocationDonut data={allocation} currency={currency} />
+            {allocation ? (
+              <AllocationTabs allocation={allocation} currency={currency} />
+            ) : (
+              <p className="text-center text-sm text-muted-foreground py-8">—</p>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {showExposure && (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("currencyExposure")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AllocationDonut data={exposure} currency={currency} />
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

@@ -6,6 +6,7 @@ import { getDb } from "../db/client.js";
 import { getMarketData, flushUsage } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
 import { refreshDividends } from "./dividends.js";
+import { refreshInstrumentMetadata } from "./instrument-metadata.js";
 import { recordDailySnapshots } from "./snapshots.js";
 import { refreshAntamBuyback, refreshGaleri24Buyback, refreshNav } from "./scrapers/store.js";
 import { syncTrConnection } from "./pytr/sync.js";
@@ -34,6 +35,12 @@ const DIVIDEND_QUEUE = "refresh-dividends";
 // Weekly on Monday morning UTC — dividend ex-dates change slowly; daily would burn
 // API quota for no practical gain. Runs early before the IDX open.
 const DIVIDEND_CRON = "0 6 * * 1";
+
+const INSTRUMENT_META_QUEUE = "refresh-instrument-metadata";
+// Weekly on Sunday 04:00 UTC — sector/industry data changes at most quarterly; daily
+// would burn keyed API quota for no gain. Sunday avoids clashing with the Monday
+// dividend refresh.
+const INSTRUMENT_META_CRON = "0 4 * * 0";
 
 const GC_RECEIPTS_QUEUE = "gc-staged-receipts";
 // Daily at 03:00 UTC — clean up staged documents from abandoned draft imports (>7d).
@@ -90,6 +97,12 @@ export const JOB_DESCRIPTORS = [
     label: "Dividend refresh",
     description: "Pull announced and historical dividend events from market-data providers.",
     cron: DIVIDEND_CRON,
+  },
+  {
+    name: INSTRUMENT_META_QUEUE,
+    label: "Instrument metadata refresh",
+    description: "Fetch sector/industry/country from market-data providers for held instruments missing a sector.",
+    cron: INSTRUMENT_META_CRON,
   },
   {
     name: GC_RECEIPTS_QUEUE,
@@ -250,6 +263,20 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
     }
   });
   await boss.schedule(DIVIDEND_QUEUE, DIVIDEND_CRON);
+
+  // Weekly instrument-metadata refresh: fetch sector/industry/country for held
+  // instruments still missing a sector and write it onto the instrument row.
+  await boss.createQueue(INSTRUMENT_META_QUEUE);
+  await boss.work(INSTRUMENT_META_QUEUE, async () => {
+    try {
+      const count = await refreshInstrumentMetadata(getDb(), await getMarketData());
+      await flushUsage();
+      app.log.info({ count }, "instrument metadata refresh complete");
+    } catch (err) {
+      app.log.error({ err }, "instrument metadata refresh failed");
+    }
+  });
+  await boss.schedule(INSTRUMENT_META_QUEUE, INSTRUMENT_META_CRON);
 
   // GC sweep: delete staged receipt documents from abandoned draft imports (#231).
   await boss.createQueue(GC_RECEIPTS_QUEUE);
