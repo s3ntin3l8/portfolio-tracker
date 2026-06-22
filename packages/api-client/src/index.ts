@@ -404,7 +404,11 @@ export interface Transaction {
   currency: string;
   executedAt: string;
   source: string;
+  /** Sub-type within an action (saveback/roundup/transfer_in/merger); null for most rows. */
+  kind: string | null;
   importId: string | null;
+  /** Import dedup key; null for manually-entered transactions. */
+  externalId: string | null;
   instrument: InstrumentMeta | null;
   /** True when the parent import has a retained source document available for download (#231). */
   hasDocument: boolean;

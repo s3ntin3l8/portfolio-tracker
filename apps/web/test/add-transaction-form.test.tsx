@@ -464,6 +464,120 @@ describe("AddTransactionForm", () => {
     );
   });
 
+  // ---------------------------------------------------------------------------
+  // New type coverage (the expanded type list)
+  // ---------------------------------------------------------------------------
+
+  it("savings_plan shows quantity, price and fees like a buy", () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "savings_plan" } });
+    expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.price)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.fees)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.tax)).toBeInTheDocument();
+  });
+
+  it("bonus shows quantity and price but no fees (share receipt)", () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "bonus" } });
+    expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.price)).toBeInTheDocument();
+    expect(screen.queryByLabelText(m.fees)).toBeNull();
+    expect(screen.queryByLabelText(m.tax)).toBeNull();
+  });
+
+  it("dividend shows instrument and tax but no quantity or fees (income)", () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "dividend" } });
+    // Instrument section present (income, not cash).
+    expect(screen.getByLabelText(m.search)).toBeInTheDocument();
+    // No quantity or fees.
+    expect(screen.queryByLabelText(m.quantity)).toBeNull();
+    expect(screen.queryByLabelText(m.fees)).toBeNull();
+    // Tax retained for income types.
+    expect(screen.getByLabelText(m.tax)).toBeInTheDocument();
+  });
+
+  it("interest hides the instrument section (cash type)", () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "interest" } });
+    expect(screen.queryByLabelText(m.symbol)).toBeNull();
+    expect(screen.queryByLabelText(m.search)).toBeNull();
+    expect(screen.queryByLabelText(m.quantity)).toBeNull();
+  });
+
+  it("bonus_cash hides the instrument section (cash type)", () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "bonus_cash" } });
+    expect(screen.queryByLabelText(m.search)).toBeNull();
+    expect(screen.queryByLabelText(m.quantity)).toBeNull();
+  });
+
+  it("edit mode preserves import provenance (source + externalId) on submit", async () => {
+    const client = makeClient();
+    const onSuccess = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AddTransactionForm
+          client={client}
+          portfolioId="p1"
+          transactionId="t-import"
+          initial={{
+            ...EDIT_INITIAL,
+            source: "pytr",
+            externalId: "tr:exec:abc-123",
+          }}
+          onSuccess={onSuccess}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // Change only the notes field — provenance must survive.
+    fireEvent.change(screen.getByLabelText(m.notes), { target: { value: "corrected note" } });
+    fireEvent.click(screen.getByRole("button", { name: m.save }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(client.updateTransaction).toHaveBeenCalledWith(
+      "p1",
+      "t-import",
+      expect.objectContaining({
+        source: "pytr",
+        externalId: "tr:exec:abc-123",
+        description: "corrected note",
+      }),
+    );
+  });
+
+  it("sets kind in the payload when a sub-type is chosen", async () => {
+    const client = makeClient();
+    renderForm(client);
+
+    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "savings_plan" } });
+    fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "MSFT" } });
+    fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Microsoft" } });
+    fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText(m.price), { target: { value: "400" } });
+    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-05-01" } });
+    fireEvent.change(screen.getByLabelText(m.subType), { target: { value: "saveback" } });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ kind: "saveback", type: "savings_plan" }),
+    );
+  });
+
   it("prefills tax, fxRate, description, tags from initial (edit round-trip guard)", async () => {
     const client = makeClient();
     render(

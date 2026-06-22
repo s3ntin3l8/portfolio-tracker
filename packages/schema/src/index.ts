@@ -244,6 +244,10 @@ export const transactionInputSchema = z.object({
   executedAt: z.coerce.date(),
   source: transactionSourceSchema.default("manual"),
   externalId: z.string().optional(),
+  // Sub-type within an action (e.g. saveback / roundup for TR; merger for fund mergers;
+  // transfer_in for free share receipts). Validated loosely so legacy/unrecognised strings
+  // don't 400; the UI constrains input to the known set.
+  kind: z.string().nullable().optional(),
 });
 export type TransactionInput = z.infer<typeof transactionInputSchema>;
 

@@ -51,10 +51,40 @@ export interface AddTransactionInitial {
   sources?: import("@portfolio/api-client").SourceSummary[];
   /** True when at least one source has per-component taxComponents (#230). */
   hasFullTaxDetail?: boolean;
+  /** Sub-type (saveback / roundup / transfer_in / merger); null when not set. */
+  kind?: string | null;
+  /** Original import source (pytr / csv / pdf / screenshot); null = manual. Preserved on edit. */
+  source?: string | null;
+  /** Import dedup key; null for manual transactions. Preserved on edit. */
+  externalId?: string | null;
 }
 
-const TX_TYPES = ["buy", "sell", "dividend", "coupon", "deposit", "withdrawal", "fee"] as const;
-type TxType = (typeof TX_TYPES)[number];
+/**
+ * Types offered in the dropdown, grouped by behaviour:
+ *   Acquisition  — carry instrument + quantity + price/unit + fees + tax
+ *   ShareReceipt — carry instrument + quantity + price/unit (not required); no fees/tax
+ *   Income       — carry instrument + amount; no quantity/fees; tax retained
+ *   Cash         — amount only; no instrument, quantity, fees
+ *
+ * loan_drawdown / loan_repayment are intentionally excluded: they require a loanId the
+ * form cannot set; orphaned legs break loanBalances in core.
+ */
+const ACQUISITION_TYPES = ["buy", "sell", "savings_plan"] as const;
+const SHARE_RECEIPT_TYPES = ["bonus", "split", "rights"] as const;
+const INCOME_TYPES = ["dividend", "coupon"] as const;
+const CASH_TYPES = ["deposit", "withdrawal", "fee", "interest", "bonus_cash"] as const;
+
+/** Types the user can freely select. Loan types are excluded. */
+const SELECTABLE_TYPES = [
+  ...ACQUISITION_TYPES,
+  ...SHARE_RECEIPT_TYPES,
+  ...INCOME_TYPES,
+  ...CASH_TYPES,
+] as const;
+type SelectableType = (typeof SELECTABLE_TYPES)[number];
+
+/** All recognised types (superset; covers loan rows already in the DB). */
+type TxType = SelectableType | "loan_drawdown" | "loan_repayment";
 const ASSET_CLASSES = ["equity", "gold", "bond", "mutual_fund", "etf", "crypto"] as const;
 const UNITS = ["shares", "grams", "units"] as const;
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
@@ -113,6 +143,7 @@ export function AddTransactionForm({
 
   const isEdit = Boolean(transactionId);
   const [type, setType] = useState<TxType>(() => (initial?.type as TxType) ?? "buy");
+  const [kind, setKind] = useState(() => initial?.kind ?? "");
   const [currency, setCurrency] = useState(() => initial?.currency ?? "IDR");
   const [date, setDate] = useState(() => initial?.executedAt?.slice(0, 10) ?? "");
   const [quantity, setQuantity] = useState(() => initial?.quantity ?? "");
@@ -161,12 +192,26 @@ export function AddTransactionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Cash movements carry no instrument; dividend/coupon are instrument income.
-  const isCash = type === "deposit" || type === "withdrawal" || type === "fee";
-  const isTrade = type === "buy" || type === "sell";
+  // Per-type field groups — drive which fields are shown and validated.
+  const isAcquisition = (ACQUISITION_TYPES as readonly string[]).includes(type);
+  const isShareReceipt = (SHARE_RECEIPT_TYPES as readonly string[]).includes(type);
+  const isIncome = (INCOME_TYPES as readonly string[]).includes(type);
+  const isCash = (CASH_TYPES as readonly string[]).includes(type) ||
+    type === "loan_drawdown" || type === "loan_repayment";
+
+  /** Shows the instrument picker. */
+  const hasInstrument = !isCash;
+  /** Shows the quantity field. */
+  const showQuantity = isAcquisition || isShareReceipt;
+  /** Shows fees (acquisitions only). */
+  const showFees = isAcquisition;
+  /** Shows tax withheld (acquisitions + income). */
+  const showTax = isAcquisition || isIncome;
+  /** Price is mandatory except for share receipts (bonus shares are commonly price 0). */
+  const priceRequired = !isShareReceipt;
   // Gold gets a dedicated entry flow (source + label, no symbol/search). For an already
   // selected instrument (edit) trust its own class; otherwise the picked asset kind.
-  const isGold = !isCash && (selected ? selected.assetClass : assetClass) === "gold";
+  const isGold = hasInstrument && (selected ? selected.assetClass : assetClass) === "gold";
 
   // Load the selectable gold sources once; default to the first (highest-priority) one.
   useEffect(() => {
@@ -225,7 +270,7 @@ export function AddTransactionForm({
   }
 
   async function resolveInstrumentId(): Promise<string | null> {
-    if (isCash) return null;
+    if (!hasInstrument) return null;
     if (selected) return selected.id;
     if (assetClass === "gold") {
       const label = name.trim();
@@ -259,7 +304,7 @@ export function AddTransactionForm({
     if (busy) return;
     // A new non-gold instrument needs a symbol (gold derives one from its label). Catch the
     // empty case here with a clear message instead of letting the API reject it generically.
-    if (!isCash && !selected && assetClass !== "gold" && !symbol.trim()) {
+    if (hasInstrument && !selected && assetClass !== "gold" && !symbol.trim()) {
       setError(t("symbolRequired"));
       return;
     }
@@ -274,16 +319,20 @@ export function AddTransactionForm({
       const payload = {
         type,
         instrumentId,
-        quantity: isTrade ? quantity || "0" : "0",
+        quantity: showQuantity ? quantity || "0" : "0",
         price: price || "0",
-        fees: isTrade ? fees || "0" : "0",
-        tax: isTrade && tax ? tax : null,
+        fees: showFees ? fees || "0" : "0",
+        tax: showTax && tax ? tax : null,
         fxRate: fxRate || null,
+        kind: kind || null,
         description: description.trim() || null,
         tags: parsedTags.length > 0 ? parsedTags : null,
         currency,
         executedAt: new Date(date),
-        source: "manual" as const,
+        // Preserve import provenance on edit; new manual rows default to "manual".
+        source: (isEdit ? (initial?.source ?? "manual") : "manual") as
+          "manual" | "screenshot" | "csv" | "pytr",
+        externalId: isEdit ? (initial?.externalId ?? undefined) : undefined,
       };
       if (transactionId) {
         await client.updateTransaction(portfolioId, transactionId, payload);
@@ -312,7 +361,12 @@ export function AddTransactionForm({
 
       <Field label={t("type")} htmlFor="tx-type">
         <Select id="tx-type" value={type} onChange={(e) => setType(e.target.value as TxType)}>
-          {TX_TYPES.map((ty) => (
+          {/* Render the curated selectable list, plus the current type if it's a loan/legacy
+              row that isn't in the list — so editing won't clobber it. */}
+          {[
+            ...SELECTABLE_TYPES,
+            ...(!(SELECTABLE_TYPES as readonly string[]).includes(type) ? [type] : []),
+          ].map((ty) => (
             <option key={ty} value={ty}>
               {tt(ty)}
             </option>
@@ -320,7 +374,7 @@ export function AddTransactionForm({
         </Select>
       </Field>
 
-      {!isCash && (
+      {hasInstrument && (
         <div className="space-y-3 rounded-lg border border-border p-4">
           <Label>{t("instrument")}</Label>
           {selected ? (
@@ -485,7 +539,7 @@ export function AddTransactionForm({
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {isTrade && (
+        {showQuantity && (
           <Field label={isGold ? t("grams") : t("quantity")} htmlFor="tx-qty">
             <Input
               id="tx-qty"
@@ -498,7 +552,7 @@ export function AddTransactionForm({
           </Field>
         )}
         <Field
-          label={isGold && isTrade ? t("pricePerGram") : isTrade ? t("price") : t("amount")}
+          label={isGold && showQuantity ? t("pricePerGram") : showQuantity ? t("price") : t("amount")}
           htmlFor="tx-price"
         >
           <Input
@@ -506,10 +560,10 @@ export function AddTransactionForm({
             inputMode="decimal"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            required
+            required={priceRequired}
           />
         </Field>
-        {isTrade && (
+        {showFees && (
           <Field label={t("fees")} htmlFor="tx-fees">
             <Input
               id="tx-fees"
@@ -519,7 +573,7 @@ export function AddTransactionForm({
             />
           </Field>
         )}
-        {isTrade && (
+        {showTax && (
           <Field label={t("tax")} htmlFor="tx-tax">
             <Input
               id="tx-tax"
@@ -583,6 +637,19 @@ export function AddTransactionForm({
               onChange={(e) => setFxRate(e.target.value)}
               placeholder={t("fxRatePlaceholder")}
             />
+          </Field>
+          <Field label={t("subType")} htmlFor="tx-sub-type">
+            <Select
+              id="tx-sub-type"
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+            >
+              <option value="">{t("subTypeNone")}</option>
+              <option value="saveback">{t("subTypeSaveback")}</option>
+              <option value="roundup">{t("subTypeRoundup")}</option>
+              <option value="transfer_in">{t("subTypeTransferIn")}</option>
+              <option value="merger">{t("subTypeMerger")}</option>
+            </Select>
           </Field>
         </div>
       </details>

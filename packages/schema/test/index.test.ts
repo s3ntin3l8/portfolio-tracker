@@ -94,6 +94,42 @@ describe("transactionInputSchema", () => {
     expect(tx.executedAt).toBeInstanceOf(Date);
   });
 
+  it("accepts kind and passes it through; omitting it leaves it undefined", () => {
+    const withKind = transactionInputSchema.parse({
+      portfolioId: UUID,
+      type: "savings_plan",
+      price: "200",
+      quantity: "1.5",
+      currency: "EUR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+      kind: "saveback",
+    });
+    expect(withKind.kind).toBe("saveback");
+
+    const withoutKind = transactionInputSchema.parse({
+      portfolioId: UUID,
+      type: "buy",
+      price: "100",
+      quantity: "10",
+      currency: "IDR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+    });
+    expect(withoutKind.kind).toBeUndefined();
+  });
+
+  it("accepts kind: null", () => {
+    const tx = transactionInputSchema.parse({
+      portfolioId: UUID,
+      type: "buy",
+      price: "100",
+      quantity: "10",
+      currency: "IDR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+      kind: null,
+    });
+    expect(tx.kind).toBeNull();
+  });
+
   it("rejects an invalid portfolio id and bad decimals", () => {
     expect(() =>
       transactionInputSchema.parse({

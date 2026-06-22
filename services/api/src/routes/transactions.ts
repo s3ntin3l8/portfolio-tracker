@@ -785,6 +785,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           executedAt: input.executedAt,
           source: input.source,
           externalId: input.externalId,
+          kind: input.kind ?? null,
         })
         .returning();
       await enqueueRecompute(portfolioId, new Date(input.executedAt).toISOString().slice(0, 10));
@@ -879,6 +880,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           executedAt: input.executedAt,
           source: input.source,
           externalId: input.externalId,
+          kind: input.kind ?? null,
         })
         .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
         .returning();

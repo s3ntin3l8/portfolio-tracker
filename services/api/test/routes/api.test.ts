@@ -669,6 +669,103 @@ describe("auth + portfolios + transactions", () => {
     expect(missing.statusCode).toBe(404);
   });
 
+  it("creates a savings_plan transaction with kind and returns it", async () => {
+    const t = await token("user-sp");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "SP Test", baseCurrency: "eur" },
+      })
+    ).json().id;
+    const [eq] = await app.db
+      .insert(instruments)
+      .values({ symbol: "XETRA", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Test ETF" })
+      .returning();
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "savings_plan",
+        instrumentId: eq.id,
+        quantity: "1.5",
+        price: "200",
+        currency: "EUR",
+        executedAt: "2026-03-01T00:00:00.000Z",
+        kind: "saveback",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ type: "savings_plan", kind: "saveback", quantity: "1.5" });
+  });
+
+  it("PATCH preserves kind and provenance (source/externalId)", async () => {
+    // Simulate an imported transaction that had source+externalId set.
+    const t = await token("user-prov");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Prov Test", baseCurrency: "eur" },
+      })
+    ).json().id;
+    const [eq] = await app.db
+      .insert(instruments)
+      .values({ symbol: "PROV", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Prov Inst" })
+      .returning();
+
+    // Create with kind + externalId to simulate an import.
+    const created = (
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: eq.id,
+          quantity: "10",
+          price: "100",
+          currency: "EUR",
+          executedAt: "2026-03-10T00:00:00.000Z",
+          source: "csv",
+          externalId: "csv-row-42",
+          kind: "saveback",
+        },
+      })
+    ).json();
+    const txId: string = created.id;
+
+    // PATCH that sends back the original source/externalId (as the edit form does).
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/portfolios/${portfolioId}/transactions/${txId}`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: eq.id,
+        quantity: "10",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+        executedAt: "2026-03-10T00:00:00.000Z",
+        source: "csv",
+        externalId: "csv-row-42",
+        kind: "saveback",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      id: txId,
+      source: "csv",
+      externalId: "csv-row-42",
+      kind: "saveback",
+    });
+  });
+
   it("batch-deletes transactions, ignoring foreign ids (owner only)", async () => {
     // A dedicated user/portfolio so the count isn't perturbed by other tests.
     const t = await token("bulk-user");
