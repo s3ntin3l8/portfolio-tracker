@@ -607,6 +607,17 @@
     "needInstruments": "Pilih instrumen lama dan baru.",
     "error": "Tidak dapat mencatat merger. Periksa kolom dan coba lagi."
   },
+  "Search": {
+    "triggerLabel": "Cari",
+    "placeholder": "Cari instrumen & transaksi…",
+    "hint": "Ketik untuk mencari instrumen dan transaksi.",
+    "searching": "Mencari…",
+    "noResults": "Tidak ada hasil.",
+    "groupInstruments": "Instrumen",
+    "groupTransactions": "Transaksi",
+    "catalogBadge": "katalog",
+    "shortcutHint": "⌘K"
+  },
   "Settings": {
     "title": "Pengaturan",
     "subtitle": "Akun dan preferensi Anda.",

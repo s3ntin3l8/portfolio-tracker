@@ -25,6 +25,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { PortfolioSwitcher } from "@/components/portfolio-switcher";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
+import { GlobalSearch } from "@/components/global-search";
 import { InstallPrompt } from "@/components/install-prompt";
 
 const NAV = [
@@ -149,6 +150,7 @@ export function AppShell({
           </Button>
           <div className="min-w-0">{switcher}</div>
           <div className="ml-auto flex items-center gap-1">
+            <GlobalSearch holderId={selectedHolderId} />
             {/* Global add-entry affordance: reachable from every screen, owns the
                 share-target / shortcut auto-open. Suspense is required because
                 AddTransactionMenu reads useSearchParams and this shell renders on

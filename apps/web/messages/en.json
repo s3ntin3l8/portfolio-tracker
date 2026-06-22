@@ -609,6 +609,17 @@
     "needInstruments": "Select both the old and the new instrument.",
     "error": "Couldn't record the merger. Check the fields and try again."
   },
+  "Search": {
+    "triggerLabel": "Search",
+    "placeholder": "Search instruments & transactions…",
+    "hint": "Type to search instruments and transactions.",
+    "searching": "Searching…",
+    "noResults": "No results.",
+    "groupInstruments": "Instruments",
+    "groupTransactions": "Transactions",
+    "catalogBadge": "catalog",
+    "shortcutHint": "⌘K"
+  },
   "Settings": {
     "title": "Settings",
     "subtitle": "Your account and preferences.",
