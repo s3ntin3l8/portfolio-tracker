@@ -944,5 +944,18 @@
     "under": "{pct}pp di bawah target",
     "onTarget": "Sesuai target",
     "hint": "{over} melebihi · {under} di bawah target"
+  },
+  "RebalanceDialog": {
+    "trigger": "Atur target alokasi",
+    "title": "Target alokasi rencana tabungan",
+    "description": "Atur alokasi yang Anda inginkan di antara rencana tabungan. Kami akan merekomendasikan cara membagi kontribusi bulanan Anda untuk mendekati target ini.",
+    "total": "Total",
+    "mustEqual100": "Harus sama dengan 100%",
+    "save": "Simpan target",
+    "cancel": "Batal",
+    "loadError": "Gagal memuat target yang ada.",
+    "saveError": "Gagal menyimpan target.",
+    "recommendedSplit": "Pembagian bulanan yang disarankan",
+    "amount": "Jumlah"
   }
 }

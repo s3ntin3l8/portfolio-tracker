@@ -112,6 +112,9 @@ export default async function SavingsPage({
           data={sparplanResult.data}
           currency={currency}
           locale={locale}
+          portfolioId={sparplanResult.portfolioId ?? undefined}
+          drift={sparplanResult.data.drift}
+          contributionSplit={sparplanResult.data.contributionSplit}
         />
       )}
 

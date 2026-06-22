@@ -946,5 +946,18 @@
     "under": "{pct}pp under target",
     "onTarget": "On target",
     "hint": "{over} over · {under} under target"
+  },
+  "RebalanceDialog": {
+    "trigger": "Set target split",
+    "title": "Target split for savings plans",
+    "description": "Set your desired allocation across savings plans. We'll recommend how to split your monthly contribution to converge toward these targets.",
+    "total": "Total",
+    "mustEqual100": "Must equal 100%",
+    "save": "Save targets",
+    "cancel": "Cancel",
+    "loadError": "Could not load existing targets.",
+    "saveError": "Could not save targets.",
+    "recommendedSplit": "Recommended monthly split",
+    "amount": "Amount"
   }
 }
