@@ -433,13 +433,27 @@ describe("sparplan rebalancing (Phase B)", () => {
     expect(body.tradeActions).toBeDefined();
     expect(Array.isArray(body.tradeActions)).toBe(true);
 
-    // With VWCE over-weight and EIMI under-weight, expect at least one buy.
+    // VWCE is over-weight → sell action expected; EIMI is under-weight → buy action expected.
     const buys = body.tradeActions.filter((a: { side: string }) => a.side === "buy");
     expect(buys.length).toBeGreaterThan(0);
+
+    // Verify the sell cap is applied.
+    // Setup: VWCE 9 units @ cost €80 = €720 total cost, market price €100 → value €900, unrealized gain €180.
+    // Targeted total: €900 + €100 = €1000. Uncapped sell = |70%×1000 − 900| = 200.
+    // ETF tfRate = 30%, multiplier = 0.70. harvestableGross = min(180, remaining/0.70) ≈ 180.
+    // So sell is capped from 200 → 180.
+    const sell = body.tradeActions.find((a: { side: string }) => a.side === "sell");
+    expect(sell).toBeDefined();
+    // The capped value (≈180) must be strictly less than the uncapped value (200).
+    expect(Number(sell.deltaValue)).toBeLessThan(200);
+    // And approximately equal to the harvestable gross (€180).
+    expect(Number(sell.deltaValue)).toBeCloseTo(180, 0);
 
     // Allowance fields should be present.
     expect(body.allowanceUsed).toBeDefined();
     expect(body.remainingAllowance).toBeDefined();
+    // allowanceUsed should be > 0 (the sell realizes some adjusted gain).
+    expect(Number(body.allowanceUsed)).toBeGreaterThan(0);
 
     // drift and contributionSplit still present.
     expect(body.drift).toBeDefined();
