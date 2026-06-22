@@ -608,7 +608,7 @@ export async function adminRoute(app: FastifyInstance) {
               FROM pg_tables t
               LEFT JOIN pg_stat_user_tables s USING (tablename)
               WHERE t.schemaname = 'public'
-                AND t.tablename = ANY(${TABLES})
+                AND t.tablename IN ${TABLES}
               ORDER BY total_bytes DESC`,
         );
 
@@ -703,20 +703,26 @@ export async function adminRoute(app: FastifyInstance) {
     if (schedulerAvailable) {
       try {
         const queueNames: string[] = JOB_DESCRIPTORS.map((j) => j.name);
-        const rows = await app.db.execute<{
+        type JobStatusRow = {
           name: string;
           last_completed: string | null;
           last_failed: string | null;
-        }>(sql`
+        };
+        const rawResult = await app.db.execute<JobStatusRow>(sql`
           SELECT
             name,
             MAX(completed_on) FILTER (WHERE state = 'completed') AS last_completed,
             MAX(completed_on) FILTER (WHERE state = 'failed')    AS last_failed
           FROM pgboss.job
-          WHERE name = ANY(${queueNames})
+          WHERE name IN ${queueNames}
             AND completed_on > NOW() - INTERVAL '30 days'
           GROUP BY name
         `);
+        // postgres-js returns the result directly as an array; PGlite (test / embedded)
+        // returns { rows, fields, affectedRows }. Normalize across both.
+        const rows: JobStatusRow[] = Array.isArray(rawResult)
+          ? (rawResult as JobStatusRow[])
+          : ((rawResult as unknown as { rows: JobStatusRow[] }).rows ?? []);
         liveRows = rows.map((r) => {
           const c = r.last_completed ? new Date(r.last_completed).toISOString() : null;
           const f = r.last_failed ? new Date(r.last_failed).toISOString() : null;
