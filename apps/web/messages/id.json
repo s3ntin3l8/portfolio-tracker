@@ -503,6 +503,7 @@
     "cashNotTracked": "Tidak dilacak",
     "income": "Pendapatan",
     "return": "Imbal hasil (per tahun)",
+    "returnPeriod": "Imbal hasil ({period})",
     "valueOverTime": "Nilai dari waktu ke waktu",
     "allocation": "Alokasi",
     "allocationTabClass": "Kelas",
@@ -992,5 +993,24 @@
       "taxSaving": "Penghematan pajak",
       "tfApplied": "TF {pct}% diterapkan"
     }
+  },
+  "PeriodSelector": {
+    "ytd": "YTD",
+    "1y": "1T",
+    "5y": "5T",
+    "max": "Maks"
+  },
+  "KpiPicker": {
+    "title": "Sesuaikan dasbor",
+    "description": "Pilih KPI yang ingin ditampilkan.",
+    "netWorth": "Kekayaan bersih",
+    "xirr": "Imbal hasil (XIRR)",
+    "dayChange": "Perubahan harian",
+    "totalPnL": "Total untung/rugi",
+    "income": "Pendapatan",
+    "cash": "Kas",
+    "positions": "Posisi",
+    "save": "Simpan",
+    "cancel": "Batal"
   }
 }

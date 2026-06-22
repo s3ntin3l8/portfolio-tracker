@@ -14,9 +14,11 @@ import { GoldTicker } from "@/components/gold-ticker";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId } from "@/lib/server-api";
+import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId, loadPreferences } from "@/lib/server-api";
 import { cn, formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
+import { PeriodSelector } from "@/components/period-selector";
+import { KpiPickerSheet } from "@/components/kpi-picker-sheet";
 
 type CostBasisMode = "purchase_price" | "total_paid";
 
@@ -25,22 +27,24 @@ export default async function DashboardPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ costBasis?: string }>;
+  searchParams: Promise<{ costBasis?: string; period?: string }>;
 }) {
   const { locale } = await params;
-  const { costBasis: costBasisParam } = await searchParams;
+  const { costBasis: costBasisParam, period: periodParam } = await searchParams;
   const costBasis: CostBasisMode =
     costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
+  const period = ["ytd", "1y", "5y", "max"].includes(periodParam ?? "") ? periodParam! : "max";
   setRequestLocale(locale);
   const t = await getTranslations("Dashboard");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
   const th = await getTranslations("Holdings");
 
-  const [result, history, selectedId] = await Promise.all([
-    loadNetWorth(costBasis),
+  const [result, history, selectedId, preferences] = await Promise.all([
+    loadNetWorth(costBasis, period),
     loadNetWorthHistory(),
     getSelectedPortfolioId(),
+    loadPreferences(),
   ]);
 
   const Heading = (
@@ -90,6 +94,7 @@ export default async function DashboardPage({
 
   const summary = result.data; // NetWorth carries the same fields as a summary
   const performance = { xirr: result.data.xirr };
+  const activePeriod = result.data.period ?? "max";
   const currency = summary.displayCurrency;
   const m = (n: number) => formatMoney(n, currency, locale);
 
@@ -144,12 +149,17 @@ export default async function DashboardPage({
 
       <GoldTicker currency={currency} />
 
-      <div className="flex justify-end">
-        <CostBasisToggle
-          current={costBasis}
-          labelPurchase={th("costBasisPurchasePrice")}
-          labelTotal={th("costBasisTotalPaid")}
-        />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* PeriodSelector only renders in aggregate scope (no single portfolio selected) */}
+        {selectedId === null && <PeriodSelector current={activePeriod} />}
+        <div className="flex items-center gap-2 ml-auto">
+          <KpiPickerSheet currentKpis={preferences?.dashboardKpis ?? null} />
+          <CostBasisToggle
+            current={costBasis}
+            labelPurchase={th("costBasisPurchasePrice")}
+            labelTotal={th("costBasisTotalPaid")}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -171,10 +181,17 @@ export default async function DashboardPage({
           deltaTone={totalPnL >= 0 ? "up" : "down"}
         />
         <StatCard
-          label={t("return")}
+          label={
+            activePeriod !== "max"
+              ? t("returnPeriod", { period: activePeriod.toUpperCase() })
+              : t("return")
+          }
           value={
-            performance.xirr !== null
-              ? formatPercent(performance.xirr, locale)
+            (activePeriod !== "max" ? (summary.periodXirr ?? null) : performance.xirr) !== null
+              ? formatPercent(
+                  (activePeriod !== "max" ? summary.periodXirr! : performance.xirr)!,
+                  locale,
+                )
               : "—"
           }
         />

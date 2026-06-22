@@ -28,6 +28,7 @@ import {
   type ImportStrategy,
   type AdminStorageResponse,
   type TaxSummaryHolder,
+  type UserPreferences,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import {
@@ -98,6 +99,7 @@ export type NetWorthResult =
  */
 export async function loadNetWorth(
   costBasis?: "purchase_price" | "total_paid",
+  period = "max",
 ): Promise<NetWorthResult> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
@@ -107,21 +109,33 @@ export async function loadNetWorth(
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
     if (selected) {
+      // Single-portfolio scope: period filter not yet supported via getSummary/getPerformance.
+      // We pass period=max implicitly — PeriodSelector only renders in aggregate scope.
       const [summary, perf] = await Promise.all([
         api.getSummary(selected.id, costBasis),
         api.getPerformance(selected.id),
       ]);
       return {
         status: "ok",
-        data: { ...summary, xirr: perf.xirr, portfolioCount: 1, asOf: perf.asOf },
+        data: { ...summary, xirr: perf.xirr, portfolioCount: 1, asOf: perf.asOf, period: "max" },
       };
     }
     const holderId = await resolveHolderScope(portfolios);
-    const data = await api.getNetWorth(costBasis, holderId);
+    const data = await api.getNetWorth(costBasis, holderId, period);
     if (data.portfolioCount === 0) return { status: "empty" };
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
+  }
+}
+
+export async function loadPreferences(): Promise<UserPreferences | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    return await api.getPreferences();
+  } catch {
+    return null;
   }
 }
 

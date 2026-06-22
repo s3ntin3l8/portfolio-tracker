@@ -288,6 +288,13 @@
       "when": 1782153047633,
       "tag": "0040_fast_slayback",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1782157448737,
+      "tag": "0041_striped_next_avengers",
+      "breakpoints": true
     }
   ]
 }

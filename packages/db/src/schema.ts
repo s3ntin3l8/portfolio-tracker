@@ -780,6 +780,15 @@ export const allocationTargets = pgTable(
   ],
 );
 
+// User dashboard preferences (period selector, KPI layout).
+export const userPreferences = pgTable("user_preferences", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  dashboardPeriod: text("dashboard_period").notNull().default("max"),
+  dashboardKpis: jsonb("dashboard_kpis").$type<string[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // FX rates for converting to a portfolio/display currency.
 export const fxRates = pgTable(
   "fx_rates",
@@ -802,6 +811,14 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [trConnections.userId],
   }),
+  preferences: one(userPreferences, {
+    fields: [users.id],
+    references: [userPreferences.userId],
+  }),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, { fields: [userPreferences.userId], references: [users.id] }),
 }));
 
 export const accountHoldersRelations = relations(accountHolders, ({ one, many }) => ({
