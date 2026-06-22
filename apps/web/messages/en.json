@@ -673,6 +673,7 @@
   "Transactions": {
     "title": "Transactions",
     "subtitle": "Every buy, sell, dividend and cash flow.",
+    "filterScope": "Scope",
     "filterAll": "All activity",
     "filterInvestments": "Investments only",
     "filterType": "Type",

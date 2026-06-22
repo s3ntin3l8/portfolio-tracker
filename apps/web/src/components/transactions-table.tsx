@@ -264,20 +264,15 @@ export function TransactionsTable({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Button
-          size="sm"
-          variant={investmentsOnly ? "ghost" : "secondary"}
-          onClick={() => setInvestmentsOnly(false)}
+        <select
+          aria-label={t("filterScope")}
+          value={investmentsOnly ? "investments" : "all"}
+          onChange={(e) => setInvestmentsOnly(e.target.value === "investments")}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         >
-          {t("filterAll")}
-        </Button>
-        <Button
-          size="sm"
-          variant={investmentsOnly ? "secondary" : "ghost"}
-          onClick={() => setInvestmentsOnly(true)}
-        >
-          {t("filterInvestments")}
-        </Button>
+          <option value="all">{t("filterAll")}</option>
+          <option value="investments">{t("filterInvestments")}</option>
+        </select>
         {typeOptions.length > 1 && (
           <select
             aria-label={t("filterType")}
