@@ -230,13 +230,11 @@
     "deleteWarning": "Portofolio yang memakai pemilik ini akan menjadi tidak terhubung.",
     "confirmDelete": "Hapus"
   },
-  "HolderFilter": {
-    "label": "Pemilik akun",
-    "all": "Semua pemilik"
-  },
   "PortfolioSwitcher": {
     "label": "Portofolio",
-    "all": "Semua portofolio"
+    "all": "Semua portofolio",
+    "accountHolders": "Pemilik akun",
+    "portfolios": "Portofolio"
   },
   "PortfolioForm": {
     "new": "Portofolio baru",

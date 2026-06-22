@@ -12,7 +12,9 @@ import { PortfolioSwitcher } from "../src/components/portfolio-switcher";
 
 function renderSwitcher(props: {
   portfolios: { id: string; name: string; brokerage: string | null; accountHolder: string | null }[];
+  holders?: { id: string; name: string }[];
   selectedId: string | null;
+  selectedHolderId?: string | null;
 }) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -44,7 +46,7 @@ describe("PortfolioSwitcher", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows a static label (no switcher) with exactly one portfolio", () => {
+  it("shows a static label (no switcher) with exactly one portfolio and no holders", () => {
     renderSwitcher({
       portfolios: [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
       selectedId: null,
@@ -109,5 +111,77 @@ describe("PortfolioSwitcher", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
     expect(document.cookie).toContain("pf=p2");
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows the Account holders section when qualifying holders are passed", () => {
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+      ],
+      holders: [
+        { id: "h1", name: "Self" },
+        { id: "h2", name: "Child" },
+      ],
+      selectedId: null,
+    });
+    openMenu();
+    // Section header is rendered as a non-interactive label.
+    expect(screen.getByText(messages.PortfolioSwitcher.accountHolders)).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Self/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Child/ })).toBeInTheDocument();
+  });
+
+  it("writes pf=holder:<id> and refreshes when a holder row is chosen", () => {
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+      ],
+      holders: [{ id: "h1", name: "Self" }],
+      selectedId: null,
+    });
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Self/ }));
+    // document.cookie doesn't encode `:` — the raw value is `holder:h1`.
+    expect(document.cookie).toContain("pf=holder:h1");
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("shows holder name on the trigger when selectedHolderId is set", () => {
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+      ],
+      holders: [{ id: "h1", name: "Self" }],
+      selectedId: null,
+      selectedHolderId: "h1",
+    });
+    expect(trigger()).toHaveTextContent("Self");
+    // Must not show "All" or any portfolio name.
+    expect(trigger()).not.toHaveTextContent(messages.PortfolioSwitcher.all);
+  });
+
+  it("does not show the Account holders section when no holders are passed", () => {
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+      ],
+      selectedId: null,
+    });
+    openMenu();
+    expect(screen.queryByText(messages.PortfolioSwitcher.accountHolders)).not.toBeInTheDocument();
+  });
+
+  it("shows the dropdown (not a static label) when a holder qualifies, even with 1 portfolio", () => {
+    // A single portfolio + a qualifying holder → should show the dropdown, not the static label.
+    renderSwitcher({
+      portfolios: [{ id: "p1", name: "Solo", brokerage: null, accountHolder: null }],
+      holders: [{ id: "h1", name: "Self" }],
+      selectedId: null,
+    });
+    expect(trigger()).toBeInTheDocument();
   });
 });

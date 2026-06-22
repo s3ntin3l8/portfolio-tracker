@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { SessionErrorGuard } from "@/components/session-error-guard";
-import { resolveSelection, loadMe } from "@/lib/server-api";
+import { resolveSelection, loadMe, loadAccountHolders } from "@/lib/server-api";
+import { qualifyingHolders } from "@/lib/portfolio-selection";
 import { auth } from "@/auth";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
@@ -26,7 +27,18 @@ export default async function AppLayout({
     if (!session) redirect(`/${locale}`);
   }
 
-  const [selection, me] = await Promise.all([resolveSelection(), loadMe()]);
+  const [selection, holders, me] = await Promise.all([
+    resolveSelection(),
+    loadAccountHolders(),
+    loadMe(),
+  ]);
+
+  // Only surface holders with ≥2 portfolios in the switcher (a 1-portfolio holder
+  // is equivalent to selecting that portfolio directly via the portfolios section).
+  const qualHolders = qualifyingHolders(selection.portfolios, holders).map((h) => ({
+    id: h.id,
+    name: h.name,
+  }));
 
   return (
     <>
@@ -38,7 +50,9 @@ export default async function AppLayout({
           brokerage: p.brokerage,
           accountHolder: p.accountHolder,
         }))}
+        holders={qualHolders}
         selectedId={selection.selectedId}
+        selectedHolderId={selection.selectedHolderId}
         isAdmin={Boolean(me?.isAdmin)}
       >
         {children}

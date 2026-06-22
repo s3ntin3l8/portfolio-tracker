@@ -28,12 +28,40 @@ import {
   type AdminStorageResponse,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
-import { SELECTED_PORTFOLIO_COOKIE } from "@/lib/portfolio-selection";
+import {
+  SELECTED_PORTFOLIO_COOKIE,
+  HOLDER_SCOPE_PREFIX,
+  qualifyingHolders,
+} from "@/lib/portfolio-selection";
+
+/**
+ * The active scope derived from the `pf` cookie.
+ * - `all`       — cross-portfolio aggregate (default)
+ * - `portfolio` — single portfolio
+ * - `holder`    — aggregate of a specific account holder's portfolios
+ */
+export type Scope =
+  | { kind: "all" }
+  | { kind: "portfolio"; portfolioId: string }
+  | { kind: "holder"; holderId: string };
+
+/**
+ * Parse the raw `pf` cookie value into a typed Scope.
+ * Does NOT validate against the live list — call `resolveSelection()` for that.
+ */
+async function getRawScope(): Promise<Scope> {
+  const value = (await cookies()).get(SELECTED_PORTFOLIO_COOKIE)?.value;
+  if (!value || value === "all") return { kind: "all" };
+  if (value.startsWith(HOLDER_SCOPE_PREFIX)) {
+    return { kind: "holder", holderId: value.slice(HOLDER_SCOPE_PREFIX.length) };
+  }
+  return { kind: "portfolio", portfolioId: value };
+}
 
 /** The selected portfolio id, or null when the aggregate ("All portfolios") is active. */
 export async function getSelectedPortfolioId(): Promise<string | null> {
-  const value = (await cookies()).get(SELECTED_PORTFOLIO_COOKIE)?.value;
-  return value && value !== "all" ? value : null;
+  const scope = await getRawScope();
+  return scope.kind === "portfolio" ? scope.portfolioId : null;
 }
 
 /** API base URL — config-driven so the web app can move to Vercel without a rewrite. */
@@ -86,7 +114,8 @@ export async function loadNetWorth(
         data: { ...summary, xirr: perf.xirr, portfolioCount: 1, asOf: perf.asOf },
       };
     }
-    const data = await api.getNetWorth(costBasis);
+    const holderId = await resolveHolderScope(portfolios);
+    const data = await api.getNetWorth(costBasis, holderId);
     if (data.portfolioCount === 0) return { status: "empty" };
     return { status: "ok", data };
   } catch {
@@ -108,7 +137,8 @@ export async function loadNetWorthHistory(
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
     if (selected) return await api.getPortfolioHistory(selected.id, range);
-    return await api.getNetWorthHistory(range);
+    const holderId = await resolveHolderScope(portfolios);
+    return await api.getNetWorthHistory(range, holderId ? { holderId } : undefined);
   } catch {
     return [];
   }
@@ -143,27 +173,64 @@ export async function loadPortfolios(): Promise<{
 export interface Selection {
   status: "ok" | "unavailable";
   portfolios: Portfolio[];
-  /** null = aggregate across all portfolios ("All portfolios"). */
+  /** null = aggregate across all portfolios ("All portfolios"), or holder scope is active. */
   selectedId: string | null;
+  /** Set when a holder-scoped aggregate is active; null otherwise. */
+  selectedHolderId: string | null;
 }
 
 /**
- * The user's portfolio list plus the active selection from the `pf` cookie, validated
- * against the live list (an unknown/stale id collapses to the aggregate). Drives the
- * global switcher and every per-portfolio screen.
+ * Resolve the active scope (cookie) against the live portfolio + holder lists and return
+ * the validated selection. Stale/unknown ids collapse to the aggregate. Drives the global
+ * switcher and every aggregate loader.
  */
 export async function resolveSelection(): Promise<Selection> {
   const api = await getServerApi();
-  if (!api) return { status: "unavailable", portfolios: [], selectedId: null };
+  if (!api) return { status: "unavailable", portfolios: [], selectedId: null, selectedHolderId: null };
   try {
-    const portfolios = await api.listPortfolios();
-    const wanted = await getSelectedPortfolioId();
-    const selectedId =
-      wanted && portfolios.some((p) => p.id === wanted) ? wanted : null;
-    return { status: "ok", portfolios, selectedId };
+    const [portfolios, holders] = await Promise.all([
+      api.listPortfolios(),
+      api.listAccountHolders(),
+    ]);
+    const rawScope = await getRawScope();
+
+    if (rawScope.kind === "portfolio") {
+      const selectedId = portfolios.some((p) => p.id === rawScope.portfolioId)
+        ? rawScope.portfolioId
+        : null;
+      return { status: "ok", portfolios, selectedId, selectedHolderId: null };
+    }
+
+    if (rawScope.kind === "holder") {
+      // Validate that the holder still exists and still qualifies (≥2 portfolios).
+      const qualifying = qualifyingHolders(portfolios, holders);
+      const selectedHolderId = qualifying.some((h) => h.id === rawScope.holderId)
+        ? rawScope.holderId
+        : null;
+      return { status: "ok", portfolios, selectedId: null, selectedHolderId };
+    }
+
+    return { status: "ok", portfolios, selectedId: null, selectedHolderId: null };
   } catch {
-    return { status: "unavailable", portfolios: [], selectedId: null };
+    return { status: "unavailable", portfolios: [], selectedId: null, selectedHolderId: null };
   }
+}
+
+/**
+ * Returns the holderId when the cookie encodes a holder-scoped aggregate AND the
+ * holder is still valid (owns ≥2 portfolios in the provided list), or `undefined`
+ * otherwise. Validates with the portfolio list the caller already holds — no extra
+ * API calls. This prevents the header (validated via `resolveSelection`) and the
+ * page body (this loader) from disagreeing when a holder is deleted or demoted.
+ */
+async function resolveHolderScope(
+  portfolios: { accountHolderId?: string | null }[],
+): Promise<string | undefined> {
+  const raw = await getRawScope();
+  if (raw.kind !== "holder") return undefined;
+  const { holderId } = raw;
+  const count = portfolios.filter((p) => p.accountHolderId === holderId).length;
+  return count >= 2 ? holderId : undefined;
 }
 
 export interface TransactionWithPortfolio extends Transaction {
@@ -181,7 +248,13 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
   const api = await getServerApi();
   if (!api) return { status: "unavailable", transactions: [] };
   try {
-    const portfolios = await api.listPortfolios();
+    const allPortfolios = await api.listPortfolios();
+    if (allPortfolios.length === 0) return { status: "empty", transactions: [] };
+    // When a holder scope is active (and still valid), narrow to that holder's portfolios.
+    const holderId = await resolveHolderScope(allPortfolios);
+    const portfolios = holderId
+      ? allPortfolios.filter((p) => p.accountHolderId === holderId)
+      : allPortfolios;
     if (portfolios.length === 0) return { status: "empty", transactions: [] };
     const nameById = new Map(portfolios.map((p) => [p.id, p.name]));
     const lists = await Promise.all(
@@ -238,9 +311,10 @@ export async function loadHoldings(
     }
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
     const data = selected
       ? await api.getSummary(selected.id, costBasis)
-      : await api.getNetWorth(costBasis);
+      : await api.getNetWorth(costBasis, holderId);
     return {
       status: "ok",
       holdings: data.holdings,
@@ -266,10 +340,10 @@ export type ContributionsView =
 
 /**
  * Contribution analytics for the active scope: a single portfolio when one is
- * selected, else the cross-portfolio aggregate (optionally narrowed to one holder).
- * The single-portfolio cookie wins; `holderId` only applies in the "all" state.
+ * selected, else the cross-portfolio aggregate narrowed by the holder scope (if any).
+ * The single-portfolio cookie wins; the holder scope only applies in the "all" state.
  */
-export async function loadContributions(holderId?: string): Promise<ContributionsView> {
+export async function loadContributions(): Promise<ContributionsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
@@ -277,6 +351,7 @@ export async function loadContributions(holderId?: string): Promise<Contribution
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
     const data = selected
       ? await api.getPortfolioContributions(selected.id)
       : await api.getContributions(holderId);
@@ -306,9 +381,10 @@ export async function loadTrades(
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
     const data = selected
       ? await api.getTrades(selected.id, method, costBasis)
-      : await api.getNetWorthTrades(method, costBasis);
+      : await api.getNetWorthTrades(method, costBasis, holderId);
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
@@ -423,10 +499,10 @@ export type IncomeStatsView =
 
 /**
  * Income analytics for the active scope: a single portfolio when one is selected,
- * else the cross-portfolio aggregate (optionally narrowed to one holder).
- * The single-portfolio cookie wins; `holderId` only applies in the "all" state.
+ * else the cross-portfolio aggregate narrowed by the holder scope (if any).
+ * The single-portfolio cookie wins; the holder scope only applies in the "all" state.
  */
-export async function loadIncomeStats(holderId?: string): Promise<IncomeStatsView> {
+export async function loadIncomeStats(): Promise<IncomeStatsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
@@ -434,6 +510,7 @@ export async function loadIncomeStats(holderId?: string): Promise<IncomeStatsVie
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
     const data = selected
       ? await api.getPortfolioIncome(selected.id)
       : await api.getIncome(holderId);

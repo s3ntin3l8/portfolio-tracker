@@ -17,7 +17,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
-import type { Portfolio } from "@portfolio/api-client";
+import type { Portfolio, AccountHolder } from "@portfolio/api-client";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,16 @@ const NAV = [
 export function AppShell({
   children,
   portfolios = [],
+  holders = [],
   selectedId = null,
+  selectedHolderId = null,
   isAdmin = false,
 }: {
   children: React.ReactNode;
   portfolios?: Pick<Portfolio, "id" | "name" | "brokerage" | "accountHolder">[];
+  holders?: Pick<AccountHolder, "id" | "name">[];
   selectedId?: string | null;
+  selectedHolderId?: string | null;
   isAdmin?: boolean;
 }) {
   const t = useTranslations("Nav");
@@ -59,7 +63,12 @@ export function AppShell({
     : NAV;
 
   const switcher = (
-    <PortfolioSwitcher portfolios={portfolios} selectedId={selectedId} />
+    <PortfolioSwitcher
+      portfolios={portfolios}
+      holders={holders}
+      selectedId={selectedId}
+      selectedHolderId={selectedHolderId}
+    />
   );
 
   const signOutButton = (

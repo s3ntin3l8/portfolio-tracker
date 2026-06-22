@@ -922,11 +922,12 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Aggregate net worth across all of the user's portfolios, in their display
   // currency — combined holdings, cash, totals, and money-weighted return.
-  app.get<{ Querystring: { costBasis?: string } }>(
+  app.get<{ Querystring: { costBasis?: string; holderId?: string } }>(
     "/networth",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const { id } = requireUser(request);
+      const { holderId } = request.query;
       const [u] = await app.db
         .select({ displayCurrency: users.displayCurrency })
         .from(users)
@@ -935,7 +936,23 @@ export async function transactionsRoute(app: FastifyInstance) {
       const display = u?.displayCurrency ?? "IDR";
       const costBasisMode = costBasisFromQuery(request.query);
 
-      const pfs = await app.db.select().from(portfolios).where(eq(portfolios.userId, id));
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      }
+
+      const pfs = await app.db
+        .select()
+        .from(portfolios)
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
 
       const summaries = [];
       const instrumentIds = new Set<string>();
@@ -1027,11 +1044,12 @@ export async function transactionsRoute(app: FastifyInstance) {
   // Aggregate trade log across all of the user's portfolios, in their display
   // currency. Each portfolio's trades are computed under its own settings, then merged
   // (a position held in two portfolios is two trades).
-  app.get<{ Querystring: { method?: string; costBasis?: string } }>(
+  app.get<{ Querystring: { method?: string; costBasis?: string; holderId?: string } }>(
     "/networth/trades",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const { id } = requireUser(request);
+      const { holderId } = request.query;
       const [u] = await app.db
         .select({ displayCurrency: users.displayCurrency })
         .from(users)
@@ -1041,10 +1059,23 @@ export async function transactionsRoute(app: FastifyInstance) {
       const method = methodFromQuery(request.query);
       const costBasisMode = costBasisFromQuery(request.query);
 
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      }
+
       const pfs = await app.db
         .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
         .from(portfolios)
-        .where(eq(portfolios.userId, id));
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
 
       const logs: TradeLog[] = [];
       const meta = new Map<string, InstrumentMeta>();
@@ -1158,11 +1189,12 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Aggregate net-worth-over-time across all of the user's portfolios, summing each
   // day's snapshots converted to the display currency.
-  app.get<{ Querystring: { range?: string; include?: string; exclude?: string } }>(
+  app.get<{ Querystring: { range?: string; include?: string; exclude?: string; holderId?: string } }>(
     "/networth/history",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const { id } = requireUser(request);
+      const { holderId } = request.query;
       const [u] = await app.db
         .select({ displayCurrency: users.displayCurrency })
         .from(users)
@@ -1170,10 +1202,23 @@ export async function transactionsRoute(app: FastifyInstance) {
         .limit(1);
       const display = u?.displayCurrency ?? "IDR";
 
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      }
+
       const pfs = await app.db
         .select({ id: portfolios.id, includeInAggregate: portfolios.includeInAggregate })
         .from(portfolios)
-        .where(eq(portfolios.userId, id));
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
       if (pfs.length === 0) return [];
 
       // Resolve which portfolios to include.

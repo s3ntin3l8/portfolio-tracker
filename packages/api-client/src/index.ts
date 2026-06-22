@@ -1063,8 +1063,13 @@ export function createApiClient(config: ApiClientConfig) {
         `/admin/jobs/${encodeURIComponent(name)}/trigger`,
       ),
 
-    getNetWorth: (costBasis?: "purchase_price" | "total_paid") =>
-      request<NetWorth>("GET", costBasis ? `/networth?costBasis=${costBasis}` : "/networth"),
+    getNetWorth: (costBasis?: "purchase_price" | "total_paid", holderId?: string) => {
+      const params = new URLSearchParams();
+      if (costBasis) params.set("costBasis", costBasis);
+      if (holderId) params.set("holderId", holderId);
+      const qs = params.toString();
+      return request<NetWorth>("GET", qs ? `/networth?${qs}` : "/networth");
+    },
     getIncome: (holderId?: string) =>
       request<IncomeStats>(
         "GET",
@@ -1081,10 +1086,11 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPortfolioContributions: (portfolioId: string) =>
       request<ContributionStats>("GET", `/portfolios/${portfolioId}/contributions`),
-    getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[] }) => {
+    getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[]; holderId?: string }) => {
       const params = new URLSearchParams({ range });
       if (opts?.include?.length) params.set("include", opts.include.join(","));
       if (opts?.exclude?.length) params.set("exclude", opts.exclude.join(","));
+      if (opts?.holderId) params.set("holderId", opts.holderId);
       return request<PerformancePoint[]>("GET", `/networth/history?${params.toString()}`);
     },
     getPortfolioHistory: (portfolioId: string, range = "1y") =>
@@ -1190,9 +1196,11 @@ export function createApiClient(config: ApiClientConfig) {
     getNetWorthTrades: (
       method: TradeMethod = "average",
       costBasis?: "purchase_price" | "total_paid",
+      holderId?: string,
     ) => {
       const params = new URLSearchParams({ method });
       if (costBasis) params.set("costBasis", costBasis);
+      if (holderId) params.set("holderId", holderId);
       return request<TradeLog>("GET", `/networth/trades?${params.toString()}`);
     },
 

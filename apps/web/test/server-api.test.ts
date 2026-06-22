@@ -33,16 +33,22 @@ const PF = [
 beforeEach(() => {
   h.session = { accessToken: "tok" }; // signed in by default
   h.cookies = {};
-  h.client = {};
+  h.client = {
+    // resolveSelection() now always calls listAccountHolders — default to empty list.
+    listAccountHolders: async () => [],
+  };
 });
 
 describe("getSelectedPortfolioId", () => {
-  it("returns the cookie's uuid, or null for 'all'/absent", async () => {
+  it("returns the cookie's uuid, or null for 'all'/absent/holder scope", async () => {
     h.cookies = { pf: "p2" };
     expect(await api.getSelectedPortfolioId()).toBe("p2");
     h.cookies = { pf: "all" };
     expect(await api.getSelectedPortfolioId()).toBeNull();
     h.cookies = {};
+    expect(await api.getSelectedPortfolioId()).toBeNull();
+    // Holder scope also returns null (it's not a portfolio selection).
+    h.cookies = { pf: "holder:h1" };
     expect(await api.getSelectedPortfolioId()).toBeNull();
   });
 });
@@ -54,6 +60,7 @@ describe("resolveSelection", () => {
     expect(await api.resolveSelection()).toMatchObject({
       status: "ok",
       selectedId: "p2",
+      selectedHolderId: null,
     });
   });
 
@@ -65,12 +72,63 @@ describe("resolveSelection", () => {
     expect(res.portfolios).toHaveLength(2);
   });
 
+  it("resolves a holder scope and validates against qualifying holders (≥2 portfolios)", async () => {
+    // p1 and p2 both belong to holder h1 → h1 qualifies (≥2 portfolios).
+    const pfWithHolders = [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "h1" },
+      { id: "p2", name: "B", baseCurrency: "EUR", accountHolderId: "h1" },
+    ];
+    h.client.listPortfolios = async () => pfWithHolders;
+    h.client.listAccountHolders = async () => [{ id: "h1", name: "Self" }];
+    h.cookies = { pf: "holder:h1" };
+    const res = await api.resolveSelection();
+    expect(res.selectedId).toBeNull();
+    expect(res.selectedHolderId).toBe("h1");
+  });
+
+  it("collapses a stale holder cookie to aggregate when holder no longer qualifies", async () => {
+    // Only one portfolio for h2 → h2 doesn't qualify (< 2 portfolios).
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "h2" },
+    ];
+    h.client.listAccountHolders = async () => [{ id: "h2", name: "Child" }];
+    h.cookies = { pf: "holder:h2" };
+    const res = await api.resolveSelection();
+    expect(res.selectedId).toBeNull();
+    expect(res.selectedHolderId).toBeNull();
+  });
+
   it("reports unavailable when not signed in", async () => {
     h.session = null;
     expect(await api.resolveSelection()).toMatchObject({
       status: "unavailable",
       selectedId: null,
+      selectedHolderId: null,
     });
+  });
+});
+
+describe("loadTransactionsAcrossPortfolios (holder scope)", () => {
+  it("filters to the holder's portfolios when holder scope is active", async () => {
+    const pfWithHolders = [
+      { id: "p1", name: "Self-A", baseCurrency: "IDR", accountHolderId: "h1" },
+      { id: "p2", name: "Self-B", baseCurrency: "EUR", accountHolderId: "h1" },
+      { id: "p3", name: "Other",  baseCurrency: "IDR", accountHolderId: "h2" },
+    ];
+    h.client.listPortfolios = async () => pfWithHolders;
+    h.client.listTransactions = async (id: string) =>
+      id === "p1"
+        ? [{ id: "t1", portfolioId: "p1", type: "buy" }]
+        : id === "p2"
+          ? [{ id: "t2", portfolioId: "p2", type: "sell" }]
+          : [{ id: "t3", portfolioId: "p3", type: "buy" }];
+    h.cookies = { pf: "holder:h1" };
+
+    const res = await api.loadTransactionsAcrossPortfolios();
+    expect(res.status).toBe("ok");
+    // Only p1 and p2 transactions — p3 belongs to h2, not h1.
+    expect(res.transactions).toHaveLength(2);
+    expect(res.transactions.map((t) => t.id).sort()).toEqual(["t1", "t2"]);
   });
 });
 
@@ -245,7 +303,7 @@ describe("aggregate + misc loaders", () => {
     h.client.getPortfolioHistory = vi.fn();
 
     expect(await api.loadNetWorthHistory("3m")).toEqual([{ date: "2026-01-01", netWorth: "3m" }]);
-    expect(getNetWorthHistory).toHaveBeenCalledWith("3m");
+    expect(getNetWorthHistory).toHaveBeenCalledWith("3m", undefined);
     expect(h.client.getPortfolioHistory).not.toHaveBeenCalled();
   });
 
@@ -298,17 +356,25 @@ describe("aggregate + misc loaders", () => {
     expect(getIncome).toHaveBeenCalledWith(undefined);
     expect(getPortfolioIncome).not.toHaveBeenCalled();
 
-    // holderId in "all" scope → passes holderId to getIncome.
+    // Holder scope cookie → passes holderId to getIncome.
+    // resolveHolderScope validates: need ≥2 portfolios owned by the holder.
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "holder-abc" },
+      { id: "p2", name: "B", baseCurrency: "EUR", accountHolderId: "holder-abc" },
+    ];
+    h.cookies = { pf: "holder:holder-abc" };
     getIncome.mockClear();
-    res = await api.loadIncomeStats("holder-abc");
+    res = await api.loadIncomeStats();
     expect(res).toMatchObject({ status: "ok" });
     expect(getIncome).toHaveBeenCalledWith("holder-abc");
     expect(getPortfolioIncome).not.toHaveBeenCalled();
+    // Restore PF for the next assertion.
+    h.client.listPortfolios = async () => PF;
 
-    // A selected portfolio → cookie wins, holderId is ignored.
+    // A selected portfolio cookie → portfolio path wins.
     h.cookies = { pf: "p2" };
     getIncome.mockClear();
-    res = await api.loadIncomeStats("holder-abc");
+    res = await api.loadIncomeStats();
     expect(res).toMatchObject({ status: "ok" });
     expect(getPortfolioIncome).toHaveBeenCalledWith("p2");
     expect(getIncome).not.toHaveBeenCalled();
@@ -322,7 +388,7 @@ describe("aggregate + misc loaders", () => {
     expect(await api.loadIncomeStats()).toMatchObject({ status: "unavailable" });
   });
 
-  it("loadContributions passes holderId to the aggregate; cookie wins over holderId", async () => {
+  it("loadContributions reads holder scope from the cookie; portfolio cookie wins", async () => {
     h.client.listPortfolios = async () => PF;
     const getContributions = vi.fn(async () => ({ displayCurrency: "IDR", netContributed: "500" }));
     const getPortfolioContributions = vi.fn(async (id: string) => ({
@@ -333,21 +399,29 @@ describe("aggregate + misc loaders", () => {
     h.client.getContributions = getContributions;
     h.client.getPortfolioContributions = getPortfolioContributions;
 
-    // No selection, no holderId → aggregate with undefined.
+    // No selection → aggregate with undefined holderId.
     let res = await api.loadContributions();
     expect(res).toMatchObject({ status: "ok" });
     expect(getContributions).toHaveBeenCalledWith(undefined);
 
-    // No selection + holderId → aggregate with holderId.
+    // Holder scope cookie → aggregate with holderId.
+    // resolveHolderScope validates: need ≥2 portfolios owned by the holder.
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "holder-xyz" },
+      { id: "p2", name: "B", baseCurrency: "EUR", accountHolderId: "holder-xyz" },
+    ];
+    h.cookies = { pf: "holder:holder-xyz" };
     getContributions.mockClear();
-    res = await api.loadContributions("holder-xyz");
+    res = await api.loadContributions();
     expect(res).toMatchObject({ status: "ok" });
     expect(getContributions).toHaveBeenCalledWith("holder-xyz");
+    // Restore PF for the next assertion.
+    h.client.listPortfolios = async () => PF;
 
-    // Portfolio selected → cookie wins; holderId ignored.
+    // Portfolio selected cookie → per-portfolio path, no holderId.
     h.cookies = { pf: "p1" };
     getContributions.mockClear();
-    res = await api.loadContributions("holder-xyz");
+    res = await api.loadContributions();
     expect(res).toMatchObject({ status: "ok" });
     expect(getPortfolioContributions).toHaveBeenCalledWith("p1");
     expect(getContributions).not.toHaveBeenCalled();

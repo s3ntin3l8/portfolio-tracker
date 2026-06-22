@@ -1982,4 +1982,129 @@ describe("auth + portfolios + transactions", () => {
     });
     expect(bad.statusCode).toBe(404);
   });
+
+  it("filters /networth by holderId (net-worth aggregate)", async () => {
+    const t = await token("holder-networth");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    const holderA = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Holder A", type: "self" },
+      })
+    ).json();
+    const holderB = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Holder B", type: "other" },
+      })
+    ).json();
+
+    // Two portfolios for holderA, one for holderB — all cash-inside so deposits appear.
+    const pfA1 = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "A1", baseCurrency: "IDR", accountHolderId: holderA.id, cashCounted: true } })).json().id;
+    const pfA2 = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "A2", baseCurrency: "IDR", accountHolderId: holderA.id, cashCounted: true } })).json().id;
+    const pfB  = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "B",  baseCurrency: "IDR", accountHolderId: holderB.id, cashCounted: true } })).json().id;
+
+    // Deposit a known amount into each portfolio so net worth differs by holder.
+    await app.inject({ method: "POST", url: `/portfolios/${pfA1}/transactions`, headers: auth(t), payload: { type: "deposit", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    await app.inject({ method: "POST", url: `/portfolios/${pfA2}/transactions`, headers: auth(t), payload: { type: "deposit", price: "2000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    await app.inject({ method: "POST", url: `/portfolios/${pfB}/transactions`,  headers: auth(t), payload: { type: "deposit", price: "500",  currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+
+    // Aggregate without filter = 1000 + 2000 + 500 = 3500 net worth.
+    const allRes = (await app.inject({ method: "GET", url: "/networth", headers: auth(t) })).json();
+    expect(Number(allRes.netWorth)).toBe(3500);
+    expect(allRes.portfolioCount).toBe(3);
+
+    // Filtered by holderA = 1000 + 2000 = 3000.
+    const aRes = (await app.inject({ method: "GET", url: `/networth?holderId=${holderA.id}`, headers: auth(t) })).json();
+    expect(Number(aRes.netWorth)).toBe(3000);
+    expect(aRes.portfolioCount).toBe(2);
+
+    // Filtered by holderB = 500.
+    const bRes = (await app.inject({ method: "GET", url: `/networth?holderId=${holderB.id}`, headers: auth(t) })).json();
+    expect(Number(bRes.netWorth)).toBe(500);
+    expect(bRes.portfolioCount).toBe(1);
+
+    // Unknown / other-user holder → 404.
+    const bad = await app.inject({ method: "GET", url: "/networth?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    expect(bad.statusCode).toBe(404);
+    expect(bad.json().code).toBe("holder_not_found");
+  });
+
+  it("filters /networth/trades by holderId", async () => {
+    const t = await token("holder-trades");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    const holderT = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "Trader", type: "self" },
+      })
+    ).json();
+
+    const [stock] = await app.db
+      .insert(instruments)
+      .values({ symbol: "TLKM3", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom3" })
+      .returning();
+
+    const pfT = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Trade pf", baseCurrency: "IDR", accountHolderId: holderT.id } })).json().id;
+    const pfOther = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Other pf", baseCurrency: "IDR" } })).json().id;
+
+    // Buy in holderT's portfolio.
+    await app.inject({ method: "POST", url: `/portfolios/${pfT}/transactions`, headers: auth(t), payload: { type: "buy", instrumentId: stock.id, quantity: "10", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    // Buy in unrelated portfolio.
+    await app.inject({ method: "POST", url: `/portfolios/${pfOther}/transactions`, headers: auth(t), payload: { type: "buy", instrumentId: stock.id, quantity: "5",  price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+
+    // Unfiltered = 2 separate trade episodes (one per portfolio), total 15 shares.
+    const allTrades = (await app.inject({ method: "GET", url: "/networth/trades", headers: auth(t) })).json();
+    const allPositions = allTrades.trades.filter((tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3");
+    const allQuantity = allPositions.reduce((s: number, tr: { quantity: string }) => s + Number(tr.quantity), 0);
+    expect(allQuantity).toBe(15);
+
+    // Filtered by holderT = only pfT's episode, 10 shares.
+    const filteredTrades = (await app.inject({ method: "GET", url: `/networth/trades?holderId=${holderT.id}`, headers: auth(t) })).json();
+    const filteredPositions = filteredTrades.trades.filter((tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3");
+    const filteredQuantity = filteredPositions.reduce((s: number, tr: { quantity: string }) => s + Number(tr.quantity), 0);
+    expect(filteredQuantity).toBe(10);
+
+    // Unknown holder → 404.
+    const bad = await app.inject({ method: "GET", url: "/networth/trades?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    expect(bad.statusCode).toBe(404);
+    expect(bad.json().code).toBe("holder_not_found");
+  });
+
+  it("filters /networth/history by holderId (composes with includeInAggregate)", async () => {
+    const t = await token("holder-history");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    const holderH = (
+      await app.inject({
+        method: "POST",
+        url: "/account-holders",
+        headers: auth(t),
+        payload: { name: "History holder", type: "self" },
+      })
+    ).json();
+
+    // Without snapshots the endpoint just returns []; assert it doesn't 500 and that
+    // an unknown holder returns 404 (the filter composes correctly).
+    const pfH = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Hist pf", baseCurrency: "IDR", accountHolderId: holderH.id } })).json().id;
+    expect(pfH).toBeTruthy();
+
+    const res = await app.inject({ method: "GET", url: `/networth/history?holderId=${holderH.id}`, headers: auth(t) });
+    expect(res.statusCode).toBe(200);
+    // No snapshots yet → empty array, not an error.
+    expect(res.json()).toEqual([]);
+
+    // Unknown holder → 404.
+    const bad = await app.inject({ method: "GET", url: "/networth/history?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    expect(bad.statusCode).toBe(404);
+    expect(bad.json().code).toBe("holder_not_found");
+  });
 });
