@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   LogOut,
+  Receipt,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import type { Portfolio, AccountHolder } from "@portfolio/api-client";
@@ -33,6 +34,7 @@ const NAV = [
   { href: "/holdings", icon: Wallet, key: "holdings" },
   { href: "/transactions", icon: ArrowLeftRight, key: "transactions" },
   { href: "/trades", icon: ScrollText, key: "trades" },
+  { href: "/tax", icon: Receipt, key: "tax" },
   { href: "/income", icon: Coins, key: "income" },
   { href: "/savings", icon: PiggyBank, key: "savings" },
   { href: "/portfolios", icon: Briefcase, key: "portfolios" },

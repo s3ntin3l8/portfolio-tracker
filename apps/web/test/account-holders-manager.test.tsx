@@ -33,6 +33,10 @@ const emma: AccountHolder = {
   name: "Emma",
   type: "child",
   birthYear: 2017,
+  taxAllowanceAnnual: null,
+  capitalGainsTaxRate: null,
+  churchTax: null,
+  taxResidence: null,
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
@@ -70,6 +74,10 @@ describe("AccountHoldersManager", () => {
         name: "Luca",
         type: "child",
         birthYear: 2019,
+        taxAllowanceAnnual: null,
+        capitalGainsTaxRate: null,
+        churchTax: false,
+        taxResidence: null,
       }),
     );
     expect(refresh).toHaveBeenCalled();

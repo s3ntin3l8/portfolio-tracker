@@ -224,6 +224,15 @@ export interface AccountHolder {
   type: AccountHolderType;
   /** Birth year — powers the "to age 18" forecast for a child. Null if unknown. */
   birthYear: number | null;
+  // German tax profile (all optional).
+  /** Annual Sparerpauschbetrag (e.g. "1000" for €1,000). Null = not configured. */
+  taxAllowanceAnnual: string | null;
+  /** Kapitalertragsteuer rate (e.g. "0.25" for 25%). Null = not configured (defaults to 0.25). */
+  capitalGainsTaxRate: string | null;
+  /** Church-tax surcharge flag. */
+  churchTax: boolean | null;
+  /** ISO-3166-1 alpha-2 tax residence (e.g. "DE"). Null = not configured. */
+  taxResidence: string | null;
   createdAt: string;
 }
 
@@ -231,6 +240,79 @@ export interface AccountHolderInput {
   name: string;
   type: AccountHolderType;
   birthYear?: number | null;
+  taxAllowanceAnnual?: string | null;
+  capitalGainsTaxRate?: string | null;
+  churchTax?: boolean | null;
+  taxResidence?: string | null;
+}
+
+// --- Tax optimization types -----------------------------------------------
+
+/** YTD usage of the annual Sparerpauschbetrag (§20 EStG). */
+export interface AllowanceUsage {
+  year: number;
+  /** Annual allowance configured for this holder (decimal string). */
+  allowanceAnnual: string;
+  /** Tf-adjusted FIFO realized gains this year (decimal string). */
+  realizedGainsAdjusted: string;
+  /** Dividend/interest/coupon income this year (decimal string). */
+  incomeYtd: string;
+  /** Total used (clamped to allowance), decimal string. */
+  usedYtd: string;
+  /** Remaining allowance (never negative), decimal string. */
+  remaining: string;
+  /** Effective KapSt rate (decimal string, e.g. "0.25"). */
+  taxRate: string;
+  /** Estimated tax saved if you use the remaining allowance, decimal string. */
+  taxSavingAvailable: string;
+  /** Currency of all monetary amounts. */
+  currency: string;
+}
+
+/** A single harvest suggestion: an open position that could be (partially) realized tax-free. */
+export interface HarvestSuggestion {
+  instrumentId: string;
+  /** Gross unrealized gain of the full open position (decimal string). */
+  unrealizedGross: string;
+  /** Teilfreistellung rate applied (decimal string, 0–1). */
+  tfRate: string;
+  /** Tf-adjusted unrealized gain = gross × (1 − tfRate), decimal string. */
+  unrealizedAdjusted: string;
+  /** How much gross gain you can realize tax-free given the remaining allowance. */
+  harvestableGross: string;
+  /** Estimated tax saved if you harvest exactly `harvestableGross`. */
+  taxSaving: string;
+  /** Instrument metadata (symbol, name, etc.) enriched by the API. */
+  instrument: {
+    symbol: string;
+    name: string;
+    assetClass: string;
+    market: string;
+  } | null;
+}
+
+/** Response from GET /portfolios/:id/tax */
+export interface PortfolioTaxSummary {
+  year: number;
+  currency: string;
+  allowanceUsage: AllowanceUsage;
+  harvestSuggestions: HarvestSuggestion[];
+}
+
+/** One holder's entry in the GET /networth/tax response. */
+export interface TaxSummaryHolder {
+  holder: {
+    id: string;
+    name: string;
+    taxAllowanceAnnual: string;
+    capitalGainsTaxRate: string | null;
+    churchTax: boolean | null;
+    taxResidence: string | null;
+  };
+  year: number;
+  currency: string;
+  allowanceUsage: AllowanceUsage;
+  harvestSuggestions: HarvestSuggestion[];
 }
 
 export interface Portfolio {
@@ -1480,6 +1562,37 @@ export function createApiClient(config: ApiClientConfig) {
       if (costBasis) params.set("costBasis", costBasis);
       if (holderId) params.set("holderId", holderId);
       return request<TradeLog>("GET", `/networth/trades?${params.toString()}`);
+    },
+
+    /**
+     * German Sparerpauschbetrag headroom + harvest suggestions for a single portfolio.
+     * The portfolio's holder must have `taxAllowanceAnnual` configured, otherwise the
+     * API returns 422 (tax_allowance_not_configured).
+     */
+    getPortfolioTax: (portfolioId: string, year?: number) => {
+      const params = new URLSearchParams();
+      if (year !== undefined) params.set("year", String(year));
+      const qs = params.toString();
+      return request<PortfolioTaxSummary>(
+        "GET",
+        `/portfolios/${portfolioId}/tax${qs ? `?${qs}` : ""}`,
+      );
+    },
+
+    /**
+     * Aggregated German tax summary across all of the user's portfolios, grouped by
+     * holder. Only holders with `taxAllowanceAnnual` configured are returned.
+     * Optionally filter to a single holder via `holderId`.
+     */
+    getNetworthTax: (year?: number, holderId?: string) => {
+      const params = new URLSearchParams();
+      if (year !== undefined) params.set("year", String(year));
+      if (holderId !== undefined) params.set("holderId", holderId);
+      const qs = params.toString();
+      return request<TaxSummaryHolder[]>(
+        "GET",
+        `/networth/tax${qs ? `?${qs}` : ""}`,
+      );
     },
 
     // `force` re-imports a file the server would otherwise dedup against an earlier import

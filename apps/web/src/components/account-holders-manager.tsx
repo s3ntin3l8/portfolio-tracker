@@ -111,6 +111,11 @@ function HolderFormDialog({
   const [birthYear, setBirthYear] = useState(
     holder?.birthYear != null ? String(holder.birthYear) : "",
   );
+  // German tax profile fields.
+  const [taxAllowance, setTaxAllowance] = useState(holder?.taxAllowanceAnnual ?? "");
+  const [taxRate, setTaxRate] = useState(holder?.capitalGainsTaxRate ?? "");
+  const [churchTax, setChurchTax] = useState(holder?.churchTax ?? false);
+  const [taxResidence, setTaxResidence] = useState(holder?.taxResidence ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -120,6 +125,10 @@ function HolderFormDialog({
       setName(holder?.name ?? "");
       setType(holder?.type ?? "self");
       setBirthYear(holder?.birthYear != null ? String(holder.birthYear) : "");
+      setTaxAllowance(holder?.taxAllowanceAnnual ?? "");
+      setTaxRate(holder?.capitalGainsTaxRate ?? "");
+      setChurchTax(holder?.churchTax ?? false);
+      setTaxResidence(holder?.taxResidence ?? "");
       setError(false);
       setConfirmDelete(false);
     }
@@ -133,7 +142,15 @@ function HolderFormDialog({
     setBusy(true);
     setError(false);
     const by = type === "child" && birthYear.trim() !== "" ? Number(birthYear) : null;
-    const input = { name: trimmed, type, birthYear: by };
+    const input = {
+      name: trimmed,
+      type,
+      birthYear: by,
+      taxAllowanceAnnual: taxAllowance.trim() !== "" ? taxAllowance.trim() : null,
+      capitalGainsTaxRate: taxRate.trim() !== "" ? taxRate.trim() : null,
+      churchTax: churchTax,
+      taxResidence: taxResidence.trim().toUpperCase() || null,
+    };
     try {
       if (mode === "edit" && holder) {
         await api.updateAccountHolder(holder.id, input);
@@ -222,6 +239,61 @@ function HolderFormDialog({
               <p className="text-xs text-muted-foreground">{tf("birthYearHint")}</p>
             </div>
           )}
+
+          {/* German tax profile (DE only, optional) */}
+          <details className="rounded-md border px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-medium text-muted-foreground select-none">
+              {t("taxProfileSection")}
+            </summary>
+            <div className="mt-3 space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="holder-tax-residence">{t("taxResidence")}</Label>
+                <Input
+                  id="holder-tax-residence"
+                  maxLength={2}
+                  placeholder="DE"
+                  value={taxResidence}
+                  onChange={(e) => setTaxResidence(e.target.value.toUpperCase())}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="holder-tax-allowance">{t("taxAllowance")}</Label>
+                <Input
+                  id="holder-tax-allowance"
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="1000"
+                  value={taxAllowance}
+                  onChange={(e) => setTaxAllowance(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t("taxAllowanceHint")}</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="holder-tax-rate">{t("capitalGainsTaxRate")}</Label>
+                <Input
+                  id="holder-tax-rate"
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0.25"
+                  min="0"
+                  max="1"
+                  step="0.00001"
+                  value={taxRate}
+                  onChange={(e) => setTaxRate(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">{t("capitalGainsTaxRateHint")}</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={churchTax}
+                  onChange={(e) => setChurchTax(e.target.checked)}
+                  className="size-4"
+                />
+                {t("churchTax")}
+              </label>
+            </div>
+          </details>
 
           <DialogFooter className="pt-2">
             {mode === "edit" &&

@@ -128,6 +128,19 @@ export const accountHolders = pgTable(
     type: text("type").notNull().default("other"),
     // Optional birth year — powers the "to age 18" savings forecast for a child.
     birthYear: integer("birth_year"),
+    // --- German tax profile (optional; null = not configured) ---
+    // Annual Sparerpauschbetrag in EUR (default €1,000 for a single individual).
+    // Stored per-holder so it can vary (e.g. €2,000 for jointly-assessed married couples)
+    // and be updated when the law changes — never hard-coded in application code.
+    taxAllowanceAnnual: numeric("tax_allowance_annual"),
+    // Flat Kapitalertragsteuer rate (e.g. 0.25 = 25%). Soli is computed on top.
+    // Stored per-holder so church-tax payers can configure the effective combined rate.
+    capitalGainsTaxRate: numeric("capital_gains_tax_rate"),
+    // Church-tax surcharge flag (Kirchensteuer). Informational — the effective combined
+    // rate (KapSt + Soli + KiSt) should be captured in capitalGainsTaxRate.
+    churchTax: boolean("church_tax").default(false),
+    // ISO-3166-1 alpha-2 tax residence (e.g. "DE"). Drives which rules apply.
+    taxResidence: text("tax_residence"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("account_holders_user_id_idx").on(t.userId)],
@@ -211,6 +224,13 @@ export const instruments = pgTable(
     couponRate: numeric("coupon_rate"),
     couponSchedule: text("coupon_schedule"), // e.g. 'semiannual'
     maturityDate: date("maturity_date"),
+    /**
+     * German Teilfreistellung rate (0–1). Applies only to funds (ETF/Mischfonds).
+     * 0.30 = equity ETF, 0.15 = mixed fund, 0 = bond fund / everything else.
+     * Null = not configured; the tax module falls back to 0 (no exemption).
+     * Never applied to individual stocks or bonds.
+     */
+    partialExemptionRate: numeric("partial_exemption_rate"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

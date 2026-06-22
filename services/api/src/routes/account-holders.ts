@@ -28,6 +28,10 @@ export async function accountHoldersRoute(app: FastifyInstance) {
         name: input.name,
         type: input.type,
         birthYear: input.birthYear ?? null,
+        taxAllowanceAnnual: input.taxAllowanceAnnual ?? null,
+        capitalGainsTaxRate: input.capitalGainsTaxRate ?? null,
+        churchTax: input.churchTax ?? false,
+        taxResidence: input.taxResidence ?? null,
       })
       .returning();
     reply.code(201);

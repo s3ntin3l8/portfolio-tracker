@@ -38,7 +38,8 @@
     "settings": "Settings",
     "admin": "Admin",
     "signOut": "Sign out",
-    "trades": "Trades"
+    "trades": "Trades",
+    "tax": "Tax"
   },
   "Admin": {
     "title": "Admin",
@@ -256,7 +257,14 @@
     "error": "Couldn't save the holder. Please try again.",
     "delete": "Delete holder",
     "deleteWarning": "Portfolios using this holder will become unassigned.",
-    "confirmDelete": "Delete"
+    "confirmDelete": "Delete",
+    "taxProfileSection": "Tax profile (DE)",
+    "taxResidence": "Tax residence",
+    "taxAllowance": "Annual allowance (Sparerpauschbetrag)",
+    "taxAllowanceHint": "€1,000 for single filers; €2,000 for jointly-assessed couples.",
+    "capitalGainsTaxRate": "Capital gains tax rate",
+    "capitalGainsTaxRateHint": "0.25 (25% KapSt) or 0.26375 incl. Soli. Adjust for your marginal rate.",
+    "churchTax": "Church tax surcharge (Kirchensteuer)"
   },
   "PortfolioSwitcher": {
     "label": "Portfolio",
@@ -959,5 +967,32 @@
     "saveError": "Could not save targets.",
     "recommendedSplit": "Recommended monthly split",
     "amount": "Amount"
+  },
+  "Tax": {
+    "title": "Tax Optimization",
+    "subtitle": "Sparerpauschbetrag headroom and tax-free harvest suggestions. German tax only.",
+    "empty": {
+      "title": "No tax allowance configured",
+      "description": "Add a Sparerpauschbetrag (annual allowance) to at least one account holder in Settings to see headroom and harvest suggestions."
+    },
+    "allowance": {
+      "annual": "Annual allowance",
+      "annualDesc": "Sparerpauschbetrag per year",
+      "used": "Used YTD",
+      "usedDesc": "Tf-adjusted gains + income",
+      "remaining": "Remaining",
+      "taxSaving": "Tax saving available",
+      "usedPct": "{pct}% used",
+      "gains": "gains",
+      "income": "income"
+    },
+    "harvest": {
+      "title": "Harvest suggestions",
+      "subtitle": "Open positions you could partially sell to use up remaining allowance tax-free.",
+      "unrealized": "Unrealized gain",
+      "harvestable": "Harvestable",
+      "taxSaving": "Tax saving",
+      "tfApplied": "TF {pct}% applied"
+    }
   }
 }

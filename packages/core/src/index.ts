@@ -103,3 +103,11 @@ export {
   type DriftRow,
   type TradeAction,
 } from "./rebalancing.js";
+export {
+  allowanceUsageYTD,
+  harvestSuggestions,
+  type AllowanceUsage,
+  type HarvestSuggestion,
+  type AllowanceUsageInput,
+  type HarvestSuggestionsInput,
+} from "./tax.js";
