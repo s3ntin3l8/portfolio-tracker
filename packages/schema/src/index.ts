@@ -511,3 +511,25 @@ export const searchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
+
+// --- User preferences / dashboard KPI config ---------------------------------
+
+export const dashboardPeriodSchema = z.enum(["ytd", "1y", "5y", "max"]);
+export type DashboardPeriod = z.infer<typeof dashboardPeriodSchema>;
+
+export const KPI_KEYS = [
+  "netWorth",
+  "xirr",
+  "dayChange",
+  "totalPnL",
+  "income",
+  "cash",
+  "positions",
+] as const;
+export type KpiKey = (typeof KPI_KEYS)[number];
+
+export const userPreferencesSchema = z.object({
+  dashboardPeriod: dashboardPeriodSchema.optional(),
+  dashboardKpis: z.array(z.enum(KPI_KEYS)).max(8).optional(),
+});
+export type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;

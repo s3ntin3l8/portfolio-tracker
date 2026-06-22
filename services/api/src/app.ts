@@ -27,6 +27,7 @@ import { adminRoute } from "./routes/admin.js";
 import { searchRoute } from "./routes/search.js";
 import { storageRoute } from "./routes/storage.js";
 import { targetsRoute } from "./routes/targets.js";
+import { preferencesRoute } from "./routes/preferences.js";
 import type { ScreenshotParser } from "./services/parsers/types.js";
 import { getScreenshotParser } from "./services/screenshot-parser.js";
 import { getPytrRunner } from "./services/pytr/runner.js";
@@ -171,6 +172,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(adminRoute);
   await app.register(searchRoute);
   await app.register(targetsRoute);
+  await app.register(preferencesRoute);
   // Public file-serving for the folder storage provider (no auth — token in query string).
   await app.register(storageRoute);
 

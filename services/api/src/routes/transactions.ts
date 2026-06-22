@@ -33,6 +33,7 @@ import {
   rebalancingDrift,
   rebalancingTrades,
   xirr,
+  periodXirr,
   projectCoupons,
   projectDividends,
   projectNextYearDividends,
@@ -1159,7 +1160,7 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Aggregate net worth across all of the user's portfolios, in their display
   // currency — combined holdings, cash, totals, and money-weighted return.
-  app.get<{ Querystring: { costBasis?: string; holderId?: string } }>(
+  app.get<{ Querystring: { costBasis?: string; holderId?: string; period?: string } }>(
     "/networth",
     { preHandler: app.authenticate },
     async (request, reply) => {
@@ -1172,6 +1173,20 @@ export async function transactionsRoute(app: FastifyInstance) {
         .limit(1);
       const display = u?.displayCurrency ?? "IDR";
       const costBasisMode = costBasisFromQuery(request.query);
+
+      // Period selector: ytd | 1y | 5y | max (default)
+      const period = ["ytd", "1y", "5y"].includes(request.query.period ?? "")
+        ? (request.query.period as "ytd" | "1y" | "5y")
+        : "max";
+      const today = new Date();
+      let periodStart: Date | null = null;
+      if (period === "ytd") {
+        periodStart = new Date(today.getFullYear(), 0, 1);
+      } else if (period === "1y") {
+        periodStart = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+      } else if (period === "5y") {
+        periodStart = new Date(today.getFullYear() - 5, today.getMonth(), today.getDate());
+      }
 
       if (holderId != null) {
         const [holder] = await app.db
@@ -1229,12 +1244,76 @@ export async function transactionsRoute(app: FastifyInstance) {
       const allocation = allocationBreakdown(aggregated, meta);
       const drift = await loadDrift(id, null, allocation);
 
+      // Period-scoped XIRR and P&L: look up the earliest snapshot per portfolio at or
+      // after periodStart, FX-convert each to display currency on its own snapshot date,
+      // and sum them. One query per portfolio avoids the cross-portfolio ordering hazard.
+      //
+      // We track the actual snapshot anchor date (not the nominal periodStart) so that
+      // the flow-filter in periodXirr is aligned: flows embedded in the snapshot value
+      // must not be re-added as explicit post-flows.
+      let startNav: number | null = null;
+      let anchorDate: Date | null = null; // actual snapshot date (may lag periodStart by a day or two)
+      if (periodStart !== null && pfs.length > 0) {
+        const periodStartStr = periodStart.toISOString().slice(0, 10);
+        let totalStartNav = 0;
+        let missingPortfolios = 0;
+        let latestSnapDate: string | null = null;
+        for (const pf of pfs) {
+          // Fetch the earliest snapshot at or after periodStart for this portfolio.
+          const [snap] = await app.db
+            .select()
+            .from(portfolioSnapshots)
+            .where(and(eq(portfolioSnapshots.portfolioId, pf.id), gte(portfolioSnapshots.date, periodStartStr)))
+            .orderBy(asc(portfolioSnapshots.date))
+            .limit(1);
+          if (!snap) {
+            // Portfolio has no snapshot at or after periodStart (brand-new or no history).
+            missingPortfolios++;
+            continue;
+          }
+          const ratesByDate = await getFxRatesForDates(app.db, [snap.currency], display, [snap.date]);
+          const fx = makeFxRateFn(ratesByDate.get(snap.date) ?? {}, display);
+          totalStartNav += Number(convert(snap.netWorth, snap.currency, display, fx));
+          // Use the latest snapshot date across all portfolios as the flow-filter anchor.
+          // This ensures no portfolio's snapshot embeds flows that are then re-added.
+          if (latestSnapDate === null || snap.date > latestSnapDate) {
+            latestSnapDate = snap.date;
+          }
+        }
+        // Only produce a startNav when all portfolios contributed — partial sums would
+        // under-count the denominator and manufacture phantom period gains.
+        if (missingPortfolios === 0 && latestSnapDate !== null) {
+          startNav = totalStartNav;
+          anchorDate = new Date(`${latestSnapDate}T00:00:00.000Z`);
+        }
+      }
+
+      const currentNetWorth = Number(aggregated.netWorth);
+      // flows has the terminal inflow as its last entry; strip it to get boundary-only flows.
+      const boundaryOnlyFlows = flows.slice(0, -1);
+      const pXirr =
+        anchorDate !== null && startNav !== null
+          ? periodXirr(boundaryOnlyFlows, currentNetWorth, startNav, anchorDate, asOf)
+          : null;
+      const periodPnL =
+        anchorDate !== null && startNav !== null
+          ? String(currentNetWorth - startNav)
+          : null;
+      const periodPnLPct =
+        anchorDate !== null && startNav !== null && startNav > 0
+          ? String((currentNetWorth - startNav) / startNav)
+          : null;
+
       return {
         ...aggregated,
         holdings,
         allocation,
         ...(Object.keys(drift).length > 0 ? { drift } : {}),
         xirr: Number.isFinite(rate) ? rate : null,
+        periodXirr: pXirr,
+        periodPnL,
+        periodPnLPct,
+        period,
         portfolioCount: pfs.length,
         asOf: asOf.toISOString(),
       };

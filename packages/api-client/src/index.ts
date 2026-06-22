@@ -651,8 +651,22 @@ export interface NetWorth {
    */
   drift?: Record<string, DriftRow[]>;
   xirr: number | null;
+  /** Period-scoped XIRR (ytd / 1y / 5y). Null when period is "max" or no snapshot data. */
+  periodXirr?: number | null;
+  /** Period P&L in display currency (string decimal). Null for "max" or no snapshot data. */
+  periodPnL?: string | null;
+  /** Period P&L as a fraction (e.g. 0.12 = 12%). Null for "max" or no snapshot data. */
+  periodPnLPct?: string | null;
+  /** The active period: "ytd" | "1y" | "5y" | "max". */
+  period?: string;
   portfolioCount: number;
   asOf: string;
+}
+
+/** User dashboard preferences (period selector, KPI layout). */
+export interface UserPreferences {
+  dashboardPeriod: "ytd" | "1y" | "5y" | "max";
+  dashboardKpis: string[] | null;
 }
 
 /** A point on a net-worth-over-time series (display/base currency). */
@@ -1384,13 +1398,22 @@ export function createApiClient(config: ApiClientConfig) {
         opts?.force ? { force: true } : undefined,
       ),
 
-    getNetWorth: (costBasis?: "purchase_price" | "total_paid", holderId?: string) => {
+    getNetWorth: (
+      costBasis?: "purchase_price" | "total_paid",
+      holderId?: string,
+      period?: string,
+    ) => {
       const params = new URLSearchParams();
       if (costBasis) params.set("costBasis", costBasis);
       if (holderId) params.set("holderId", holderId);
+      if (period && period !== "max") params.set("period", period);
       const qs = params.toString();
       return request<NetWorth>("GET", qs ? `/networth?${qs}` : "/networth");
     },
+
+    getPreferences: () => request<UserPreferences>("GET", "/me/preferences"),
+    putPreferences: (prefs: Partial<{ dashboardPeriod: string; dashboardKpis: string[] }>) =>
+      request<UserPreferences>("PUT", "/me/preferences", prefs),
     getIncome: (holderId?: string) =>
       request<IncomeStats>(
         "GET",

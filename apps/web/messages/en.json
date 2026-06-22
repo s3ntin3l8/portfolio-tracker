@@ -505,6 +505,7 @@
     "cashNotTracked": "Not tracked",
     "income": "Income",
     "return": "Return (p.a.)",
+    "returnPeriod": "Return ({period})",
     "valueOverTime": "Value over time",
     "allocation": "Allocation",
     "allocationTabClass": "Class",
@@ -1002,5 +1003,24 @@
       "taxSaving": "Tax saving",
       "tfApplied": "TF {pct}% applied"
     }
+  },
+  "PeriodSelector": {
+    "ytd": "YTD",
+    "1y": "1Y",
+    "5y": "5Y",
+    "max": "Max"
+  },
+  "KpiPicker": {
+    "title": "Customize dashboard",
+    "description": "Choose which KPIs to show.",
+    "netWorth": "Net worth",
+    "xirr": "Return (XIRR)",
+    "dayChange": "Day change",
+    "totalPnL": "Total P&L",
+    "income": "Income",
+    "cash": "Cash",
+    "positions": "Positions",
+    "save": "Save",
+    "cancel": "Cancel"
   }
 }
