@@ -19,6 +19,7 @@ import {
   mapExchange,
   resolveCryptoIsin,
   PRICEABLE_FOREIGN_MARKETS,
+  isKnownMarket,
   type InstrumentRef,
   type InstrumentSearchResult,
   type MarketDataProvider,
@@ -148,6 +149,36 @@ describe("PRICEABLE_FOREIGN_MARKETS", () => {
     expect(PRICEABLE_FOREIGN_MARKETS.has("CRYPTO")).toBe(true);
     expect(PRICEABLE_FOREIGN_MARKETS.has("XETRA")).toBe(false);
     expect(PRICEABLE_FOREIGN_MARKETS.has("PAR")).toBe(false);
+  });
+});
+
+describe("isKnownMarket", () => {
+  it("returns true for all recognised internal market codes", () => {
+    // Exchange-derived markets
+    expect(isKnownMarket("IDX")).toBe(true);
+    expect(isKnownMarket("US")).toBe(true);
+    expect(isKnownMarket("XETRA")).toBe(true);
+    expect(isKnownMarket("AMS")).toBe(true);
+    expect(isKnownMarket("PAR")).toBe(true);
+    expect(isKnownMarket("MIL")).toBe(true);
+    expect(isKnownMarket("MCE")).toBe(true);
+    expect(isKnownMarket("STU")).toBe(true);
+    expect(isKnownMarket("SWX")).toBe(true);
+    expect(isKnownMarket("SGX")).toBe(true);
+    // Gold and crypto markets not in EXCHANGE_MAP
+    expect(isKnownMarket("XAU")).toBe(true);
+    expect(isKnownMarket("ANTAM")).toBe(true);
+    expect(isKnownMarket("GALERI24")).toBe(true);
+    expect(isKnownMarket("CRYPTO")).toBe(true);
+  });
+
+  it("returns false for raw provider exchange codes and unknown strings", () => {
+    // Raw OpenFIGI / TwelveData exchCode values that must not leak into instrument rows
+    expect(isKnownMarket("PE")).toBe(false); // the AMZN-on-Xetra bug case
+    expect(isKnownMarket("XLON")).toBe(false); // LSE — deliberately unmapped
+    expect(isKnownMarket("GR")).toBe(false); // OpenFIGI exchCode for Xetra, not the internal code
+    expect(isKnownMarket("")).toBe(false);
+    expect(isKnownMarket("UNKNOWN")).toBe(false);
   });
 });
 

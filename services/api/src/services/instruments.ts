@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { instruments } from "@portfolio/db";
-import { isIsin, PRICEABLE_FOREIGN_MARKETS } from "@portfolio/market-data";
+import { isIsin, isKnownMarket, PRICEABLE_FOREIGN_MARKETS } from "@portfolio/market-data";
 import type { InstrumentInput } from "@portfolio/schema";
 import type { DB } from "../db/client.js";
 
@@ -27,16 +27,21 @@ function instrumentUpgrade(
     (existing.assetClass === "equity" || existing.assetClass === "mutual_fund")
   )
     set.assetClass = input.assetClass;
-  // Re-pin a row stuck on the EU-broker default (Xetra/EUR) to its real tradeable venue when a
-  // fresh import resolves one our providers price directly (US stocks, crypto). Mirrors the
-  // import adoption guard; only upgrades off the default, so real EUR funds are never touched.
+  // Re-pin a row stuck on the EU-broker default (Xetra/EUR) OR on an unrecognised market
+  // (e.g. a legacy row with market "PE" from a raw provider exchange code) to its real
+  // tradeable venue when a fresh import resolves one our providers price directly (US stocks,
+  // crypto). The input-side guard on PRICEABLE_FOREIGN_MARKETS is intentional: if ISIN
+  // resolution failed on re-import, input.market is XETRA — dropping the guard would trade
+  // one bad market for another. Real EUR funds are never touched (their resolved market stays
+  // XETRA/EUR, which is not in PRICEABLE_FOREIGN_MARKETS).
   if (
-    existing.market === "XETRA" &&
-    existing.currency === "EUR" &&
-    PRICEABLE_FOREIGN_MARKETS.has(input.market)
+    (existing.market === "XETRA" && existing.currency === "EUR") ||
+    !isKnownMarket(existing.market)
   ) {
-    set.market = input.market;
-    set.currency = input.currency;
+    if (PRICEABLE_FOREIGN_MARKETS.has(input.market)) {
+      set.market = input.market;
+      set.currency = input.currency;
+    }
   }
   // Back-fill missing ISIN/WKN when the input carries one.
   if (!existing.isin && input.isin) set.isin = input.isin;
@@ -79,13 +84,32 @@ export function marketForEuInstrument(_assetClass?: string | null): string {
 }
 
 /**
+ * Optional dependencies for `findOrCreateInstrument`.
+ *
+ * @param resolveMarket - Best-effort callback: given an ISIN, returns the canonical
+ *   `{ market, currency }` from an external registry (OpenFIGI). Called only when the
+ *   input carries an ISIN whose market is not a recognised internal code. Failures and
+ *   `null` results are silently ignored so a missing/rate-limited response never blocks
+ *   an import.
+ */
+export interface FindOrCreateOpts {
+  resolveMarket?: (isin: string) => Promise<{ market: string; currency: string } | null>;
+}
+
+/**
  * Find an instrument by ISIN, then WKN, then (market, symbol) identity, creating it if
  * absent. ISIN and WKN matches also back-fill the missing identifier on existing rows so
  * imports that arrive in any order converge to a single fully-identified row.
+ *
+ * Pass `opts.resolveMarket` to enable create-time market correction: when the input
+ * carries an ISIN with an unrecognised market, the resolver is queried and its result
+ * (if it returns a known market) replaces the input market and currency for both the
+ * identity lookup and the new-row insert.
  */
 export async function findOrCreateInstrument(
   db: DB,
   input: Omit<InstrumentInput, "isin" | "wkn"> & { isin?: string | null; wkn?: string | null },
+  opts?: FindOrCreateOpts,
 ): Promise<Instrument> {
   if (input.isin) {
     const [byIsin] = await db
@@ -105,11 +129,29 @@ export async function findOrCreateInstrument(
     if (byWkn) return healInstrument(db, byWkn, input);
   }
 
+  // Correct an unrecognised market before the (symbol, market) identity lookup and
+  // the new-row insert. Gated on having an ISIN + an unrecognised market. The resolver
+  // is only wired in non-test builds (it's not passed in PGlite tests), and its failures
+  // are silently caught so a rate-limit or network error never blocks a confirm.
+  let market = input.market;
+  let currency = input.currency;
+  if (opts?.resolveMarket && input.isin && !isKnownMarket(market)) {
+    try {
+      const r = await opts.resolveMarket(input.isin);
+      if (r && isKnownMarket(r.market)) {
+        market = r.market;
+        currency = r.currency;
+      }
+    } catch {
+      // best-effort; keep import-provided market
+    }
+  }
+
   const [existing] = await db
     .select()
     .from(instruments)
     .where(
-      and(eq(instruments.symbol, input.symbol), eq(instruments.market, input.market)),
+      and(eq(instruments.symbol, input.symbol), eq(instruments.market, market)),
     )
     .limit(1);
   if (existing) return healInstrument(db, existing, input);
@@ -118,10 +160,10 @@ export async function findOrCreateInstrument(
     .insert(instruments)
     .values({
       symbol: input.symbol,
-      market: input.market,
+      market,
       assetClass: input.assetClass,
       unit: input.unit,
-      currency: input.currency,
+      currency,
       name: input.name,
       isin: input.isin ?? null,
       wkn: input.wkn ?? null,

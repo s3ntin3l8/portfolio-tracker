@@ -112,10 +112,19 @@ export async function instrumentsRoute(app: FastifyInstance) {
     },
   );
 
-  // Find-or-create an instrument by its (market, symbol) identity.
+  // Find-or-create an instrument by its (market, symbol) identity. When the input
+  // carries an ISIN with an unrecognised market, an OpenFIGI lookup corrects it before
+  // the identity search and insert (best-effort; falls back to the provided market on
+  // any failure).
   app.post("/instruments", { preHandler: app.authenticate }, async (request, reply) => {
     const input = instrumentInputSchema.parse(request.body);
-    const instrument = await findOrCreateInstrument(app.db, input);
+    const md = await getMarketData();
+    const instrument = await findOrCreateInstrument(app.db, input, {
+      resolveMarket: async (isin) => {
+        const [hit] = await md.search(isin);
+        return hit ? { market: hit.market, currency: hit.currency } : null;
+      },
+    });
     reply.code(201);
     return instrument;
   });
