@@ -190,6 +190,116 @@ describe("findOrCreateInstrument", () => {
       .where(eq(instruments.symbol, "EUNL"));
     expect(rows).toHaveLength(1);
   });
+
+  // --- Heal-path re-pin for unknown markets (issue #283) ---
+
+  it("re-pins an existing row stuck on an unrecognised market when a priceable venue is resolved", async () => {
+    // Simulates the legacy AMZN-on-PE case: a row was created with a raw provider exchange
+    // code ("PE") instead of the canonical internal market ("US").
+    const isin = "US0231351067"; // Amazon
+    await getDb()
+      .insert(instruments)
+      .values({ market: "PE", assetClass: "equity" as const, unit: "shares" as const, currency: "EUR", symbol: "AMZN", name: "Amazon", isin });
+
+    const healed = await findOrCreateInstrument(getDb(), {
+      symbol: "AMZN",
+      market: "US",
+      assetClass: "equity",
+      unit: "shares",
+      currency: "USD",
+      name: "Amazon.com Inc",
+      isin,
+    });
+    expect(healed.market).toBe("US");
+    expect(healed.currency).toBe("USD");
+  });
+
+  it("does not re-pin an unknown-market row when the input market is not priceable (XETRA fallback from failed lookup)", async () => {
+    // When resolveEuIsin fails, market falls back to XETRA — we must not trade PE→XETRA.
+    const isin = "US1234567890";
+    await getDb()
+      .insert(instruments)
+      .values({ market: "PE", assetClass: "equity" as const, unit: "shares" as const, currency: "EUR", symbol: "TSTXX", name: "TestCo", isin });
+
+    const unchanged = await findOrCreateInstrument(getDb(), {
+      symbol: "TSTXX",
+      market: "XETRA", // what we'd pass when OpenFIGI lookup failed
+      assetClass: "equity",
+      unit: "shares",
+      currency: "EUR",
+      name: "TestCo",
+      isin,
+    });
+    // PE is not in PRICEABLE_FOREIGN_MARKETS and XETRA is not either → no re-pin
+    expect(unchanged.market).toBe("PE");
+    expect(unchanged.currency).toBe("EUR");
+  });
+
+  // --- Create-time guard via opts.resolveMarket (issue #283) ---
+
+  it("creates the instrument with the corrected market when resolveMarket returns a known market", async () => {
+    const isin = "US5949181045"; // Microsoft
+    const created = await findOrCreateInstrument(
+      getDb(),
+      {
+        symbol: "MSFT",
+        market: "PE", // unrecognised raw exchange code from a hypothetical source
+        assetClass: "equity",
+        unit: "shares",
+        currency: "EUR",
+        name: "Microsoft Corporation",
+        isin,
+      },
+      {
+        resolveMarket: async () => ({ market: "US", currency: "USD" }),
+      },
+    );
+    expect(created.market).toBe("US");
+    expect(created.currency).toBe("USD");
+    // Confirm only one row exists.
+    const rows = await getDb().select().from(instruments).where(eq(instruments.isin, isin));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("keeps the import-provided market when resolveMarket returns null", async () => {
+    const isin = "US9884981013"; // fictional ISIN
+    const created = await findOrCreateInstrument(
+      getDb(),
+      {
+        symbol: "ZZZZ",
+        market: "PE",
+        assetClass: "equity",
+        unit: "shares",
+        currency: "EUR",
+        name: "Unknown Co",
+        isin,
+      },
+      {
+        resolveMarket: async () => null,
+      },
+    );
+    expect(created.market).toBe("PE"); // falls back to import-provided value
+  });
+
+  it("keeps the import-provided market when resolveMarket throws", async () => {
+    const isin = "US9884981014"; // fictional ISIN
+    const created = await findOrCreateInstrument(
+      getDb(),
+      {
+        symbol: "ZZZZ2",
+        market: "PE",
+        assetClass: "equity",
+        unit: "shares",
+        currency: "EUR",
+        name: "Unknown Co 2",
+        isin,
+      },
+      {
+        resolveMarket: async () => { throw new Error("OpenFIGI rate-limited"); },
+      },
+    );
+    expect(created.market).toBe("PE"); // graceful fallback
+  });
 });
 
 describe("updateInstrument", () => {

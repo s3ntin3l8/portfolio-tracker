@@ -1228,16 +1228,30 @@ export async function importsRoute(app: FastifyInstance) {
             }
           }
 
-          const instrument = await findOrCreateInstrument(app.db, {
-            symbol,
-            market,
-            assetClass,
-            unit: d.unit ?? "shares",
-            currency: instrumentCurrency,
-            name: d.name ?? symbol,
-            isin: d.isin ?? null,
-            wkn: d.wkn ?? null,
-          });
+          const instrument = await findOrCreateInstrument(
+            app.db,
+            {
+              symbol,
+              market,
+              assetClass,
+              unit: d.unit ?? "shares",
+              currency: instrumentCurrency,
+              name: d.name ?? symbol,
+              isin: d.isin ?? null,
+              wkn: d.wkn ?? null,
+            },
+            // Delegate to the cached resolveEuIsin so any future path that produces an
+            // unknown market benefits from the same OpenFIGI correction without a second
+            // round-trip. On the current EU/IDX/gold paths market is always known at this
+            // point, so the guard inside findOrCreateInstrument never fires — this is
+            // defensive / future-proofing only.
+            {
+              resolveMarket: async (isin) => {
+                const r = await resolveEuIsin(isin);
+                return r ? { market: r.market, currency: r.currency } : null;
+              },
+            },
+          );
           instrumentId = instrument.id;
           request.log.debug({ symbol, market, instrumentId }, "instrument resolved");
         }

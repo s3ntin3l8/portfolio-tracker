@@ -79,6 +79,27 @@ export function mapExchange(exchange: string | undefined | null): MarketInfo | u
 export const PRICEABLE_FOREIGN_MARKETS: ReadonlySet<string> = new Set(["US", CRYPTO_MARKET]);
 
 /**
+ * All internal market codes the application recognises. Derived from the exchange-map
+ * values (covers IDX, US, XETRA, AMS, PAR, MIL, MCE, STU, SWX, SGX) plus the gold
+ * and crypto markets that don't come through a provider exchange code.
+ *
+ * Use `isKnownMarket` to guard against raw provider exchange codes (e.g. OpenFIGI
+ * `exchCode: "PE"`) leaking through as instrument market values.
+ */
+export const KNOWN_MARKETS: ReadonlySet<string> = new Set([
+  ...Object.values(EXCHANGE_MAP).map((v) => v.market),
+  "XAU",
+  "ANTAM",
+  "GALERI24",
+  CRYPTO_MARKET,
+]);
+
+/** Returns `true` when `market` is a recognised internal market code. */
+export function isKnownMarket(market: string): boolean {
+  return KNOWN_MARKETS.has(market);
+}
+
+/**
  * Trade Republic books crypto under synthetic ISINs (`XF000<TICKER>…`, e.g. `XF000BTC0017`,
  * `XF000ETH0019`) that no ISIN registry — including OpenFIGI — resolves. Recognise the format
  * and extract the embedded ticker so the holding routes to CoinGecko, which resolves a ticker

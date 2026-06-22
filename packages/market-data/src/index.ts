@@ -17,5 +17,7 @@ export {
   eodhdExchangeForMarket,
   resolveCryptoIsin,
   PRICEABLE_FOREIGN_MARKETS,
+  KNOWN_MARKETS,
+  isKnownMarket,
   type MarketInfo,
 } from "./instrument-mapping.js";
