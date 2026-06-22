@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
-import { TransactionSourcesSection } from "@/components/transaction-sources-section.js";
+import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Link } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { formatMoney } from "@/lib/utils";

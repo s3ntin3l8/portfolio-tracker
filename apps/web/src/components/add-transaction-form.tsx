@@ -10,7 +10,7 @@ import type {
   InstrumentSearchResult,
 } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
-import { TransactionSourcesSection } from "@/components/transaction-sources-section.js";
+import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
