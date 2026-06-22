@@ -995,12 +995,12 @@
     },
     "forecast": {
       "label": "Dividen & kupon yang diperkirakan",
-      "labelDesc": "Sisa tahun ini (est.)",
+      "labelDesc": "Sisa tahun ini, bruto (est.)",
       "projectedUsed": "Proyeksi terpakai",
       "projectedUsedDesc": "Termasuk pembayaran yang diperkirakan",
       "projectedRemaining": "Proyeksi sisa",
       "projectedTaxSaving": "Proyeksi penghematan pajak",
-      "disclaimer": "Estimasi berdasarkan pembayaran tahun lalu dan tanggal yang diumumkan. Jumlah aktual dapat berbeda."
+      "disclaimer": "Estimasi bruto (sebelum pemotongan pajak) berdasarkan pembayaran tahun lalu dan tanggal yang diumumkan. Halaman pendapatan menampilkan kas bersih yang diterima — selisihnya adalah pajak yang dipotong."
     },
     "harvest": {
       "title": "Saran panen",
