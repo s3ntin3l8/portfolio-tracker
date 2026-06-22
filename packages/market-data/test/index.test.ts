@@ -1037,7 +1037,8 @@ function yahooProfileFetch(
   opts: { crumbStatus?: number; summaryOk?: boolean } = {},
 ) {
   return (async (url: string, _init?: RequestInit) => {
-    if (url.includes("fc.yahoo.com")) {
+    const { hostname, pathname } = new URL(url);
+    if (hostname === "fc.yahoo.com") {
       return {
         ok: true,
         status: 200,
@@ -1051,7 +1052,7 @@ function yahooProfileFetch(
         text: async () => "",
       } as unknown as Response;
     }
-    if (url.includes("getcrumb")) {
+    if (pathname.includes("getcrumb")) {
       const ok = opts.crumbStatus === undefined || opts.crumbStatus === 200;
       return {
         ok,
