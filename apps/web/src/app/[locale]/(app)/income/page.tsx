@@ -123,7 +123,12 @@ export default async function IncomePage({
   for (const u of s.upcoming) {
     const year = u.date.slice(0, 4);
     const bucket = byYear.get(year) ?? [];
-    bucket.push({ ...u, type: u.kind });
+    bucket.push({
+      ...u,
+      type: u.kind,
+      growthApplied: u.growthApplied,
+      assumesContributions: u.assumesContributions,
+    });
     byYear.set(year, bucket);
   }
   for (const bucket of byYear.values()) {

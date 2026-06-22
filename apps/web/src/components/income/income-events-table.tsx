@@ -18,6 +18,8 @@ import type { ColDef } from "@/lib/table-sort";
 /** Unified row type: historical events + upcoming payments merged into one table. */
 export type IncomeEventRow = IncomeEvent & {
   status?: UpcomingPayment["status"];
+  growthApplied?: number;
+  assumesContributions?: boolean;
 };
 
 const COLS: ColDef<IncomeEventRow>[] = [
@@ -27,9 +29,11 @@ const COLS: ColDef<IncomeEventRow>[] = [
   { key: "amount", get: (e) => e.amount, type: "numeric" },
 ];
 
-// Certainty order: projected (estimate) → announced (declared) → paid (settled).
+// Certainty order: projected (estimate) → grown (growth-adjusted estimate)
+//   → announced (declared) → paid (settled).
 const STATUS_VARIANT: Record<string, "default" | "warning" | "success" | "outline"> = {
   projected: "outline",
+  grown: "outline",
   scheduled: "default",
   announced: "warning",
   paid: "success",
@@ -63,9 +67,23 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
             </TableCell>
             <TableCell>
               {e.status ? (
-                <Badge variant={STATUS_VARIANT[e.status] ?? "outline"}>
-                  {t(e.status)}
-                </Badge>
+                <div className="flex flex-col gap-1">
+                  <Badge variant={STATUS_VARIANT[e.status] ?? "outline"}>
+                    {t(e.status)}
+                  </Badge>
+                  {e.growthApplied !== undefined && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("growthHint", {
+                        pct: `${e.growthApplied >= 1 ? "+" : ""}${((e.growthApplied - 1) * 100).toFixed(1)}%`,
+                      })}
+                    </span>
+                  )}
+                  {e.assumesContributions && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("contributionsHint")}
+                    </span>
+                  )}
+                </div>
               ) : (
                 <Badge variant="default">{tt(e.type)}</Badge>
               )}

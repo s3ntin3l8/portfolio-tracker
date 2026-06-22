@@ -26,6 +26,7 @@ export {
 export {
   projectCoupons,
   projectDividends,
+  projectNextYearDividends,
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
