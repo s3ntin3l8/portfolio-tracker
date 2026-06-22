@@ -9,8 +9,9 @@ import {
 import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
 import { ForecastPanel } from "@/components/savings/forecast-panel";
+import { SparplanSection } from "@/components/savings/sparplan-section";
 import { EmptyState } from "@/components/empty-state";
-import { loadContributions } from "@/lib/server-api";
+import { loadContributions, loadSparplan } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function SavingsPage({
@@ -26,6 +27,9 @@ export default async function SavingsPage({
   // Holder scope is now global (cookie-based via the portfolio switcher).
   // loadContributions() reads it automatically.
   const result = await loadContributions();
+  // Sparplan detection is fetched independently so it renders even when
+  // totalContributed === 0 (e.g. cash-outside portfolio with only plan buys).
+  const sparplanResult = await loadSparplan();
 
   const heading = (
     <div>
@@ -98,6 +102,14 @@ export default async function SavingsPage({
           <ContributionsChart series={c.series} currency={currency} />
         </CardContent>
       </Card>
+
+      {sparplanResult.status === "ok" && sparplanResult.data.plans.length > 0 && (
+        <SparplanSection
+          data={sparplanResult.data}
+          currency={currency}
+          locale={locale}
+        />
+      )}
 
       <ForecastPanel
         currentValue={c.currentValue}

@@ -98,6 +98,7 @@ export async function valuePortfolio(
     loanId: r.loanId,
     kind: r.kind,
     tax: r.tax,
+    savingsPlanId: r.savingsPlanId,
   }));
 
   // Resolve FX so holdings/cash in other currencies convert to the display currency

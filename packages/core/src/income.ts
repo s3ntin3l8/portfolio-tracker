@@ -24,7 +24,7 @@ function addUTCMonths(date: Date, months: number): Date {
  * Infer the most likely payment cadence from a list of payment dates.
  * Returns the interval in months: 1 (monthly), 3 (quarterly), 6 (semiannual), 12 (annual).
  */
-function inferIntervalMonths(dates: Date[]): number {
+export function inferIntervalMonths(dates: Date[]): number {
   if (dates.length < 2) return 12;
   const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
   const spacings: number[] = [];

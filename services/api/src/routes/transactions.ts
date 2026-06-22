@@ -39,6 +39,8 @@ import {
   cashFlow,
   contributionStats,
   mergeContributionStats,
+  detectSparplans,
+  mergeSparplanStats,
   chainIndex,
   aggregateValueFlows,
   computeTrades,
@@ -51,6 +53,7 @@ import {
   type PortfolioSummary,
   type TradeLog,
   type TradeMethod,
+  type SparplanStats,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
@@ -305,6 +308,28 @@ export async function transactionsRoute(app: FastifyInstance) {
     return enrichContributions(stats, summary.netWorth, flows, birthYear, portfolioType, {
       totalReturn: boundary === "outside",
     });
+  }
+
+  // Recurring-investment (Sparplan) detection for a set of valued transactions.
+  // Detects per-instrument recurring plans, infers cadence and step-increases, and
+  // attaches instrument metadata (symbol/name) for display. FX-converts to `display`.
+  async function buildSparplanStats(
+    coreTxns: CoreTransaction[],
+    display: string,
+  ): Promise<SparplanStats & { plans: (SparplanStats["plans"][number] & { symbol: string | null; name: string | null })[] }> {
+    const ccys = [...new Set(coreTxns.map((t) => t.currency))];
+    const rates = await getFxRates(app.db, ccys, display);
+    const fx = makeFxRateFn(rates, display);
+    const stats = detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
+    const meta = await instrumentMeta(stats.plans.map((p) => p.instrumentId));
+    return {
+      ...stats,
+      plans: stats.plans.map((p) => ({
+        ...p,
+        symbol: meta.get(p.instrumentId)?.symbol ?? null,
+        name: meta.get(p.instrumentId)?.name ?? null,
+      })),
+    };
   }
 
   // Income analytics for a set of valued transactions: per-year/-month totals, TTM,
@@ -1240,6 +1265,87 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolio.cashCounted,
       );
       return buildIncomeStats(coreTxns, summary, portfolio.baseCurrency);
+    },
+  );
+
+  // Sparplan detection for a single portfolio (in its base currency).
+  app.get<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/sparplan",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      const portfolio = await ownedPortfolio(id, portfolioId);
+      if (!portfolio) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { coreTxns } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
+      );
+      return buildSparplanStats(coreTxns, portfolio.baseCurrency);
+    },
+  );
+
+  // Aggregate Sparplan detection across all of the user's portfolios (or a holder
+  // subset). Detection runs per portfolio and is merged (not concatenated) to avoid
+  // two portfolios with the same instrument collapsing into one plan.
+  app.get<{ Querystring: { holderId?: string } }>(
+    "/networth/sparplan",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { holderId } = request.query;
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+
+      if (holderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.code(404).send({ error: "holder_not_found" });
+      }
+
+      const pfs = await app.db
+        .select({ id: portfolios.id, cashCounted: portfolios.cashCounted, baseCurrency: portfolios.baseCurrency })
+        .from(portfolios)
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
+
+      // Detect per portfolio in the display currency, then merge (not concatenate).
+      const perPortfolio: SparplanStats[] = [];
+      const allInstrumentIds = new Set<string>();
+      for (const p of pfs) {
+        const { coreTxns } = await loadValuation(p.id, display, undefined, p.cashCounted);
+        const ccys = [...new Set(coreTxns.map((t) => t.currency))];
+        const rates = await getFxRates(app.db, ccys, display);
+        const fx = makeFxRateFn(rates, display);
+        const stats = detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
+        perPortfolio.push(stats);
+        for (const plan of stats.plans) allInstrumentIds.add(plan.instrumentId);
+      }
+
+      const merged = mergeSparplanStats(perPortfolio, display);
+      const meta = await instrumentMeta([...allInstrumentIds]);
+      return {
+        ...merged,
+        plans: merged.plans.map((p) => ({
+          ...p,
+          symbol: meta.get(p.instrumentId)?.symbol ?? null,
+          name: meta.get(p.instrumentId)?.name ?? null,
+        })),
+      };
     },
   );
 

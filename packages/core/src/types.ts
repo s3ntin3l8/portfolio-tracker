@@ -42,6 +42,9 @@ export interface CoreTransaction {
   // interest). Informational — used by the trade log to surface tax-by-year; the
   // cash effect lives in `price`. null/undefined when not applicable.
   tax?: string | null;
+  // Groups executions of the same broker savings plan (Sparplan). Written by the TR
+  // importer; used only by sparplan detection. null/undefined for non-plan rows.
+  savingsPlanId?: string | null;
 }
 
 export interface CorporateAction {

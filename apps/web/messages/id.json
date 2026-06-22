@@ -217,7 +217,21 @@
     "contributedSoFar": "termasuk {amount} setoran sejauh ini",
     "growthSoFar": "termasuk {amount} pertumbuhan sejauh ini",
     "emptyTitle": "Belum ada setoran",
-    "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini."
+    "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini.",
+    "sparplanTitle": "Rencana investasi rutin",
+    "detectedMonthly": "Total bulanan aktif",
+    "cadenceMonthly": "/bulan",
+    "cadenceMonthlyShort": "bln",
+    "cadenceQuarterly": "/kuartal",
+    "cadenceSemiAnnual": "/6 bulan",
+    "cadenceAnnual": "/tahun",
+    "statusActive": "Aktif",
+    "statusStopped": "Dihentikan",
+    "stepSince": "{from} → {to} sejak {date}",
+    "sourceHeuristic": "Terdeteksi",
+    "firstSince": "Sejak {date}",
+    "executionCount": "{count, plural, other {# eksekusi}}",
+    "stoppedPlans": "{count, plural, other {# rencana dihentikan}}"
   },
   "Portfolios": {
     "title": "Portofolio",

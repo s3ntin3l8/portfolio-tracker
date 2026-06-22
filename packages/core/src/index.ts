@@ -24,6 +24,7 @@ export {
   financingByInstrument,
 } from "./loans.js";
 export {
+  inferIntervalMonths,
   projectCoupons,
   projectDividends,
   projectNextYearDividends,
@@ -42,6 +43,14 @@ export {
   type CurrencyIncome,
   type AggregateIncomeInput,
 } from "./income.js";
+export {
+  detectSparplans,
+  mergeSparplanStats,
+  type SparplanInput,
+  type SparplanStats,
+  type DetectedPlan,
+  type AmountLevel,
+} from "./sparplan.js";
 export {
   contributionStats,
   mergeContributionStats,

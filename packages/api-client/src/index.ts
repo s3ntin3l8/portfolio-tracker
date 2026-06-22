@@ -635,6 +635,58 @@ export interface ContributionStats {
   asOf: string;
 }
 
+/** One recurring-amount tier within a detected Sparplan's history (native currency). */
+export interface AmountLevel {
+  /** Median per-execution amount in the plan's native currency. */
+  amount: string;
+  /** `amount` converted to the display currency. */
+  amountDisplay: string;
+  currency: string;
+  /** YYYY-MM-DD: first execution at this level. */
+  since: string;
+  /** YYYY-MM-DD: last execution at this level; null = current (latest) level. */
+  until: string | null;
+  executionCount: number;
+}
+
+/** A detected recurring savings plan for one instrument. */
+export interface DetectedPlan {
+  instrumentId: string;
+  /** Instrument symbol (null when metadata unavailable). */
+  symbol: string | null;
+  /** Instrument display name (null when metadata unavailable). */
+  name: string | null;
+  /** Native execution currency. */
+  currency: string;
+  /** Most likely cadence: 1 (monthly), 3 (quarterly), 6 (semi-annual), 12 (annual). */
+  cadenceMonths: number;
+  /** Latest level's representative amount in native currency. */
+  currentAmount: string;
+  /** `currentAmount` converted to the display currency. */
+  currentAmountDisplay: string;
+  status: "active" | "stopped";
+  /** YYYY-MM-DD: first ever execution. */
+  firstExecution: string;
+  /** YYYY-MM-DD: most recent execution. */
+  lastExecution: string;
+  executionCount: number;
+  /** "tagged" = explicit savings_plan type or savingsPlanId; "heuristic" = inferred. */
+  source: "tagged" | "heuristic";
+  /** Chronological amount levels. length > 1 means step-increases were detected. */
+  levels: AmountLevel[];
+}
+
+export interface SparplanStats {
+  displayCurrency: string;
+  plans: DetectedPlan[];
+  /**
+   * Sum of active plans' monthly-equivalent amounts in the display currency.
+   * Quarterly/semi-annual plans are normalised to monthly (÷ cadenceMonths).
+   */
+  activeMonthlyTotalDisplay: string;
+  activePlanCount: number;
+}
+
 export type TradeMethod = "average" | "fifo";
 
 /** A matched disposal slice — FIFO: one consumed lot; average: the whole sell. */
@@ -1105,6 +1157,15 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPortfolioContributions: (portfolioId: string) =>
       request<ContributionStats>("GET", `/portfolios/${portfolioId}/contributions`),
+    getSparplan: (holderId?: string) =>
+      request<SparplanStats>(
+        "GET",
+        holderId
+          ? `/networth/sparplan?holderId=${encodeURIComponent(holderId)}`
+          : "/networth/sparplan",
+      ),
+    getPortfolioSparplan: (portfolioId: string) =>
+      request<SparplanStats>("GET", `/portfolios/${portfolioId}/sparplan`),
     getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[]; holderId?: string }) => {
       const params = new URLSearchParams({ range });
       if (opts?.include?.length) params.set("include", opts.include.join(","));

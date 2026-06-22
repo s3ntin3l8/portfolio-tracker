@@ -17,6 +17,7 @@ import {
   type ImportDetail,
   type IncomeStats,
   type ContributionStats,
+  type SparplanStats,
   type TradeLog,
   type TradeMethod,
   type TrConnection,
@@ -355,6 +356,33 @@ export async function loadContributions(): Promise<ContributionsView> {
     const data = selected
       ? await api.getPortfolioContributions(selected.id)
       : await api.getContributions(holderId);
+    return { status: "ok", data };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+export type SparplanView =
+  | { status: "ok"; data: SparplanStats }
+  | { status: "empty" }
+  | { status: "unavailable" };
+
+/**
+ * Sparplan (recurring investment) detection for the active scope: a single portfolio
+ * when one is selected, else the cross-portfolio aggregate narrowed by the holder scope.
+ */
+export async function loadSparplan(): Promise<SparplanView> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const portfolios = await api.listPortfolios();
+    if (portfolios.length === 0) return { status: "empty" };
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
+    const data = selected
+      ? await api.getPortfolioSparplan(selected.id)
+      : await api.getSparplan(holderId);
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
