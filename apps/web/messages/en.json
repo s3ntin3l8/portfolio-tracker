@@ -995,9 +995,19 @@
       "gains": "gains",
       "income": "income"
     },
+    "forecast": {
+      "label": "Expected dividends & coupons",
+      "labelDesc": "Rest of year (est.)",
+      "projectedUsed": "Projected used",
+      "projectedUsedDesc": "Incl. expected payments",
+      "projectedRemaining": "Projected remaining",
+      "projectedTaxSaving": "Projected tax saving",
+      "disclaimer": "Estimates based on last year's payments and announced dates. Actual amounts may differ."
+    },
     "harvest": {
       "title": "Harvest suggestions",
-      "subtitle": "Open positions you could partially sell to use up remaining allowance tax-free.",
+      "subtitle": "Open positions you could partially sell to use up remaining allowance tax-free. Sized against your projected remaining allowance (accounts for expected dividends & coupons).",
+      "subtitleNoForecast": "Open positions you could partially sell to use up remaining allowance tax-free.",
       "unrealized": "Unrealized gain",
       "harvestable": "Harvestable",
       "taxSaving": "Tax saving",

@@ -707,3 +707,155 @@ describe("harvestSuggestions", () => {
     expect(result[0].harvestableGross).toBe("100.00"); // 100 fits in 500
   });
 });
+
+// ---------------------------------------------------------------------------
+// forecastIncomeRestOfYear — projected fields
+// ---------------------------------------------------------------------------
+
+describe("allowanceUsageYTD with forecastIncomeRestOfYear", () => {
+  it("echoes '0.00' and leaves realized fields unchanged when forecast is zero/omitted", () => {
+    const log = makeTradeLog({
+      dividendsByYear: [{ year: 2025, amount: "200", tax: "0" }],
+    });
+    const result = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+    });
+    expect(result.forecastIncomeRestOfYear).toBe("0.00");
+    expect(result.projectedUsedFullYear).toBe("200.00"); // same as usedYtd
+    expect(result.projectedRemaining).toBe("800.00"); // same as remaining
+    expect(result.projectedTaxSavingAvailable).toBe("200.00"); // 800 × 0.25
+  });
+
+  it("reduces projectedRemaining by the forecast amount", () => {
+    const log = makeTradeLog({
+      dividendsByYear: [{ year: 2025, amount: "200", tax: "0" }],
+    });
+    const result = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      forecastIncomeRestOfYear: "310",
+    });
+    // realized: 200 used, remaining: 800.
+    // forecast: 310 → projectedUsed = min(200 + 310, 1000) = 510.
+    expect(result.incomeYtd).toBe("200.00"); // realized stays
+    expect(result.remaining).toBe("800.00");   // realized stays
+    expect(result.forecastIncomeRestOfYear).toBe("310.00");
+    expect(result.projectedUsedFullYear).toBe("510.00");
+    expect(result.projectedRemaining).toBe("490.00");
+    expect(result.projectedTaxSavingAvailable).toBe("122.50"); // 490 × 0.25
+  });
+
+  it("clamps projectedUsedFullYear to the annual allowance", () => {
+    const log = makeTradeLog({
+      dividendsByYear: [{ year: 2025, amount: "600", tax: "0" }],
+    });
+    const result = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      forecastIncomeRestOfYear: "600",
+    });
+    // 600 (realized) + 600 (forecast) = 1200 → clamped to 1000.
+    expect(result.projectedUsedFullYear).toBe("1000.00");
+    expect(result.projectedRemaining).toBe("0.00");
+    expect(result.projectedTaxSavingAvailable).toBe("0.00");
+  });
+
+  it("ignores negative forecast values (treated as zero)", () => {
+    const log = makeTradeLog();
+    const result = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      forecastIncomeRestOfYear: "-50",
+    });
+    expect(result.forecastIncomeRestOfYear).toBe("0.00");
+    expect(result.projectedRemaining).toBe("1000.00");
+  });
+});
+
+describe("harvestSuggestions with forecast-aware projectedRemaining", () => {
+  function makeOpenTrade(instrumentId: string, unrealizedPnL: string) {
+    return {
+      instrumentId,
+      currency: "EUR",
+      status: "open" as const,
+      entryDate: "2025-01-01",
+      exitDate: null,
+      holdingDays: 150,
+      longTerm: false,
+      quantity: "10",
+      avgEntryPrice: "100",
+      avgExitPrice: null,
+      invested: "1000",
+      realizedPnL: "0",
+      unrealizedPnL,
+      dividends: "0",
+      totalReturn: unrealizedPnL,
+      totalReturnPct: Number(unrealizedPnL) / 10,
+      annualizedPct: null,
+      legs: [],
+    };
+  }
+
+  it("sizes suggestions against projectedRemaining when forecast is present", () => {
+    // allowance = 1000, no realized income → remaining = 1000.
+    // forecast = 700 → projectedRemaining = 300.
+    // Stock with unrealized gain = 500 → should be capped to 300.
+    const log = makeTradeLog({ trades: [makeOpenTrade("stock-x", "500")] });
+    const usage = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      forecastIncomeRestOfYear: "700",
+    });
+    expect(usage.projectedRemaining).toBe("300.00");
+
+    const result = harvestSuggestions({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      usage,
+    });
+
+    expect(result).toHaveLength(1);
+    // harvestableGross capped at 300 (projectedRemaining), not 500.
+    expect(parseFloat(result[0].harvestableGross)).toBeCloseTo(300, 1);
+    expect(result[0].taxSaving).toBe("75.00"); // 300 × 0.25
+  });
+
+  it("returns empty harvest list when forecast eats all remaining allowance", () => {
+    // allowance = 1000, realized income = 400 → remaining = 600.
+    // forecast = 600 → projectedRemaining = 0.
+    const log = makeTradeLog({
+      dividendsByYear: [{ year: 2025, amount: "400", tax: "0" }],
+      trades: [makeOpenTrade("etf-1", "500")],
+    });
+    const usage = allowanceUsageYTD({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      forecastIncomeRestOfYear: "600",
+    });
+    expect(usage.projectedRemaining).toBe("0.00");
+
+    const result = harvestSuggestions({
+      tradeLog: log,
+      tfRates: {},
+      allowanceAnnual: "1000",
+      year: 2025,
+      usage,
+    });
+    expect(result).toHaveLength(0);
+  });
+});

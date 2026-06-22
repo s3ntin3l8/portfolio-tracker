@@ -267,6 +267,14 @@ export interface AllowanceUsage {
   taxSavingAvailable: string;
   /** Currency of all monetary amounts. */
   currency: string;
+  /** Gross projected income for the rest of the year (dividends + coupons), decimal string. "0.00" when not available. */
+  forecastIncomeRestOfYear: string;
+  /** Projected full-year used = clamp(realized + incomeYtd + forecastIncomeRestOfYear, 0, allowance), decimal string. */
+  projectedUsedFullYear: string;
+  /** Projected remaining = allowanceAnnual − projectedUsedFullYear (never negative), decimal string. */
+  projectedRemaining: string;
+  /** Estimated tax saved against the projected remaining = projectedRemaining × taxRate, decimal string. */
+  projectedTaxSavingAvailable: string;
 }
 
 /** A single harvest suggestion: an open position that could be (partially) realized tax-free. */
