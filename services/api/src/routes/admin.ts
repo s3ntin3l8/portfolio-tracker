@@ -747,6 +747,8 @@ export async function adminRoute(app: FastifyInstance) {
   });
 
   // Manually enqueue a job immediately (admin "run now" button).
+  // Optional query param ?force=1 (or body { force: true }) forwards a force flag
+  // to jobs that support it (e.g. backfill-stale-history for a full rebuild).
   app.post(
     "/admin/jobs/:name/trigger",
     { preHandler: app.requireAdmin },
@@ -757,7 +759,13 @@ export async function adminRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "unknown_job" });
       }
 
-      const result = await triggerJob(name);
+      // Accept force from either query string (?force=1) or JSON body ({ force: true }).
+      const queryForce = (request.query as Record<string, string> | null)?.force;
+      const bodyForce = (request.body as Record<string, unknown> | null)?.force;
+      const force = Boolean(queryForce === "1" || queryForce === "true" || bodyForce);
+      const payload: Record<string, unknown> = force ? { force: true } : {};
+
+      const result = await triggerJob(name, payload);
       if (!result.queued) {
         return reply.code(503).send({ error: "scheduler_unavailable" });
       }
@@ -766,10 +774,10 @@ export async function adminRoute(app: FastifyInstance) {
         actorSub: request.user!.authSub,
         action: "trigger_job",
         target: name,
-        meta: null,
+        meta: force ? { force: true } : null,
       });
 
-      return { queued: true, name };
+      return { queued: true, name, ...(force ? { force: true } : {}) };
     },
   );
 

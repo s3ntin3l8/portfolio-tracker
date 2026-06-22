@@ -339,31 +339,36 @@ export async function backfillPortfolioHistory(
     return "realSeries";
   }
 
+  // Forward-fill rawPrices over the full date grid so that non-trading days
+  // (weekends, market holidays) carry the most-recent known close rather than
+  // returning null.  Bond/mutual_fund maps are already dense (filled day-by-day
+  // when fetched above); this handles realSeries instruments whose candle sets
+  // only include actual trading days.
+  //
+  // Dates before the instrument's first candle are intentionally left absent so
+  // holdings that haven't been purchased yet stay unvalued (null → skipped in MV).
+  const filledPrices = new Map<string, Map<string, { close: string; currency: string }>>();
+  for (const [instrId, dateMap] of rawPrices) {
+    const filled = new Map<string, { close: string; currency: string }>();
+    let last: { close: string; currency: string } | null = null;
+    for (const date of dateGrid) {
+      const candle = dateMap.get(date);
+      if (candle) last = candle;
+      if (last) filled.set(date, last);
+      // If last is still null the date is before the first candle → absent → priceAt returns null.
+    }
+    filledPrices.set(instrId, filled);
+  }
+
   function priceAt(instrId: string, date: string): { close: string; currency: string } | null {
-    const dateMap = rawPrices.get(instrId);
-    if (!dateMap) return null;
-    // Direct match
-    const exact = dateMap.get(date);
-    if (exact) {
-      // Apply split adjustment
-      const factor = splitAdjustmentFactor(coreCas, instrId, date);
-      if (factor.isZero() || factor.isNaN()) return exact;
-      return { close: new Decimal(exact.close).div(factor).toString(), currency: exact.currency };
-    }
-    // Carry-forward: find the most recent price on or before this date
-    const instr = instrById.get(instrId);
-    if (instr?.assetClass === "bond" || instr?.assetClass === "mutual_fund") {
-      // For flat proxies, carry forward; find dates before this
-      let bestDate = "";
-      for (const [pd] of dateMap) {
-        if (pd <= date && pd > bestDate) bestDate = pd;
-      }
-      if (bestDate) {
-        const p = dateMap.get(bestDate)!;
-        return { close: p.close, currency: p.currency };
-      }
-    }
-    return null;
+    const filled = filledPrices.get(instrId);
+    if (!filled) return null;
+    const raw = filled.get(date);
+    if (!raw) return null;
+    // Apply split adjustment at the target date (unchanged from before).
+    const factor = splitAdjustmentFactor(coreCas, instrId, date);
+    if (factor.isZero() || factor.isNaN()) return raw;
+    return { close: new Decimal(raw.close).div(factor).toString(), currency: raw.currency };
   }
 
   function fxAt(date: string) {
@@ -456,11 +461,28 @@ export interface SweepResult {
   portfolios: Array<{ portfolioId: string; result: BackfillResult }>;
 }
 
+export interface SweepOptions {
+  /**
+   * When true, skip the staleness filter and run a full inception backfill for
+   * every portfolio that has at least one transaction.  Use this as a one-shot
+   * heal after a backfill bug fix: the upsert in `backfillPortfolioHistory` is
+   * idempotent, so re-running it overwrites any bad rows (e.g. weekend zeros)
+   * without risk of double-counting.
+   *
+   * The scheduled 05:00 cron run should always use the default (force = false)
+   * so it remains a near-no-op once all portfolios are current.
+   */
+  force?: boolean;
+}
+
 /**
  * Find portfolios whose snapshot history does not reach back to their inception
  * date (or that have no snapshots at all) and run a full inception backfill for
  * each.  Safe to call repeatedly — once healed, earliest snapshot == inception
  * so the portfolio is skipped on subsequent runs.
+ *
+ * Pass `{ force: true }` to rebuild every portfolio from inception regardless of
+ * its current snapshot coverage — useful after a backfill bug fix.
  *
  * This is the self-healing companion to the on-mutation `enqueueRecompute` hook:
  * the mutation path keeps actively-edited portfolios current; this sweep catches
@@ -471,6 +493,7 @@ export async function backfillStalePortfolios(
   db: DB,
   marketData: MarketDataService,
   ttlMs: number,
+  opts: SweepOptions = {},
 ): Promise<SweepResult> {
   // For every portfolio that has ≥1 transaction, find its inception date and its
   // earliest snapshot date (NULL when no snapshots exist).
@@ -488,18 +511,20 @@ export async function backfillStalePortfolios(
     .where(isNotNull(transactions.portfolioId))
     .groupBy(transactions.portfolioId);
 
-  const stale = rows.filter((r) => {
-    if (!r.portfolioId || !r.inception) return false;
-    const inceptionDate = r.inception.toISOString().slice(0, 10);
-    // No snapshots at all → stale
-    if (!r.earliestSnapshot) return true;
-    // Earliest snapshot is later than inception → incomplete history
-    return r.earliestSnapshot > inceptionDate;
-  });
+  const toHeal = opts.force
+    ? rows.filter((r) => r.portfolioId && r.inception)
+    : rows.filter((r) => {
+        if (!r.portfolioId || !r.inception) return false;
+        const inceptionDate = r.inception.toISOString().slice(0, 10);
+        // No snapshots at all → stale
+        if (!r.earliestSnapshot) return true;
+        // Earliest snapshot is later than inception → incomplete history
+        return r.earliestSnapshot > inceptionDate;
+      });
 
   const result: SweepResult = { scanned: rows.length, healed: 0, portfolios: [] };
 
-  for (const { portfolioId } of stale) {
+  for (const { portfolioId } of toHeal) {
     if (!portfolioId) continue;
     // Omit fromDate to backfill from true inception
     const backfillResult = await backfillPortfolioHistory(db, marketData, ttlMs, portfolioId);

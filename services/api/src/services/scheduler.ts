@@ -133,10 +133,14 @@ export function getActiveBoss(): PgBoss | null {
 /**
  * Enqueue a manual run of a named job queue.
  * Returns `{ queued: true }` on success, `{ queued: false }` when pg-boss is unavailable.
+ * An optional `payload` object is forwarded as the job data (e.g. `{ force: true }`).
  */
-export async function triggerJob(name: string): Promise<{ queued: boolean }> {
+export async function triggerJob(
+  name: string,
+  payload: Record<string, unknown> = {},
+): Promise<{ queued: boolean }> {
   if (!activeBoss) return { queued: false };
-  await activeBoss.send(name, {});
+  await activeBoss.send(name, payload);
   return { queued: true };
 }
 
@@ -308,16 +312,22 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   // full inception backfill. Near-no-op once every portfolio is healed; continues to
   // catch any portfolio that is imported but never mutated.
   await boss.createQueue(BACKFILL_STALE_QUEUE);
-  await boss.work(BACKFILL_STALE_QUEUE, async () => {
+  await boss.work(BACKFILL_STALE_QUEUE, async (jobs) => {
+    // jobs[0].data may carry { force: true } when triggered from the admin panel
+    // to rebuild all portfolios from inception (one-shot heal after a bug fix).
+    const force = Array.isArray(jobs) && jobs.length > 0
+      ? Boolean((jobs[0]?.data as Record<string, unknown> | null)?.force)
+      : false;
     try {
       const result = await backfillStalePortfolios(
         getDb(),
         await getMarketData(),
         app.config.MARKET_DATA_TTL_MS,
+        { force },
       );
       await flushUsage();
       app.log.info(
-        { scanned: result.scanned, healed: result.healed },
+        { scanned: result.scanned, healed: result.healed, force },
         "backfill-stale-history complete",
       );
     } catch (err) {
