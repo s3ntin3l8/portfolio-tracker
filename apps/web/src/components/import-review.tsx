@@ -96,6 +96,11 @@ export interface ImportReviewProps {
   onRemoveMany: (uids: string[]) => void;
   /** Confirm all drafts, or just the passed subset (confirm-selected). */
   onConfirm: (uids?: string[]) => void | Promise<void>;
+  /**
+   * When true, disables all confirm/discard actions (the parent is mid-submit).
+   * Preserves selection state across external confirm calls (vs. unmounting the component).
+   */
+  isSubmitting?: boolean;
   onDiscard: () => void | Promise<void>;
   /** Unmapped/skipped events surfaced for review (Trade Republic imports). */
   issues?: ImportIssue[];
@@ -138,6 +143,7 @@ export function ImportReview({
   portfolioByImport,
   onPortfolioChange,
   issuesByImport,
+  isSubmitting = false,
 }: ImportReviewProps) {
   // When more than one group is passed, render group-header rows in the table.
   const isGrouped = (groups?.length ?? 0) > 1;
@@ -213,7 +219,7 @@ export function ImportReview({
   const [pending, setPending] = useState<
     "confirm" | "confirmSelected" | "discard" | null
   >(null);
-  const busy = pending !== null;
+  const busy = pending !== null || isSubmitting;
 
   async function runConfirm(
     action: "confirm" | "confirmSelected",
@@ -353,17 +359,28 @@ export function ImportReview({
   const pct = (c: number) => t("confidence", { pct: Math.round(c * 100) });
   const dateOf = (d: ReviewDraft) => d.executedAt.slice(0, 10);
 
-  // Drafts flagged as cross-format duplicates (#196). They're excluded from the default
-  // "Confirm" (the parent handles that); here we badge them and explain the exclusion.
+  // Drafts flagged as cross-format duplicates or enrichments (#196, #259).
+  // Duplicates are excluded from default "Confirm"; enrichments are included (auto-applied).
   const duplicateCount = useMemo(
-    () => drafts.filter((d) => d.likelyDuplicate).length,
+    () => drafts.filter((d) => d.likelyDuplicate?.kind === "duplicate").length,
     [drafts],
   );
-  const dupLabel = (d: ReviewDraft) =>
-    t("review.duplicate", {
+  const enrichmentCount = useMemo(
+    () => drafts.filter((d) => d.likelyDuplicate?.kind === "enrichment").length,
+    [drafts],
+  );
+  const dupLabel = (d: ReviewDraft) => {
+    if (d.likelyDuplicate?.kind === "enrichment") {
+      return t("review.enrichment", {
+        source: d.likelyDuplicate.source ?? "—",
+        date: (d.likelyDuplicate.executedAt ?? "").slice(0, 10),
+      });
+    }
+    return t("review.duplicate", {
       source: d.likelyDuplicate?.source ?? "—",
       date: (d.likelyDuplicate?.executedAt ?? "").slice(0, 10),
     });
+  };
 
   function draftCells(d: ReviewDraft, isSelected: boolean) {
     return (
@@ -383,7 +400,10 @@ export function ImportReview({
               {pct(d.confidence)}
             </Badge>
             {d.likelyDuplicate && (
-              <Badge variant="warning" title={dupLabel(d)}>
+              <Badge
+                variant={d.likelyDuplicate.kind === "enrichment" ? "default" : "warning"}
+                title={dupLabel(d)}
+              >
                 {dupLabel(d)}
               </Badge>
             )}
@@ -540,7 +560,11 @@ export function ImportReview({
               {d.wkn && (
                 <span className="font-mono text-muted-foreground">{d.wkn}</span>
               )}
-              {d.likelyDuplicate && <Badge variant="warning">{dupLabel(d)}</Badge>}
+              {d.likelyDuplicate && (
+                <Badge variant={d.likelyDuplicate.kind === "enrichment" ? "default" : "warning"}>
+                  {dupLabel(d)}
+                </Badge>
+              )}
             </div>
             <div className="mt-1 tabular text-sm text-muted-foreground">
               {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
@@ -571,7 +595,15 @@ export function ImportReview({
         {t("draftCount", { count: drafts.length })} — {t("reviewHint")}
       </p>
 
-      {/* Cross-format duplicate notice (#196): flagged rows are excluded from "Confirm";
+      {/* Enrichment notice (#259): blue info — these rows are included in "Confirm" and
+          auto-linked to the existing transaction (PDF attached, fields enriched). */}
+      {enrichmentCount > 0 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+          {t("review.enrichmentNotice", { count: enrichmentCount })}
+        </div>
+      )}
+
+      {/* Duplicate notice (#196): amber warning — these rows are excluded from "Confirm";
           to import one anyway the user selects it and uses "Confirm selected". */}
       {duplicateCount > 0 && (
         <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">

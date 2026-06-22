@@ -88,6 +88,40 @@ export function withinDayTolerance(a: Date | string, b: Date | string): boolean 
   return Math.abs(dayIndex(a) - dayIndex(b)) <= 1;
 }
 
+/**
+ * Map an import parser tag to the `transactions.source` value that would be written for it.
+ * Mirrors the mapping in the confirm endpoint (imports.ts), kept here for shared use by the
+ * preview endpoint and the upload-time annotator.
+ */
+export function parserToTxSource(parser: string): string {
+  if (parser === "pytr") return "pytr";
+  if (parser === "csv" || parser === "dkb" || parser === "tr-csv") return "csv";
+  return "screenshot";
+}
+
+/**
+ * Classify a cross-source economic match as **enrichment** or **duplicate**.
+ *
+ * Enrichment: the incoming import is from a *different* source than the committed transaction
+ * **and** it brings new value (the import is a file upload carrying a document, or the draft
+ * carries `taxComponents` — i.e. it's a richer PDF than a plain CSV row). Enrichment is
+ * auto-applied at confirm time (links the PDF, folds in tax/fees) without a blocking 409.
+ *
+ * Duplicate: same source as the committed row, or no new value. These block at confirm time
+ * so the user consciously decides whether to import or discard.
+ */
+export function classifyMatch(
+  importParser: string,
+  matchedTxSource: string,
+  draftHasEnrichment: boolean,
+): "enrichment" | "duplicate" {
+  const incomingTxSource = parserToTxSource(importParser);
+  if (incomingTxSource !== matchedTxSource && draftHasEnrichment) {
+    return "enrichment";
+  }
+  return "duplicate";
+}
+
 /** A record reduced to the fields that decide economic identity. `key` is the caller's
  *  instrument identity: the resolved `instrumentId` at confirm time, or an ISIN/WKN at
  *  upload time (before instruments are resolved). */

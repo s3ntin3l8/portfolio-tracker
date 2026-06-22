@@ -92,6 +92,8 @@ export function ImportFlowClient({
         enrichments as unknown as Parameters<typeof api.enrichImport>[1],
         portfolioId,
       ),
+    checkImportDuplicates: (importId, portfolioId) =>
+      api.checkImportDuplicates(importId, portfolioId),
   };
 
   return (

@@ -406,7 +406,9 @@
       },
       "empty": "No drafts match your filters.",
       "duplicate": "Already imported · {source} · {date}",
-      "duplicateNotice": "{count, plural, one {# draft looks like it was already imported} other {# drafts look like they were already imported}} and won't be added by Confirm. To add one anyway, select it and use \"Confirm selected\"."
+      "duplicateNotice": "{count, plural, one {# draft looks like it was already imported} other {# drafts look like they were already imported}} and won't be added by Confirm. To add one anyway, select it and use \"Confirm selected\".",
+      "enrichment": "Enriches existing · {source} · {date}",
+      "enrichmentNotice": "{count, plural, one {# draft will enrich} other {# drafts will enrich}} an existing transaction with additional details (document, tax info) — applied automatically on Confirm."
     },
     "accountMismatch": {
       "otherPortfolio": "This file (account {account}) looks like it belongs to \"{portfolio}\". Import into the selected portfolio anyway?",

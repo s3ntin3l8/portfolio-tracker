@@ -78,6 +78,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -110,6 +111,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -153,6 +155,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(async () => ({ importId: "imp2c", drafts: [DRAFT], errors: [] })),
       confirmImport: vi.fn(),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -173,6 +176,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "imp-csv", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -201,6 +205,7 @@ describe("ImportFlow", () => {
       importCsv,
       confirmImport: vi.fn(),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -230,6 +235,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
@@ -283,6 +289,7 @@ describe("ImportFlow", () => {
       })),
       confirmImport,
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -315,6 +322,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -346,6 +354,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -388,6 +397,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 4 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -418,6 +428,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -462,6 +473,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "imp-c", drafts: [DRAFT_B], errors: [] }),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -510,6 +522,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "i2", drafts: [], errors: [] }),
       confirmImport: vi.fn(),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -541,6 +554,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -572,6 +586,7 @@ describe("ImportFlow", () => {
       })),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -595,7 +610,7 @@ describe("ImportFlow", () => {
   it("excludes likely-duplicate drafts from the default Confirm (#196)", async () => {
     const dup: ImportDraft = {
       ...DRAFT,
-      likelyDuplicate: { source: "screenshot", executedAt: "2026-02-08" },
+      likelyDuplicate: { kind: "duplicate" as const, source: "screenshot", executedAt: "2026-02-08" },
     };
     const client: ImportClient = {
       importScreenshot: vi.fn(async () => ({
@@ -606,6 +621,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -640,6 +656,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
@@ -695,6 +712,7 @@ describe("ImportFlow", () => {
         .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
       confirmImport,
       enrichImport: vi.fn(async () => ({ enriched: 0, skipped: [] })),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -742,6 +760,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 1 })),
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     const { container } = renderFlow(client);
 
@@ -806,6 +825,7 @@ describe("ImportFlow", () => {
       importCsv: vi.fn(),
       confirmImport,
       enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
     };
     renderFlow(client);
 

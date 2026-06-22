@@ -57,7 +57,7 @@ export function DuplicateConflictBanner({
                   {d.matchedTransactionId && (
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="secondary"
                       className="h-6 shrink-0 text-xs"
                       onClick={() => onEnrich(d)}
                     >
@@ -74,7 +74,7 @@ export function DuplicateConflictBanner({
             </ul>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={onImportAnyway}>
+        <Button size="sm" variant="ghost" className="shrink-0 text-warning/80 hover:text-warning" onClick={onImportAnyway}>
           {t("importAnyway")}
         </Button>
       </div>

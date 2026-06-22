@@ -69,7 +69,7 @@ describe("DraftReviewClient", () => {
     const flaggedDraft: ImportDraft = {
       ...DRAFT,
       name: "Flagged Stock",
-      likelyDuplicate: { source: "csv", executedAt: "2026-03-01" },
+      likelyDuplicate: { kind: "duplicate", source: "csv", executedAt: "2026-03-01" },
     };
     render(
       <NextIntlClientProvider locale="en" messages={messages}>

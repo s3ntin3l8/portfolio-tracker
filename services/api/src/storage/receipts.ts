@@ -226,6 +226,89 @@ export async function finalizeReceipts(
 }
 
 /**
+ * Retain and link a staged import document to a target transaction.
+ * Called by the enrich paths (confirm auto-enrich and /enrich endpoint) when the import's
+ * portfolio has documentRetention=true. Marks the document retained, sets `transactionId`
+ * and `portfolioId`, then best-effort re-keys the storage object to a structured path.
+ * When retention is off the caller still needs to call `finalizeReceipts` (which will delete
+ * the staged doc). Returns the documentId on success, null if no staged doc exists.
+ */
+export async function retainDocumentForTransaction(
+  app: AppLike,
+  opts: {
+    importId: string;
+    transactionId: string;
+    portfolioId: string;
+  },
+): Promise<string | null> {
+  const { importId, transactionId, portfolioId } = opts;
+
+  const [row] = await db(app)
+    .select({
+      id: documents.id,
+      storageKey: documents.storageKey,
+      mimeType: documents.mimeType,
+      originalFilename: documents.originalFilename,
+      source: documents.source,
+      storedAt: documents.storedAt,
+      userId: documents.userId,
+    })
+    .from(documents)
+    .where(and(eq(documents.importId, importId), eq(documents.status, "staged")))
+    .limit(1);
+
+  if (!row) return null;
+
+  await db(app)
+    .update(documents)
+    .set({ status: "retained", transactionId, portfolioId })
+    .where(eq(documents.id, row.id));
+
+  // Best-effort re-key to a structured, human-readable path (same as finalizeReceipts).
+  try {
+    const parts = await gatherDocumentNaming(app, {
+      doc: { ...row, importId, transactionId },
+      portfolioId,
+      txId: transactionId,
+    });
+    const newKey = buildStructuredKey(row.userId, parts);
+    if (newKey !== row.storageKey) {
+      await app.storage.move(row.storageKey, newKey, {
+        mimeType: row.mimeType,
+        originalFilename: row.originalFilename ?? undefined,
+      });
+      await db(app)
+        .update(documents)
+        .set({ storageKey: newKey })
+        .where(eq(documents.id, row.id));
+    }
+  } catch (err) {
+    app.log.warn(
+      { err, docId: row.id, importId },
+      "retainDocumentForTransaction: re-key failed (non-fatal)",
+    );
+  }
+
+  return row.id;
+}
+
+/**
+ * Return the id of the staged document for an import, or null if none exists.
+ * Used by the confirm endpoint to determine whether a match constitutes enrichment.
+ */
+export async function getStagedDocumentId(
+  app: AppLikeDb,
+  importId: string,
+): Promise<string | null> {
+  const [row] = await db(app)
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.importId, importId), eq(documents.status, "staged")))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/**
  * Delete all documents (staged or retained) for a given import.
  * Used by: discard, undo-import, GC sweep.
  */

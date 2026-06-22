@@ -112,12 +112,13 @@ export function useImportConfirm({
     setError(null);
     pendingAcknowledgeMismatch.current = acknowledgeMismatch;
 
-    // "Confirm all" excludes likely-duplicate rows; an explicit uid list includes
+    // "Confirm all" excludes plain-duplicate rows (they need explicit user choice), but
+    // includes enrichment rows (auto-applied server-side). An explicit uid list includes
     // exactly what the user selected.
     const subset =
       uids && uids.length
         ? drafts.filter((d) => uids.includes(d.uid))
-        : drafts.filter((d) => !d.likelyDuplicate);
+        : drafts.filter((d) => d.likelyDuplicate?.kind !== "duplicate");
     pendingSubset.current = subset;
 
     onBeforeConfirm?.();

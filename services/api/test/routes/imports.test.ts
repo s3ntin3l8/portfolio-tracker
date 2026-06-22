@@ -2073,3 +2073,221 @@ describe("import dedup + account mismatch (#196, #197)", () => {
     await a.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #259 — enrichment vs duplicate preview and auto-enrich
+// ---------------------------------------------------------------------------
+
+import type { StorageProvider } from "../../src/storage/types.js";
+
+/** In-memory storage provider (same pattern as imports-receipts.test.ts). */
+function makeMemoryStorage(): StorageProvider {
+  const data = new Map<string, Buffer>();
+  return {
+    put: async (key, body) => { data.set(key, body instanceof Buffer ? body : Buffer.from("bytes")); },
+    getSignedUrl: async (key) => `https://fake/${key}`,
+    delete: async (key) => { data.delete(key); },
+    exists: async (key) => data.has(key),
+    get: async (key) => data.get(key) ?? null,
+    move: async (src, dest) => {
+      const buf = data.get(src);
+      if (buf) { data.set(dest, buf); data.delete(src); }
+    },
+    stats: async () => ({ objectCount: data.size, totalBytes: 0 }),
+  };
+}
+
+describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
+  beforeAll(() => {
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+  });
+
+  afterAll(async () => {
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+  });
+
+  async function freshApp259(opts?: { parser?: ScreenshotParser; storage?: StorageProvider }) {
+    const kp = await generateKeyPair("ES256");
+    const a = await buildApp({
+      authKey: kp.publicKey,
+      ...(opts?.parser ? { screenshotParser: opts.parser } : {}),
+      ...(opts?.storage ? { storage: opts.storage } : {}),
+    });
+    const mkTok = (sub: string) =>
+      new SignJWT({ email: `${sub}@test.example` })
+        .setProtectedHeader({ alg: "ES256" })
+        .setSubject(sub)
+        .setIssuer(ISSUER)
+        .setAudience(AUDIENCE)
+        .setIssuedAt()
+        .setExpirationTime("1h")
+        .sign(kp.privateKey);
+    return { a, mkTok };
+  }
+
+  // BCA trade as a mock screenshot draft — ticker must match the CSV's "BBCA" so the
+  // confirm-path instrument lookup resolves to the same DB row (instrumentId-based dedup).
+  const BCA_SCREENSHOT_DRAFT: ParsedTransaction = {
+    assetClass: "equity",
+    action: "buy",
+    ticker: "BBCA",
+    name: "Bank Central Asia",
+    quantity: "100",
+    unit: "shares",
+    price: "9500",
+    fees: "0",
+    currency: "IDR",
+    executedAt: new Date("2026-01-15T00:00:00.000Z"),
+    confidence: 0.9,
+  };
+
+  // A second CSV with the same BCA trade but different file content (different hash).
+  const CSV_DUP = [
+    "date,action,assetClass,name,ticker,quantity,unit,price,fees,currency",
+    "2026-01-15,buy,equity,Bank Central Asia,BBCA,100,shares,9500,0,IDR",
+  ].join("\n");
+
+  it("preview endpoint returns kind=duplicate for same-source CSV re-import", async () => {
+    const { a, mkTok } = await freshApp259();
+    const t = await mkTok("dup-preview-user");
+
+    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+
+    // Confirm the first CSV import.
+    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
+    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+
+    // Import the same trade via a different CSV file (different hash).
+    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    expect(r2.statusCode).toBe(201);
+    const importId2 = r2.json().importId;
+
+    // Preview: same csv source → duplicate.
+    const preview = await a.inject({ method: "POST", url: `/imports/${importId2}/duplicates`, headers: auth(t), payload: { portfolioId: pid } });
+    expect(preview.statusCode).toBe(200);
+    const { annotations } = preview.json() as { annotations: Array<{ draftIndex: number; kind: string }> };
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0].kind).toBe("duplicate");
+
+    await a.close();
+  });
+
+  it("preview endpoint returns kind=enrichment for cross-source screenshot vs CSV tx", async () => {
+    const storage = makeMemoryStorage();
+    const { a, mkTok } = await freshApp259({
+      parser: { name: "mock", isConfigured: () => true, parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }) },
+      storage,
+    });
+    const t = await mkTok("enrich-preview-user");
+
+    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+
+    // Confirm CSV import (source="csv").
+    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
+    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+
+    // Upload a screenshot with the same trade.
+    const form = screenshotPart(Buffer.from("fake-bca-screenshot"), "image/png", "bca.png");
+    const r2 = await a.inject({ method: "POST", url: "/imports/screenshot", headers: { ...auth(t), ...form.headers }, payload: form.payload });
+    expect(r2.statusCode).toBe(201);
+    const importId2 = r2.json().importId;
+
+    // Preview: screenshot vs csv → enrichment.
+    const preview = await a.inject({ method: "POST", url: `/imports/${importId2}/duplicates`, headers: auth(t), payload: { portfolioId: pid } });
+    expect(preview.statusCode).toBe(200);
+    const { annotations } = preview.json() as { annotations: Array<{ draftIndex: number; kind: string; matchedTransactionId: string }> };
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0].kind).toBe("enrichment");
+    expect(annotations[0].matchedTransactionId).toBeTruthy();
+
+    await a.close();
+  });
+
+  it("auto-enrich: confirming a screenshot that matches a CSV tx returns enriched=1 and no 409", async () => {
+    const storage = makeMemoryStorage();
+    const { a, mkTok } = await freshApp259({
+      parser: { name: "mock", isConfigured: () => true, parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }) },
+      storage,
+    });
+    const t = await mkTok("auto-enrich-user");
+
+    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+
+    // Confirm CSV import first.
+    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
+    const conf1 = await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    expect(conf1.statusCode).toBe(201);
+    expect(conf1.json().confirmed).toBe(1);
+
+    // Upload screenshot (same trade).
+    const form = screenshotPart(Buffer.from("bca-screenshot-bytes"), "image/png", "bca2.png");
+    const r2 = await a.inject({ method: "POST", url: "/imports/screenshot", headers: { ...auth(t), ...form.headers }, payload: form.payload });
+    expect(r2.statusCode).toBe(201);
+    const { importId: impId2, drafts: drafts2 } = r2.json();
+
+    // Confirm screenshot — should auto-enrich, not 409.
+    const conf2 = await a.inject({ method: "POST", url: `/imports/${impId2}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: drafts2 } });
+    expect(conf2.statusCode).toBe(201);
+    const body = conf2.json() as { confirmed: number; enriched: number };
+    expect(body.confirmed).toBe(0); // not a new tx
+    expect(body.enriched).toBe(1);  // enriched the existing one
+
+    // Holdings count is still 1 (no duplicate tx created).
+    const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    expect(holdings.json()).toHaveLength(1);
+
+    await a.close();
+  });
+
+  it("plain same-source CSV re-import is silently absorbed (skipped, no 409)", async () => {
+    // Same source (csv) + same content → assignContentExternalIds produces the same hash,
+    // so committedExtKeys filters the match before classification. The insert no-ops via
+    // onConflictDoNothing. No 409 — same-source re-imports are handled quietly.
+    const { a, mkTok } = await freshApp259();
+    const t = await mkTok("plain-dup-user");
+
+    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+
+    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
+    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+
+    // Second import with same trade, different file content → different hash, new import record.
+    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    expect(r2.statusCode).toBe(201);
+
+    const conf2 = await a.inject({ method: "POST", url: `/imports/${r2.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r2.json().drafts } });
+    // 201 not 409: same-source + same content → onConflictDoNothing, skipped=1.
+    expect(conf2.statusCode).toBe(201);
+    expect(conf2.json().skipped).toBe(1);
+
+    // Holdings still has exactly 1 row (no duplicate tx created).
+    const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    expect(holdings.json()).toHaveLength(1);
+
+    await a.close();
+  });
+
+  it("acknowledging duplicate bypasses 409 and writes the transaction", async () => {
+    const { a, mkTok } = await freshApp259();
+    const t = await mkTok("ack-dup-user");
+
+    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+
+    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
+    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+
+    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    const conf2 = await a.inject({
+      method: "POST",
+      url: `/imports/${r2.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r2.json().drafts, acknowledgeDuplicates: true },
+    });
+    expect(conf2.statusCode).toBe(201);
+
+    await a.close();
+  });
+});

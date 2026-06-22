@@ -35,7 +35,7 @@ import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { parseTrCsv } from "../services/parsers/tr-csv.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../services/parsers/hash.js";
-import { findCrossSourceDuplicates } from "../services/parsers/dedup.js";
+import { findCrossSourceDuplicates, classifyMatch, parserToTxSource } from "../services/parsers/dedup.js";
 import {
   findOrCreateInstrument,
   marketForAssetClass,
@@ -51,6 +51,8 @@ import {
   getDocumentForImport,
   getDocumentSummaryForImport,
   linkTrReceiptsToTransactions,
+  retainDocumentForTransaction,
+  getStagedDocumentId,
 } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 
@@ -316,18 +318,26 @@ export async function importsRoute(app: FastifyInstance) {
    * draft's ISIN → WKN → normalised name. Matching is tolerant (action class, ±1 day,
    * quantity/price within tolerance) and **count-aware** — each committed row flags at most
    * one draft, so two legitimate identical same-day buys against an empty history are never
-   * both suppressed. Mutates drafts in place, adding `likelyDuplicate: { source, executedAt }`.
+   * both suppressed. Mutates drafts in place, adding `likelyDuplicate: { kind, source, executedAt, matchedTransactionId }`.
    *
-   * This pass is advisory (it only pre-deselects in the UI). The authoritative backstop runs
-   * at confirm time against the resolved instrumentId — see the cross-source check there.
+   * `importParser` is the import's parser tag (e.g. "csv", "dkb", "screenshot") used to
+   * classify each match as "enrichment" (different source + file upload / taxComponents) vs
+   * plain "duplicate" (same source or no new value) — so the review screen can badge them
+   * differently and the confirm flow can auto-apply enrichments without a blocking 409.
+   *
+   * This pass is advisory (it only pre-deselects / badges in the UI). The authoritative
+   * backstop runs at confirm time against the resolved instrumentId — see the cross-source
+   * check there.
    */
   async function annotateLikelyDuplicates(
     drafts: ParsedTransaction[],
     portfolioId: string | null,
+    importParser: string,
   ): Promise<void> {
     if (!portfolioId || drafts.length === 0) return;
     const rows = await app.db
       .select({
+        id: transactions.id,
         type: transactions.type,
         executedAt: transactions.executedAt,
         quantity: transactions.quantity,
@@ -342,6 +352,7 @@ export async function importsRoute(app: FastifyInstance) {
       .where(eq(transactions.portfolioId, portfolioId));
 
     const committed = rows.map((r) => ({
+      id: r.id,
       key: uploadIdentity(r.isin, r.wkn, r.name),
       action: r.type,
       quantity: r.quantity,
@@ -357,10 +368,21 @@ export async function importsRoute(app: FastifyInstance) {
       executedAt: d.executedAt,
     }));
 
+    // A screenshot/PDF upload carries a document; a CSV upload doesn't (even if it's
+    // technically stored as a receipt, it brings no visual document or tax detail).
+    const importIsFileUpload = importParser === "screenshot";
+
     for (const { draftIndex, matched } of findCrossSourceDuplicates(draftCandidates, committed)) {
+      const draft = drafts[draftIndex];
+      const hasTaxComponents =
+        draft.taxComponents && Object.keys(draft.taxComponents).length > 0;
+      const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
+      const kind = classifyMatch(importParser, matched.source ?? "csv", draftHasEnrichment);
       (drafts[draftIndex] as Record<string, unknown>).likelyDuplicate = {
+        kind,
         source: matched.source,
         executedAt: matched.executedAt,
+        matchedTransactionId: matched.id,
       };
     }
   }
@@ -434,7 +456,7 @@ export async function importsRoute(app: FastifyInstance) {
       // Candidate portfolio for duplicate flagging: the account-matched one, else the
       // user's sole portfolio (the unambiguous default the review picker will land on).
       const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
-      await annotateLikelyDuplicates(result.drafts, candidate);
+      await annotateLikelyDuplicates(result.drafts, candidate, PARSER_TAG[resolved] ?? "csv");
       const accountMismatch = candidate
         ? await accountMismatchVerdict(id, detected, candidate)
         : null;
@@ -693,7 +715,7 @@ export async function importsRoute(app: FastifyInstance) {
       const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
       // Candidate portfolio for duplicate flagging: account-matched, else the sole portfolio.
       const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
-      await annotateLikelyDuplicates(result.drafts, candidate);
+      await annotateLikelyDuplicates(result.drafts, candidate, "screenshot");
       const accountMismatch = candidate
         ? await accountMismatchVerdict(id, detectedAccountNumber, candidate)
         : null;
@@ -950,6 +972,89 @@ export async function importsRoute(app: FastifyInstance) {
     },
   );
 
+  // Preview-check: run the economic duplicate analysis for a specific target portfolio
+  // and return per-draft annotations (kind: "enrichment" | "duplicate", matchedTransactionId,
+  // etc.). Does NOT persist anything — lets the review screen show badges immediately after
+  // the user selects/changes the portfolio, before the user clicks Confirm.
+  app.post<{ Params: { importId: string } }>(
+    "/imports/:importId/duplicates",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+
+      const { portfolioId } = z.object({ portfolioId: z.string().uuid() }).parse(request.body);
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      const parsed = (imp.parsedJson ?? {}) as { drafts?: ParsedTransaction[] };
+      const drafts: ParsedTransaction[] = Array.isArray(parsed.drafts) ? parsed.drafts : [];
+      if (drafts.length === 0) return { annotations: [] };
+
+      const rows = await app.db
+        .select({
+          id: transactions.id,
+          type: transactions.type,
+          executedAt: transactions.executedAt,
+          quantity: transactions.quantity,
+          price: transactions.price,
+          source: transactions.source,
+          isin: instruments.isin,
+          wkn: instruments.wkn,
+          name: instruments.name,
+        })
+        .from(transactions)
+        .leftJoin(instruments, eq(instruments.id, transactions.instrumentId))
+        .where(eq(transactions.portfolioId, portfolioId));
+
+      const committed = rows.map((r) => ({
+        id: r.id,
+        key: uploadIdentity(r.isin, r.wkn, r.name),
+        action: r.type,
+        quantity: r.quantity,
+        price: r.price,
+        executedAt: r.executedAt,
+        source: r.source,
+      }));
+      const draftCandidates = drafts.map((d) => ({
+        key: uploadIdentity(d.isin, d.wkn, d.name),
+        action: d.action,
+        quantity: d.quantity,
+        price: d.price,
+        executedAt: d.executedAt,
+      }));
+
+      const incomingSource = parserToTxSource(imp.parser ?? "csv");
+      const importIsFileUpload = incomingSource === "screenshot";
+      const isoDay = (v: Date | string) =>
+        (v instanceof Date ? v.toISOString() : new Date(v).toISOString()).slice(0, 10);
+
+      const annotations = findCrossSourceDuplicates(draftCandidates, committed).map(
+        ({ draftIndex, matched }) => {
+          const d = drafts[draftIndex];
+          const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
+          const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
+          const kind = classifyMatch(incomingSource, matched.source ?? "csv", draftHasEnrichment);
+          return {
+            draftIndex,
+            kind,
+            matchedTransactionId: matched.id,
+            matchedSource: matched.source,
+            matchedExecutedAt: isoDay(matched.executedAt),
+            name: d.name ?? d.isin ?? d.ticker ?? null,
+            action: d.action,
+            quantity: d.quantity,
+            executedAt: isoDay(d.executedAt),
+          };
+        },
+      );
+
+      return { annotations };
+    },
+  );
+
   // Confirm an import: write the (possibly edited) drafts as transactions.
   app.post<{ Params: { importId: string } }>(
     "/imports/:importId/confirm",
@@ -1139,12 +1244,17 @@ export async function importsRoute(app: FastifyInstance) {
         resolved.push({ draft: d, instrumentId });
       }
 
-      // Cross-source duplicate check (#196, hardened to a real backstop in #217): now that
-      // instruments are resolved, find drafts that economically match a transaction already
-      // committed to the target portfolio (tolerant + count-aware, keyed on the resolved
-      // instrumentId). Unlike before, this is authoritative — an *un-acknowledged* economic
-      // duplicate blocks the confirm with a 409 so the user consciously sees it and can either
-      // drop the row or re-confirm with `acknowledgeDuplicates`. It never silently drops a row.
+      // Cross-source duplicate check (#196, hardened to a real backstop in #217, enrichment
+      // classification added in #259): now that instruments are resolved, find drafts that
+      // economically match a transaction already committed to the target portfolio. Matches
+      // are classified into:
+      //   • "enrichment" — different source + import carries a document or taxComponents.
+      //     Auto-applied in pass 2 (links PDF, folds in tax/fees) with no blocking 409.
+      //   • "duplicate" — same source or no new value. Blocks with a 409 unless acknowledged.
+      //
+      // Invariant: confirm owns routing. The advisory upload-time badges are best-effort
+      // (keyed on ISIN/WKN rather than resolved instrumentId); this pass re-classifies
+      // independently and is authoritative.
       //
       // KNOWN RACE (4.3): this SELECT runs outside the write transaction below. Two concurrent
       // confirms of overlapping sources can both clear the 409 and both write. The practical
@@ -1152,6 +1262,9 @@ export async function importsRoute(app: FastifyInstance) {
       // is the same-source `(portfolioId, source, externalId)` unique index which absorbs true
       // re-imports silently. A future hardening pass can re-run this check inside the transaction.
       let likelyDuplicates = 0;
+      // Enrichment matches resolved here, applied in pass 2 BEFORE finalizeReceipts.
+      const enrichmentMatches: Array<{ draftIndex: number; matchedTransactionId: string }> = [];
+      const enrichmentDraftIndices = new Set<number>();
       duplicateCheck: {
         const committed = await app.db
           .select({
@@ -1194,7 +1307,7 @@ export async function importsRoute(app: FastifyInstance) {
           executedAt: d.executedAt,
         }));
 
-        const matches = findCrossSourceDuplicates(draftCandidates, committedCandidates).filter(
+        const allMatches = findCrossSourceDuplicates(draftCandidates, committedCandidates).filter(
           ({ draftIndex }) => {
             // Skip economic matches that are also a guaranteed no-op write (same source +
             // same content externalId already present) — those need no surfacing.
@@ -1203,11 +1316,32 @@ export async function importsRoute(app: FastifyInstance) {
             return !committedExtKeys.has(`${source}|${prospectiveExtId}`);
           },
         );
-        if (matches.length === 0) break duplicateCheck; // no duplicates → likelyDuplicates stays 0
-        likelyDuplicates = matches.length;
+        if (allMatches.length === 0) break duplicateCheck;
+
+        // Check whether this import has a staged document (signals enrichment value).
+        const hasStagedDoc = !!(await getStagedDocumentId(app, imp.id));
+
+        // Classify each match. Enrichments are removed from the insert set and applied in
+        // pass 2; plain duplicates block with a 409 (unless already acknowledged).
+        const plainDuplicates: typeof allMatches = [];
+        for (const match of allMatches) {
+          const d = resolved[match.draftIndex].draft;
+          const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
+          const draftHasEnrichment = hasStagedDoc || !!hasTaxComponents;
+          const kind = classifyMatch(source, match.matched.source ?? "csv", draftHasEnrichment);
+          if (kind === "enrichment") {
+            enrichmentMatches.push({ draftIndex: match.draftIndex, matchedTransactionId: match.matched.id });
+            enrichmentDraftIndices.add(match.draftIndex);
+          } else {
+            plainDuplicates.push(match);
+          }
+        }
+
+        likelyDuplicates = plainDuplicates.length;
+        if (likelyDuplicates === 0) break duplicateCheck;
 
         request.log.info(
-          { importId: imp.id, likelyDuplicates, acknowledged: acknowledgeDuplicates },
+          { importId: imp.id, likelyDuplicates, enrichments: enrichmentMatches.length, acknowledged: acknowledgeDuplicates },
           "confirm: cross-source duplicates among selected drafts",
         );
         if (!acknowledgeDuplicates) {
@@ -1216,7 +1350,7 @@ export async function importsRoute(app: FastifyInstance) {
           return reply.code(409).send({
             error: "duplicate_transactions",
             count: likelyDuplicates,
-            duplicates: matches.map(({ draftIndex, matched }) => {
+            duplicates: plainDuplicates.map(({ draftIndex, matched }) => {
               const d = resolved[draftIndex].draft;
               return {
                 draftIndex,
@@ -1240,10 +1374,15 @@ export async function importsRoute(app: FastifyInstance) {
         seenEventIds?: string[];
       };
       let attempted = 0;
+      let skipped = 0;
       let finalStatus: "draft" | "confirmed" = "draft";
       const created = await app.db.transaction(async (tx) => {
         const written: (typeof transactions.$inferSelect)[] = [];
         for (let i = 0; i < resolved.length; i++) {
+          // Skip drafts that matched an existing transaction as enrichments — they are applied
+          // below (after the transaction) rather than inserted as new rows.
+          if (enrichmentDraftIndices.has(i)) continue;
+
           const { draft: d, instrumentId } = resolved[i];
           attempted++;
           const externalId = d.externalId ?? `import:${imp.id}:${i}`;
@@ -1301,7 +1440,10 @@ export async function importsRoute(app: FastifyInstance) {
                 taxComponents: hasTaxComponents ? (d.taxComponents as Record<string, unknown>) : null,
               })
               .onConflictDoNothing();
-          } else request.log.debug({ externalId }, "duplicate skipped");
+          } else {
+            skipped++;
+            request.log.debug({ externalId }, "duplicate skipped");
+          }
         }
 
         // Financed gold contracts: create the gold instrument + loan, then insert
@@ -1486,10 +1628,48 @@ export async function importsRoute(app: FastifyInstance) {
       // Finalize receipt storage: keep if the portfolio has documentRetention=true,
       // else delete the staged bytes (privacy-by-default). Best-effort (#231).
       const portfolio = await ownedPortfolio(id, targetPortfolioId);
+      const retain = portfolio?.documentRetention ?? false;
+
+      // Auto-enrich: for each draft classified as "enrichment" in duplicateCheck, fold its
+      // fields into the matched existing transaction and link/retain the staged PDF.
+      // Must run BEFORE finalizeReceipts so the staged bytes are still available.
+      // Best-effort: a failure here never blocks the confirm response.
+      let enriched = 0;
+      if (enrichmentMatches.length > 0) {
+        try {
+          for (const { draftIndex, matchedTransactionId } of enrichmentMatches) {
+            const { draft: d } = resolved[draftIndex];
+            await enrichTransactionFromDrafts(
+              matchedTransactionId,
+              app.db,
+              [d],
+              { importId: imp.id, importSource: source },
+            );
+            if (retain) {
+              // Link and retain the staged PDF to the target transaction so it surfaces
+              // in the transaction-detail view (#259 orphan fix). The 1:1 case: single
+              // PDF upload → single matched tx → set documents.transactionId.
+              await retainDocumentForTransaction(app, {
+                importId: imp.id,
+                transactionId: matchedTransactionId,
+                portfolioId: targetPortfolioId,
+              });
+            }
+            enriched++;
+          }
+          request.log.info(
+            { importId: imp.id, enriched },
+            "confirm: auto-enrichment applied",
+          );
+        } catch (err) {
+          request.log.warn({ err }, "confirm: auto-enrichment failed (non-fatal)");
+        }
+      }
+
       await finalizeReceipts(app, {
         importId: imp.id,
         portfolioId: targetPortfolioId,
-        retain: portfolio?.documentRetention ?? false,
+        retain,
       });
 
       request.log.info(
@@ -1497,13 +1677,15 @@ export async function importsRoute(app: FastifyInstance) {
           importId: imp.id,
           attempted,
           written: created.length,
+          enriched,
+          skipped,
           skippedDuplicates: attempted - created.length,
           finalStatus,
         },
         "confirm complete",
       );
       reply.code(201);
-      return { confirmed: created.length, transactions: created, likelyDuplicates };
+      return { confirmed: created.length, transactions: created, likelyDuplicates, enriched, skipped };
     },
   );
 
@@ -1557,6 +1739,11 @@ export async function importsRoute(app: FastifyInstance) {
 
       let enriched = 0;
       const skipped: number[] = [];
+      const portfolio = await ownedPortfolio(id, targetPortfolioId);
+      const retain = portfolio?.documentRetention ?? false;
+
+      // Track whether we've already linked the staged document (one doc per import, 1:1 case).
+      let documentLinked = false;
 
       for (let i = 0; i < enrichments.length; i++) {
         const { draft, targetTransactionId } = enrichments[i];
@@ -1578,11 +1765,31 @@ export async function importsRoute(app: FastifyInstance) {
           [draft],
           { importId: imp.id, importSource: source },
         );
+
+        // Link and retain the staged PDF to the target transaction so it surfaces in the
+        // transaction-detail view. Single-doc-per-import: only link on the first enrichment.
+        if (retain && !documentLinked) {
+          const docId = await retainDocumentForTransaction(app, {
+            importId: imp.id,
+            transactionId: targetTransactionId,
+            portfolioId: targetPortfolioId,
+          });
+          if (docId) documentLinked = true;
+        }
+
         enriched++;
       }
 
+      // If retention is off (or no enrichments retained a doc), clean up any remaining staged
+      // document for this import — the /enrich path previously left docs staged indefinitely.
+      await finalizeReceipts(app, {
+        importId: imp.id,
+        portfolioId: targetPortfolioId,
+        retain,
+      });
+
       request.log.info(
-        { importId: imp.id, enriched, skipped: skipped.length },
+        { importId: imp.id, enriched, skipped: skipped.length, documentLinked },
         "enrich complete",
       );
       return { enriched, skipped };

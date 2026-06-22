@@ -15,6 +15,7 @@ import {
   type ImportTargetPortfolio,
   type ReviewDraft,
 } from "@/components/import-flow";
+import type { DuplicateAnnotation, LikelyDuplicate } from "@portfolio/api-client";
 import { useApiClient } from "@/lib/api";
 import { useImportConfirm } from "@/lib/use-import-confirm";
 import { useRouter } from "@/i18n/navigation";
@@ -45,7 +46,7 @@ export function DraftReviewClient({
   const router = useRouter();
 
   const [drafts, setDrafts] = useState<ReviewDraft[]>(() =>
-    initial.map((d) => withUid(d, importId)),
+    initial.map((d, i) => withUid(d, importId, i)),
   );
   const [issues, setIssues] = useState<ImportIssue[]>(initialIssues);
 
@@ -94,9 +95,22 @@ export function DraftReviewClient({
     setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
   }
 
+  function applyAnnotations(annotations: DuplicateAnnotation[]) {
+    const byServerIdx = new Map(annotations.map((a) => [a.draftIndex, a]));
+    setDrafts((ds) =>
+      ds.map((d) => {
+        const ann = byServerIdx.get(d._serverIdx);
+        const likelyDuplicate: LikelyDuplicate | null = ann
+          ? { kind: ann.kind, source: ann.matchedSource, executedAt: ann.matchedExecutedAt, matchedTransactionId: ann.matchedTransactionId }
+          : null;
+        return { ...d, likelyDuplicate };
+      }),
+    );
+  }
+
   // Promote a mapped issue into a draft, then drop it from the issues list.
   function mapIssue(eventId: string, draft: ImportDraft) {
-    setDrafts((ds) => [...ds, withUid(draft, importId)]);
+    setDrafts((ds) => [...ds, withUid(draft, importId, -1)]);
     setIssues((is) => is.filter((i) => i.eventId !== eventId));
   }
 
@@ -182,7 +196,13 @@ export function DraftReviewClient({
           <PortfolioPicker
             portfolios={portfolios}
             value={portfolioId}
-            onChange={setPortfolioId}
+            onChange={(pid) => {
+              setPortfolioId(pid);
+              void api
+                .checkImportDuplicates(importId, pid)
+                .then(({ annotations }) => applyAnnotations(annotations))
+                .catch(() => {});
+            }}
             ariaLabel={ti("targetPortfolio")}
             triggerClassName="w-full"
           />

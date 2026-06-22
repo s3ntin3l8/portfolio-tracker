@@ -685,14 +685,37 @@ export interface TradeLog {
 /** A draft transaction matched a transaction already committed to the candidate portfolio
  * — likely a cross-format re-import (#196). The review screen pre-deselects these. */
 export interface LikelyDuplicate {
+  /**
+   * "enrichment": different source and the import carries a document or taxComponents.
+   *   → blue info badge; auto-applied at confirm time (no blocking 409).
+   * "duplicate": same source or no new value.
+   *   → amber warning badge; excluded from default "Confirm all", blocks with 409.
+   */
+  kind: "enrichment" | "duplicate";
   /** Source of the already-committed transaction (e.g. "csv", "screenshot"). */
   source: string | null;
   /** When the already-committed transaction executed (ISO date). */
   executedAt: string;
+  /** Id of the matched committed transaction (for the Enrich existing action). */
+  matchedTransactionId?: string;
 }
 
 /** A draft enriched with a cross-source duplicate hint (otherwise a plain ParsedTransaction). */
 export type DraftTransaction = ParsedTransaction & { likelyDuplicate?: LikelyDuplicate };
+
+/** Per-draft annotation returned by the preview duplicate-check endpoint (#259). */
+export interface DuplicateAnnotation {
+  /** Index into the import's stored draft list (parsedJson.drafts). */
+  draftIndex: number;
+  kind: "enrichment" | "duplicate";
+  matchedTransactionId: string;
+  matchedSource: string | null;
+  matchedExecutedAt: string;
+  name: string | null;
+  action: string;
+  quantity: string;
+  executedAt: string;
+}
 
 /** Verdict that a file's account number conflicts with the chosen portfolio (#197). */
 export interface AccountMismatch {
@@ -1203,7 +1226,7 @@ export function createApiClient(config: ApiClientConfig) {
       acknowledgeAccountMismatch = false,
       acknowledgeDuplicates = false,
     ) =>
-      request<{ confirmed: number; transactions: Transaction[]; likelyDuplicates: number }>(
+      request<{ confirmed: number; transactions: Transaction[]; likelyDuplicates: number; enriched: number; skipped: number }>(
         "POST",
         `/imports/${importId}/confirm`,
         {
@@ -1213,6 +1236,17 @@ export function createApiClient(config: ApiClientConfig) {
           acknowledgeAccountMismatch,
           acknowledgeDuplicates,
         },
+      ),
+    /**
+     * Preview which drafts in an import economically duplicate (or enrich) transactions in
+     * the chosen portfolio — without persisting anything. Call this when the user selects or
+     * changes the target portfolio in the review screen so badges appear before Confirm (#259).
+     */
+    checkImportDuplicates: (importId: string, portfolioId: string) =>
+      request<{ annotations: DuplicateAnnotation[] }>(
+        "POST",
+        `/imports/${importId}/duplicates`,
+        { portfolioId },
       ),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */

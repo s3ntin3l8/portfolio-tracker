@@ -9,6 +9,7 @@ const DRAFTS: ReviewDraft[] = [
   {
     uid: "a",
     importId: "imp1",
+    _serverIdx: 0,
     assetClass: "gold",
     action: "buy",
     name: "Antam Gold",
@@ -23,6 +24,7 @@ const DRAFTS: ReviewDraft[] = [
   {
     uid: "b",
     importId: "imp1",
+    _serverIdx: 1,
     assetClass: "stock",
     action: "buy",
     name: "Apple Inc",
@@ -37,6 +39,7 @@ const DRAFTS: ReviewDraft[] = [
   {
     uid: "c",
     importId: "imp1",
+    _serverIdx: 2,
     assetClass: "bond",
     action: "sell",
     name: "FR Bond",
@@ -267,5 +270,66 @@ describe("ImportReview", () => {
     expect(rows[0]).toHaveTextContent("FR Bond");
     expect(rows[1]).toHaveTextContent("Apple Inc");
     expect(rows[2]).toHaveTextContent("Antam Gold");
+  });
+
+  // ── Enrichment vs duplicate badge behavior (#259) ──────────────────────────
+
+  it("shows amber warning badge for a duplicate draft", () => {
+    const draftWithDup: ReviewDraft = {
+      ...DRAFTS[0]!,
+      likelyDuplicate: { kind: "duplicate", source: "csv", executedAt: "2026-02-08" },
+    };
+    renderReview([draftWithDup]);
+    // Badge appears in both the desktop table and the mobile card view.
+    expect(screen.getAllByText(/Already imported/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows default badge for an enrichment draft", () => {
+    const draftWithEnrich: ReviewDraft = {
+      ...DRAFTS[0]!,
+      likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" },
+    };
+    renderReview([draftWithEnrich]);
+    expect(screen.getAllByText(/Enriches existing/i).length).toBeGreaterThan(0);
+  });
+
+  it("shows enrichment notice banner when enrichment drafts are present", () => {
+    const draftsWithEnrich: ReviewDraft[] = [
+      { ...DRAFTS[0]!, likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" } },
+      DRAFTS[1]!,
+    ];
+    renderReview(draftsWithEnrich);
+    expect(screen.getByText(/1 draft will enrich/i)).toBeInTheDocument();
+  });
+
+  it("shows duplicate notice banner when duplicate drafts are present", () => {
+    const draftsWithDup: ReviewDraft[] = [
+      { ...DRAFTS[0]!, likelyDuplicate: { kind: "duplicate", source: "csv", executedAt: "2026-02-08" } },
+      DRAFTS[1]!,
+    ];
+    renderReview(draftsWithDup);
+    expect(screen.getByText(/1 draft looks like it was already imported/i)).toBeInTheDocument();
+  });
+
+  it("enrichment draft is included in confirm-all (no subset passed)", () => {
+    const { onConfirm } = renderReview([
+      { ...DRAFTS[0]!, likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" } },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
+    // confirm-all passes undefined so the hook applies its own filter
+    expect(onConfirm).toHaveBeenCalledWith(undefined);
+  });
+
+  it("isSubmitting=true disables buttons without unmounting the component", () => {
+    const h = handlers();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportReview drafts={DRAFTS} {...h} isSubmitting={true} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: messages.Import.confirm })).toBeDisabled();
+    expect(screen.getByRole("button", { name: messages.Import.discard })).toBeDisabled();
+    // Component is still mounted — drafts are still rendered (appears in table + mobile card)
+    expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0);
   });
 });
