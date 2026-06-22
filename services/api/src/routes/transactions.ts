@@ -48,6 +48,8 @@ import {
   aggregateValueFlows,
   computeTrades,
   mergeTradeLogs,
+  allowanceUsageYTD,
+  harvestSuggestions,
   type CoreTransaction,
   type CostBasisMode,
   type CorporateAction,
@@ -1894,6 +1896,211 @@ export async function transactionsRoute(app: FastifyInstance) {
       void reply.header("Content-Disposition", `attachment; filename="${archiveName}"`);
       void reply.header("Content-Length", String(zipped.length));
       return reply.code(200).send(Buffer.from(zipped));
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // German tax optimization: Sparerpauschbetrag headroom + harvest suggestions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build a per-instrumentId Teilfreistellung rate map for a set of instrument ids.
+   *
+   * Priority:
+   *   1. `partial_exemption_rate` column (explicit per-instrument override).
+   *   2. Asset-class default under German InvStG §20 Abs. 9:
+   *        etf          → 30 % (equity ETF — the overwhelming common case)
+   *        mutual_fund  → 15 % (mixed fund; equity funds also qualify at 30 %, but
+   *                             we conservatively default to 15 % for unclassified
+   *                             mutual funds; users can override via the column)
+   *        all others   → 0 % (stocks, bonds, gold, cash — no exemption)
+   *
+   * Only instruments with a non-zero rate appear in the returned map; absent =
+   * core treats as 0 (correct for stocks/bonds/gold).
+   */
+  async function tfRatesFor(instrumentIds: (string | null)[]): Promise<Record<string, string>> {
+    const ids = [...new Set(instrumentIds.filter((x): x is string => x !== null))];
+    if (ids.length === 0) return {};
+    const rows = await app.db
+      .select({
+        id: instruments.id,
+        partialExemptionRate: instruments.partialExemptionRate,
+        assetClass: instruments.assetClass,
+      })
+      .from(instruments)
+      .where(inArray(instruments.id, ids));
+    const map: Record<string, string> = {};
+    for (const r of rows) {
+      if (r.partialExemptionRate !== null) {
+        // Explicit per-instrument override always wins.
+        map[r.id] = r.partialExemptionRate;
+      } else if (r.assetClass === "etf") {
+        map[r.id] = "0.30"; // §20 Abs. 9 InvStG — equity ETF
+      } else if (r.assetClass === "mutual_fund") {
+        map[r.id] = "0.15"; // §20 Abs. 9 InvStG — mixed/unclassified fund
+      }
+      // stocks, bonds, gold, cash → omit (core defaults to 0 %)
+    }
+    return map;
+  }
+
+  /**
+   * GET /portfolios/:portfolioId/tax
+   * German Sparerpauschbetrag headroom and harvest suggestions for a single portfolio.
+   * The portfolio's holder must have `taxAllowanceAnnual` configured.
+   */
+  app.get<{ Params: PortfolioParams; Querystring: { year?: string; holderId?: string } }>(
+    "/portfolios/:portfolioId/tax",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+
+      const portfolio = await ownedPortfolio(id, portfolioId);
+      if (!portfolio) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      // Fetch holder (if any) for tax profile.
+      const holderId = portfolio.accountHolderId;
+      let holderTaxProfile: {
+        taxAllowanceAnnual: string | null;
+        capitalGainsTaxRate: string | null;
+      } | null = null;
+
+      if (holderId) {
+        const [holder] = await app.db
+          .select({
+            taxAllowanceAnnual: accountHolders.taxAllowanceAnnual,
+            capitalGainsTaxRate: accountHolders.capitalGainsTaxRate,
+          })
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (holder) holderTaxProfile = holder;
+      }
+
+      if (!holderTaxProfile?.taxAllowanceAnnual) {
+        return reply.code(422).send({ error: "tax_allowance_not_configured" });
+      }
+
+      const year = request.query.year ? parseInt(request.query.year, 10) : new Date().getUTCFullYear();
+      const { coreTxns, prices, metaById } = await loadValuation(
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
+      );
+      const tradeLog = await buildTradeLog(coreTxns, prices, portfolio.baseCurrency, "fifo", undefined, metaById);
+      const tfRates = await tfRatesFor(tradeLog.trades.map((t) => t.instrumentId));
+      const allowanceAnnual = holderTaxProfile.taxAllowanceAnnual;
+      const taxRate = holderTaxProfile.capitalGainsTaxRate ?? "0.25";
+
+      const usage = allowanceUsageYTD({ tradeLog, tfRates, allowanceAnnual, taxRate, year });
+      const suggestions = harvestSuggestions({ tradeLog, tfRates, allowanceAnnual, taxRate, year, usage });
+
+      return {
+        year,
+        currency: portfolio.baseCurrency,
+        allowanceUsage: usage,
+        harvestSuggestions: suggestions.map((s) => ({
+          ...s,
+          instrument: metaById.get(s.instrumentId) ?? null,
+        })),
+      };
+    },
+  );
+
+  /**
+   * GET /networth/tax
+   * Aggregated German tax summary across all of the user's portfolios (or filtered by
+   * holderId).  Returns one entry per holder that has a `taxAllowanceAnnual` configured.
+   */
+  app.get<{ Querystring: { year?: string; holderId?: string } }>(
+    "/networth/tax",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { holderId: filterHolderId } = request.query;
+      const year = request.query.year ? parseInt(request.query.year, 10) : new Date().getUTCFullYear();
+
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+
+      // If a holderId is specified, validate it belongs to the user.
+      if (filterHolderId != null) {
+        const [holder] = await app.db
+          .select()
+          .from(accountHolders)
+          .where(and(eq(accountHolders.id, filterHolderId), eq(accountHolders.userId, id)))
+          .limit(1);
+        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      }
+
+      // Fetch all holders with tax allowances configured.
+      const holderRows = await app.db
+        .select()
+        .from(accountHolders)
+        .where(
+          filterHolderId != null
+            ? and(eq(accountHolders.userId, id), eq(accountHolders.id, filterHolderId))
+            : eq(accountHolders.userId, id),
+        );
+
+      const result = [];
+
+      for (const holder of holderRows) {
+        if (!holder.taxAllowanceAnnual) continue; // skip unconfigured holders
+
+        // Portfolios belonging to this holder.
+        const pfs = await app.db
+          .select({ id: portfolios.id, cashCounted: portfolios.cashCounted })
+          .from(portfolios)
+          .where(and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holder.id)));
+
+        if (pfs.length === 0) continue;
+
+        // Merge trade logs across all portfolios.
+        const logs: TradeLog[] = [];
+        const meta = new Map<string, InstrumentMeta>();
+        for (const p of pfs) {
+          const { coreTxns, prices, metaById } = await loadValuation(p.id, display, undefined, p.cashCounted);
+          logs.push(await buildTradeLog(coreTxns, prices, display, "fifo", undefined, metaById));
+          for (const [k, v] of metaById) meta.set(k, v);
+        }
+        const mergedLog = mergeTradeLogs(logs, display, "fifo");
+
+        const tfRates = await tfRatesFor(mergedLog.trades.map((t) => t.instrumentId));
+        const allowanceAnnual = holder.taxAllowanceAnnual;
+        const taxRate = holder.capitalGainsTaxRate ?? "0.25";
+
+        const usage = allowanceUsageYTD({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year });
+        const suggestions = harvestSuggestions({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, usage });
+
+        result.push({
+          holder: {
+            id: holder.id,
+            name: holder.name,
+            taxAllowanceAnnual: holder.taxAllowanceAnnual,
+            capitalGainsTaxRate: holder.capitalGainsTaxRate,
+            churchTax: holder.churchTax,
+            taxResidence: holder.taxResidence,
+          },
+          year,
+          currency: display,
+          allowanceUsage: usage,
+          harvestSuggestions: suggestions.map((s) => ({
+            ...s,
+            instrument: meta.get(s.instrumentId) ?? null,
+          })),
+        });
+      }
+
+      return result;
     },
   );
 }

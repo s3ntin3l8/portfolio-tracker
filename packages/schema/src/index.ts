@@ -79,6 +79,11 @@ export const accountHolderInputSchema = z.object({
   type: z.enum(["self", "child", "other"]).default("other"),
   // Optional birth year — powers the "to age 18" forecast for a child.
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  // German tax profile (all optional).
+  taxAllowanceAnnual: decimalString.nullable().optional(),
+  capitalGainsTaxRate: decimalString.nullable().optional(),
+  churchTax: z.boolean().nullable().optional(),
+  taxResidence: z.string().trim().length(2).nullable().optional(),
 });
 export type AccountHolderInput = z.infer<typeof accountHolderInputSchema>;
 
@@ -87,6 +92,15 @@ export const accountHolderPatchSchema = z.object({
   name: z.string().trim().min(1).optional(),
   type: z.enum(["self", "child", "other"]).optional(),
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  // German tax profile fields (all optional; null clears the value).
+  // Annual Sparerpauschbetrag — decimal string, e.g. "1000" (€1,000).
+  taxAllowanceAnnual: decimalString.nullable().optional(),
+  // Flat Kapitalertragsteuer rate — decimal string, e.g. "0.25" (25%).
+  capitalGainsTaxRate: decimalString.nullable().optional(),
+  // Church-tax surcharge flag.
+  churchTax: z.boolean().nullable().optional(),
+  // ISO-3166-1 alpha-2 tax residence, e.g. "DE".
+  taxResidence: z.string().trim().length(2).nullable().optional(),
 });
 export type AccountHolderPatch = z.infer<typeof accountHolderPatchSchema>;
 

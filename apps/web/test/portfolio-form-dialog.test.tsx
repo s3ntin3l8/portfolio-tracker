@@ -28,6 +28,10 @@ const createAccountHolder = vi.fn(
     name: input.name,
     type: input.type as AccountHolder["type"],
     birthYear: input.birthYear,
+    taxAllowanceAnnual: null,
+    capitalGainsTaxRate: null,
+    churchTax: null,
+    taxResidence: null,
     createdAt: "2026-01-01T00:00:00.000Z",
   }),
 );
@@ -148,7 +152,7 @@ describe("PortfolioFormDialog", () => {
 
   it("links an existing account holder when one is picked", async () => {
     listAccountHolders.mockResolvedValue([
-      { id: "h1", userId: "u1", name: "Emma", type: "child", birthYear: 2017, createdAt: "x" },
+      { id: "h1", userId: "u1", name: "Emma", type: "child", birthYear: 2017, taxAllowanceAnnual: null, capitalGainsTaxRate: null, churchTax: null, taxResidence: null, createdAt: "x" },
     ]);
     renderCreate();
     fireEvent.click(screen.getByRole("button", { name: m.new }));

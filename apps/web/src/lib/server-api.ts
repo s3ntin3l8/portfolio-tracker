@@ -27,6 +27,7 @@ import {
   type AdminJobsResponse,
   type ImportStrategy,
   type AdminStorageResponse,
+  type TaxSummaryHolder,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import {
@@ -721,5 +722,20 @@ export async function loadPortfolio<T>(
     return { status: "ok", portfolio, data };
   } catch {
     return { status: "unavailable" };
+  }
+}
+
+/**
+ * Load German tax summary (Sparerpauschbetrag headroom + harvest suggestions)
+ * across all holders with a configured allowance. Returns an empty array when
+ * the API is unavailable or no holders are configured.
+ */
+export async function loadNetworthTax(year?: number): Promise<TaxSummaryHolder[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.getNetworthTax(year);
+  } catch {
+    return [];
   }
 }

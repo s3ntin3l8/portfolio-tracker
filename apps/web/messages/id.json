@@ -38,7 +38,8 @@
     "settings": "Pengaturan",
     "admin": "Admin",
     "signOut": "Keluar",
-    "trades": "Catatan Dagang"
+    "trades": "Catatan Dagang",
+    "tax": "Pajak"
   },
   "Admin": {
     "title": "Admin",
@@ -256,7 +257,14 @@
     "error": "Tidak dapat menyimpan pemilik. Silakan coba lagi.",
     "delete": "Hapus pemilik",
     "deleteWarning": "Portofolio yang memakai pemilik ini akan menjadi tidak terhubung.",
-    "confirmDelete": "Hapus"
+    "confirmDelete": "Hapus",
+    "taxProfileSection": "Profil pajak (DE)",
+    "taxResidence": "Domisili pajak",
+    "taxAllowance": "Batas bebas pajak tahunan (Sparerpauschbetrag)",
+    "taxAllowanceHint": "€1.000 untuk lajang; €2.000 untuk pasangan yang dihitung bersama.",
+    "capitalGainsTaxRate": "Tarif pajak keuntungan modal",
+    "capitalGainsTaxRateHint": "0,25 (25% KapSt) atau 0,26375 termasuk Soli.",
+    "churchTax": "Pajak gereja (Kirchensteuer)"
   },
   "PortfolioSwitcher": {
     "label": "Portofolio",
@@ -957,5 +965,32 @@
     "saveError": "Gagal menyimpan target.",
     "recommendedSplit": "Pembagian bulanan yang disarankan",
     "amount": "Jumlah"
+  },
+  "Tax": {
+    "title": "Optimasi Pajak",
+    "subtitle": "Sisa Sparerpauschbetrag dan saran panen bebas pajak. Khusus pajak Jerman.",
+    "empty": {
+      "title": "Batas pajak belum dikonfigurasi",
+      "description": "Tambahkan Sparerpauschbetrag pada pemilik akun di Pengaturan untuk melihat sisa batas dan saran panen."
+    },
+    "allowance": {
+      "annual": "Batas tahunan",
+      "annualDesc": "Sparerpauschbetrag per tahun",
+      "used": "Terpakai YTD",
+      "usedDesc": "Keuntungan terkena Tf + pendapatan",
+      "remaining": "Sisa",
+      "taxSaving": "Penghematan pajak tersedia",
+      "usedPct": "{pct}% terpakai",
+      "gains": "keuntungan",
+      "income": "pendapatan"
+    },
+    "harvest": {
+      "title": "Saran panen",
+      "subtitle": "Posisi terbuka yang bisa dijual sebagian untuk memanfaatkan sisa batas bebas pajak.",
+      "unrealized": "Keuntungan belum direalisasi",
+      "harvestable": "Dapat dipanen",
+      "taxSaving": "Penghematan pajak",
+      "tfApplied": "TF {pct}% diterapkan"
+    }
   }
 }
