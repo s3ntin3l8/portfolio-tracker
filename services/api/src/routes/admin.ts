@@ -710,11 +710,11 @@ export async function adminRoute(app: FastifyInstance) {
         }>(sql`
           SELECT
             name,
-            MAX(completedon) FILTER (WHERE state = 'completed') AS last_completed,
-            MAX(completedon) FILTER (WHERE state = 'failed')    AS last_failed
+            MAX(completed_on) FILTER (WHERE state = 'completed') AS last_completed,
+            MAX(completed_on) FILTER (WHERE state = 'failed')    AS last_failed
           FROM pgboss.job
           WHERE name = ANY(${queueNames})
-            AND completedon > NOW() - INTERVAL '30 days'
+            AND completed_on > NOW() - INTERVAL '30 days'
           GROUP BY name
         `);
         liveRows = rows.map((r) => {
@@ -726,9 +726,10 @@ export async function adminRoute(app: FastifyInstance) {
           const lastStatus: "completed" | "failed" = c && (!f || c >= f) ? "completed" : "failed";
           return { name: r.name, lastRunAt, lastStatus };
         });
-      } catch {
+      } catch (err) {
         // pgboss schema may not exist yet (first boot before scheduler started).
         // Fall through with empty liveRows.
+        app.log.warn({ err }, "admin jobs status query failed");
       }
     }
 
@@ -739,6 +740,7 @@ export async function adminRoute(app: FastifyInstance) {
       label: d.label,
       description: d.description,
       cron: d.cron,
+      supportsForce: (d as { supportsForce?: boolean }).supportsForce ?? false,
       lastRunAt: liveMap.get(d.name)?.lastRunAt ?? null,
       lastStatus: liveMap.get(d.name)?.lastStatus ?? null,
     }));

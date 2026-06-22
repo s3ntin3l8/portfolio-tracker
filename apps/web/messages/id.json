@@ -99,6 +99,8 @@
     "jobRunning": "Sedang berjalan…",
     "jobQueued": "Diantrekan ✓",
     "jobTriggerFailed": "Tidak dapat mengantrekan pekerjaan. Apakah scheduler sedang berjalan?",
+    "jobForce": "Paksa jalankan ulang",
+    "jobPollTimedOut": "Masih berjalan; muat ulang untuk memeriksa status.",
     "keyFromEnv": "dari .env",
     "dragHandle": "Seret untuk mengurutkan",
     "providerName": "Penyedia",

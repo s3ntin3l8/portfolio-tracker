@@ -45,11 +45,14 @@ export function needsSectorEnrichment(
  * and persist it onto the instrument row.
  *
  * - **Stocks (equity):** writes `sector` (single GICS string).
- * - **ETFs:** writes `sectorWeights` (per-sector fraction map from EODHD ETF_Data).
+ * - **ETFs:** writes `sectorWeights` (per-sector fraction map).
  *
  * `sectorCheckedAt` is **always** stamped on every attempt, even when the provider
  * returns nothing — this prevents the job from re-querying instruments indefinitely
  * when the provider has no sector data for them. They will be retried after STALE_DAYS.
+ *
+ * When `opts.force` is true, all held non-skip instruments are re-enriched regardless
+ * of `sectorCheckedAt`. Useful after fixing a broken provider configuration.
  *
  * Runs on a weekly schedule (see scheduler.ts) and is also triggered on-demand by
  * the self-heal hook in the allocation endpoints. Skips asset classes where sector
@@ -60,6 +63,7 @@ export function needsSectorEnrichment(
 export async function refreshInstrumentMetadata(
   db: DB,
   service: MarketDataService,
+  opts: { force?: boolean } = {},
 ): Promise<number> {
   // Only instruments held (referenced by at least one transaction) are worth
   // enriching — instruments in the catalogue but never transacted are skipped.
@@ -81,12 +85,14 @@ export async function refreshInstrumentMetadata(
   const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
   const toEnrich = rows.filter((i) => {
     if (SKIP_ASSET_CLASSES.has(i.assetClass)) return false;
+    if (opts.force) return true; // force: ignore sectorCheckedAt
     if (i.sectorCheckedAt == null) return true;
     return new Date(i.sectorCheckedAt) < staleCutoff;
   });
   if (toEnrich.length === 0) return 0;
 
   let enriched = 0;
+  let skipped = 0;
   for (const inst of toEnrich) {
     try {
       const profile = await service.getProfile({
@@ -115,18 +121,29 @@ export async function refreshInstrumentMetadata(
         enriched++;
       } else {
         // Provider returned nothing useful — stamp the attempt so we don't retry
-        // until STALE_DAYS have passed.
+        // until STALE_DAYS have passed, and note it for the run summary.
         await db
           .update(instruments)
           .set({ sectorCheckedAt: now })
           .where(eq(instruments.id, inst.id));
+        skipped++;
+        console.warn(
+          `[instrument-metadata] no sector data for ${inst.symbol} (${inst.market}, ${inst.assetClass}) — provider returned null; will retry after ${STALE_DAYS} days`,
+        );
       }
-    } catch {
-      // Non-fatal: log via pg-boss job failure tracking; instrument retried after stale.
-      // We deliberately do NOT stamp sectorCheckedAt on exception so a transient
-      // network error doesn't suppress the instrument for 30 days.
+    } catch (err) {
+      // Non-fatal: log the error. We deliberately do NOT stamp sectorCheckedAt on
+      // exception so a transient network error doesn't suppress the instrument for
+      // 30 days — it will be retried on the next scheduled run.
+      console.warn(
+        `[instrument-metadata] getProfile failed for ${inst.symbol} (${inst.market}, ${inst.assetClass}):`,
+        err,
+      );
     }
   }
 
+  console.info(
+    `[instrument-metadata] batch complete — enriched: ${enriched}, no-data: ${skipped}, total attempted: ${toEnrich.length}`,
+  );
   return enriched;
 }

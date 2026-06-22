@@ -511,6 +511,26 @@ describe("auth + portfolios + transactions", () => {
     expect(patch.json()).toMatchObject({ id: inst.id, isin: "DE0007236101", wkn: "723610" });
   });
 
+  it("patches an instrument's market (corrects a mis-mapped import)", async () => {
+    const t = await token("user-a");
+    const create = await app.inject({
+      method: "POST",
+      url: "/instruments",
+      headers: auth(t),
+      payload: { symbol: "AMZN", market: "PE", assetClass: "equity", currency: "USD", name: "Amazon" },
+    });
+    const inst = create.json();
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/instruments/${inst.id}`,
+      headers: auth(t),
+      payload: { market: "US" },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json()).toMatchObject({ id: inst.id, market: "US" });
+  });
+
   it("returns 409 when patching an instrument with an ISIN already owned by another row", async () => {
     const t = await token("user-a");
     const isin = "DE000SAP0011";

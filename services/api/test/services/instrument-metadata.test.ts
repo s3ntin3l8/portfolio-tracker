@@ -218,4 +218,58 @@ describe("refreshInstrumentMetadata", () => {
     // Gold must never be passed to getProfile.
     expect(callCount).toBe(0);
   });
+
+  // ── force option ──────────────────────────────────────────────────────────
+
+  it("force=true re-enriches an instrument with a fresh sectorCheckedAt", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "FORCE_FRESH_TEST",
+      assetClass: "equity",
+      sectorCheckedAt: new Date(), // just checked — would normally be skipped
+    });
+
+    let callCount = 0;
+    const svc = {
+      getProfile: async () => {
+        callCount++;
+        return { sector: "Industrials" };
+      },
+    } as unknown as MarketDataService;
+
+    const enriched = await refreshInstrumentMetadata(db, svc, { force: true });
+
+    // force=true must bypass the sectorCheckedAt gate.
+    expect(callCount).toBeGreaterThanOrEqual(1);
+    expect(enriched).toBeGreaterThanOrEqual(1);
+
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.sector).toBe("Industrials");
+  });
+
+  it("force=true still skips SKIP_ASSET_CLASSES (gold)", async () => {
+    const db = getDb();
+    await createHeld({
+      symbol: "FORCE_GOLD_TEST",
+      assetClass: "gold",
+      sectorCheckedAt: new Date(),
+    });
+
+    // Track which symbols were passed to getProfile.
+    // With force=true, all non-gold/non-skipped held instruments from previous
+    // tests in this shared PGlite DB will also be enriched — so we can't assert
+    // callCount === 0. Instead assert that the gold instrument was never passed.
+    const calledSymbols: string[] = [];
+    const svc = {
+      getProfile: async (ref: { symbol: string }) => {
+        calledSymbols.push(ref.symbol);
+        return null;
+      },
+    } as unknown as MarketDataService;
+
+    await refreshInstrumentMetadata(db, svc, { force: true });
+
+    // Gold must never be passed to getProfile regardless of force.
+    expect(calledSymbols).not.toContain("FORCE_GOLD_TEST");
+  });
 });

@@ -21,5 +21,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "yahoo-finance2": "^2.11.3"
   }
 }

@@ -109,6 +109,7 @@ export const JOB_DESCRIPTORS = [
     label: "Instrument metadata refresh",
     description: "Fetch sector/industry/country from market-data providers for held instruments missing a sector.",
     cron: INSTRUMENT_META_CRON,
+    supportsForce: true,
   },
   {
     name: GC_RECEIPTS_QUEUE,
@@ -122,6 +123,7 @@ export const JOB_DESCRIPTORS = [
     description:
       "Find portfolios whose value-over-time history doesn't reach back to inception and backfill them. Idempotent — near-no-op once all portfolios are healed.",
     cron: BACKFILL_STALE_CRON,
+    supportsForce: true,
   },
 ] as const;
 
@@ -306,12 +308,18 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
 
   // Weekly instrument-metadata refresh: fetch sector/industry/country for held
   // instruments still missing a sector and write it onto the instrument row.
+  // Accepts { force: true } payload (from admin panel "Force re-run") to re-enrich
+  // all held instruments regardless of sectorCheckedAt.
   await boss.createQueue(INSTRUMENT_META_QUEUE);
-  await boss.work(INSTRUMENT_META_QUEUE, async () => {
+  await boss.work(INSTRUMENT_META_QUEUE, async (jobs) => {
+    const force =
+      Array.isArray(jobs) && jobs.length > 0
+        ? Boolean((jobs[0]?.data as Record<string, unknown> | null)?.force)
+        : false;
     try {
-      const count = await refreshInstrumentMetadata(getDb(), await getMarketData());
+      const count = await refreshInstrumentMetadata(getDb(), await getMarketData(), { force });
       await flushUsage();
-      app.log.info({ count }, "instrument metadata refresh complete");
+      app.log.info({ count, force }, "instrument metadata refresh complete");
     } catch (err) {
       app.log.error({ err }, "instrument metadata refresh failed");
     }

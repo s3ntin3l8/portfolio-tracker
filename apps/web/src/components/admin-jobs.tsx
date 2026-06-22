@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,33 +28,72 @@ function StatusBadge({ status }: { status: AdminJob["lastStatus"] }) {
   );
 }
 
-function TriggerButton({ name, onTriggered }: { name: string; onTriggered: () => void }) {
+interface TriggerButtonProps {
+  name: string;
+  supportsForce?: boolean;
+  onTriggered: (priorLastRunAt: string | null, force: boolean) => void;
+  currentLastRunAt: string | null;
+}
+
+function TriggerButton({ name, supportsForce, onTriggered, currentLastRunAt }: TriggerButtonProps) {
   const t = useTranslations("Admin");
   const api = useApiClient();
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
+  const [forcePending, setForcePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleClick() {
+  async function trigger(force: boolean) {
     setError(null);
-    startTransition(async () => {
-      try {
-        await api.triggerAdminJob(name);
-        onTriggered();
-      } catch {
-        setError(t("jobTriggerFailed"));
-      }
-    });
+    if (force) setForcePending(true);
+    else setPending(true);
+    try {
+      await api.triggerAdminJob(name, force ? { force: true } : undefined);
+      onTriggered(currentLastRunAt, force);
+    } catch {
+      setError(t("jobTriggerFailed"));
+    } finally {
+      if (force) setForcePending(false);
+      else setPending(false);
+    }
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button size="sm" variant="outline" onClick={handleClick} disabled={pending}>
-        {pending ? t("jobRunning") : t("jobRunNow")}
-      </Button>
+      <div className="flex gap-1">
+        <Button size="sm" variant="outline" onClick={() => { void trigger(false); }} disabled={pending || forcePending}>
+          {pending ? t("jobRunning") : t("jobRunNow")}
+        </Button>
+        {supportsForce && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => { void trigger(true); }}
+            disabled={pending || forcePending}
+            aria-label={t("jobForce")}
+            title={t("jobForce")}
+          >
+            {forcePending ? t("jobRunning") : t("jobForce")}
+          </Button>
+        )}
+      </div>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
 }
+
+interface PendingEntry {
+  /** The lastRunAt value at the time the job was triggered. Poll until it changes. */
+  priorLastRunAt: string | null;
+  /**
+   * Set to true when the poll loop times out without seeing a lastRunAt change.
+   * Kept in the pending map (not deleted) so the render can show the hint.
+   * The entry is excluded from polling via `hasPending`.
+   */
+  timedOut?: boolean;
+}
+
+const POLL_INTERVAL_MS = 3_000;
+const MAX_POLLS = 10;
 
 interface AdminJobsProps {
   initialJobs: AdminJob[];
@@ -63,7 +102,69 @@ interface AdminJobsProps {
 
 export function AdminJobs({ initialJobs, schedulerAvailable }: AdminJobsProps) {
   const t = useTranslations("Admin");
-  const [triggeredAt, setTriggeredAt] = useState<Record<string, string>>({});
+  const api = useApiClient();
+  const [jobs, setJobs] = useState<AdminJob[]>(initialJobs);
+  /**
+   * Map of job name → pending entry.
+   * - Active poll: `{ priorLastRunAt, timedOut: undefined }`
+   * - Timed out:   `{ priorLastRunAt, timedOut: true }` (still in map so render can show hint)
+   * - Completed:   entry deleted
+   */
+  const [pending, setPending] = useState<Record<string, PendingEntry>>({});
+  /** Poll-attempt counter per job. Only accessed inside effects — never read during render. */
+  const pollCounts = useRef<Record<string, number>>({});
+
+  // Only consider entries that are still actively being polled (not timed out).
+  const hasPending = Object.values(pending).some((e) => !e.timedOut);
+
+  useEffect(() => {
+    if (!hasPending) return;
+
+    const id = setInterval(async () => {
+      let fresh: AdminJob[] | null = null;
+      try {
+        const result = await api.getAdminJobs();
+        fresh = result.jobs;
+      } catch {
+        // transient error — keep polling
+        return;
+      }
+
+      setPending((prev) => {
+        const next = { ...prev };
+        for (const [name, entry] of Object.entries(prev)) {
+          if (entry.timedOut) continue; // already timed out — skip
+          pollCounts.current[name] = (pollCounts.current[name] ?? 0) + 1;
+          const freshJob = fresh?.find((j) => j.name === name);
+          const didTimeOut = pollCounts.current[name] >= MAX_POLLS;
+
+          if (didTimeOut) {
+            // Mark timed out in the map so the render can show the hint.
+            // Keep the entry so `!isPending && timedOut` can be detected in the render.
+            next[name] = { ...entry, timedOut: true };
+          } else if (!freshJob) {
+            // Job disappeared from the scheduler — stop waiting silently.
+            delete next[name];
+            delete pollCounts.current[name];
+          } else if (freshJob.lastRunAt !== entry.priorLastRunAt) {
+            // lastRunAt changed — job completed (or a newer run appeared).
+            delete next[name];
+            delete pollCounts.current[name];
+          }
+        }
+        return next;
+      });
+
+      if (fresh) {
+        // Merge fresh data into our job list (don't clobber pending rows prematurely).
+        setJobs((prev) =>
+          prev.map((job) => fresh!.find((f) => f.name === job.name) ?? job),
+        );
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, [hasPending, api]);
 
   if (!schedulerAvailable) {
     return (
@@ -94,38 +195,51 @@ export function AdminJobs({ initialJobs, schedulerAvailable }: AdminJobsProps) {
           </tr>
         </thead>
         <tbody>
-          {initialJobs.map((job) => (
-            <tr key={job.name} className="border-b border-border last:border-0">
-              <td className="px-3 py-2">
-                <div className="font-medium">{job.label}</div>
-                <div className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
-                  {job.description}
-                </div>
-              </td>
-              <td className="px-3 py-2 hidden sm:table-cell">
-                <code className="text-xs bg-muted px-1 py-0.5 rounded">{job.cron ?? "on-demand"}</code>
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {triggeredAt[job.name]
-                  ? <span className="text-xs text-green-600">{t("jobQueued")}</span>
-                  : <span className="text-xs">{formatRelative(job.lastRunAt)}</span>}
-              </td>
-              <td className="px-3 py-2 hidden sm:table-cell">
-                <StatusBadge status={job.lastStatus} />
-              </td>
-              <td className="px-3 py-2 text-right">
-                <TriggerButton
-                  name={job.name}
-                  onTriggered={() =>
-                    setTriggeredAt((prev) => ({
-                      ...prev,
-                      [job.name]: new Date().toISOString(),
-                    }))
-                  }
-                />
-              </td>
-            </tr>
-          ))}
+          {jobs.map((job) => {
+            const entry = pending[job.name];
+            const isPending = Boolean(entry) && !entry?.timedOut;
+            const timedOut = Boolean(entry?.timedOut);
+            return (
+              <tr key={job.name} className="border-b border-border last:border-0">
+                <td className="px-3 py-2">
+                  <div className="font-medium">{job.label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
+                    {job.description}
+                  </div>
+                </td>
+                <td className="px-3 py-2 hidden sm:table-cell">
+                  <code className="text-xs bg-muted px-1 py-0.5 rounded">{job.cron ?? "on-demand"}</code>
+                </td>
+                <td className="px-3 py-2 text-muted-foreground" aria-live="polite">
+                  {isPending ? (
+                    <span className="text-xs text-green-600">{t("jobQueued")}</span>
+                  ) : timedOut ? (
+                    <span className="text-xs text-amber-600">{t("jobPollTimedOut")}</span>
+                  ) : (
+                    <span className="text-xs">{formatRelative(job.lastRunAt)}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 hidden sm:table-cell">
+                  <StatusBadge status={job.lastStatus} />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <TriggerButton
+                    name={job.name}
+                    supportsForce={job.supportsForce}
+                    currentLastRunAt={job.lastRunAt}
+                    onTriggered={(priorLastRunAt) => {
+                      pollCounts.current[job.name] = 0;
+                      setPending((prev) => ({
+                        ...prev,
+                        // Fresh entry clears any previous timedOut flag.
+                        [job.name]: { priorLastRunAt },
+                      }));
+                    }}
+                  />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

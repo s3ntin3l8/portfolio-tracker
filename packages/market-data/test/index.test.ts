@@ -1022,6 +1022,189 @@ describe("EodhdProvider", () => {
   });
 });
 
+// ─── YahooFinanceProvider getProfile ─────────────────────────────────────────
+
+/**
+ * Helper: build a mock fetch for YahooFinanceProvider.getProfile tests.
+ *
+ * The flow is: fc.yahoo.com (cookie) → getcrumb → quoteSummary.
+ * Unlike the generic mockFetch helper, this returns proper Response-shaped
+ * objects with `headers.get()` (needed by getYahooCrumb) and `text()` (needed
+ * by the crumb endpoint — it returns plain text, not JSON).
+ */
+function yahooProfileFetch(
+  quoteSummaryBody: unknown,
+  opts: { crumbStatus?: number; summaryOk?: boolean } = {},
+) {
+  return (async (url: string, _init?: RequestInit) => {
+    const { hostname, pathname } = new URL(url);
+    if (hostname === "fc.yahoo.com") {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (k: string) =>
+            k.toLowerCase() === "set-cookie"
+              ? "A3=d_abc123; Path=/; Domain=.yahoo.com"
+              : null,
+        },
+        json: async () => ({}),
+        text: async () => "",
+      } as unknown as Response;
+    }
+    if (pathname.includes("getcrumb")) {
+      const ok = opts.crumbStatus === undefined || opts.crumbStatus === 200;
+      return {
+        ok,
+        status: ok ? 200 : (opts.crumbStatus ?? 500),
+        headers: { get: () => null },
+        json: async () => ({}),
+        text: async () => (ok ? "test-crumb-abc123" : ""),
+      } as unknown as Response;
+    }
+    // quoteSummary
+    const ok = opts.summaryOk !== false;
+    return {
+      ok,
+      status: ok ? 200 : 403,
+      headers: { get: () => null },
+      json: async () => quoteSummaryBody,
+      text: async () => "",
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+}
+
+describe("YahooFinanceProvider getProfile", () => {
+  it("returns sector/industry/country for a US equity", async () => {
+    const msft: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const body = {
+      quoteSummary: {
+        result: [
+          {
+            assetProfile: {
+              sector: "Technology",
+              industry: "Software—Infrastructure",
+              country: "United States",
+            },
+          },
+        ],
+      },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    const profile = await p.getProfile(msft);
+    expect(profile).not.toBeNull();
+    expect(profile?.sector).toBe("Technology");
+    expect(profile?.industry).toBe("Software—Infrastructure");
+    expect(profile?.country).toBe("United States");
+    expect(profile?.sectorWeights).toBeUndefined();
+  });
+
+  it("returns null when all equity fields are N/A", async () => {
+    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const body = {
+      quoteSummary: {
+        result: [{ assetProfile: { sector: "N/A", industry: "N/A", country: "N/A" } }],
+      },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    expect(await p.getProfile(ref)).toBeNull();
+  });
+
+  it("returns sectorWeights for an ETF (XETRA, .DE suffix)", async () => {
+    const aemd: InstrumentRef = { symbol: "AEMD", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    let calledUrl = "";
+    const body = {
+      quoteSummary: {
+        result: [
+          {
+            topHoldings: {
+              sectorWeightings: [
+                { technology: 0.25 },
+                { financial_services: 0.18 },
+                { healthcare: 0.12 },
+                { realestate: 0 }, // zero → excluded
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const p = new YahooFinanceProvider({
+      fetch: (async (url: string, init?: RequestInit) => {
+        // Only capture the quoteSummary URL (not fc.yahoo.com or getcrumb).
+        if (url.includes("quoteSummary")) calledUrl = url;
+        return (await yahooProfileFetch(body)(url, init)) as Response;
+      }) as unknown as typeof fetch,
+    });
+    const profile = await p.getProfile(aemd);
+    // symbol should be AEMD.DE
+    expect(calledUrl).toContain("AEMD.DE");
+    expect(profile).not.toBeNull();
+    expect(profile?.sectorWeights).toEqual({
+      Technology: 0.25,
+      "Financial Services": 0.18,
+      Healthcare: 0.12,
+      // "Real Estate" excluded because value was 0
+    });
+    expect(profile?.sector).toBeUndefined();
+  });
+
+  it("returns null when ETF topHoldings is missing", async () => {
+    const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
+    const body = { quoteSummary: { result: [{}] } };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    expect(await p.getProfile(ref)).toBeNull();
+  });
+
+  it("returns null when ETF sectorWeightings are all zero/empty", async () => {
+    const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
+    const body = {
+      quoteSummary: { result: [{ topHoldings: { sectorWeightings: [{ technology: 0 }] } }] },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    expect(await p.getProfile(ref)).toBeNull();
+  });
+
+  it("uses IDX symbol BBCA.JK for Indonesian equity", async () => {
+    const bbcaRef: InstrumentRef = { symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR" };
+    let calledUrl = "";
+    const body = {
+      quoteSummary: {
+        result: [{ assetProfile: { sector: "Financial Services", industry: "Banks", country: "Indonesia" } }],
+      },
+    };
+    const p = new YahooFinanceProvider({
+      fetch: (async (url: string, init?: RequestInit) => {
+        // Only capture the quoteSummary URL (not fc.yahoo.com or getcrumb).
+        if (url.includes("quoteSummary")) calledUrl = url;
+        return (await yahooProfileFetch(body)(url, init)) as Response;
+      }) as unknown as typeof fetch,
+    });
+    await p.getProfile(bbcaRef);
+    expect(calledUrl).toContain("BBCA.JK");
+  });
+
+  it("returns null when crumb fetch fails", async () => {
+    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { crumbStatus: 429 }) });
+    expect(await p.getProfile(ref)).toBeNull();
+  });
+
+  it("returns null when quoteSummary HTTP error", async () => {
+    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { summaryOk: false }) });
+    expect(await p.getProfile(ref)).toBeNull();
+  });
+
+  it("returns null for non-equity/non-etf asset classes", async () => {
+    const gold: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "USD" };
+    const p = new YahooFinanceProvider({
+      fetch: yahooProfileFetch({}),
+    });
+    expect(await p.getProfile(gold)).toBeNull();
+  });
+});
+
 describe("OpenFigiProvider", () => {
   it("does not quote (discovery-only)", async () => {
     const p = new OpenFigiProvider({ fetch: mockFetch(() => ({ body: [] })) });

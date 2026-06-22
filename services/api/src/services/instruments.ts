@@ -137,7 +137,7 @@ export async function findOrCreateInstrument(
 export async function updateInstrument(
   db: DB,
   id: string,
-  patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string },
+  patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string; market?: string },
 ): Promise<Instrument | "conflict" | "not_found"> {
   const [existing] = await db.select().from(instruments).where(eq(instruments.id, id)).limit(1);
   if (!existing) return "not_found";
@@ -166,6 +166,7 @@ export async function updateInstrument(
   if (patch.symbol !== undefined) set.symbol = patch.symbol;
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.assetClass !== undefined) set.assetClass = patch.assetClass;
+  if (patch.market !== undefined) set.market = patch.market;
 
   if (Object.keys(set).length === 0) return existing;
 

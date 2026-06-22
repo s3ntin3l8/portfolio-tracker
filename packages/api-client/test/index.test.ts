@@ -348,4 +348,37 @@ describe("createApiClient request methods", () => {
     await client.listPortfolios();
     expect((seen?.headers as Record<string, string>).authorization).toBeUndefined();
   });
+
+  // ── triggerAdminJob force option ──────────────────────────────────────────
+
+  it("triggerAdminJob: sends no body when force is not set", async () => {
+    let seen: { url: string; init: RequestInit } | undefined;
+    const fetchImpl = mockFetch((u, init) => {
+      seen = { url: u, init };
+      return { status: 200, body: { queued: true, name: "refresh-prices" } };
+    });
+    const client = createApiClient({
+      baseUrl: base,
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+    await client.triggerAdminJob("refresh-prices");
+    expect(seen?.init.method).toBe("POST");
+    expect(seen?.url).toBe(`${base}/admin/jobs/refresh-prices/trigger`);
+    expect(seen?.init.body).toBeUndefined();
+  });
+
+  it("triggerAdminJob: sends { force: true } body when force option is set", async () => {
+    let seen: { url: string; init: RequestInit } | undefined;
+    const fetchImpl = mockFetch((u, init) => {
+      seen = { url: u, init };
+      return { status: 200, body: { queued: true, name: "refresh-instrument-metadata", force: true } };
+    });
+    const client = createApiClient({
+      baseUrl: base,
+      fetch: fetchImpl as unknown as typeof fetch,
+    });
+    await client.triggerAdminJob("refresh-instrument-metadata", { force: true });
+    expect(seen?.init.method).toBe("POST");
+    expect(JSON.parse(seen?.init.body as string)).toEqual({ force: true });
+  });
 });

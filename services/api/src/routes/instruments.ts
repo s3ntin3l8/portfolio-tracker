@@ -18,6 +18,7 @@ const patchInstrumentSchema = z.object({
   symbol: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
   assetClass: z.string().optional(),
+  market: z.string().min(1).optional(),
 });
 const enrichQuerySchema = z.object({ q: z.string().trim().min(1) });
 

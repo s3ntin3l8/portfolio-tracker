@@ -420,7 +420,14 @@ describe("admin provider config", () => {
     expect(ok.statusCode).toBe(200);
     const body = ok.json() as {
       schedulerAvailable: boolean;
-      jobs: { name: string; label: string; cron: string | null; lastRunAt: null; lastStatus: null }[];
+      jobs: {
+        name: string;
+        label: string;
+        cron: string | null;
+        lastRunAt: null;
+        lastStatus: null;
+        supportsForce: boolean;
+      }[];
     };
     // pg-boss is not running in PGlite/test env.
     expect(body.schedulerAvailable).toBe(false);
@@ -443,6 +450,12 @@ describe("admin provider config", () => {
       expect(typeof job.label).toBe("string");
       expect(typeof job.cron).toBe("string"); // all known jobs have a cron
     }
+    // supportsForce is exposed on the two force-capable jobs.
+    const byName = Object.fromEntries(body.jobs.map((j) => [j.name, j]));
+    expect(byName["backfill-stale-history"].supportsForce).toBe(true);
+    expect(byName["refresh-instrument-metadata"].supportsForce).toBe(true);
+    expect(byName["refresh-prices"].supportsForce).toBe(false);
+    expect(byName["daily-snapshot"].supportsForce).toBe(false);
   });
 
   it("POST /admin/jobs/:name/trigger returns 404 for unknown job names", async () => {

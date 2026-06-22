@@ -99,6 +99,8 @@
     "jobRunning": "Running…",
     "jobQueued": "Queued ✓",
     "jobTriggerFailed": "Could not queue job. Is the scheduler running?",
+    "jobForce": "Force re-run",
+    "jobPollTimedOut": "Still running; refresh to check status.",
     "keyFromEnv": "from .env",
     "dragHandle": "Drag to reorder",
     "providerName": "Provider",

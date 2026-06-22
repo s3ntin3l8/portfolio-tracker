@@ -2,6 +2,7 @@ import type {
   AssetClass,
   Candle,
   DividendEvent,
+  InstrumentProfile,
   InstrumentRef,
   InstrumentSearchResult,
   MarketDataProvider,
@@ -15,6 +16,25 @@ import {
 import { isIsin } from "./types.js";
 
 const TROY_OUNCE_GRAMS = 31.1034768;
+
+/**
+ * Maps Yahoo Finance's lowercase `topHoldings.sectorWeightings` keys (e.g. `"realestate"`)
+ * to proper-case GICS-style names that `normalizeSector` in `@portfolio/core` can fold
+ * into canonical labels for consistent cross-instrument aggregation.
+ */
+const YAHOO_ETF_SECTOR_KEY: Record<string, string> = {
+  realestate: "Real Estate",
+  technology: "Technology",
+  consumer_cyclical: "Consumer Cyclical",
+  consumer_defensive: "Consumer Defensive",
+  financial_services: "Financial Services",
+  communication_services: "Communication Services",
+  basic_materials: "Basic Materials",
+  utilities: "Utilities",
+  industrials: "Industrials",
+  healthcare: "Healthcare",
+  energy: "Energy",
+};
 
 export interface YahooProviderOptions {
   baseUrl?: string;
@@ -50,6 +70,14 @@ export class YahooFinanceProvider implements MarketDataProvider {
   private readonly doFetch: typeof fetch;
   /** Memoised ISIN → Yahoo symbol resolution (caches misses as `null`). */
   private readonly isinSymbolCache = new Map<string, string | null>();
+  /**
+   * Cached Yahoo crumb + cookie for the quoteSummary endpoint (valid ~23 hours).
+   * The quoteSummary endpoint requires a crumb (fetched via /v1/test/getcrumb) and
+   * the corresponding session cookie, unlike the keyless /v8/finance/chart endpoint
+   * used by the other methods.
+   */
+  private crumbCache: { cookies: string; crumb: string; fetchedAt: number } | null = null;
+  private readonly CRUMB_TTL_MS = 23 * 60 * 60 * 1000; // 23 hours
   /**
    * Yahoo's unofficial chart/search endpoints return 429 ("Too Many Requests") for
    * requests that lack a browser-like User-Agent. Sending one brings it back to normal
@@ -267,6 +295,134 @@ export class YahooFinanceProvider implements MarketDataProvider {
       });
     }
     return candles;
+  }
+
+  /**
+   * Obtain a Yahoo crumb + session cookie pair for the authenticated quoteSummary
+   * endpoint. Results are cached for 23 hours; stale entries are refreshed on the
+   * next call. All requests go through `this.doFetch` so tests can mock them.
+   */
+  private async getYahooCrumb(): Promise<{ cookies: string; crumb: string } | null> {
+    if (
+      this.crumbCache &&
+      Date.now() - this.crumbCache.fetchedAt < this.CRUMB_TTL_MS
+    ) {
+      return this.crumbCache;
+    }
+    try {
+      // Step 1: establish a Yahoo session (get cookie).
+      const cookieRes = await this.doFetch("https://fc.yahoo.com/", {
+        headers: this.defaultHeaders,
+        redirect: "follow",
+      });
+      const setCookieHeader = cookieRes.headers.get("set-cookie") ?? "";
+      // Parse individual cookie values (name=value) from the Set-Cookie header,
+      // splitting on commas that precede a new cookie name (not commas inside values).
+      const cookies = setCookieHeader
+        .split(/,(?=\s*[A-Za-z0-9_-]+=)/)
+        .map((c) => c.split(";")[0].trim())
+        .filter(Boolean)
+        .join("; ");
+
+      // Step 2: fetch the crumb using the session cookie.
+      const crumbRes = await this.doFetch(
+        "https://query2.finance.yahoo.com/v1/test/getcrumb",
+        { headers: { ...this.defaultHeaders, Cookie: cookies } },
+      );
+      if (!crumbRes.ok) return null;
+      const crumb = (await crumbRes.text()).trim();
+      // Validate: crumb is a short alphanumeric token — reject empty or multi-word values.
+      if (!crumb || crumb.length < 3 || crumb.includes(" ")) return null;
+
+      this.crumbCache = { cookies, crumb, fetchedAt: Date.now() };
+      return this.crumbCache;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Parse a raw quoteSummary JSON response into an InstrumentProfile (or null). */
+  private parseQuoteSummary(
+    assetClass: AssetClass,
+    data: unknown,
+  ): InstrumentProfile | null {
+    const typed = data as {
+      quoteSummary?: {
+        result?: Array<{
+          assetProfile?: { sector?: string; industry?: string; country?: string };
+          topHoldings?: { sectorWeightings?: Array<Record<string, number>> };
+        }> | null;
+        error?: unknown;
+      };
+    };
+    const result = typed?.quoteSummary?.result?.[0];
+    if (!result) return null;
+
+    if (assetClass === "etf") {
+      const weightings = result.topHoldings?.sectorWeightings ?? [];
+      const sectorWeights: Record<string, number> = {};
+      for (const entry of weightings) {
+        for (const [rawKey, v] of Object.entries(entry)) {
+          if (!v || v <= 0) continue;
+          // Map Yahoo's lowercase key (e.g. "realestate") to a proper-case name
+          // that normalizeSector() in @portfolio/core can aggregate consistently.
+          const key = YAHOO_ETF_SECTOR_KEY[rawKey] ?? rawKey;
+          sectorWeights[key] = v;
+        }
+      }
+      return Object.keys(sectorWeights).length > 0 ? { sectorWeights } : null;
+    }
+
+    // Equity / other: return sector, industry, country from assetProfile.
+    const ap = result.assetProfile;
+    if (!ap) return null;
+    const sector = ap.sector && ap.sector !== "N/A" ? ap.sector : null;
+    const industry = ap.industry && ap.industry !== "N/A" ? ap.industry : null;
+    const country = ap.country && ap.country !== "N/A" ? ap.country : null;
+    if (!sector && !industry && !country) return null;
+    return { sector, industry, country };
+  }
+
+  /**
+   * Fetch instrument profile (sector / sector weights) via Yahoo Finance's quoteSummary
+   * endpoint. Uses the `assetProfile` module for equities (single GICS sector string) and
+   * the `topHoldings` module for ETFs (per-sector fraction map).
+   *
+   * Requires a Yahoo session crumb (fetched automatically and cached). Falls back to null
+   * if the crumb cannot be obtained or the provider returns no data for this instrument.
+   */
+  async getProfile(ref: InstrumentRef): Promise<InstrumentProfile | null> {
+    if (ref.assetClass !== "equity" && ref.assetClass !== "etf") return null;
+
+    const symbol = this.yahooSymbol(ref);
+    const module = ref.assetClass === "etf" ? "topHoldings" : "assetProfile";
+
+    try {
+      const auth = await this.getYahooCrumb();
+      if (!auth) return null;
+
+      const buildUrl = (c: string) =>
+        `${this.baseUrl}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${module}&crumb=${encodeURIComponent(c)}`;
+
+      let res = await this.doFetch(buildUrl(auth.crumb), {
+        headers: { ...this.defaultHeaders, Cookie: auth.cookies },
+      });
+
+      // 401 means the crumb expired — clear and retry once.
+      if (res.status === 401) {
+        this.crumbCache = null;
+        const auth2 = await this.getYahooCrumb();
+        if (!auth2) return null;
+        res = await this.doFetch(buildUrl(auth2.crumb), {
+          headers: { ...this.defaultHeaders, Cookie: auth2.cookies },
+        });
+      }
+
+      if (!res.ok) return null;
+      return this.parseQuoteSummary(ref.assetClass, await res.json());
+    } catch {
+      return null;
+    }
   }
 
   async getHistoryFrom(ref: InstrumentRef, fromDate: string): Promise<Candle[]> {
