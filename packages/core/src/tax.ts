@@ -47,6 +47,24 @@ export interface AllowanceUsage {
   taxSavingAvailable: string;
   /** Currency of all monetary amounts (= the TradeLog displayCurrency). */
   currency: string;
+
+  // --- Forecast (rest-of-year projected income) ---
+
+  /**
+   * Gross projected income for the remainder of the current year (equity dividends +
+   * bond coupons, grossed up to match the Sparerpauschbetrag convention).
+   * "0.00" when the requested year is not the current year or no projection is available.
+   */
+  forecastIncomeRestOfYear: string;
+  /**
+   * Projected full-year used = clamp(realizedGainsAdjusted + incomeYtd + forecastIncomeRestOfYear,
+   * 0, allowanceAnnual).  Equals usedYtd when forecastIncomeRestOfYear is zero.
+   */
+  projectedUsedFullYear: string;
+  /** projectedRemaining = allowanceAnnual − projectedUsedFullYear (never negative). */
+  projectedRemaining: string;
+  /** Estimated tax saving against the projected remaining = projectedRemaining × taxRate. */
+  projectedTaxSavingAvailable: string;
 }
 
 /** A single harvest suggestion: one open position that could be (partially) realized tax-free. */
@@ -97,6 +115,15 @@ export interface AllowanceUsageInput {
   taxRate?: string;
   /** Tax year to compute. Defaults to the current UTC calendar year. */
   year?: number;
+  /**
+   * Gross projected income (equity dividends + bond coupons) for the rest of
+   * the current year, in the TradeLog displayCurrency.  Must already be grossed
+   * up to match the Sparerpauschbetrag convention (gross = net + withholding).
+   *
+   * Pass "0" (or omit) when the requested year differs from the current calendar
+   * year, or when no forecast is available.
+   */
+  forecastIncomeRestOfYear?: string;
 }
 
 export interface HarvestSuggestionsInput extends AllowanceUsageInput {
@@ -163,6 +190,13 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
   // Tax saving available = remaining × taxRate (before Soli etc.).
   const taxSavingAvailable = remaining.times(taxRate);
 
+  // Step 5: forward projection (rest-of-year forecast, already grossed up by caller).
+  const forecastGross = Decimal.max(ZERO, D(input.forecastIncomeRestOfYear ?? "0"));
+  const rawProjected = rawUsed.plus(forecastGross);
+  const projectedUsedFullYear = Decimal.min(Decimal.max(ZERO, rawProjected), allowance);
+  const projectedRemaining = Decimal.max(ZERO, allowance.minus(projectedUsedFullYear));
+  const projectedTaxSavingAvailable = projectedRemaining.times(taxRate);
+
   return {
     year,
     allowanceAnnual: allowance.toFixed(2),
@@ -173,6 +207,10 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
     taxRate: taxRate.toString(),
     taxSavingAvailable: taxSavingAvailable.toFixed(2),
     currency,
+    forecastIncomeRestOfYear: forecastGross.toFixed(2),
+    projectedUsedFullYear: projectedUsedFullYear.toFixed(2),
+    projectedRemaining: projectedRemaining.toFixed(2),
+    projectedTaxSavingAvailable: projectedTaxSavingAvailable.toFixed(2),
   };
 }
 
@@ -196,7 +234,9 @@ export function harvestSuggestions(input: HarvestSuggestionsInput): HarvestSugge
       year: input.year,
     });
 
-  const remaining = D(usage.remaining);
+  // Use projectedRemaining when available (accounts for rest-of-year forecast income).
+  // Falls back to realized remaining when the forecast is zero (backward-compatible).
+  const remaining = D(usage.projectedRemaining ?? usage.remaining);
   const taxRate = D(usage.taxRate);
 
   if (remaining.lte(ZERO)) return [];

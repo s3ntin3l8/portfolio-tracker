@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Receipt, TrendingUp, Landmark } from "lucide-react";
+import { Receipt, TrendingUp, Landmark, CalendarClock } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +66,7 @@ function TaxHolderSection({
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
   const pct = parseFloat(u.remaining) / parseFloat(u.allowanceAnnual);
   const usedPct = Math.round((1 - Math.max(0, Math.min(1, pct))) * 100);
+  const hasForecast = Number(u.forecastIncomeRestOfYear) > 0;
 
   return (
     <section className="space-y-4">
@@ -77,7 +78,7 @@ function TaxHolderSection({
         </h2>
       </div>
 
-      {/* Allowance summary cards */}
+      {/* Realized allowance summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label={t("allowance.annual")}
@@ -116,7 +117,39 @@ function TaxHolderSection({
         </CardContent>
       </Card>
 
-      {/* Harvest suggestions */}
+      {/* Rest-of-year forecast block (only when there's a non-zero projection) */}
+      {hasForecast && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarClock className="size-4" />
+              {t("forecast.label")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">{t("forecast.disclaimer")}</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatCard
+                label={t("forecast.label")}
+                value={money(u.forecastIncomeRestOfYear)}
+                delta={t("forecast.labelDesc")}
+              />
+              <StatCard
+                label={t("forecast.projectedUsed")}
+                value={money(u.projectedUsedFullYear)}
+                delta={t("forecast.projectedUsedDesc")}
+              />
+              <StatCard
+                label={t("forecast.projectedRemaining")}
+                value={money(u.projectedRemaining)}
+                delta={`${t("forecast.projectedTaxSaving")}: ${money(u.projectedTaxSavingAvailable)}`}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Harvest suggestions (sized against projected remaining when forecast is available) */}
       {harvestSuggestions.length > 0 && (
         <Card>
           <CardHeader>
@@ -126,7 +159,9 @@ function TaxHolderSection({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">{t("harvest.subtitle")}</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              {hasForecast ? t("harvest.subtitle") : t("harvest.subtitleNoForecast")}
+            </p>
             <div className="divide-y">
               {harvestSuggestions.map((s) => (
                 <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />

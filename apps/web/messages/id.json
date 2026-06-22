@@ -993,9 +993,19 @@
       "gains": "keuntungan",
       "income": "pendapatan"
     },
+    "forecast": {
+      "label": "Dividen & kupon yang diperkirakan",
+      "labelDesc": "Sisa tahun ini (est.)",
+      "projectedUsed": "Proyeksi terpakai",
+      "projectedUsedDesc": "Termasuk pembayaran yang diperkirakan",
+      "projectedRemaining": "Proyeksi sisa",
+      "projectedTaxSaving": "Proyeksi penghematan pajak",
+      "disclaimer": "Estimasi berdasarkan pembayaran tahun lalu dan tanggal yang diumumkan. Jumlah aktual dapat berbeda."
+    },
     "harvest": {
       "title": "Saran panen",
-      "subtitle": "Posisi terbuka yang bisa dijual sebagian untuk memanfaatkan sisa batas bebas pajak.",
+      "subtitle": "Posisi terbuka yang bisa dijual sebagian untuk memanfaatkan sisa batas bebas pajak. Disesuaikan dengan sisa proyeksi (memperhitungkan dividen & kupon yang diperkirakan).",
+      "subtitleNoForecast": "Posisi terbuka yang bisa dijual sebagian untuk memanfaatkan sisa batas bebas pajak.",
       "unrealized": "Keuntungan belum direalisasi",
       "harvestable": "Dapat dipanen",
       "taxSaving": "Penghematan pajak",
