@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/utils";
-import type { SparplanStats, DetectedPlan } from "@portfolio/api-client";
+import { RebalanceDialog } from "@/components/savings/rebalance-dialog";
+import type { SparplanStats, DetectedPlan, DriftRow, SparplanContributionSplit } from "@portfolio/api-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,6 +19,12 @@ interface Props {
   data: SparplanStats;
   currency: string;
   locale: string;
+  /** Present when a single portfolio is selected (enables rebalance dialog + drift badges). */
+  portfolioId?: string;
+  /** Per-instrument drift rows from the API (populated when targets are set). */
+  drift?: DriftRow[];
+  /** Recommended contribution split (populated when drift is present). */
+  contributionSplit?: SparplanContributionSplit[];
 }
 
 // ---------------------------------------------------------------------------
@@ -68,14 +75,43 @@ function StepHistory({
   );
 }
 
+function DriftBadge({
+  driftRow,
+  td,
+}: {
+  driftRow: DriftRow;
+  td: ReturnType<typeof useTranslations>;
+}) {
+  const { driftPct, status } = driftRow;
+  if (status === "on_target") return null;
+  const absPct = Math.abs(driftPct).toFixed(1);
+  const label =
+    status === "over"
+      ? td("over", { pct: absPct })
+      : td("under", { pct: absPct });
+  return (
+    <Badge
+      variant="outline"
+      className={`text-xs shrink-0 ${status === "over" ? "border-destructive text-destructive" : "border-warning text-warning"}`}
+    >
+      {status === "over" ? `+${absPct}pp` : `−${absPct}pp`}
+      <span className="sr-only">{label}</span>
+    </Badge>
+  );
+}
+
 function PlanRow({
   plan,
+  driftRow,
   locale,
   t,
+  td,
 }: {
   plan: DetectedPlan;
+  driftRow?: DriftRow;
   locale: string;
   t: ReturnType<typeof useTranslations>;
+  td: ReturnType<typeof useTranslations>;
 }) {
   const label = plan.name ?? plan.symbol ?? plan.instrumentId;
   const amountLabel = `${formatMoney(Number(plan.currentAmountDisplay), plan.currency, locale)} ${cadenceLabel(plan.cadenceMonths, t)}`;
@@ -93,6 +129,7 @@ function PlanRow({
               {t("sourceHeuristic")}
             </Badge>
           )}
+          {driftRow && <DriftBadge driftRow={driftRow} td={td} />}
         </div>
         <StepHistory plan={plan} locale={locale} t={t} />
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -119,8 +156,9 @@ function PlanRow({
 // Main export
 // ---------------------------------------------------------------------------
 
-export function SparplanSection({ data, currency, locale }: Props) {
+export function SparplanSection({ data, currency, locale, portfolioId, drift, contributionSplit }: Props) {
   const t = useTranslations("Savings");
+  const td = useTranslations("DriftBadge");
 
   if (data.plans.length === 0) {
     return null;
@@ -129,11 +167,27 @@ export function SparplanSection({ data, currency, locale }: Props) {
   const activePlans = data.plans.filter((p) => p.status === "active");
   const stoppedPlans = data.plans.filter((p) => p.status === "stopped");
 
+  // Build a drift-row lookup by instrumentId.
+  const driftByKey = new Map(drift?.map((d) => [d.key, d]) ?? []);
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{t("sparplanTitle")}</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">{t("sparplanTitle")}</CardTitle>
+            {/* Rebalance button — only in single-portfolio scope */}
+            {portfolioId && (
+              <RebalanceDialog
+                portfolioId={portfolioId}
+                plans={activePlans.length > 0 ? activePlans : data.plans}
+                activeMonthlyTotalDisplay={data.activeMonthlyTotalDisplay}
+                currency={currency}
+                drift={drift}
+                contributionSplit={contributionSplit}
+              />
+            )}
+          </div>
           {data.activePlanCount > 0 && (
             <div className="text-right">
               <p className="text-xs text-muted-foreground">{t("detectedMonthly")}</p>
@@ -151,7 +205,14 @@ export function SparplanSection({ data, currency, locale }: Props) {
         {activePlans.length > 0 && (
           <div className="mb-2">
             {activePlans.map((plan) => (
-              <PlanRow key={`${plan.instrumentId}-${plan.firstExecution}`} plan={plan} locale={locale} t={t} />
+              <PlanRow
+                key={`${plan.instrumentId}-${plan.firstExecution}`}
+                plan={plan}
+                driftRow={driftByKey.get(plan.instrumentId)}
+                locale={locale}
+                t={t}
+                td={td}
+              />
             ))}
           </div>
         )}
@@ -163,7 +224,14 @@ export function SparplanSection({ data, currency, locale }: Props) {
             </summary>
             <div className="mt-2">
               {stoppedPlans.map((plan) => (
-                <PlanRow key={`${plan.instrumentId}-${plan.firstExecution}`} plan={plan} locale={locale} t={t} />
+                <PlanRow
+                  key={`${plan.instrumentId}-${plan.firstExecution}`}
+                  plan={plan}
+                  driftRow={driftByKey.get(plan.instrumentId)}
+                  locale={locale}
+                  t={t}
+                  td={td}
+                />
               ))}
             </div>
           </details>

@@ -56,6 +56,7 @@ import {
   type PortfolioSummary,
   type TradeLog,
   type TradeMethod,
+  contributionSplit,
   type SparplanStats,
   type DriftRow,
 } from "@portfolio/core";
@@ -1368,13 +1369,70 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { coreTxns } = await loadValuation(
+      const { coreTxns, summary } = await loadValuation(
         portfolioId,
         portfolio.baseCurrency,
         undefined,
         portfolio.cashCounted,
       );
-      return buildSparplanStats(coreTxns, portfolio.baseCurrency);
+      const stats = await buildSparplanStats(coreTxns, portfolio.baseCurrency);
+
+      // Phase B: load instrument targets and compute drift + contribution split.
+      const targetRows = await app.db
+        .select()
+        .from(allocationTargets)
+        .where(
+          and(
+            eq(allocationTargets.userId, id),
+            eq(allocationTargets.portfolioId, portfolioId),
+            eq(allocationTargets.dimension, "instrument"),
+          ),
+        );
+
+      if (targetRows.length === 0) {
+        return stats;
+      }
+
+      // Build a market-value map from summary holdings keyed by instrumentId.
+      const valueByInstrument = new Map<string, string>();
+      for (const h of summary.holdings) {
+        if (h.marketValueDisplay !== null) {
+          valueByInstrument.set(h.instrumentId, h.marketValueDisplay);
+        } else {
+          valueByInstrument.set(h.instrumentId, h.costBasisDisplay);
+        }
+      }
+
+      const targets = targetRows.map((r) => ({
+        key: r.targetKey,
+        targetPct: Number(r.targetPct),
+      }));
+
+      // Compute total value across only the targeted instruments to normalise pct
+      // correctly: targets sum to 100 over the targeted sleeves, so actual pct must too.
+      const targetedIds = new Set(targets.map((t) => t.key));
+      const targetedTotal = [...targetedIds].reduce((acc, key) => {
+        return acc + Number(valueByInstrument.get(key) ?? "0");
+      }, 0);
+
+      // Build AllocationSlice-compatible objects with pct normalised over targeted total.
+      const slices = targets.map((t) => {
+        const value = valueByInstrument.get(t.key) ?? "0";
+        const pct = targetedTotal > 0 ? (Number(value) / targetedTotal) * 100 : 0;
+        return { key: t.key, value, pct };
+      });
+
+      const drift: DriftRow[] = rebalancingDrift(slices, targets);
+
+      // Contribution split: allocate `activeMonthlyTotalDisplay` across sleeves.
+      const sleeves = targets.map((t) => ({
+        key: t.key,
+        value: valueByInstrument.get(t.key) ?? "0",
+        targetPct: t.targetPct,
+      }));
+      const split = contributionSplit(sleeves, stats.activeMonthlyTotalDisplay);
+
+      return { ...stats, drift, contributionSplit: split };
     },
   );
 
@@ -1427,6 +1485,8 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       const merged = mergeSparplanStats(perPortfolio, display);
       const meta = await instrumentMeta([...allInstrumentIds]);
+      // TODO Phase B: networth instrument drift — complex (multiple portfolios, base currencies).
+      // Drift + contributionSplit are only wired on the portfolio-scoped endpoint for MVP.
       return {
         ...merged,
         plans: merged.plans.map((p) => ({

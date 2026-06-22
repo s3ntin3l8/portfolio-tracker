@@ -379,13 +379,15 @@ export async function loadContributions(): Promise<ContributionsView> {
 }
 
 export type SparplanView =
-  | { status: "ok"; data: SparplanStats }
+  | { status: "ok"; data: SparplanStats; portfolioId: string | null }
   | { status: "empty" }
   | { status: "unavailable" };
 
 /**
  * Sparplan (recurring investment) detection for the active scope: a single portfolio
  * when one is selected, else the cross-portfolio aggregate narrowed by the holder scope.
+ * Returns `portfolioId` in the result so the savings page can gate the rebalance dialog
+ * (drift + contribution split are only available in single-portfolio scope).
  */
 export async function loadSparplan(): Promise<SparplanView> {
   const api = await getServerApi();
@@ -399,7 +401,7 @@ export async function loadSparplan(): Promise<SparplanView> {
     const data = selected
       ? await api.getPortfolioSparplan(selected.id)
       : await api.getSparplan(holderId);
-    return { status: "ok", data };
+    return { status: "ok", data, portfolioId: selected?.id ?? null };
   } catch {
     return { status: "unavailable" };
   }

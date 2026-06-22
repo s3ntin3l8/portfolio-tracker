@@ -802,6 +802,16 @@ export interface DetectedPlan {
   levels: AmountLevel[];
 }
 
+/** Recommended contribution amount for one savings-plan sleeve. */
+export interface SparplanContributionSplit {
+  /** instrumentId of the savings-plan sleeve. */
+  key: string;
+  /** Recommended contribution in the display currency (decimal string). */
+  amount: string;
+  /** Share of the monthly total, 0–100. */
+  sharePct: number;
+}
+
 export interface SparplanStats {
   displayCurrency: string;
   plans: DetectedPlan[];
@@ -811,6 +821,16 @@ export interface SparplanStats {
    */
   activeMonthlyTotalDisplay: string;
   activePlanCount: number;
+  /**
+   * Per-instrument drift rows when instrument targets are set for this portfolio.
+   * Only present on the portfolio-scoped endpoint (GET /portfolios/:id/sparplan).
+   */
+  drift?: DriftRow[];
+  /**
+   * Recommended split of the monthly total across savings-plan sleeves to converge
+   * toward the target weights. Only present when `drift` is present.
+   */
+  contributionSplit?: SparplanContributionSplit[];
 }
 
 export type TradeMethod = "average" | "fifo";
