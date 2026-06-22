@@ -722,6 +722,44 @@ export const portfolioSnapshots = pgTable(
   ],
 );
 
+/**
+ * User-defined target allocation weights. One row per (user, portfolio_scope, dimension, key).
+ * `portfolioId` is null for aggregate-level (networth dashboard) targets; non-null for
+ * per-portfolio targets (e.g. Sparplan instrument-level split).
+ * `dimension` is 'asset_class' | 'currency' | 'region' | 'sector' | 'instrument'.
+ * `targetKey` is the slice key (e.g. "etf") or instrumentId when dimension='instrument'.
+ * All rows for the same (userId, portfolioId, dimension) set must sum to ~100.
+ */
+export const allocationTargets = pgTable(
+  "allocation_targets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // null = aggregate/networth-level target; uuid = per-portfolio target.
+    portfolioId: uuid("portfolio_id").references(() => portfolios.id, {
+      onDelete: "cascade",
+    }),
+    // 'asset_class' | 'currency' | 'region' | 'sector' | 'instrument'
+    dimension: text("dimension").notNull(),
+    // slice key from AllocationSlice.key, or instrumentId when dimension='instrument'
+    targetKey: text("target_key").notNull(),
+    targetPct: numeric("target_pct").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("allocation_targets_scope_dim_key_idx").on(
+      t.userId,
+      t.portfolioId,
+      t.dimension,
+      t.targetKey,
+    ),
+    index("allocation_targets_user_idx").on(t.userId),
+  ],
+);
+
 // FX rates for converting to a portfolio/display currency.
 export const fxRates = pgTable(
   "fx_rates",

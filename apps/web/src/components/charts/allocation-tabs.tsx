@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { AllocationDonut } from "./allocation-donut";
-import type { AllocationBreakdown } from "@portfolio/api-client";
+import { TargetDialog, type TargetSlice } from "@/components/allocation/target-dialog";
+import type { AllocationBreakdown, DriftRow } from "@portfolio/api-client";
 
 /** Convert a decimal-string slice value to a number, clamping negatives to 0. */
 function toNumber(v: string): number {
@@ -13,16 +14,112 @@ function toNumber(v: string): number {
 }
 
 /**
+ * Compact inline drift hint: "+8pp over target · −5pp under target".
+ * Shown below the allocation chart when the user has saved targets for the dimension.
+ */
+function DriftHint({
+  drift,
+  dimensionLabel,
+}: {
+  drift: DriftRow[];
+  dimensionLabel: string;
+}) {
+  const t = useTranslations("DriftBadge");
+  const overs = drift.filter((d) => d.status === "over");
+  const unders = drift.filter((d) => d.status === "under");
+
+  if (overs.length === 0 && unders.length === 0) {
+    return (
+      <p className="text-xs text-center text-success mt-2">
+        {dimensionLabel} · {t("onTarget")}
+      </p>
+    );
+  }
+
+  const parts: string[] = [];
+  const topOver = [...overs].sort((a, b) => b.driftPct - a.driftPct)[0];
+  const topUnder = [...unders].sort((a, b) => a.driftPct - b.driftPct)[0];
+  if (topOver) parts.push(t("over", { pct: Math.abs(topOver.driftPct).toFixed(1) }));
+  if (topUnder) parts.push(t("under", { pct: Math.abs(topUnder.driftPct).toFixed(1) }));
+
+  return (
+    <p className="text-xs text-center text-muted-foreground mt-2">{parts.join(" · ")}</p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TabBody — extracted at module level to satisfy react/no-unstable-nested-components
+// ---------------------------------------------------------------------------
+
+interface TabBodyProps {
+  slices: Array<{ key: string; label: string; value: number; actualPct: number }>;
+  dimension: string;
+  dimensionLabel: string;
+  currency: string;
+  drift?: Record<string, DriftRow[]>;
+  portfolioId?: string;
+}
+
+function TabBody({
+  slices,
+  dimension,
+  dimensionLabel,
+  currency,
+  drift,
+  portfolioId,
+}: TabBodyProps) {
+  const dimDrift = drift?.[dimension];
+  const targetSlices: TargetSlice[] = slices.map((s) => ({
+    key: s.key,
+    label: s.label,
+    actualPct: s.actualPct,
+  }));
+
+  return (
+    <div>
+      {slices.length > 0 ? (
+        <AllocationDonut data={slices} currency={currency} />
+      ) : (
+        <p className="text-center text-sm text-muted-foreground py-8">—</p>
+      )}
+      {dimDrift && dimDrift.length > 0 && (
+        <DriftHint drift={dimDrift} dimensionLabel={dimensionLabel} />
+      )}
+      <div className="flex justify-end mt-2">
+        <TargetDialog
+          portfolioId={portfolioId}
+          dimension={dimension}
+          dimensionLabel={dimensionLabel}
+          slices={targetSlices}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AllocationTabs
+// ---------------------------------------------------------------------------
+
+/**
  * Tabbed allocation breakdown card: Class | Currency | Region | Sector.
  * Each tab renders an AllocationDonut. The concentration badge sits in the
  * card header, supplied by the parent.
+ *
+ * When `drift` is provided (user has saved targets), each tab shows a compact
+ * drift hint and a "Set targets" trigger button.
+ * When `portfolioId` is provided, targets are portfolio-scoped; otherwise aggregate.
  */
 export function AllocationTabs({
   allocation,
   currency,
+  drift,
+  portfolioId,
 }: {
   allocation: AllocationBreakdown;
   currency: string;
+  drift?: Record<string, DriftRow[]>;
+  portfolioId?: string;
 }) {
   const t = useTranslations("Dashboard");
   const ta = useTranslations("AssetClass");
@@ -33,11 +130,12 @@ export function AllocationTabs({
       key: s.key,
       label: s.key === "cash" ? ta("cash") : (ta as (k: string) => string)(s.key),
       value: toNumber(s.value),
+      actualPct: s.pct,
     }))
     .filter((s) => s.value > 0);
 
   const currencySlices = allocation.byCurrency
-    .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value) }))
+    .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value), actualPct: s.pct }))
     .filter((s) => s.value > 0);
 
   const regionSlices = allocation.byRegion
@@ -45,11 +143,12 @@ export function AllocationTabs({
       key: s.key,
       label: (tr as (k: string) => string)(s.key),
       value: toNumber(s.value),
+      actualPct: s.pct,
     }))
     .filter((s) => s.value > 0);
 
   const sectorSlices = allocation.bySector
-    .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value) }))
+    .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value), actualPct: s.pct }))
     .filter((s) => s.value > 0);
 
   return (
@@ -70,39 +169,55 @@ export function AllocationTabs({
       </TabsList>
 
       <TabsContent value="class">
-        {assetClassSlices.length > 0 ? (
-          <AllocationDonut data={assetClassSlices} currency={currency} />
-        ) : (
-          <p className="text-center text-sm text-muted-foreground py-8">—</p>
-        )}
+        <TabBody
+          slices={assetClassSlices}
+          dimension="asset_class"
+          dimensionLabel={t("allocationTabClass")}
+          currency={currency}
+          drift={drift}
+          portfolioId={portfolioId}
+        />
       </TabsContent>
 
       <TabsContent value="currency">
-        {currencySlices.length > 0 ? (
-          <AllocationDonut data={currencySlices} currency={currency} />
-        ) : (
-          <p className="text-center text-sm text-muted-foreground py-8">—</p>
-        )}
+        <TabBody
+          slices={currencySlices}
+          dimension="currency"
+          dimensionLabel={t("allocationTabCurrency")}
+          currency={currency}
+          drift={drift}
+          portfolioId={portfolioId}
+        />
       </TabsContent>
 
       <TabsContent value="region">
-        {regionSlices.length > 0 ? (
-          <AllocationDonut data={regionSlices} currency={currency} />
-        ) : (
-          <p className="text-center text-sm text-muted-foreground py-8">—</p>
-        )}
+        <TabBody
+          slices={regionSlices}
+          dimension="region"
+          dimensionLabel={t("allocationTabRegion")}
+          currency={currency}
+          drift={drift}
+          portfolioId={portfolioId}
+        />
       </TabsContent>
 
       <TabsContent value="sector">
-        {sectorSlices.length > 0 ? (
-          <AllocationDonut data={sectorSlices} currency={currency} />
-        ) : (
-          <p className="text-center text-sm text-muted-foreground py-8">—</p>
-        )}
+        <TabBody
+          slices={sectorSlices}
+          dimension="sector"
+          dimensionLabel={t("allocationTabSector")}
+          currency={currency}
+          drift={drift}
+          portfolioId={portfolioId}
+        />
       </TabsContent>
     </Tabs>
   );
 }
+
+// ---------------------------------------------------------------------------
+// ConcentrationBadge
+// ---------------------------------------------------------------------------
 
 /** Concentration badge shown in the card header beside the "Allocation" title. */
 export function ConcentrationBadge({
@@ -123,8 +238,6 @@ export function ConcentrationBadge({
   } as const;
 
   return (
-    <Badge variant={variant[label] ?? "secondary"}>
-      {t(labelKey[label])}
-    </Badge>
+    <Badge variant={variant[label] ?? "secondary"}>{t(labelKey[label])}</Badge>
   );
 }

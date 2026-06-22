@@ -95,3 +95,11 @@ export {
   type ConcentrationInfo,
   type AllocationBreakdown,
 } from "./allocation.js";
+export {
+  rebalancingDrift,
+  rebalancingTrades,
+  contributionSplit,
+  type TargetWeight,
+  type DriftRow,
+  type TradeAction,
+} from "./rebalancing.js";

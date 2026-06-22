@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import {
   accountHolders,
+  allocationTargets,
   corporateActions,
   dividendEvents,
   documents,
@@ -29,6 +30,7 @@ import {
   computeHoldings,
   aggregatePortfolios,
   allocationBreakdown,
+  rebalancingDrift,
   xirr,
   projectCoupons,
   projectDividends,
@@ -55,6 +57,7 @@ import {
   type TradeLog,
   type TradeMethod,
   type SparplanStats,
+  type DriftRow,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
@@ -193,6 +196,59 @@ export async function transactionsRoute(app: FastifyInstance) {
         instrument: meta.get(t.instrumentId) ?? null,
       })),
     };
+  }
+
+  // Load all allocation targets for (userId, portfolioId|null) and compute drift
+  // against each dimension's actual allocation slices from an AllocationBreakdown.
+  // Returns a Record<dimension, DriftRow[]> with only non-empty dimensions included.
+  async function loadDrift(
+    userId: string,
+    portfolioId: string | null,
+    allocation: {
+      byAssetClass: { key: string; value: string; pct: number }[];
+      byCurrency: { key: string; value: string; pct: number }[];
+      byRegion: { key: string; value: string; pct: number }[];
+      bySector: { key: string; value: string; pct: number }[];
+    },
+  ): Promise<Record<string, DriftRow[]>> {
+    // Fetch all target rows for this scope in a single query.
+    const rows = await app.db
+      .select()
+      .from(allocationTargets)
+      .where(
+        and(
+          eq(allocationTargets.userId, userId),
+          portfolioId
+            ? eq(allocationTargets.portfolioId, portfolioId)
+            : isNull(allocationTargets.portfolioId),
+        ),
+      );
+
+    if (rows.length === 0) return {};
+
+    // Group by dimension.
+    const byDimension = new Map<string, { key: string; targetPct: number }[]>();
+    for (const r of rows) {
+      const existing = byDimension.get(r.dimension) ?? [];
+      existing.push({ key: r.targetKey, targetPct: Number(r.targetPct) });
+      byDimension.set(r.dimension, existing);
+    }
+
+    const DIMENSION_SLICES: Record<string, typeof allocation.byAssetClass> = {
+      asset_class: allocation.byAssetClass,
+      currency: allocation.byCurrency,
+      region: allocation.byRegion,
+      sector: allocation.bySector,
+    };
+
+    const result: Record<string, DriftRow[]> = {};
+    for (const [dimension, targets] of byDimension) {
+      const slices = DIMENSION_SLICES[dimension];
+      if (!slices) continue; // ignore 'instrument' dimension here (Sparplan, Phase B)
+      const drift = rebalancingDrift(slices, targets);
+      if (drift.length > 0) result[dimension] = drift;
+    }
+    return result;
   }
 
   // External capital flows (deposits in (−), withdrawals out (+)) for XIRR, each
@@ -952,13 +1008,16 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (needsSectorEnrichment([...metaById.values()])) {
         void enqueueInstrumentMetadata();
       }
+      const allocation = allocationBreakdown(summary, metaById);
+      const drift = await loadDrift(id, portfolioId, allocation);
       return {
         ...summary,
         holdings: summary.holdings.map((h) => ({
           ...h,
           instrument: metaById.get(h.instrumentId) ?? null,
         })),
-        allocation: allocationBreakdown(summary, metaById),
+        allocation,
+        ...(Object.keys(drift).length > 0 ? { drift } : {}),
       };
     },
   );
@@ -1162,10 +1221,14 @@ export async function transactionsRoute(app: FastifyInstance) {
       flows.push({ amount: Number(aggregated.netWorth), date: asOf });
       const rate = xirr(flows);
 
+      const allocation = allocationBreakdown(aggregated, meta);
+      const drift = await loadDrift(id, null, allocation);
+
       return {
         ...aggregated,
         holdings,
-        allocation: allocationBreakdown(aggregated, meta),
+        allocation,
+        ...(Object.keys(drift).length > 0 ? { drift } : {}),
         xirr: Number.isFinite(rate) ? rate : null,
         portfolioCount: pfs.length,
         asOf: asOf.toISOString(),

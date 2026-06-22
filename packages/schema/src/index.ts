@@ -427,6 +427,50 @@ export const importIssueSchema = z.object({
 });
 export type ImportIssue = z.infer<typeof importIssueSchema>;
 
+// --- Allocation targets --------------------------------------------------
+
+/**
+ * Valid dimension values for allocation target sets.
+ * 'instrument' is used for Sparplan per-instrument splits (Phase B).
+ */
+export const allocationDimensionSchema = z.enum([
+  "asset_class",
+  "currency",
+  "region",
+  "sector",
+  "instrument",
+]);
+export type AllocationDimension = z.infer<typeof allocationDimensionSchema>;
+
+/**
+ * A single target weight entry.
+ * `targetPct` must be 0–100 (validated at the set level to sum ≈ 100).
+ */
+export const allocationTargetEntrySchema = z.object({
+  key: z.string().min(1),
+  targetPct: z.number().min(0).max(100),
+});
+
+/**
+ * Body schema for `PUT /networth/targets` and `PUT /portfolios/:id/targets`.
+ * Replaces the entire (scope, dimension) set atomically.
+ * `Σ targetPct` must be within 0.5 pp of 100 (accounts for rounding).
+ */
+export const allocationTargetSetSchema = z
+  .object({
+    dimension: allocationDimensionSchema,
+    portfolioId: z.guid().nullable().optional(),
+    targets: z.array(allocationTargetEntrySchema).min(1),
+  })
+  .refine(
+    (d) => {
+      const sum = d.targets.reduce((acc, t) => acc + t.targetPct, 0);
+      return Math.abs(sum - 100) <= 0.5;
+    },
+    { message: "Target percentages must sum to 100 (±0.5)" },
+  );
+export type AllocationTargetSet = z.infer<typeof allocationTargetSetSchema>;
+
 // --- Global search -------------------------------------------------------
 
 /**
