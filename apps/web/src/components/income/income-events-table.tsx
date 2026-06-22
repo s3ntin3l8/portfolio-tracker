@@ -20,12 +20,16 @@ export type IncomeEventRow = IncomeEvent & {
   status?: UpcomingPayment["status"];
   growthApplied?: number;
   assumesContributions?: boolean;
+  perShare?: string;
+  quantity?: string;
 };
 
 const COLS: ColDef<IncomeEventRow>[] = [
   { key: "date", get: (e) => e.date, type: "date" },
   { key: "type", get: (e) => e.status ?? e.type, type: "text" },
   { key: "instrument", get: (e) => e.symbol ?? "", type: "text" },
+  { key: "perShare", get: (e) => e.perShare ?? "", type: "numeric" },
+  { key: "quantity", get: (e) => e.quantity ?? "", type: "numeric" },
   { key: "amount", get: (e) => e.amount, type: "numeric" },
 ];
 
@@ -53,6 +57,8 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
           <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("date")}</SortableTableHead>
           <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("type")}</SortableTableHead>
           <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
+          <SortableTableHead colKey="perShare" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="hidden sm:table-cell text-right">{t("perShare")}</SortableTableHead>
+          <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="hidden sm:table-cell text-right">{t("shares")}</SortableTableHead>
           <SortableTableHead colKey="amount" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("amount")}</SortableTableHead>
         </TableRow>
       </TableHeader>
@@ -93,6 +99,16 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
               {e.name && (
                 <div className="text-xs text-muted-foreground">{e.name}</div>
               )}
+            </TableCell>
+            <TableCell className="hidden sm:table-cell tabular text-right text-muted-foreground">
+              {e.perShare != null
+                ? formatMoney(Number(e.perShare), e.currency, locale)
+                : "—"}
+            </TableCell>
+            <TableCell className="hidden sm:table-cell tabular text-right text-muted-foreground">
+              {e.quantity != null
+                ? Number(e.quantity).toLocaleString(locale, { maximumFractionDigits: 4 })
+                : "—"}
             </TableCell>
             <TableCell className={`tabular text-right ${Number(e.amount) >= 0 ? "text-success" : "text-destructive"}`}>
               {formatMoney(Number(e.amount), e.currency, locale)}

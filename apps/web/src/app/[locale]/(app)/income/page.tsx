@@ -128,12 +128,24 @@ export default async function IncomePage({
       type: u.kind,
       growthApplied: u.growthApplied,
       assumesContributions: u.assumesContributions,
+      perShare: u.perShare,
+      quantity: u.quantity,
     });
     byYear.set(year, bucket);
   }
   for (const bucket of byYear.values()) {
     bucket.sort((a, b) => b.date.localeCompare(a.date));
   }
+
+  // Split off next-year projected rows into a dedicated section to avoid mixing
+  // them with historical/current-year rows and to surface their assumptions clearly.
+  const nextYearStr = String(new Date().getUTCFullYear() + 1);
+  const nextYearRows = byYear.get(nextYearStr) ?? [];
+  // Remove from the generic per-year loop so they don't render twice.
+  byYear.delete(nextYearStr);
+
+  const hasGrowth = nextYearRows.some((r) => r.status === "grown");
+  const hasContributions = nextYearRows.some((r) => r.assumesContributions);
 
   return (
     <div className="space-y-8">
@@ -276,6 +288,34 @@ export default async function IncomePage({
           </section>
         );
       })}
+
+      {nextYearRows.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold">
+              {t("nextYearSectionTitle", { year: nextYearStr })}
+            </h2>
+            <p className="tabular text-sm text-muted-foreground">
+              {t("yearTotal")}{" "}
+              <span className="font-medium text-foreground">
+                {Object.entries(totalsByCurrency(nextYearRows))
+                  .map(([cur, amount]) => formatMoney(amount, cur, locale))
+                  .join(" · ")}
+              </span>
+            </p>
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            {t("assumptionsBase")}
+            {hasGrowth && <> {t("assumptionsGrowth")}</>}
+            {hasContributions && <> {t("assumptionsContributions")}</>}
+          </p>
+
+          <div className="rounded-xl border border-border">
+            <IncomeEventsTable rows={nextYearRows} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

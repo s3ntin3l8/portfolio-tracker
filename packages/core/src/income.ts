@@ -186,6 +186,14 @@ export interface ProjectedDividend {
   growthApplied?: number;
   /** True when the projected quantity includes assumed continued savings-plan accumulation. */
   assumesContributions?: boolean;
+  /**
+   * Per-share amount in `currency` (split-adjusted: uses current-share-terms quantities
+   * so values are comparable across dates regardless of subsequent corporate actions).
+   * Absent for coupons and unlinked rows.
+   */
+  perShare?: string;
+  /** Share count at the projected date (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 /**
@@ -254,6 +262,8 @@ export function projectDividends(
       currency: e.currency,
       basisYear: e.executedAt.getUTCFullYear(),
       source: "flat",
+      perShare: amount.div(currentQty).toString(),
+      quantity: currentQty.toString(),
     });
   }
 
@@ -406,7 +416,8 @@ export function projectNextYearDividends(
       const projectedQty = hasAccumulation
         ? currentQty.add(accRate.mul(monthsAhead))
         : currentQty;
-      const amount = perSharePerPayment.mul(growthFactor).mul(projectedQty);
+      const perShareFinal = perSharePerPayment.mul(growthFactor);
+      const amount = perShareFinal.mul(projectedQty);
 
       out.push({
         instrumentId,
@@ -419,6 +430,8 @@ export function projectNextYearDividends(
         source,
         growthApplied,
         assumesContributions: hasAccumulation ? true : undefined,
+        perShare: perShareFinal.toString(),
+        quantity: projectedQty.toString(),
       });
 
       d = addUTCMonths(d, intervalMonths);

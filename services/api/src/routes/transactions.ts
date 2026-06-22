@@ -485,7 +485,14 @@ export async function transactionsRoute(app: FastifyInstance) {
     // For those instruments, announced data replaces projected estimates.
     const futureAnnouncedByInstrument = new Map<
       string,
-      { exDate: string; amount: string; currency: string; status: "announced" | "paid" }[]
+      {
+        exDate: string;
+        amount: string;
+        currency: string;
+        status: "announced" | "paid";
+        perShare: string;
+        quantity: string;
+      }[]
     >();
     for (const row of announcedRows) {
       const qty = heldQtyMap.get(row.instrumentId);
@@ -497,6 +504,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         amount: totalAmount,
         currency: row.currency,
         status: row.status,
+        perShare: row.amountPerShare,
+        quantity: qty,
       });
       futureAnnouncedByInstrument.set(row.instrumentId, list);
     }
@@ -563,15 +572,30 @@ export async function transactionsRoute(app: FastifyInstance) {
     });
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
-    const events = enriched.map((e) => ({
-      instrumentId: e.instrumentId,
-      symbol: e.symbol,
-      name: e.name,
-      type: e.type,
-      date: e.date,
-      amount: e.price,
-      currency: e.currency,
-    }));
+    // For dividend rows with a known instrument, compute split-adjusted per-share/quantity.
+    const events = enriched.map((e) => {
+      let perShare: string | undefined;
+      let quantity: string | undefined;
+      if (e.type === "dividend" && e.instrumentId) {
+        const q = qtyAt(e.instrumentId, e.executedAt);
+        const qNum = Number(q);
+        if (qNum > 0) {
+          perShare = String(Number(e.price) / qNum);
+          quantity = q;
+        }
+      }
+      return {
+        instrumentId: e.instrumentId,
+        symbol: e.symbol,
+        name: e.name,
+        type: e.type,
+        date: e.date,
+        amount: e.price,
+        currency: e.currency,
+        perShare,
+        quantity,
+      };
+    });
 
     // Build announced entries for the upcoming stream (future ex-dates only, both windows).
     const upcomingAnnounced: {
@@ -583,6 +607,8 @@ export async function transactionsRoute(app: FastifyInstance) {
       currency: string;
       kind: "dividend";
       status: "announced" | "paid";
+      perShare: string;
+      quantity: string;
     }[] = [];
     for (const [instrumentId, entries] of futureAnnouncedByInstrument) {
       const im = meta.get(instrumentId);
@@ -597,6 +623,8 @@ export async function transactionsRoute(app: FastifyInstance) {
           currency: entry.currency,
           kind: "dividend",
           status: entry.status,
+          perShare: entry.perShare,
+          quantity: entry.quantity,
         });
       }
     }
@@ -617,6 +645,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         status: "scheduled" as const,
         growthApplied: undefined as number | undefined,
         assumesContributions: undefined as boolean | undefined,
+        perShare: undefined as string | undefined,
+        quantity: undefined as string | undefined,
       })),
       ...blendedProjected.map((d) => ({
         instrumentId: d.instrumentId,
@@ -629,6 +659,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         status: "projected" as const,
         growthApplied: undefined as number | undefined,
         assumesContributions: undefined as boolean | undefined,
+        perShare: d.perShare,
+        quantity: d.quantity,
       })),
       ...blendedNextYear.map((d) => ({
         instrumentId: d.instrumentId,
@@ -644,6 +676,8 @@ export async function transactionsRoute(app: FastifyInstance) {
           | "grown",
         growthApplied: d.growthApplied,
         assumesContributions: d.assumesContributions,
+        perShare: d.perShare,
+        quantity: d.quantity,
       })),
       ...upcomingAnnounced.map((d) => ({
         ...d,

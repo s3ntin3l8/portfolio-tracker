@@ -486,4 +486,89 @@ describe("projectNextYearDividends", () => {
     // TTM = 300 IDR; forecastNextYear = 300.
     expect(result.forecastNextYear).toBe("300");
   });
+
+  it("emits perShare and quantity on every projected entry", () => {
+    // Quarterly payer; currentQty = 20; four payments should appear.
+    const qtrPast = [
+      hist("div", "2025-03-01", "40.00"),
+      hist("div", "2025-06-01", "40.00"),
+      hist("div", "2025-09-01", "40.00"),
+      hist("div", "2025-12-01", "40.00"),
+    ];
+    const heldQty = new Map([["div", "20"]]);
+    const result = projectNextYearDividends(qtrPast, heldQty, () => "20", NOW, {
+      applyGrowth: false,
+    });
+    expect(result.length).toBeGreaterThan(0);
+    for (const r of result) {
+      expect(r.perShare).toBeDefined();
+      expect(r.quantity).toBeDefined();
+      // perShare × quantity ≈ amount (within floating-point rounding)
+      const reconstructed = Number(r.perShare) * Number(r.quantity);
+      expect(reconstructed).toBeCloseTo(Number(r.amount), 6);
+    }
+  });
+
+  it("reflects growth factor in perShare but not in quantity (flat accumulation)", () => {
+    // Two payments: 2024-07 and 2025-07. NOW = 2026-06-15; cutoff24mo = 2024-06-15.
+    // Both dates are within the 24-month window so both enter the base average.
+    // growthFactor = 2.2/2.0 = 1.1; base avg perShare = (2.0+2.2)/2 = 2.1; qty = 10.
+    const past = [
+      hist("grw", "2024-07-01", "20.00"), // 20/10 = 2.0 perShare — within 24mo window
+      hist("grw", "2025-07-01", "22.00"), // 22/10 = 2.2 perShare
+    ];
+    const heldQty = new Map([["grw", "10"]]);
+    const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
+      applyGrowth: true,
+    });
+    expect(result).toHaveLength(1);
+    // perShare = avg(2.0, 2.2) × growthFactor(1.1) = 2.1 × 1.1 ≈ 2.31; qty = 10
+    expect(Number(result[0].perShare)).toBeCloseTo(2.31, 1);
+    expect(Number(result[0].quantity)).toBeCloseTo(10, 4);
+    const reconstructed = Number(result[0].perShare) * Number(result[0].quantity);
+    expect(reconstructed).toBeCloseTo(Number(result[0].amount), 6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// projectDividends — perShare/quantity fields
+// ---------------------------------------------------------------------------
+
+describe("projectDividends — perShare and quantity fields", () => {
+  const NOW = d("2026-06-15");
+
+  const hist = (id: string, date: string, price: string): IncomeEntry => ({
+    instrumentId: id,
+    symbol: id.toUpperCase(),
+    type: "dividend",
+    price,
+    currency: "USD",
+    executedAt: d(date),
+  });
+
+  it("emits perShare and quantity on rest-of-year projected entries", () => {
+    const past = [hist("aapl", "2025-09-01", "10.00")]; // in last-year same-window
+    const heldQty = new Map([["aapl", "5"]]);
+    const result = projectDividends(past, heldQty, () => "5", NOW);
+    expect(result).toHaveLength(1);
+    expect(result[0].perShare).toBeDefined();
+    expect(result[0].quantity).toBeDefined();
+    // currentQty = 5; amount = 10 × (5/5) = 10; perShare = 10/5 = 2; quantity = 5
+    expect(Number(result[0].perShare)).toBeCloseTo(2.0, 6);
+    expect(Number(result[0].quantity)).toBeCloseTo(5, 6);
+    const reconstructed = Number(result[0].perShare) * Number(result[0].quantity);
+    expect(reconstructed).toBeCloseTo(Number(result[0].amount), 6);
+  });
+
+  it("scales perShare correctly when qty increases", () => {
+    // histQty = 5, currentQty = 10: amount doubles but perShare stays same
+    const past = [hist("msft", "2025-09-01", "4.00")];
+    const heldQty = new Map([["msft", "10"]]);
+    const result = projectDividends(past, heldQty, () => "5", NOW);
+    expect(result).toHaveLength(1);
+    // amount = 4 × (10/5) = 8; perShare = 8/10 = 0.8; qty = 10
+    expect(Number(result[0].amount)).toBeCloseTo(8.0, 6);
+    expect(Number(result[0].perShare)).toBeCloseTo(0.8, 6);
+    expect(Number(result[0].quantity)).toBeCloseTo(10, 6);
+  });
 });

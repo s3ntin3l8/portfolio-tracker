@@ -501,6 +501,13 @@ export interface UpcomingPayment {
   growthApplied?: number;
   /** True when the projected amount assumes continued savings-plan share accumulation. */
   assumesContributions?: boolean;
+  /**
+   * Per-share dividend amount in `currency` (split-adjusted). Absent for coupons and
+   * unlinked rows. Multiply by `quantity` to reproduce `amount`.
+   */
+  perShare?: string;
+  /** Share count used for this payment (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 /** Trailing-12-month income + yield for an income-paying holding (display currency). */
@@ -527,6 +534,13 @@ export interface IncomeEvent {
   date: string; // YYYY-MM-DD
   amount: string;
   currency: string;
+  /**
+   * Per-share dividend amount in `currency` (split-adjusted). Absent for coupons and
+   * unlinked rows. Multiply by `quantity` to reproduce `amount`.
+   */
+  perShare?: string;
+  /** Share count at the time of payment (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 export interface YearIncome {

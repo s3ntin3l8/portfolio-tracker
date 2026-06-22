@@ -1533,6 +1533,35 @@ describe("auth + portfolios + transactions", () => {
       (u: { status: string }) => u.status === "projected" || u.status === "grown",
     );
     expect(projectedEntries.length).toBeGreaterThan(0);
+
+    // Announced entries should carry perShare (= amountPerShare from dividend_events)
+    // and quantity (= held shares = 10).
+    for (const entry of announcedEntries) {
+      expect(entry.perShare).toBeDefined();
+      expect(entry.quantity).toBeDefined();
+      expect(Number(entry.perShare)).toBeCloseTo(0.80, 2); // amountPerShare
+      expect(Number(entry.quantity)).toBeCloseTo(10, 2);   // held qty
+    }
+
+    // Projected entries should carry perShare and quantity; perShare × quantity ≈ amount.
+    for (const entry of projectedEntries) {
+      expect(entry.perShare).toBeDefined();
+      expect(entry.quantity).toBeDefined();
+      const reconstructed = Number(entry.perShare) * Number(entry.quantity);
+      expect(reconstructed).toBeCloseTo(Number(entry.amount), 4);
+    }
+
+    // Historical dividend events should carry perShare and quantity.
+    const histDivEvents = body.events.filter(
+      (e: { type: string; instrumentId: string }) =>
+        e.type === "dividend" && e.instrumentId === msft.id,
+    );
+    for (const ev of histDivEvents) {
+      expect(ev.perShare).toBeDefined();
+      expect(ev.quantity).toBeDefined();
+      const reconstructed = Number(ev.perShare) * Number(ev.quantity);
+      expect(reconstructed).toBeCloseTo(Number(ev.amount), 4);
+    }
   });
 
   it("uses projected dividends when dividend_events has only past paid rows (Yahoo Finance scenario)", async () => {
@@ -1641,6 +1670,14 @@ describe("auth + portfolios + transactions", () => {
         (u: { status: string }) => u.status === "projected" || u.status === "grown",
       ),
     ).toBe(true);
+
+    // Projected upcoming dividend rows should carry perShare and quantity.
+    for (const u of upcomingMsft) {
+      expect(u.perShare).toBeDefined();
+      expect(u.quantity).toBeDefined();
+      const reconstructed = Number(u.perShare) * Number(u.quantity);
+      expect(reconstructed).toBeCloseTo(Number(u.amount), 4);
+    }
   });
 
   it("does not forecast dividends for an instrument with no recorded position", async () => {
