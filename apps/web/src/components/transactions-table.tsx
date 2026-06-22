@@ -37,12 +37,14 @@ import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
+import type { SourceSummary } from "@portfolio/api-client";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
   csv: FileSpreadsheet,
   manual: PencilLine,
   pytr: Landmark,
+  pdf: FileSpreadsheet,
 };
 
 const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
@@ -66,6 +68,12 @@ export interface TxRow {
   instrument: { symbol?: string | null; name?: string | null } | null;
   /** True when the parent import has a retained source document (#231). */
   hasDocument?: boolean;
+  /** Import dedup key; null for manually-entered transactions. */
+  externalId?: string | null;
+  /** True when at least one source row has per-component taxComponents. */
+  hasFullTaxDetail?: boolean;
+  /** Source-provenance rows — empty for manual transactions. */
+  sources?: SourceSummary[];
 }
 
 /** Compute the signed cash-flow (actual cash movement) for a TxRow via core. */

@@ -49,6 +49,7 @@ function draftSourceType(
   if (importSource === "pytr") return "pytr";
   if (importSource === "manual") return "manual";
   if (importSource === "screenshot") return "screenshot";
+  if (importSource === "pdf") return "pdf";
   return "csv";
 }
 

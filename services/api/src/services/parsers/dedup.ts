@@ -95,6 +95,7 @@ export function withinDayTolerance(a: Date | string, b: Date | string): boolean 
  */
 export function parserToTxSource(parser: string): string {
   if (parser === "pytr") return "pytr";
+  if (parser === "dkb-pdf" || parser === "tr-pdf") return "pdf";
   if (parser === "csv" || parser === "dkb" || parser === "tr-csv") return "csv";
   return "screenshot";
 }

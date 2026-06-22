@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import {
   instruments,
   loans,
@@ -648,6 +648,10 @@ export async function importsRoute(app: FastifyInstance) {
       // broker parser before vision; "vision_only" skips it so every PDF/image goes
       // straight to the vision-LLM. CSV imports use their own path and are unaffected.
       const importStrategy = await getImportStrategy(app.db);
+      // Track which deterministic parser produced the drafts so the confirm endpoint can
+      // derive the correct `transactions.source` ("pdf") and `isEu` ISIN-resolution flag.
+      // Stays at the vision-parser name when the fast-path doesn't match or falls through.
+      let parserTag = app.screenshotParser.name;
       // Deterministic fast-path for DKB securities PDFs (Wertpapierabrechnung /
       // Dividendengutschrift / Ausschüttung): parse the text layer exactly — no LLM call,
       // no billing, no data egress. Falls through to vision for any non-DKB / scanned PDF.
@@ -660,6 +664,7 @@ export async function importsRoute(app: FastifyInstance) {
             if (dkbDrafts.length > 0) {
               request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
               parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
+              parserTag = "dkb-pdf";
             }
           } else if (detectTrPdf(text)) {
             // TR settlement PDFs: deterministic parse — same fast-path as DKB.
@@ -668,6 +673,7 @@ export async function importsRoute(app: FastifyInstance) {
             if (trDrafts.length > 0) {
               request.log.info({ drafts: trDrafts.length }, "TR PDF parsed deterministically");
               parsed = { drafts: trDrafts, contracts: [], accountNumber: null };
+              parserTag = "tr-pdf";
               if (trErrors.length > 0) {
                 request.log.warn({ errors: trErrors }, "TR PDF parse had errors");
               }
@@ -728,7 +734,9 @@ export async function importsRoute(app: FastifyInstance) {
           // Store the account-matched portfolio so the draft review page pre-selects it.
           // Overwritten at confirm time with whatever the user chose in the review picker.
           portfolioId: matchedPortfolioId ?? null,
-          parser: app.screenshotParser.name,
+          // Use the deterministic parser tag ("dkb-pdf"/"tr-pdf") when the fast-path
+          // matched, so confirm can derive source="pdf" and correct ISIN resolution.
+          parser: parserTag,
           parsedJson: result,
           confidence,
           contentHash,
@@ -761,7 +769,7 @@ export async function importsRoute(app: FastifyInstance) {
         buf,
         mimeType,
         originalFilename: part.filename ?? null,
-        source: app.screenshotParser.name,
+        source: parserTag,
       });
 
       request.log.info(
@@ -1118,14 +1126,21 @@ export async function importsRoute(app: FastifyInstance) {
       // resolves ISINs like the pytr path, but is a connectionless one-shot import, so it
       // stays `source="csv"` (not the pytr collector / resolved-events branch).
       const isTrCsv = imp.parser === "tr-csv";
-      // pytr is its own source; DKB and TR-CSV exports are CSV too; otherwise a screenshot.
+      // Deterministic PDF parsers tag the import with "dkb-pdf" / "tr-pdf" at upload time
+      // so we can route them to source="pdf" and preserve EU/ISIN instrument resolution.
+      const isDkbPdf = imp.parser === "dkb-pdf";
+      const isTrPdf = imp.parser === "tr-pdf";
+      // pytr is its own source; DKB/TR PDFs get the new "pdf" source; DKB-CSV and TR-CSV
+      // exports are CSV; everything else (LLM vision) is screenshot.
       const source = isPytr
         ? "pytr"
-        : imp.parser === "csv" || isDkb || isTrCsv
-          ? "csv"
-          : "screenshot";
+        : (isDkbPdf || isTrPdf)
+          ? "pdf"
+          : imp.parser === "csv" || isDkb || isTrCsv
+            ? "csv"
+            : "screenshot";
       // DKB and Trade Republic are both EU/ISIN brokers — identical instrument resolution.
-      const isEu = isDkb || isPytr || isTrCsv;
+      const isEu = isDkb || isPytr || isTrCsv || isDkbPdf || isTrPdf;
 
       request.log.info(
         { importId: imp.id, parser: imp.parser, source, txDrafts: drafts.length, contracts: contracts.length },
@@ -1436,6 +1451,7 @@ export async function importsRoute(app: FastifyInstance) {
               hasTaxComponents ? "pdf"
               : source === "pytr" ? "pytr"
               : source === "screenshot" ? "screenshot"
+              : source === "pdf" ? "pdf"
               : "csv"
             ) as "pdf" | "pytr" | "screenshot" | "csv" | "manual";
             await tx
@@ -1686,6 +1702,33 @@ export async function importsRoute(app: FastifyInstance) {
         retain,
       });
 
+      // For DKB/TR-PDF imports: link every source row to the retained document so the
+      // per-source download button works (both new transactions and enrichment matches).
+      // The document is always a single file per import (one PDF → many source rows),
+      // so we map importId → retained doc id and batch-update in one query.
+      if ((isDkbPdf || isTrPdf) && retain) {
+        try {
+          const retainedDoc = await getDocumentForImport(app, imp.id);
+          if (retainedDoc) {
+            await app.db
+              .update(transactionSources)
+              .set({ documentId: retainedDoc.id })
+              .where(
+                and(
+                  eq(transactionSources.importId, imp.id),
+                  isNull(transactionSources.documentId),
+                ),
+              );
+            request.log.debug(
+              { importId: imp.id, docId: retainedDoc.id },
+              "confirm: linked PDF source rows to retained document",
+            );
+          }
+        } catch (err) {
+          request.log.warn({ err }, "confirm: failed to link PDF source rows to document (non-fatal)");
+        }
+      }
+
       request.log.info(
         {
           importId: imp.id,
@@ -1747,9 +1790,12 @@ export async function importsRoute(app: FastifyInstance) {
 
       const source = imp.parser === "pytr"
         ? "pytr"
-        : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
-          ? "csv"
-          : "screenshot";
+        : (imp.parser === "dkb-pdf" || imp.parser === "tr-pdf")
+          ? "pdf"
+          : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
+            ? "csv"
+            : "screenshot";
+      const isEnrichPdf = imp.parser === "dkb-pdf" || imp.parser === "tr-pdf";
 
       let enriched = 0;
       const skipped: number[] = [];
@@ -1801,6 +1847,31 @@ export async function importsRoute(app: FastifyInstance) {
         portfolioId: targetPortfolioId,
         retain,
       });
+
+      // For DKB/TR-PDF imports: link every source row to the retained document so the
+      // per-source download button works (mirrors the confirm path).
+      if (isEnrichPdf && retain) {
+        try {
+          const retainedDoc = await getDocumentForImport(app, imp.id);
+          if (retainedDoc) {
+            await app.db
+              .update(transactionSources)
+              .set({ documentId: retainedDoc.id })
+              .where(
+                and(
+                  eq(transactionSources.importId, imp.id),
+                  isNull(transactionSources.documentId),
+                ),
+              );
+            request.log.debug(
+              { importId: imp.id, docId: retainedDoc.id },
+              "enrich: linked PDF source rows to retained document",
+            );
+          }
+        } catch (err) {
+          request.log.warn({ err }, "enrich: failed to link PDF source rows to document (non-fatal)");
+        }
+      }
 
       request.log.info(
         { importId: imp.id, enriched, skipped: skipped.length, documentLinked },

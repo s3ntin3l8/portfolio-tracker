@@ -50,6 +50,7 @@ export const transactionSourceSchema = z.enum([
   "csv",
   "manual",
   "pytr",
+  "pdf",
 ]);
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
 

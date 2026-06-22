@@ -712,12 +712,14 @@
       "screenshot": "Tangkapan layar",
       "csv": "CSV",
       "manual": "Manual",
-      "pytr": "Trade Republic"
+      "pytr": "Trade Republic",
+      "pdf": "PDF"
     },
     "sourcesSection": {
       "title": "Sumber data",
       "download": "Unduh PDF sumber",
-      "fullDetailBadge": "Rincian pajak lengkap tersedia dari PDF penyelesaian."
+      "fullDetailBadge": "Rincian pajak lengkap tersedia dari PDF penyelesaian.",
+      "notRetained": "Dokumen asli tidak disimpan. Untuk menyimpan file yang diimpor, aktifkan retensi dokumen di pengaturan portofolio."
     },
     "batch": {
       "selected": "{count, plural, one {# dipilih} other {# dipilih}}",

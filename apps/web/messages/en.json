@@ -714,12 +714,14 @@
       "screenshot": "Screenshot",
       "csv": "CSV",
       "manual": "Manual",
-      "pytr": "Trade Republic"
+      "pytr": "Trade Republic",
+      "pdf": "PDF"
     },
     "sourcesSection": {
       "title": "Data sources",
       "download": "Download source PDF",
-      "fullDetailBadge": "Full tax breakdown available from settlement PDF."
+      "fullDetailBadge": "Full tax breakdown available from settlement PDF.",
+      "notRetained": "The original document was not stored. To keep imported files, enable document retention in the portfolio settings."
     },
     "batch": {
       "selected": "{count, plural, one {# selected} other {# selected}}",

@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
+import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Link } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { formatMoney } from "@/lib/utils";
@@ -151,6 +152,27 @@ export function TransactionDetailSheet({
               </dd>
             </div>
           </dl>
+
+          {/* Import provenance — source rows with per-source download buttons */}
+          {(tx.sources?.length ?? 0) > 0 && (
+            <div className="mt-4">
+              <TransactionSourcesSection
+                portfolioId={tx.portfolioId}
+                txId={tx.id}
+                sources={tx.sources!}
+                hasFullTaxDetail={tx.hasFullTaxDetail ?? false}
+              />
+            </div>
+          )}
+
+          {/* Retention hint — shown when source rows exist but no document was retained */}
+          {(tx.sources?.length ?? 0) > 0 &&
+            !tx.hasDocument &&
+            !tx.sources?.some((s) => s.documentId) && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("sourcesSection.notRetained")}
+            </p>
+          )}
 
           {/* Actions footer */}
           <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-4">

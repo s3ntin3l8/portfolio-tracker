@@ -60,6 +60,7 @@ export const txSourceEnum = pgEnum("transaction_source", [
   "csv",
   "manual",
   "pytr",
+  "pdf",
 ]);
 
 // Source-type enum for transaction_sources rows. Richer than txSourceEnum: `pdf`

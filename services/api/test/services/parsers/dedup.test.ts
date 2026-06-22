@@ -12,6 +12,11 @@ describe("parserToTxSource", () => {
     expect(parserToTxSource("tr-csv")).toBe("csv");
   });
 
+  it("maps deterministic PDF parsers to pdf", () => {
+    expect(parserToTxSource("dkb-pdf")).toBe("pdf");
+    expect(parserToTxSource("tr-pdf")).toBe("pdf");
+  });
+
   it("maps screenshot and unknown parsers to screenshot", () => {
     expect(parserToTxSource("screenshot")).toBe("screenshot");
     expect(parserToTxSource("mock")).toBe("screenshot");

@@ -5,6 +5,7 @@ import messages from "../messages/en.json";
 
 const refresh = vi.fn();
 const getTransactionDocumentUrl = vi.fn(async () => ({ url: "https://example.com/doc" }));
+const getSourceDocumentUrl = vi.fn(async () => ({ url: "https://example.com/src-doc" }));
 const deleteTransaction = vi.fn(async () => undefined);
 
 vi.mock("@/i18n/navigation", () => ({
@@ -14,7 +15,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ getTransactionDocumentUrl, deleteTransaction }),
+  useApiClient: () => ({ getTransactionDocumentUrl, getSourceDocumentUrl, deleteTransaction }),
 }));
 
 import {
@@ -63,6 +64,7 @@ describe("TransactionDetailSheet", () => {
   beforeEach(() => {
     refresh.mockClear();
     getTransactionDocumentUrl.mockClear();
+    getSourceDocumentUrl.mockClear();
     deleteTransaction.mockClear();
   });
 
@@ -152,5 +154,77 @@ describe("TransactionDetailSheet", () => {
       </NextIntlClientProvider>,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it("renders the import provenance section when tx.sources is non-empty", () => {
+    const txWithSources = {
+      ...TX,
+      hasDocument: false,
+      sources: [
+        {
+          id: "src-1",
+          sourceType: "pdf",
+          externalId: "dkb:12345",
+          orderRef: null,
+          documentId: null,
+          taxComponents: null,
+          createdAt: "2026-03-15T00:00:00.000Z",
+        },
+      ],
+    };
+    renderSheet({ tx: txWithSources });
+    // Section heading
+    expect(screen.getByText(messages.Transactions.sourcesSection.title)).toBeInTheDocument();
+    // Source type chip
+    expect(screen.getByText("pdf")).toBeInTheDocument();
+    // External ID
+    expect(screen.getByText("dkb:12345")).toBeInTheDocument();
+  });
+
+  it("calls getSourceDocumentUrl when per-source download button is clicked", async () => {
+    const txWithSources = {
+      ...TX,
+      sources: [
+        {
+          id: "src-2",
+          sourceType: "pdf",
+          externalId: "dkb:99999",
+          orderRef: null,
+          documentId: "doc-abc",
+          taxComponents: null,
+          createdAt: "2026-03-15T00:00:00.000Z",
+        },
+      ],
+    };
+    renderSheet({ tx: txWithSources });
+    const dlBtn = screen.getByRole("button", {
+      name: messages.Transactions.sourcesSection.download,
+    });
+    fireEvent.click(dlBtn);
+    await waitFor(() => {
+      expect(getSourceDocumentUrl).toHaveBeenCalledWith("p-1", "tx-1", "src-2");
+    });
+  });
+
+  it("shows the retention note when sources exist but no document was retained", () => {
+    const txNoDoc = {
+      ...TX,
+      hasDocument: false,
+      sources: [
+        {
+          id: "src-3",
+          sourceType: "csv",
+          externalId: null,
+          orderRef: null,
+          documentId: null,
+          taxComponents: null,
+          createdAt: "2026-03-15T00:00:00.000Z",
+        },
+      ],
+    };
+    renderSheet({ tx: txNoDoc });
+    expect(
+      screen.getByText(messages.Transactions.sourcesSection.notRetained),
+    ).toBeInTheDocument();
   });
 });

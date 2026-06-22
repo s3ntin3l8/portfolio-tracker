@@ -20,7 +20,8 @@ vi.mock("../../src/services/parsers/pdf-text.js", () => ({
 
 const { buildApp } = await import("../../src/app.js");
 const { closeDb } = await import("../../src/db/client.js");
-import { importSettings } from "@portfolio/db";
+import { importSettings, screenshotImports, transactionSources, transactions } from "@portfolio/db";
+import { eq } from "drizzle-orm";
 import { IMPORT_SETTINGS_ID } from "../../src/services/import-settings.js";
 import type { ScreenshotParser } from "../../src/services/parsers/types.js";
 
@@ -144,7 +145,56 @@ describe("DKB PDF deterministic import path", () => {
     });
     const list = txns.json();
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ type: "dividend", tax: "0.12", fxRate: "1.1777" });
+    expect(list[0]).toMatchObject({ type: "dividend", tax: "0.12", fxRate: "1.1777", source: "pdf" });
+  });
+
+  it("stores parser='dkb-pdf' on the import row and writes a pdf source row", async () => {
+    const t = await token("dkb-pdf-parser-tag");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB-tag", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const form = pdfPart(Buffer.from("%PDF-1.4 parser-tag-test"), "tag-test.pdf");
+    const { importId, drafts } = (
+      await app.inject({
+        method: "POST",
+        url: "/imports/screenshot",
+        headers: { ...auth(t), ...form.headers },
+        payload: form.payload,
+      })
+    ).json();
+
+    // The import row must carry the deterministic-parser tag, not the LLM parser name.
+    const [imp] = await app.db
+      .select({ parser: screenshotImports.parser })
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, importId));
+    expect(imp.parser).toBe("dkb-pdf");
+
+    // After confirm the transaction_sources row must carry sourceType="pdf".
+    await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: drafts },
+    });
+
+    const [tx] = await app.db
+      .select({ id: transactions.id, source: transactions.source })
+      .from(transactions)
+      .where(eq(transactions.portfolioId, portfolioId));
+    expect(tx.source).toBe("pdf");
+
+    const [src] = await app.db
+      .select({ sourceType: transactionSources.sourceType })
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+    expect(src.sourceType).toBe("pdf");
   });
 
   it("dedups a PDF re-export whose bytes differ but text layer is identical (#216)", async () => {
