@@ -53,6 +53,60 @@ const ROWS: TxRow[] = [
   },
 ];
 
+// Extended fixture: 3 rows across 2 types, 2 instruments, 2 years for filter tests.
+const FILTER_ROWS: TxRow[] = [
+  {
+    id: "f1",
+    portfolioId: "p1",
+    type: "buy",
+    quantity: "10",
+    price: "100",
+    fees: "0",
+    tax: null,
+    fxRate: null,
+    currency: "IDR",
+    executedAt: "2025-06-01T00:00:00.000Z",
+    source: "manual",
+    instrument: { symbol: "BBCA", name: "Bank Central Asia" },
+  },
+  {
+    id: "f2",
+    portfolioId: "p1",
+    type: "dividend",
+    quantity: "0",
+    price: "50",
+    fees: "0",
+    tax: null,
+    fxRate: null,
+    currency: "IDR",
+    executedAt: "2026-03-01T00:00:00.000Z",
+    source: "manual",
+    instrument: { symbol: "BBCA", name: "Bank Central Asia" },
+  },
+  {
+    id: "f3",
+    portfolioId: "p1",
+    type: "buy",
+    quantity: "5",
+    price: "200",
+    fees: "0",
+    tax: null,
+    fxRate: null,
+    currency: "IDR",
+    executedAt: "2026-04-01T00:00:00.000Z",
+    source: "manual",
+    instrument: { symbol: "AAPL", name: "Apple" },
+  },
+];
+
+function renderFilterTable() {
+  return render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <TransactionsTable rows={FILTER_ROWS} />
+    </NextIntlClientProvider>,
+  );
+}
+
 // Helper: render a minimal table with a single row for targeted assertions.
 function renderSingleRow(row: TxRow) {
   return render(
@@ -257,5 +311,69 @@ describe("TransactionsTable", () => {
     renderSingleRow(bonusRow);
     // The TxType.bonus_cash label ("Bonus") should appear in the badge.
     expect(screen.getByText(messages.TxType.bonus_cash)).toBeInTheDocument();
+  });
+
+  describe("list filters", () => {
+    it("type select is rendered and shows options for types present in the data", () => {
+      renderFilterTable();
+      // FILTER_ROWS has "buy" and "dividend" — both should appear as options
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      expect(typeSelect).toBeInTheDocument();
+      // buy and dividend options (via TxType labels) should be in the DOM
+      expect(screen.getByRole("option", { name: messages.TxType.buy })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: messages.TxType.dividend })).toBeInTheDocument();
+    });
+
+    it("filtering by type shows only matching rows", () => {
+      renderFilterTable();
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      // Select "buy" — only f1 and f3 (both buy) should remain; f2 (dividend) should be gone
+      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      const rows = screen.getAllByRole("row").slice(1); // skip header
+      expect(rows.length).toBe(2);
+      expect(rows.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
+      expect(rows.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
+    });
+
+    it("filtering by instrument shows only matching rows", () => {
+      renderFilterTable();
+      const instSelect = screen.getByRole("combobox", { name: messages.Transactions.filterInstrument });
+      // Select "BBCA" — f1 and f2 match; f3 (AAPL) should be gone
+      fireEvent.change(instSelect, { target: { value: "BBCA" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(2);
+      expect(rows.every((r) => r.textContent?.includes("BBCA"))).toBe(true);
+    });
+
+    it("filtering by year shows only matching rows", () => {
+      renderFilterTable();
+      const yearSelect = screen.getByRole("combobox", { name: messages.Transactions.filterYear });
+      // Select "2025" — only f1 should remain
+      fireEvent.change(yearSelect, { target: { value: "2025" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("BBCA");
+    });
+
+    it("composes type and year filters", () => {
+      renderFilterTable();
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      const yearSelect = screen.getByRole("combobox", { name: messages.Transactions.filterYear });
+      // buy AND 2026: only f3 (AAPL, 2026-04)
+      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.change(yearSelect, { target: { value: "2026" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("AAPL");
+    });
+
+    it("resetting type filter to 'all' restores all rows", () => {
+      renderFilterTable();
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.change(typeSelect, { target: { value: "all" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(FILTER_ROWS.length);
+    });
   });
 });

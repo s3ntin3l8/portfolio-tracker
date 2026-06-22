@@ -157,12 +157,46 @@ export function TransactionsTable({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [investmentsOnly, setInvestmentsOnly] = useState(defaultInvestmentsOnly);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [instrumentFilter, setInstrumentFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
 
-  // Display-only filter; does not touch any calculation.
+  // Derive distinct options from `rows` so selects only show values present in the data.
+  const typeOptions = useMemo(
+    () => [...new Set(rows.map((r) => r.type))].sort(),
+    [rows],
+  );
+  const instrumentOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of rows) {
+      if (!r.instrument) continue;
+      const key = r.instrument.symbol ?? r.instrument.name ?? "";
+      if (key && !seen.has(key)) seen.set(key, r.instrument.symbol ?? r.instrument.name ?? key);
+    }
+    return [...seen.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [rows]);
+  const yearOptions = useMemo(
+    () =>
+      [...new Set(rows.map((r) => String(new Date(r.executedAt).getFullYear())))].sort(
+        (a, b) => Number(b) - Number(a),
+      ),
+    [rows],
+  );
+
+  // Display-only filters; none of these touch any calculation.
   const visibleRows = useMemo(
-    () => (investmentsOnly ? rows.filter((r) => !NON_INVESTMENT_TYPES.has(r.type)) : rows),
-    [rows, investmentsOnly],
+    () =>
+      rows.filter(
+        (r) =>
+          (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
+          (typeFilter === "all" || r.type === typeFilter) &&
+          (instrumentFilter === "all" ||
+            (r.instrument?.symbol ?? r.instrument?.name ?? "") === instrumentFilter) &&
+          (yearFilter === "all" ||
+            String(new Date(r.executedAt).getFullYear()) === yearFilter),
+      ),
+    [rows, investmentsOnly, typeFilter, instrumentFilter, yearFilter],
   );
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
@@ -216,7 +250,7 @@ export function TransactionsTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-1 text-sm">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
         <Button
           size="sm"
           variant={investmentsOnly ? "ghost" : "secondary"}
@@ -231,6 +265,51 @@ export function TransactionsTable({
         >
           {t("filterInvestments")}
         </Button>
+        {typeOptions.length > 1 && (
+          <select
+            aria-label={t("filterType")}
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">{t("allTypes")}</option>
+            {typeOptions.map((tp) => (
+              <option key={tp} value={tp}>
+                {tt(tp as Parameters<typeof tt>[0])}
+              </option>
+            ))}
+          </select>
+        )}
+        {instrumentOptions.length > 1 && (
+          <select
+            aria-label={t("filterInstrument")}
+            value={instrumentFilter}
+            onChange={(e) => setInstrumentFilter(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">{t("allInstruments")}</option>
+            {instrumentOptions.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        )}
+        {yearOptions.length > 1 && (
+          <select
+            aria-label={t("filterYear")}
+            value={yearFilter}
+            onChange={(e) => setYearFilter(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">{t("allYears")}</option>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {selected.size > 0 && (
