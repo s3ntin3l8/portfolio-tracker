@@ -335,11 +335,15 @@ describe("projectNextYearDividends", () => {
   });
 
   it("applies YoY per-share growth and tags source: grown", () => {
-    // yearBefore (2024): perShare = 100/10 = 10; lastYear (2025): perShare = 110/10 = 11
-    // growthFactor = 11 / 10 = 1.1
+    // Rolling windows (NOW = 2026-06-15):
+    //   prior  (2024-06-15, 2025-06-15]: 2025-01-01 — perShare = 100/10 = 10
+    //   trailing (2025-06-15, 2026-06-15]: 2025-11-01 — perShare = 110/10 = 11
+    //   spacing = 10 months → inferIntervalMonths = 12 (annual)
+    //   growthFactor = trailing mean(11) / prior mean(10) = 1.1
+    //   base avg over 24mo: (10+11)/2 = 10.5; projected = 10.5 × 1.1 × 10 = 115.5
     const past = [
-      hist("aapl", "2024-03-01", "100"), // histQty=10
-      hist("aapl", "2025-03-01", "110"), // histQty=10
+      hist("aapl", "2025-01-01", "100"), // prior window — perShare=10
+      hist("aapl", "2025-11-01", "110"), // trailing window — perShare=11
     ];
     const heldQty = new Map([["aapl", "10"]]);
     // qtyAt: always 10 shares (constant position)
@@ -349,15 +353,17 @@ describe("projectNextYearDividends", () => {
     expect(result).toHaveLength(1);
     expect(result[0].source).toBe("grown");
     expect(result[0].growthApplied).toBeCloseTo(1.1, 5);
-    // amount = perSharePerPayment(11) × growthFactor(1.1) × qty(10) = 11 × 1.1 × 10 = 121
-    expect(Number(result[0].amount)).toBeCloseTo(121, 2);
+    // perSharePerPayment = avg(10, 11) = 10.5; × growthFactor(1.1) × qty(10) = 115.5
+    expect(Number(result[0].amount)).toBeCloseTo(115.5, 2);
   });
 
   it("clamps growth factor to 0.5 when dividend was cut by more than half", () => {
-    // lastYear perShare = 5/10 = 0.5; yearBefore = 50/10 = 5 → raw factor 0.1 < 0.5
+    // prior window: perShare = 50/10 = 5; trailing window: perShare = 5/10 = 0.5
+    // raw factor = 0.5/5 = 0.1 → clamped to 0.5
+    // spacing = 10 months → inferIntervalMonths = 12 (annual) → 1 projected payment
     const past = [
-      hist("cutco", "2024-03-01", "50"), // perShare=5
-      hist("cutco", "2025-03-01", "5"),  // perShare=0.5
+      hist("cutco", "2025-01-01", "50"), // prior window — perShare=5
+      hist("cutco", "2025-11-01", "5"),  // trailing window — perShare=0.5
     ];
     const heldQty = new Map([["cutco", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
@@ -368,10 +374,12 @@ describe("projectNextYearDividends", () => {
   });
 
   it("clamps growth factor to 2.0 when dividend doubled or more", () => {
-    // lastYear perShare = 100/10 = 10; yearBefore = 10/10 = 1 → raw 10 > 2
+    // prior window: perShare = 10/10 = 1; trailing window: perShare = 100/10 = 10
+    // raw factor = 10/1 = 10 → clamped to 2.0
+    // spacing = 10 months → inferIntervalMonths = 12 (annual) → 1 projected payment
     const past = [
-      hist("raiseco", "2024-03-01", "10"),  // perShare=1
-      hist("raiseco", "2025-03-01", "100"), // perShare=10
+      hist("raiseco", "2025-01-01", "10"),  // prior window — perShare=1
+      hist("raiseco", "2025-11-01", "100"), // trailing window — perShare=10
     ];
     const heldQty = new Map([["raiseco", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
@@ -382,27 +390,53 @@ describe("projectNextYearDividends", () => {
   });
 
   it("excludes one-off dividends from the growth ratio", () => {
-    // A special dividend in 2024 that dwarfs the regular ones should be filtered.
-    // Regular perShare: 10/10=1 in 2024 (3 payments), special: 200/10=20
-    // Without one-off guard: (2024 perShare sum = 3+20=23) vs (2025=12); factor=12/23≈0.52
-    // With one-off guard: median of [1,1,1,20]=1; filter >2*1=2 → exclude 20; 2024 sum=3
-    // factor=12/3=4 → clamped to 2.0
+    // Prior window: 3 regular quarterly payments at perShare=1 plus 1 special at perShare=30.
+    // Trailing window: 3 payments at perShare=4.
+    // Without one-off guard: prior mean=(1+1+1+30)/4=8.25; trailing=4; factor=4/8.25≈0.48→clamped 0.5
+    // With one-off guard: median of [1,1,1,30]=1; filter >2*1=2 → exclude 30; prior mean=1
+    //   factor = trailing(4) / prior(1) = 4 → clamped to 2.0
     const past = [
-      hist("spec", "2024-03-01", "10"), // perShare=1 regular
-      hist("spec", "2024-06-01", "10"), // perShare=1 regular
-      hist("spec", "2024-09-01", "10"), // perShare=1 regular
-      hist("spec", "2024-12-01", "200"), // perShare=20 SPECIAL — should be excluded
-      hist("spec", "2025-03-01", "40"), // perShare=4 regular
-      hist("spec", "2025-06-01", "40"), // perShare=4 regular
-      hist("spec", "2025-09-01", "40"), // perShare=4 regular
+      hist("spec", "2024-09-01", "10"),  // perShare=1 regular — prior window
+      hist("spec", "2024-12-01", "10"),  // perShare=1 regular — prior window
+      hist("spec", "2025-03-01", "10"),  // perShare=1 regular — prior window
+      hist("spec", "2025-05-01", "300"), // perShare=30 SPECIAL — prior window (excluded)
+      hist("spec", "2025-09-01", "40"),  // perShare=4 regular — trailing window
+      hist("spec", "2025-12-01", "40"),  // perShare=4 regular — trailing window
+      hist("spec", "2026-03-01", "40"),  // perShare=4 regular — trailing window
     ];
     const heldQty = new Map([["spec", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
       applyGrowth: true,
     });
     expect(result).toHaveLength(4); // quarterly → 4 payments in 2027
-    // growthFactor clamped to 2.0 (raw=4/1=4 after filtering the special)
+    // With one-off guard: prior filtered mean = 1; trailing mean = 4; factor = 4 → clamped to 2.0
     expect(result[0].growthApplied).toBeCloseTo(2.0, 5);
+  });
+
+  it("quarterly payer with incomplete current calendar year does not produce false negative growth", () => {
+    // Simulates MSFT: 4 quarterly payments in the prior 12-month window at perShare=0.62,
+    // then 3 in the trailing window at perShare=0.67 (current year is mid-year, incomplete).
+    // Old (calendar-year sums) approach: trailing-year partial sum (1 payment) vs full prior-year
+    // sum (4 payments) collapses to 0.25 → clamped to 0.5 (false −50% growth signal).
+    // New (rolling per-payment averages): trailing mean 0.67 vs prior mean 0.62 → +8%.
+    const past = [
+      hist("msft2", "2024-09-13", "0.62"), // prior window — perShare=0.62
+      hist("msft2", "2024-12-13", "0.62"), // prior window
+      hist("msft2", "2025-03-14", "0.62"), // prior window
+      hist("msft2", "2025-06-14", "0.62"), // prior window (just before cutoff12mo)
+      hist("msft2", "2025-09-12", "0.67"), // trailing window — perShare=0.67
+      hist("msft2", "2025-12-12", "0.67"), // trailing window
+      hist("msft2", "2026-03-13", "0.67"), // trailing window
+    ];
+    const heldQty = new Map([["msft2", "1"]]);
+    const result = projectNextYearDividends(past, heldQty, () => "1", NOW, {
+      applyGrowth: true,
+    });
+    expect(result).toHaveLength(4); // quarterly → 4 payments in 2027
+    // Rolling means: trailing avg = 0.67, prior avg = 0.62 → factor ≈ 1.08 (positive growth)
+    // Old calendar-sum code would clamp to 0.5 (false negative from partial current year)
+    expect(result[0].growthApplied).toBeGreaterThan(1.0);
+    expect(result[0].growthApplied).toBeLessThan(1.2);
   });
 
   it("does not apply growth when applyGrowth is false", () => {

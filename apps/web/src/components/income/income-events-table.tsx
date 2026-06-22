@@ -57,9 +57,9 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
           <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("date")}</SortableTableHead>
           <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("type")}</SortableTableHead>
           <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-          <SortableTableHead colKey="perShare" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="hidden sm:table-cell text-right">{t("perShare")}</SortableTableHead>
-          <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="hidden sm:table-cell text-right">{t("shares")}</SortableTableHead>
-          <SortableTableHead colKey="amount" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("amount")}</SortableTableHead>
+          <SortableTableHead colKey="perShare" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="hidden sm:table-cell">{t("perShare")}</SortableTableHead>
+          <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="hidden sm:table-cell">{t("shares")}</SortableTableHead>
+          <SortableTableHead colKey="amount" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("amount")}</SortableTableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

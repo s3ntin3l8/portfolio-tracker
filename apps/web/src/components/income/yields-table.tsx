@@ -32,10 +32,10 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
       <TableHeader>
         <TableRow>
           <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-          <SortableTableHead colKey="trailing" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("trailing")}</SortableTableHead>
-          <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("value")}</SortableTableHead>
-          <SortableTableHead colKey="currentYield" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("currentYield")}</SortableTableHead>
-          <SortableTableHead colKey="yieldOnCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="text-right">{t("yieldOnCost")}</SortableTableHead>
+          <SortableTableHead colKey="trailing" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("trailing")}</SortableTableHead>
+          <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("value")}</SortableTableHead>
+          <SortableTableHead colKey="currentYield" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("currentYield")}</SortableTableHead>
+          <SortableTableHead colKey="yieldOnCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("yieldOnCost")}</SortableTableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

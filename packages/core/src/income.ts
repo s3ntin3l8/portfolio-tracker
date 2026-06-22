@@ -42,16 +42,33 @@ export function inferIntervalMonths(dates: Date[]): number {
 }
 
 /**
- * Per-share YoY growth factor = lastYear / yearBefore per-share annual totals,
- * clamped to [0.5, 2.0]. One-off guard: per-payment amounts that exceed 2× the
- * instrument's median per-payment amount are excluded before summing (special dividends).
- * Returns 1.0 when there is insufficient data (< 2 calendar years).
+ * Per-share YoY growth factor using rolling 12-month windows.
+ *
+ * Trailing window = payments in (now − 12mo, now]; prior window = (now − 24mo, now − 12mo].
+ * Compares the **mean per-payment per-share** in each window (cadence-agnostic: a quarterly
+ * payer with 4 trailing payments vs 4 prior payments gets a fair comparison even when the
+ * current calendar year is only half-complete — comparing annual sums would see an incomplete
+ * trailing year and manufacture a large negative factor).
+ *
+ * One-off guard: amounts > 2× the median per-payment within a window are excluded (special
+ * dividends / one-time distributions) before computing the mean.
+ *
+ * Returns 1.0 when either window is empty or non-positive (insufficient data → flat).
+ * Result is clamped to [0.5, 2.0].
  */
-function computeGrowthFactor(perShareByYear: Map<number, number[]>): number {
-  const years = [...perShareByYear.keys()].sort((a, b) => a - b);
-  if (years.length < 2) return 1.0;
-  const lastYear = years[years.length - 1];
-  const yearBefore = years[years.length - 2];
+function computeGrowthFactor(
+  perShareAmounts: { date: Date; perShare: Decimal }[],
+  now: Date,
+): number {
+  const cutoff12mo = addUTCMonths(now, -12);
+  const cutoff24mo = addUTCMonths(now, -24);
+
+  const trailingAmts = perShareAmounts
+    .filter((p) => p.date > cutoff12mo && p.date <= now)
+    .map((p) => p.perShare.toNumber());
+  const priorAmts = perShareAmounts
+    .filter((p) => p.date > cutoff24mo && p.date <= cutoff12mo)
+    .map((p) => p.perShare.toNumber());
 
   const withoutOneOffs = (amounts: number[]): number[] => {
     if (amounts.length === 0) return [];
@@ -60,17 +77,14 @@ function computeGrowthFactor(perShareByYear: Map<number, number[]>): number {
     return amounts.filter((a) => median <= 0 || a <= 2 * median);
   };
 
-  const lastSum = withoutOneOffs(perShareByYear.get(lastYear) ?? []).reduce(
-    (s, x) => s + x,
-    0,
-  );
-  const prevSum = withoutOneOffs(perShareByYear.get(yearBefore) ?? []).reduce(
-    (s, x) => s + x,
-    0,
-  );
+  const mean = (amounts: number[]): number =>
+    amounts.length > 0 ? amounts.reduce((s, x) => s + x, 0) / amounts.length : 0;
 
-  if (prevSum <= 0 || lastSum <= 0) return 1.0;
-  return Math.min(2.0, Math.max(0.5, lastSum / prevSum));
+  const trailingMean = mean(withoutOneOffs(trailingAmts));
+  const priorMean = mean(withoutOneOffs(priorAmts));
+
+  if (priorMean <= 0 || trailingMean <= 0) return 1.0;
+  return Math.min(2.0, Math.max(0.5, trailingMean / priorMean));
 }
 
 /** A held bond position with the schedule fields needed to project coupons. */
@@ -366,14 +380,6 @@ export function projectNextYearDividends(
       return { date: e.executedAt, year: e.executedAt.getUTCFullYear(), perShare };
     });
 
-    // Per-year per-share arrays for growth computation.
-    const perShareByYear = new Map<number, number[]>();
-    for (const { year, perShare } of perShareAmounts) {
-      const arr = perShareByYear.get(year) ?? [];
-      arr.push(perShare.toNumber());
-      perShareByYear.set(year, arr);
-    }
-
     // Per-share base: average per-payment over the trailing 24 months.
     // Using 24 months (not 12) ensures annual payers whose most recent payment
     // falls 12–24 months ago are still captured and not silently skipped.
@@ -392,7 +398,7 @@ export function projectNextYearDividends(
     const intervalMonths = inferIntervalMonths(recentDates);
 
     // Growth factor for the next-year window.
-    const growthFactor = applyGrowth ? computeGrowthFactor(perShareByYear) : 1.0;
+    const growthFactor = applyGrowth ? computeGrowthFactor(perShareAmounts, now) : 1.0;
     const growthApplied =
       Math.abs(growthFactor - 1.0) > 0.001 ? growthFactor : undefined;
     const source: "flat" | "grown" = growthApplied !== undefined ? "grown" : "flat";

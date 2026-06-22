@@ -1,5 +1,6 @@
+import type React from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Coins } from "lucide-react";
+import { Coins, ChevronRight } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -24,6 +25,35 @@ function totalsByCurrency(events: IncomeEventRow[]): Record<string, number> {
     totals[e.currency] = (totals[e.currency] ?? 0) + Number(e.amount);
   }
   return totals;
+}
+
+/** Collapsible year/forecast section using native <details>/<summary>. */
+function CollapsibleYearSection({
+  title,
+  totalsNode,
+  defaultOpen,
+  children,
+}: {
+  title: React.ReactNode;
+  totalsNode: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      className="group space-y-3"
+      {...(defaultOpen ? { open: true } : {})}
+    >
+      <summary className="flex cursor-pointer list-none items-baseline justify-between [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center gap-1.5">
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+          <h2 className="text-lg font-semibold">{title}</h2>
+        </div>
+        <p className="tabular text-sm text-muted-foreground">{totalsNode}</p>
+      </summary>
+      <div className="space-y-3">{children}</div>
+    </details>
+  );
 }
 
 export default async function IncomePage({
@@ -266,45 +296,21 @@ export default async function IncomePage({
         </section>
       )}
 
-      {[...byYear.entries()].map(([year, events]) => {
-        const totals = totalsByCurrency(events);
-        return (
-          <section key={year} className="space-y-3">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-lg font-semibold">{year}</h2>
-              <p className="tabular text-sm text-muted-foreground">
-                {t("yearTotal")}{" "}
-                <span className="font-medium text-foreground">
-                  {Object.entries(totals)
-                    .map(([cur, amount]) => formatMoney(amount, cur, locale))
-                    .join(" · ")}
-                </span>
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-border">
-              <IncomeEventsTable rows={events} />
-            </div>
-          </section>
-        );
-      })}
-
       {nextYearRows.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold">
-              {t("nextYearSectionTitle", { year: nextYearStr })}
-            </h2>
-            <p className="tabular text-sm text-muted-foreground">
+        <CollapsibleYearSection
+          defaultOpen
+          title={t("nextYearSectionTitle", { year: nextYearStr })}
+          totalsNode={
+            <>
               {t("yearTotal")}{" "}
               <span className="font-medium text-foreground">
                 {Object.entries(totalsByCurrency(nextYearRows))
                   .map(([cur, amount]) => formatMoney(amount, cur, locale))
                   .join(" · ")}
               </span>
-            </p>
-          </div>
-
+            </>
+          }
+        >
           <p className="text-sm text-muted-foreground">
             {t("assumptionsBase")}
             {hasGrowth && <> {t("assumptionsGrowth")}</>}
@@ -314,8 +320,35 @@ export default async function IncomePage({
           <div className="rounded-xl border border-border">
             <IncomeEventsTable rows={nextYearRows} />
           </div>
-        </section>
+        </CollapsibleYearSection>
       )}
+
+      {[...byYear.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([year, events]) => {
+          const totals = totalsByCurrency(events);
+          return (
+            <CollapsibleYearSection
+              key={year}
+              defaultOpen={year === currentYear}
+              title={year}
+              totalsNode={
+                <>
+                  {t("yearTotal")}{" "}
+                  <span className="font-medium text-foreground">
+                    {Object.entries(totals)
+                      .map(([cur, amount]) => formatMoney(amount, cur, locale))
+                      .join(" · ")}
+                  </span>
+                </>
+              }
+            >
+              <div className="rounded-xl border border-border">
+                <IncomeEventsTable rows={events} />
+              </div>
+            </CollapsibleYearSection>
+          );
+        })}
     </div>
   );
 }
