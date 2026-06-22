@@ -317,6 +317,35 @@ export interface AllocationBreakdown {
   concentration: ConcentrationInfo;
 }
 
+// --- Rebalancing / drift types -------------------------------------------
+
+/** A user-defined target weight for one allocation dimension slice. */
+export interface TargetWeight {
+  key: string;
+  targetPct: number;
+}
+
+/** Actual vs. target drift for one allocation slice. */
+export interface DriftRow {
+  key: string;
+  label?: string;
+  targetPct: number;
+  actualPct: number;
+  /** Signed drift in pp: `actualPct − targetPct`. Positive = over target. */
+  driftPct: number;
+  actualValue: string;
+  status: "over" | "under" | "on_target";
+}
+
+/** A recommended trade action to move toward target allocation. */
+export interface TradeAction {
+  key: string;
+  label?: string;
+  /** Absolute value in the display currency (always positive). */
+  deltaValue: string;
+  side: "buy" | "sell";
+}
+
 export interface Instrument {
   id: string;
   isin: string | null;
@@ -497,6 +526,13 @@ export interface PortfolioSummary {
   exposureByCurrency: Record<string, string>;
   /** Allocation breakdown across asset class, currency, region, sector + concentration. */
   allocation?: AllocationBreakdown;
+  /**
+   * Per-dimension drift vs. user targets.
+   * Keys are dimension names ('asset_class', 'currency', 'region', 'sector');
+   * only dimensions where the user has saved targets are included.
+   * Absent when the user has no targets for this scope.
+   */
+  drift?: Record<string, DriftRow[]>;
 }
 
 export interface PortfolioPerformance {
@@ -527,6 +563,11 @@ export interface NetWorth {
   exposureByCurrency: Record<string, string>;
   /** Allocation breakdown across asset class, currency, region, sector + concentration. */
   allocation?: AllocationBreakdown;
+  /**
+   * Per-dimension drift vs. user targets. Same structure as `PortfolioSummary.drift`.
+   * Keys are dimension names; only dimensions with saved targets are present.
+   */
+  drift?: Record<string, DriftRow[]>;
   xirr: number | null;
   portfolioCount: number;
   asOf: string;
@@ -1366,6 +1407,40 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPerformance: (portfolioId: string) =>
       request<PortfolioPerformance>("GET", `/portfolios/${portfolioId}/performance`),
+
+    // --- Allocation targets ---
+    /** Fetch saved target weights for a portfolio-scoped dimension. */
+    getPortfolioTargets: (portfolioId: string, dimension: string) =>
+      request<TargetWeight[]>(
+        "GET",
+        `/portfolios/${portfolioId}/targets?dimension=${encodeURIComponent(dimension)}`,
+      ),
+    /**
+     * Replace the entire target-weight set for a portfolio + dimension (atomic).
+     * `targets` must sum to ~100. Passing an empty array clears all targets for
+     * that (portfolioId, dimension) scope.
+     */
+    putPortfolioTargets: (
+      portfolioId: string,
+      dimension: string,
+      targets: TargetWeight[],
+    ) =>
+      request<TargetWeight[]>(
+        "PUT",
+        `/portfolios/${portfolioId}/targets`,
+        { dimension, targets },
+      ),
+    /** Fetch saved aggregate (networth-level) target weights for a dimension. */
+    getNetworthTargets: (dimension: string) =>
+      request<TargetWeight[]>(
+        "GET",
+        `/networth/targets?dimension=${encodeURIComponent(dimension)}`,
+      ),
+    /**
+     * Replace the aggregate (networth-level) target-weight set for a dimension (atomic).
+     */
+    putNetworthTargets: (dimension: string, targets: TargetWeight[]) =>
+      request<TargetWeight[]>("PUT", "/networth/targets", { dimension, targets }),
 
     getTrades: (
       portfolioId: string,

@@ -927,5 +927,22 @@
     "emptyTitle": "Belum ada transaksi",
     "emptyBody": "Beli sebuah instrumen dan posisi Anda akan muncul di sini sebagai transaksi.",
     "taxDisclaimer": "Angka indikatif untuk pelacakan pribadi — bukan laporan pajak resmi. Jumlah mata uang asing dikonversi pada kurs terkini, bukan tanggal tiap transaksi."
+  },
+  "TargetDialog": {
+    "trigger": "Atur target",
+    "title": "Atur target alokasi — {dimension}",
+    "description": "Masukkan persentase alokasi yang Anda inginkan untuk setiap irisan. Total harus sama dengan 100%.",
+    "total": "Total",
+    "mustEqual100": "(harus sama dengan 100%)",
+    "save": "Simpan target",
+    "cancel": "Batal",
+    "loadError": "Gagal memuat target yang ada.",
+    "saveError": "Gagal menyimpan target. Silakan coba lagi."
+  },
+  "DriftBadge": {
+    "over": "{pct}pp melebihi target",
+    "under": "{pct}pp di bawah target",
+    "onTarget": "Sesuai target",
+    "hint": "{over} melebihi · {under} di bawah target"
   }
 }

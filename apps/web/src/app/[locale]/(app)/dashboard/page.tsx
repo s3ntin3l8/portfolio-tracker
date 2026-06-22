@@ -206,7 +206,11 @@ export default async function DashboardPage({
           </CardHeader>
           <CardContent>
             {allocation ? (
-              <AllocationTabs allocation={allocation} currency={currency} />
+              <AllocationTabs
+                allocation={allocation}
+                currency={currency}
+                drift={summary.drift}
+              />
             ) : (
               <p className="text-center text-sm text-muted-foreground py-8">—</p>
             )}

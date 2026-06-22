@@ -929,5 +929,22 @@
     "emptyTitle": "No trades yet",
     "emptyBody": "Buy an instrument and your positions will show up here as trades.",
     "taxDisclaimer": "Indicative figures for your own tracking — not an official tax statement. Foreign-currency amounts are converted at the latest rate, not each transaction's date."
+  },
+  "TargetDialog": {
+    "trigger": "Set targets",
+    "title": "Set target allocation — {dimension}",
+    "description": "Enter your desired allocation percentage for each slice. The total must equal 100%.",
+    "total": "Total",
+    "mustEqual100": "(must equal 100%)",
+    "save": "Save targets",
+    "cancel": "Cancel",
+    "loadError": "Failed to load existing targets.",
+    "saveError": "Failed to save targets. Please try again."
+  },
+  "DriftBadge": {
+    "over": "{pct}pp over target",
+    "under": "{pct}pp under target",
+    "onTarget": "On target",
+    "hint": "{over} over · {under} under target"
   }
 }
