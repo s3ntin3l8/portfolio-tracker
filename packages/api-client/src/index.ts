@@ -482,10 +482,11 @@ export interface ProjectedCoupon {
 /**
  * A single entry in the upcoming-payments table, covering bond coupons and equity
  * dividends at every stage of the lifecycle:
- * - "scheduled"  — coupon from a bond's fixed schedule
- * - "projected"  — dividend projected from last year's actual (seasonal heuristic)
- * - "announced"  — ex-date announced by the issuer; amount may still change
- * - "paid"       — cash has settled; amount is final
+ * - "scheduled"      — coupon from a bond's fixed schedule
+ * - "projected"      — dividend projected from last year's actual (seasonal heuristic)
+ * - "grown"          — projected with a YoY per-share growth multiplier applied
+ * - "announced"      — ex-date announced by the issuer; amount may still change
+ * - "paid"           — cash has settled; amount is final
  */
 export interface UpcomingPayment {
   instrumentId: string;
@@ -495,7 +496,18 @@ export interface UpcomingPayment {
   amount: string;
   currency: string;
   kind: "coupon" | "dividend";
-  status: "scheduled" | "projected" | "announced" | "paid";
+  status: "scheduled" | "projected" | "grown" | "announced" | "paid";
+  /** The YoY per-share growth multiplier applied when `status === "grown"`. */
+  growthApplied?: number;
+  /** True when the projected amount assumes continued savings-plan share accumulation. */
+  assumesContributions?: boolean;
+  /**
+   * Per-share dividend amount in `currency` (split-adjusted). Absent for coupons and
+   * unlinked rows. Multiply by `quantity` to reproduce `amount`.
+   */
+  perShare?: string;
+  /** Share count used for this payment (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 /** Trailing-12-month income + yield for an income-paying holding (display currency). */
@@ -522,6 +534,13 @@ export interface IncomeEvent {
   date: string; // YYYY-MM-DD
   amount: string;
   currency: string;
+  /**
+   * Per-share dividend amount in `currency` (split-adjusted). Absent for coupons and
+   * unlinked rows. Multiply by `quantity` to reproduce `amount`.
+   */
+  perShare?: string;
+  /** Share count at the time of payment (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 export interface YearIncome {

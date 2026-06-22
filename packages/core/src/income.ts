@@ -1,6 +1,78 @@
 import { Decimal } from "decimal.js";
 import { convert, type FxRateFn } from "./networth.js";
 
+// ---------------------------------------------------------------------------
+// Internal date helpers
+// ---------------------------------------------------------------------------
+
+/** Whole-month count between two UTC dates (b − a, may be negative). */
+function monthsBetween(a: Date, b: Date): number {
+  return (
+    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
+    (b.getUTCMonth() - a.getUTCMonth())
+  );
+}
+
+/** Return a new Date advanced by `months` UTC months. */
+function addUTCMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d;
+}
+
+/**
+ * Infer the most likely payment cadence from a list of payment dates.
+ * Returns the interval in months: 1 (monthly), 3 (quarterly), 6 (semiannual), 12 (annual).
+ */
+function inferIntervalMonths(dates: Date[]): number {
+  if (dates.length < 2) return 12;
+  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  const spacings: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const m = monthsBetween(sorted[i - 1], sorted[i]);
+    // Ignore noise (< 1 month duplicate) and multi-year gaps (skipped year).
+    if (m >= 1 && m <= 14) spacings.push(m);
+  }
+  if (spacings.length === 0) return 12;
+  const avg = spacings.reduce((s, x) => s + x, 0) / spacings.length;
+  if (avg <= 1.5) return 1;
+  if (avg <= 4.5) return 3;
+  if (avg <= 9) return 6;
+  return 12;
+}
+
+/**
+ * Per-share YoY growth factor = lastYear / yearBefore per-share annual totals,
+ * clamped to [0.5, 2.0]. One-off guard: per-payment amounts that exceed 2× the
+ * instrument's median per-payment amount are excluded before summing (special dividends).
+ * Returns 1.0 when there is insufficient data (< 2 calendar years).
+ */
+function computeGrowthFactor(perShareByYear: Map<number, number[]>): number {
+  const years = [...perShareByYear.keys()].sort((a, b) => a - b);
+  if (years.length < 2) return 1.0;
+  const lastYear = years[years.length - 1];
+  const yearBefore = years[years.length - 2];
+
+  const withoutOneOffs = (amounts: number[]): number[] => {
+    if (amounts.length === 0) return [];
+    const sorted = [...amounts].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    return amounts.filter((a) => median <= 0 || a <= 2 * median);
+  };
+
+  const lastSum = withoutOneOffs(perShareByYear.get(lastYear) ?? []).reduce(
+    (s, x) => s + x,
+    0,
+  );
+  const prevSum = withoutOneOffs(perShareByYear.get(yearBefore) ?? []).reduce(
+    (s, x) => s + x,
+    0,
+  );
+
+  if (prevSum <= 0 || lastSum <= 0) return 1.0;
+  return Math.min(2.0, Math.max(0.5, lastSum / prevSum));
+}
+
 /** A held bond position with the schedule fields needed to project coupons. */
 export interface BondPosition {
   instrumentId: string;
@@ -97,13 +169,31 @@ export interface ProjectedDividend {
   instrumentId: string;
   symbol?: string | null;
   name?: string | null;
-  /** YYYY-MM-DD — the historical payment date shifted forward by one year. */
+  /** YYYY-MM-DD — the projected payment date. */
   date: string;
   /** Total projected cash in `currency`, scaled by quantity change. */
   amount: string;
   currency: string;
   /** Calendar year the estimate is derived from (e.g. 2025 for a 2026 projection). */
   basisYear: number;
+  /**
+   * How this estimate was derived:
+   * - "flat"  — straight replay of historical amount (no growth adjustment)
+   * - "grown" — YoY per-share growth factor applied
+   */
+  source: "flat" | "grown";
+  /** The per-share YoY growth multiplier applied when `source === "grown"`. */
+  growthApplied?: number;
+  /** True when the projected quantity includes assumed continued savings-plan accumulation. */
+  assumesContributions?: boolean;
+  /**
+   * Per-share amount in `currency` (split-adjusted: uses current-share-terms quantities
+   * so values are comparable across dates regardless of subsequent corporate actions).
+   * Absent for coupons and unlinked rows.
+   */
+  perShare?: string;
+  /** Share count at the projected date (split-adjusted, same basis as `perShare`). */
+  quantity?: string;
 }
 
 /**
@@ -171,7 +261,181 @@ export function projectDividends(
       amount: amount.toString(),
       currency: e.currency,
       basisYear: e.executedAt.getUTCFullYear(),
+      source: "flat",
+      perShare: amount.div(currentQty).toString(),
+      quantity: currentQty.toString(),
     });
+  }
+
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// ---------------------------------------------------------------------------
+// Next-year cadence-based dividend projection engine
+// ---------------------------------------------------------------------------
+
+/**
+ * Project equity dividends for the full next calendar year using cadence detection,
+ * optional YoY per-share growth, and optional share-accumulation from regular buys.
+ *
+ * This engine replaces the TTM scalar approach for `forecastNextYear`:
+ *
+ * - **Cadence**: infers each instrument's payment frequency (monthly / quarterly /
+ *   semiannual / annual) from the spacing of its last 24 months of payments, then
+ *   generates the correct number of future payment dates within
+ *   `(Dec 31 this year, Dec 31 next year]`.
+ *
+ * - **YoY growth** (`applyGrowth`, default `true`): computes a per-share growth
+ *   multiplier = lastYear / yearBefore per-share annual totals, clamped to [0.5, 2.0].
+ *   One-off guard: payments exceeding 2× the instrument's median per-payment amount
+ *   are excluded from the ratio (avoids special dividends inflating the growth rate).
+ *   Requires ≥ 2 calendar years of data; defaults to 1.0 otherwise.
+ *   Only applied to the *next*-year window — rest-of-year stays at current run-rate.
+ *
+ * - **Accumulation** (`accumulation`): optional map of instrument → shares-per-month
+ *   rate (from recent savings-plan / buy transactions). Projected qty at a future date
+ *   = currentQty + rate × monthsAhead. Flagged with `assumesContributions: true`.
+ *
+ * Each emitted `ProjectedDividend` carries `source: "flat" | "grown"` and optional
+ * `growthApplied` / `assumesContributions` fields for UI display.
+ *
+ * Announced/paid data from `dividend_events` is blended at the API layer (same
+ * pattern as `projectDividends`), not here.
+ *
+ * Only instruments still held (`heldQty` with qty > 0) are projected. Instruments
+ * with no payment in the trailing 24 months are skipped.
+ */
+export function projectNextYearDividends(
+  pastDividends: IncomeEntry[],
+  heldQty: Map<string, string>,
+  qtyAt: (instrumentId: string, at: Date) => string,
+  now: Date = new Date(),
+  opts: {
+    /** Per-instrument monthly share accumulation rate (shares/month). */
+    accumulation?: Map<string, string>;
+    /** Apply YoY per-share growth factor. Default: true. */
+    applyGrowth?: boolean;
+  } = {},
+): ProjectedDividend[] {
+  const applyGrowth = opts.applyGrowth ?? true;
+  const currentYear = now.getUTCFullYear();
+  const nextYear = currentYear + 1;
+  // Window: (Dec 31 thisYear, Dec 31 nextYear], exclusive/inclusive.
+  const windowStart = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
+  const windowEnd = new Date(Date.UTC(nextYear, 11, 31, 23, 59, 59, 999));
+
+  // Group past dividend payments by instrument.
+  const byInstrument = new Map<string, IncomeEntry[]>();
+  for (const e of pastDividends) {
+    if (e.type !== "dividend" || !e.instrumentId) continue;
+    const list = byInstrument.get(e.instrumentId) ?? [];
+    list.push(e);
+    byInstrument.set(e.instrumentId, list);
+  }
+
+  const out: ProjectedDividend[] = [];
+
+  // Cut-off: require at least one payment within the trailing 24 months.
+  // Cut-off: require at least one payment within the trailing 24 months.
+  // Using 24 months (not 12) captures annual payers whose payment may be
+  // 12–24 months back (e.g., a March annual payer when now is June).
+  const cutoff24mo = addUTCMonths(now, -24);
+
+  for (const [instrumentId, entries] of byInstrument) {
+    const currentQtyStr = heldQty.get(instrumentId);
+    if (!currentQtyStr || new Decimal(currentQtyStr).lte(0)) continue;
+    const currentQty = new Decimal(currentQtyStr);
+
+    // Sort ascending.
+    const sorted = [...entries].sort(
+      (a, b) => a.executedAt.getTime() - b.executedAt.getTime(),
+    );
+
+    // Skip instruments with no recent activity.
+    const hasRecent = sorted.some((e) => e.executedAt >= cutoff24mo);
+    if (!hasRecent) continue;
+
+    // Compute per-share for each historical payment.
+    const perShareAmounts = sorted.map((e) => {
+      const histQtyStr = qtyAt(instrumentId, e.executedAt);
+      const histQty = new Decimal(histQtyStr);
+      // Fallback: treat raw price as the per-share amount when histQty unknown.
+      const perShare = histQty.gt(0)
+        ? new Decimal(e.price).div(histQty)
+        : new Decimal(e.price);
+      return { date: e.executedAt, year: e.executedAt.getUTCFullYear(), perShare };
+    });
+
+    // Per-year per-share arrays for growth computation.
+    const perShareByYear = new Map<number, number[]>();
+    for (const { year, perShare } of perShareAmounts) {
+      const arr = perShareByYear.get(year) ?? [];
+      arr.push(perShare.toNumber());
+      perShareByYear.set(year, arr);
+    }
+
+    // Per-share base: average per-payment over the trailing 24 months.
+    // Using 24 months (not 12) ensures annual payers whose most recent payment
+    // falls 12–24 months ago are still captured and not silently skipped.
+    const basePayments = perShareAmounts.filter((p) => p.date >= cutoff24mo);
+    if (basePayments.length === 0) continue;
+    const basePerShareSum = basePayments.reduce(
+      (s, p) => s.add(p.perShare),
+      new Decimal(0),
+    );
+    const perSharePerPayment = basePerShareSum.div(basePayments.length);
+
+    // Infer cadence from recent dates (trailing 24 months).
+    const recentDates = sorted
+      .filter((e) => e.executedAt >= cutoff24mo)
+      .map((e) => e.executedAt);
+    const intervalMonths = inferIntervalMonths(recentDates);
+
+    // Growth factor for the next-year window.
+    const growthFactor = applyGrowth ? computeGrowthFactor(perShareByYear) : 1.0;
+    const growthApplied =
+      Math.abs(growthFactor - 1.0) > 0.001 ? growthFactor : undefined;
+    const source: "flat" | "grown" = growthApplied !== undefined ? "grown" : "flat";
+
+    // Accumulation rate (shares/month) for this instrument.
+    const accRate = opts.accumulation
+      ? new Decimal(opts.accumulation.get(instrumentId) ?? "0")
+      : new Decimal(0);
+    const hasAccumulation = accRate.gt(0);
+
+    // Generate future payment dates from the most recent payment anchor.
+    const lastPayment = sorted[sorted.length - 1].executedAt;
+    let d = addUTCMonths(lastPayment, intervalMonths);
+    // Step forward until we enter the target window.
+    while (d <= windowStart) {
+      d = addUTCMonths(d, intervalMonths);
+    }
+    // Emit one entry per generated date within the window.
+    while (d <= windowEnd) {
+      const monthsAhead = Math.max(0, monthsBetween(now, d));
+      const projectedQty = hasAccumulation
+        ? currentQty.add(accRate.mul(monthsAhead))
+        : currentQty;
+      const perShareFinal = perSharePerPayment.mul(growthFactor);
+      const amount = perShareFinal.mul(projectedQty);
+
+      out.push({
+        instrumentId,
+        symbol: entries[0].symbol ?? null,
+        name: entries[0].name ?? null,
+        date: d.toISOString().slice(0, 10),
+        amount: amount.toString(),
+        currency: entries[0].currency,
+        basisYear: currentYear,
+        source,
+        growthApplied,
+        assumesContributions: hasAccumulation ? true : undefined,
+        perShare: perShareFinal.toString(),
+        quantity: projectedQty.toString(),
+      });
+
+      d = addUTCMonths(d, intervalMonths);
+    }
   }
 
   return out.sort((a, b) => a.date.localeCompare(b.date));
@@ -301,6 +565,13 @@ export interface AggregateIncomeInput {
    * Used in `forecastRestOfYear`.
    */
   projectedDividends?: { amount: string; currency: string }[];
+  /**
+   * Dividends projected for the full next calendar year by the cadence/growth engine
+   * (native currency). When provided, `forecastNextYear` is computed from these
+   * events + `forecastCoupons`. When absent, the TTM dividend run-rate is used as
+   * a fallback (backward-compatible behaviour).
+   */
+  projectedDividendsNextYear?: { amount: string; currency: string }[];
   /** Current holding quantities (decimal string) keyed by instrument ID. */
   heldQty?: Map<string, string>;
   /** Function to get holding quantity (decimal string) at a historical date. */
@@ -400,7 +671,17 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
     (s, c) => s.add(convert(c.amount, c.currency, displayCurrency, fx)),
     ZERO(),
   );
-  const forecast = ttmDividends.add(couponForecast);
+  // Next-year dividend forecast: use the cadence/growth engine output when provided;
+  // fall back to the TTM scalar for backward compatibility (e.g. in unit tests that
+  // don't provide projectedDividendsNextYear).
+  const nextYearDividendForecast =
+    input.projectedDividendsNextYear !== undefined
+      ? input.projectedDividendsNextYear.reduce(
+          (s, d) => s.add(convert(d.amount, d.currency, displayCurrency, fx)),
+          ZERO(),
+        )
+      : ttmDividends;
+  const forecast = nextYearDividendForecast.add(couponForecast);
 
   const restOfYearCouponSum = (input.restOfYearCoupons ?? []).reduce(
     (s, c) => s.add(convert(c.amount, c.currency, displayCurrency, fx)),

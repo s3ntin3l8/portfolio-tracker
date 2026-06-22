@@ -31,6 +31,7 @@ import {
   xirr,
   projectCoupons,
   projectDividends,
+  projectNextYearDividends,
   trailingIncomeByInstrument,
   trailingYield,
   aggregateIncome,
@@ -426,9 +427,52 @@ export async function transactionsRoute(app: FastifyInstance) {
     const pastDivs = enriched.filter((e) => e.type === "dividend");
     const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now);
 
+    // Compute per-instrument share-accumulation rate (shares/month) from the trailing
+    // 12 months of buy + savings_plan transactions, excluding "saveback" kind (consistent
+    // with contribution boundary rules). Used by projectNextYearDividends so that a
+    // growing savings plan is reflected in the next-year dividend forecast.
+    const accCutoff = new Date(now);
+    accCutoff.setUTCFullYear(accCutoff.getUTCFullYear() - 1);
+    const sharesAccumulated = new Map<string, number>();
+    for (const t of coreTxns) {
+      if (
+        (t.type !== "buy" && t.type !== "savings_plan") ||
+        t.kind === "saveback" ||
+        !t.instrumentId ||
+        t.executedAt < accCutoff
+      )
+        continue;
+      sharesAccumulated.set(
+        t.instrumentId,
+        (sharesAccumulated.get(t.instrumentId) ?? 0) + Number(t.quantity),
+      );
+    }
+    const accumulation = new Map<string, string>(
+      [...sharesAccumulated.entries()].map(([id, total]) => [
+        id,
+        String(total / 12), // monthly rate
+      ]),
+    );
+
+    // Project dividends for the full next calendar year using the cadence/growth engine.
+    // applyGrowth uses the per-share YoY multiplier (clamped [0.5, 2.0]) when ≥2 years
+    // of history exist; accumulation factors in ongoing savings-plan share additions.
+    const projectedNextYear = projectNextYearDividends(
+      pastDivs,
+      heldQtyMap,
+      qtyAt,
+      now,
+      { accumulation, applyGrowth: true },
+    );
+
     // Load announced/paid dividend events from the DB for held instruments.
     // Scale amountPerShare by current holdings quantity to get the total payout.
     const todayStr = now.toISOString().slice(0, 10);
+    const nextYearEndStr = new Date(
+      Date.UTC(now.getUTCFullYear() + 1, 11, 31),
+    )
+      .toISOString()
+      .slice(0, 10);
     const announcedRows =
       heldIds.length > 0
         ? await app.db
@@ -441,7 +485,14 @@ export async function transactionsRoute(app: FastifyInstance) {
     // For those instruments, announced data replaces projected estimates.
     const futureAnnouncedByInstrument = new Map<
       string,
-      { exDate: string; amount: string; currency: string; status: "announced" | "paid" }[]
+      {
+        exDate: string;
+        amount: string;
+        currency: string;
+        status: "announced" | "paid";
+        perShare: string;
+        quantity: string;
+      }[]
     >();
     for (const row of announcedRows) {
       const qty = heldQtyMap.get(row.instrumentId);
@@ -453,31 +504,58 @@ export async function transactionsRoute(app: FastifyInstance) {
         amount: totalAmount,
         currency: row.currency,
         status: row.status,
+        perShare: row.amountPerShare,
+        quantity: qty,
       });
       futureAnnouncedByInstrument.set(row.instrumentId, list);
     }
 
+    // ── Rest-of-year blend (today → Dec 31 thisYear) ──────────────────────────
     // Blend: for instruments with announced future dividends, drop projected entries.
     // Only consider instruments that actually have future announcements — instruments with
     // only past paid rows in dividend_events should still use the projected heuristic.
     // dividend_events is populated by the weekly `refresh-dividends` pg-boss job
     // (scheduler.ts); this blend activates automatically for any held equity/ETF
     // instrument whose provider returns dividend announcements.
-    const instrumentsWithAnnounced = new Set(
+    const yearEndStr = new Date(Date.UTC(now.getUTCFullYear(), 11, 31))
+      .toISOString()
+      .slice(0, 10);
+    const instrumentsWithAnnouncedRestOfYear = new Set(
       [...futureAnnouncedByInstrument.entries()]
-        .filter(([_, rows]) => rows.some((r) => r.exDate > todayStr))
+        .filter(([_, rows]) =>
+          rows.some((r) => r.exDate > todayStr && r.exDate <= yearEndStr),
+        )
         .map(([id]) => id),
     );
     const blendedProjected = projectedDividends.filter(
-      (d) => d.instrumentId && !instrumentsWithAnnounced.has(d.instrumentId),
+      (d) => d.instrumentId && !instrumentsWithAnnouncedRestOfYear.has(d.instrumentId),
     );
-    // Combine for the forecastRestOfYear sum: both projected + future announced amounts.
-    const futureAnnounced = [...futureAnnouncedByInstrument.values()]
+    const futureAnnouncedRestOfYear = [...futureAnnouncedByInstrument.values()]
       .flat()
-      .filter((d) => d.exDate > todayStr);
+      .filter((d) => d.exDate > todayStr && d.exDate <= yearEndStr);
     const allRestOfYearDividends = [
       ...blendedProjected.map((d) => ({ amount: d.amount, currency: d.currency })),
-      ...futureAnnounced.map((d) => ({ amount: d.amount, currency: d.currency })),
+      ...futureAnnouncedRestOfYear.map((d) => ({ amount: d.amount, currency: d.currency })),
+    ];
+
+    // ── Next-year blend (Jan 1 → Dec 31 nextYear) ─────────────────────────────
+    // Announced data supersedes projections for next year too (same precedence rules).
+    const instrumentsWithAnnouncedNextYear = new Set(
+      [...futureAnnouncedByInstrument.entries()]
+        .filter(([_, rows]) =>
+          rows.some((r) => r.exDate > yearEndStr && r.exDate <= nextYearEndStr),
+        )
+        .map(([id]) => id),
+    );
+    const blendedNextYear = projectedNextYear.filter(
+      (d) => d.instrumentId && !instrumentsWithAnnouncedNextYear.has(d.instrumentId),
+    );
+    const futureAnnouncedNextYear = [...futureAnnouncedByInstrument.values()]
+      .flat()
+      .filter((d) => d.exDate > yearEndStr && d.exDate <= nextYearEndStr);
+    const allNextYearDividends = [
+      ...blendedNextYear.map((d) => ({ amount: d.amount, currency: d.currency })),
+      ...futureAnnouncedNextYear.map((d) => ({ amount: d.amount, currency: d.currency })),
     ];
 
     const stats = aggregateIncome({
@@ -488,22 +566,38 @@ export async function transactionsRoute(app: FastifyInstance) {
       forecastCoupons: upcomingCoupons12mo,
       restOfYearCoupons,
       projectedDividends: allRestOfYearDividends,
+      projectedDividendsNextYear: allNextYearDividends,
       heldQty: heldQtyMap,
       qtyAt,
     });
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
-    const events = enriched.map((e) => ({
-      instrumentId: e.instrumentId,
-      symbol: e.symbol,
-      name: e.name,
-      type: e.type,
-      date: e.date,
-      amount: e.price,
-      currency: e.currency,
-    }));
+    // For dividend rows with a known instrument, compute split-adjusted per-share/quantity.
+    const events = enriched.map((e) => {
+      let perShare: string | undefined;
+      let quantity: string | undefined;
+      if (e.type === "dividend" && e.instrumentId) {
+        const q = qtyAt(e.instrumentId, e.executedAt);
+        const qNum = Number(q);
+        if (qNum > 0) {
+          perShare = String(Number(e.price) / qNum);
+          quantity = q;
+        }
+      }
+      return {
+        instrumentId: e.instrumentId,
+        symbol: e.symbol,
+        name: e.name,
+        type: e.type,
+        date: e.date,
+        amount: e.price,
+        currency: e.currency,
+        perShare,
+        quantity,
+      };
+    });
 
-    // Build announced entries for the upcoming stream (future ex-dates only).
+    // Build announced entries for the upcoming stream (future ex-dates only, both windows).
     const upcomingAnnounced: {
       instrumentId: string;
       symbol: string;
@@ -513,11 +607,13 @@ export async function transactionsRoute(app: FastifyInstance) {
       currency: string;
       kind: "dividend";
       status: "announced" | "paid";
+      perShare: string;
+      quantity: string;
     }[] = [];
     for (const [instrumentId, entries] of futureAnnouncedByInstrument) {
       const im = meta.get(instrumentId);
       for (const entry of entries) {
-        if (entry.exDate <= todayStr) continue;
+        if (entry.exDate <= todayStr || entry.exDate > nextYearEndStr) continue;
         upcomingAnnounced.push({
           instrumentId,
           symbol: im?.symbol ?? "",
@@ -527,12 +623,16 @@ export async function transactionsRoute(app: FastifyInstance) {
           currency: entry.currency,
           kind: "dividend",
           status: entry.status,
+          perShare: entry.perShare,
+          quantity: entry.quantity,
         });
       }
     }
 
-    // Merge 12-month coupons, blended projected, and announced dividends into one
-    // date-sorted upcoming stream.
+    // Merge coupons (next 12 months), blended rest-of-year projected dividends, blended
+    // next-year projected dividends, and announced dividends (both windows) into one
+    // date-sorted upcoming stream. The status/growthApplied/assumesContributions fields
+    // let the UI surface source confidence per row.
     const upcoming = [
       ...upcomingCoupons12mo.map((c) => ({
         instrumentId: c.instrumentId,
@@ -543,6 +643,10 @@ export async function transactionsRoute(app: FastifyInstance) {
         currency: c.currency,
         kind: "coupon" as const,
         status: "scheduled" as const,
+        growthApplied: undefined as number | undefined,
+        assumesContributions: undefined as boolean | undefined,
+        perShare: undefined as string | undefined,
+        quantity: undefined as string | undefined,
       })),
       ...blendedProjected.map((d) => ({
         instrumentId: d.instrumentId,
@@ -553,8 +657,33 @@ export async function transactionsRoute(app: FastifyInstance) {
         currency: d.currency,
         kind: "dividend" as const,
         status: "projected" as const,
+        growthApplied: undefined as number | undefined,
+        assumesContributions: undefined as boolean | undefined,
+        perShare: d.perShare,
+        quantity: d.quantity,
       })),
-      ...upcomingAnnounced,
+      ...blendedNextYear.map((d) => ({
+        instrumentId: d.instrumentId,
+        symbol: d.symbol ?? "",
+        name: d.name,
+        date: d.date,
+        amount: d.amount,
+        currency: d.currency,
+        kind: "dividend" as const,
+        // "grown" status when a growth multiplier was applied, else "projected".
+        status: (d.source === "grown" ? "grown" : "projected") as
+          | "projected"
+          | "grown",
+        growthApplied: d.growthApplied,
+        assumesContributions: d.assumesContributions,
+        perShare: d.perShare,
+        quantity: d.quantity,
+      })),
+      ...upcomingAnnounced.map((d) => ({
+        ...d,
+        growthApplied: undefined as number | undefined,
+        assumesContributions: undefined as boolean | undefined,
+      })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 
     return { displayCurrency: display, ...stats, yields, upcoming, events };
