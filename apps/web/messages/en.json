@@ -679,6 +679,9 @@
     "fxRate": "FX Rate",
     "source": "Source",
     "empty": "No transactions.",
+    "searchPlaceholder": "Search transactions…",
+    "searchClear": "Clear search",
+    "noResults": "No transactions match your search.",
     "exportCsv": "Export CSV",
     "exportDocuments": "Export Documents",
     "sources": {

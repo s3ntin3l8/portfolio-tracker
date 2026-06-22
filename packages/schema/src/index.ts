@@ -426,3 +426,30 @@ export const importIssueSchema = z.object({
     .nullish(),
 });
 export type ImportIssue = z.infer<typeof importIssueSchema>;
+
+// --- Global search -------------------------------------------------------
+
+/**
+ * Query schema for the user-scoped `GET /search` endpoint.  The `q` field is the
+ * free-text term matched against instrument symbol/name/ISIN/WKN and transaction
+ * description/tags.  Optional facets narrow results server-side; they are also the
+ * contract that the future Cmd-K palette will consume.
+ *
+ * `holderId` mirrors the `/networth?holderId=` scoping pattern — restricts the
+ * transaction (and owned-instrument) search to portfolios linked to that account holder.
+ * `types` pre-filters the transaction result set to a subset of transaction types.
+ * `limit` caps each result bucket (instruments and transactions independently).
+ */
+export const searchQuerySchema = z.object({
+  q: z.string().trim().min(1),
+  // Querystring parsers may deliver a single `?types=buy` as a string rather than
+  // a one-element array.  preprocess normalises both shapes so the route handler
+  // receives a consistent array.
+  types: z.preprocess(
+    (v) => (v == null ? undefined : Array.isArray(v) ? v : [v]),
+    z.array(transactionTypeSchema).optional(),
+  ),
+  holderId: z.guid().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export type SearchQuery = z.infer<typeof searchQuerySchema>;

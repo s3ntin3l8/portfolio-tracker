@@ -12,6 +12,8 @@ import {
   Trash2,
   Download,
   ChevronRight,
+  Search,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -31,6 +33,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cashFlow } from "@portfolio/core";
 import { formatMoney } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
@@ -160,6 +163,7 @@ export function TransactionsTable({
   const [typeFilter, setTypeFilter] = useState("all");
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
+  const [query, setQuery] = useState("");
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
 
   // Derive distinct options from `rows` so selects only show values present in the data.
@@ -185,19 +189,28 @@ export function TransactionsTable({
   );
 
   // Display-only filters; none of these touch any calculation.
-  const visibleRows = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
-          (typeFilter === "all" || r.type === typeFilter) &&
-          (instrumentFilter === "all" ||
-            (r.instrument?.symbol ?? r.instrument?.name ?? "") === instrumentFilter) &&
-          (yearFilter === "all" ||
-            String(new Date(r.executedAt).getFullYear()) === yearFilter),
-      ),
-    [rows, investmentsOnly, typeFilter, instrumentFilter, yearFilter],
-  );
+  const visibleRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(
+      (r) =>
+        (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
+        (typeFilter === "all" || r.type === typeFilter) &&
+        (instrumentFilter === "all" ||
+          (r.instrument?.symbol ?? r.instrument?.name ?? "") === instrumentFilter) &&
+        (yearFilter === "all" ||
+          String(new Date(r.executedAt).getFullYear()) === yearFilter) &&
+        (!q ||
+          (r.instrument?.symbol ?? "").toLowerCase().includes(q) ||
+          (r.instrument?.name ?? "").toLowerCase().includes(q) ||
+          r.type.toLowerCase().includes(q) ||
+          tt(r.type as Parameters<typeof tt>[0])
+            .toLowerCase()
+            .includes(q) ||
+          (r.portfolioName ?? "").toLowerCase().includes(q) ||
+          r.source.toLowerCase().includes(q)),
+    );
+  }, [rows, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
+
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
@@ -310,6 +323,26 @@ export function TransactionsTable({
             ))}
           </select>
         )}
+        <div className="relative ml-auto flex items-center">
+          <Search className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder={t("searchPlaceholder")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-8 w-44 pl-7 pr-7 text-xs"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("searchClear")}
+              className="absolute right-2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {selected.size > 0 && (
@@ -502,7 +535,7 @@ export function TransactionsTable({
                   colSpan={colSpan}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
-                  {t("empty")}
+                  {query.trim() ? t("noResults") : t("empty")}
                 </TableCell>
               </TableRow>
             )}

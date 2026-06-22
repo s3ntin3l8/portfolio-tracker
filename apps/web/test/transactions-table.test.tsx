@@ -376,4 +376,80 @@ describe("TransactionsTable", () => {
       expect(rows.length).toBe(FILTER_ROWS.length);
     });
   });
+
+  describe("text search", () => {
+    function getSearchInput() {
+      return screen.getByPlaceholderText(messages.Transactions.searchPlaceholder);
+    }
+
+    it("renders a search input", () => {
+      renderFilterTable();
+      expect(getSearchInput()).toBeInTheDocument();
+    });
+
+    it("filters rows by instrument symbol", () => {
+      renderFilterTable();
+      fireEvent.change(getSearchInput(), { target: { value: "BBCA" } });
+      // FILTER_ROWS: f1 (BBCA buy) + f2 (BBCA dividend) match; f3 (AAPL buy) does not.
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(2);
+      expect(rows.every((r) => r.textContent?.includes("BBCA"))).toBe(true);
+    });
+
+    it("filters rows by instrument name (case-insensitive)", () => {
+      renderFilterTable();
+      fireEvent.change(getSearchInput(), { target: { value: "apple" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("AAPL");
+    });
+
+    it("filters rows by raw type string", () => {
+      renderFilterTable();
+      fireEvent.change(getSearchInput(), { target: { value: "dividend" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("BBCA");
+    });
+
+    it("shows noResults message when search matches nothing", () => {
+      renderFilterTable();
+      fireEvent.change(getSearchInput(), { target: { value: "xyznonexistent" } });
+      expect(screen.getByText(messages.Transactions.noResults)).toBeInTheDocument();
+    });
+
+    it("shows empty (not noResults) when the full row set is empty and there is no query", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[]} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByText(messages.Transactions.empty)).toBeInTheDocument();
+      expect(screen.queryByText(messages.Transactions.noResults)).toBeNull();
+    });
+
+    it("clearing the search via the X button restores all rows", () => {
+      renderFilterTable();
+      const input = getSearchInput();
+      fireEvent.change(input, { target: { value: "BBCA" } });
+      // The clear button should be visible.
+      const clearBtn = screen.getByRole("button", { name: messages.Transactions.searchClear });
+      fireEvent.click(clearBtn);
+      // All rows restored.
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(FILTER_ROWS.length);
+      expect((input as HTMLInputElement).value).toBe("");
+    });
+
+    it("composes text search with the type dropdown filter", () => {
+      renderFilterTable();
+      // Type filter = buy; then search for AAPL → only f3 matches
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.change(getSearchInput(), { target: { value: "AAPL" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("AAPL");
+    });
+  });
 });

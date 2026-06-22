@@ -24,6 +24,7 @@ import { mergersRoute } from "./routes/mergers.js";
 import { importsRoute } from "./routes/imports.js";
 import { trRoute } from "./routes/tr.js";
 import { adminRoute } from "./routes/admin.js";
+import { searchRoute } from "./routes/search.js";
 import { storageRoute } from "./routes/storage.js";
 import type { ScreenshotParser } from "./services/parsers/types.js";
 import { getScreenshotParser } from "./services/screenshot-parser.js";
@@ -167,6 +168,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(importsRoute);
   await app.register(trRoute);
   await app.register(adminRoute);
+  await app.register(searchRoute);
   // Public file-serving for the folder storage provider (no auth — token in query string).
   await app.register(storageRoute);
 

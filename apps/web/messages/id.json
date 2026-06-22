@@ -677,6 +677,9 @@
     "fxRate": "Kurs",
     "source": "Sumber",
     "empty": "Tidak ada transaksi.",
+    "searchPlaceholder": "Cari transaksi…",
+    "searchClear": "Hapus pencarian",
+    "noResults": "Tidak ada transaksi yang cocok dengan pencarian Anda.",
     "exportCsv": "Ekspor CSV",
     "exportDocuments": "Ekspor Dokumen",
     "sources": {

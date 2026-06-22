@@ -6,6 +6,7 @@ import {
   parsedTransactionSchema,
   portfolioInputSchema,
   accountHolderInputSchema,
+  searchQuerySchema,
 } from "../src/index.js";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
@@ -183,5 +184,54 @@ describe("parsedTransactionSchema", () => {
         confidence: 1.5,
       }),
     ).toThrow();
+  });
+});
+
+describe("searchQuerySchema", () => {
+  it("requires q and defaults limit to 20", () => {
+    const parsed = searchQuerySchema.parse({ q: "apple" });
+    expect(parsed.q).toBe("apple");
+    expect(parsed.limit).toBe(20);
+    expect(parsed.types).toBeUndefined();
+    expect(parsed.holderId).toBeUndefined();
+  });
+
+  it("trims whitespace from q", () => {
+    const parsed = searchQuerySchema.parse({ q: "  bbca  " });
+    expect(parsed.q).toBe("bbca");
+  });
+
+  it("rejects an empty q after trimming", () => {
+    expect(() => searchQuerySchema.parse({ q: "   " })).toThrow();
+  });
+
+  it("coerces limit from string and clamps to [1,50]", () => {
+    expect(searchQuerySchema.parse({ q: "x", limit: "5" }).limit).toBe(5);
+    expect(() => searchQuerySchema.parse({ q: "x", limit: "0" })).toThrow();
+    expect(() => searchQuerySchema.parse({ q: "x", limit: "51" })).toThrow();
+  });
+
+  it("accepts a valid holderId", () => {
+    // z.guid() accepts any UUID-shaped string (less strict than RFC-4122 variant bits).
+    const id = "11111111-1111-1111-1111-111111111111";
+    expect(searchQuerySchema.parse({ q: "x", holderId: id }).holderId).toBe(id);
+  });
+
+  it("rejects an invalid holderId", () => {
+    expect(() => searchQuerySchema.parse({ q: "x", holderId: "not-a-uuid" })).toThrow();
+  });
+
+  it("accepts types as a single value (string → array)", () => {
+    const parsed = searchQuerySchema.parse({ q: "x", types: "buy" });
+    expect(parsed.types).toEqual(["buy"]);
+  });
+
+  it("accepts types as an array", () => {
+    const parsed = searchQuerySchema.parse({ q: "x", types: ["buy", "sell"] });
+    expect(parsed.types).toEqual(["buy", "sell"]);
+  });
+
+  it("rejects unknown transaction types in the types array", () => {
+    expect(() => searchQuerySchema.parse({ q: "x", types: ["unknown_type"] })).toThrow();
   });
 });

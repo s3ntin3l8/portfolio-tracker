@@ -327,6 +327,34 @@ export interface Instrument {
   name: string;
 }
 
+/** An instrument result from the global search — extends the catalog record with
+ *  an `owned` flag indicating whether the authenticated user holds or has transacted
+ *  this instrument (owned results sort first in the response). */
+export interface SearchInstrumentResult extends Instrument {
+  sector: string | null;
+  owned: boolean;
+}
+
+/** A transaction result from the global search — a minimal display record
+ *  matched by description or tags, enriched with instrument name/symbol. */
+export interface SearchTransactionResult {
+  id: string;
+  portfolioId: string;
+  portfolioName: string | null;
+  type: string;
+  currency: string;
+  executedAt: string;
+  description: string | null;
+  tags: string[] | null;
+  instrument: { symbol: string; name: string } | null;
+}
+
+/** Aggregated payload returned by `GET /search`. */
+export interface GlobalSearchResult {
+  instruments: SearchInstrumentResult[];
+  transactions: SearchTransactionResult[];
+}
+
 /** A market-data discovery match used to prefill the manual-entry form. */
 export interface InstrumentSearchResult {
   symbol: string;
@@ -1280,6 +1308,23 @@ export function createApiClient(config: ApiClientConfig) {
 
     searchInstruments: (q?: string) =>
       request<Instrument[]>("GET", `/instruments${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+
+    /**
+     * User-scoped global search across instruments (owned-first, with catalog fallback)
+     * and transactions (matched by description / tags).  The `holderId` facet narrows
+     * the transaction and owned-instrument results to a specific account holder's
+     * portfolios.  Results are grouped: `instruments` and `transactions`.
+     */
+    globalSearch: (params: { q: string; holderId?: string; types?: string[]; limit?: number }) => {
+      const p = new URLSearchParams({ q: params.q });
+      if (params.holderId) p.set("holderId", params.holderId);
+      if (params.limit != null) p.set("limit", String(params.limit));
+      if (params.types && params.types.length > 0) {
+        // Repeat the param for each type (array-in-querystring).
+        for (const t of params.types) p.append("types", t);
+      }
+      return request<GlobalSearchResult>("GET", `/search?${p.toString()}`);
+    },
     /** Discover instruments from market data (ticker/name search or ISIN). */
     lookupInstruments: (q: string) =>
       request<InstrumentSearchResult[]>("GET", `/instruments/lookup?q=${encodeURIComponent(q)}`),
