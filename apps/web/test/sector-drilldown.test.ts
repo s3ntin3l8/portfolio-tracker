@@ -1,0 +1,295 @@
+import { describe, it, expect } from "vitest";
+import { getDrillDownInstruments, type DrillDownInstrument } from "../src/lib/sector-drilldown";
+
+function makeHolding(
+  overrides: Partial<{
+    instrumentId: string;
+    instrument: {
+      symbol: string;
+      name: string;
+      assetClass: string;
+      unit: string;
+      market: string;
+      sector: string | null;
+      sectorWeights: Record<string, number> | null;
+      currency: string | null;
+    } | null;
+    marketValueDisplay: string | null;
+  }>,
+) {
+  return {
+    instrumentId: overrides.instrumentId ?? "h1",
+    quantity: "100",
+    avgCost: "10",
+    costBasis: "1000",
+    realizedPnL: "0",
+    costCurrency: null,
+    price: "15",
+    currency: "USD",
+    marketValue: "1500",
+    unrealizedPnL: "500",
+    marketValueDisplay: overrides.marketValueDisplay !== undefined ? overrides.marketValueDisplay : "1500",
+    costBasisDisplay: "1000",
+    unrealizedPnLDisplay: "500",
+    previousClose: "14.5",
+    dayChange: "0.5",
+    dayChangePct: "3.4",
+    instrument: overrides.instrument ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Sector dimension
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — sector", () => {
+  it("includes equity whose sector matches", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "500",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Technology");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "goto", name: "GOTO", value: 500 });
+  });
+
+  it("excludes equity whose sector does not match", () => {
+    const holdings = [
+      makeHolding({
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "1000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+
+  it("decomposes ETF by sectorWeights proportionally", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "sxr8",
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.39, Finance: 0.13 }, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Technology");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "sxr8", name: "SXR8", value: 3900 });
+  });
+
+  it("skips ETF with zero weight in sector", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "sxr8",
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Finance: 0.13 }, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Region dimension
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — region", () => {
+  it("includes equity whose market maps to region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "500",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "ID");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "goto", name: "GOTO", value: 500 });
+  });
+
+  it("excludes equity whose market maps to different region", () => {
+    const holdings = [
+      makeHolding({
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, currency: "EUR" },
+        marketValueDisplay: "1000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "region", "ID")).toEqual([]);
+  });
+
+  it("includes ETF by its listing market region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "EU");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "vwce", name: "VWCE", value: 10000 });
+  });
+
+  it("maps NASDAQ to US region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "aapl",
+        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null, currency: "USD" },
+        marketValueDisplay: "5000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "US");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "aapl", name: "AAPL", value: 5000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Currency dimension
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — currency", () => {
+  it("includes equity whose currency matches", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "aapl",
+        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null, currency: "USD" },
+        marketValueDisplay: "5000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "currency", "USD");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "aapl", name: "AAPL", value: 5000 });
+  });
+
+  it("excludes equity whose currency does not match", () => {
+    const holdings = [
+      makeHolding({
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "1000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "currency", "USD")).toEqual([]);
+  });
+
+  it("includes ETF by its quote currency", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "sxr8",
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "currency", "EUR");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "sxr8", name: "SXR8", value: 10000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Asset class dimension
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — asset_class", () => {
+  it("includes equity when filtering by equity", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "500",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "asset_class", "equity");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "goto", name: "GOTO", value: 500 });
+  });
+
+  it("excludes ETF when filtering by equity", () => {
+    const holdings = [
+      makeHolding({
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "asset_class", "equity")).toEqual([]);
+  });
+
+  it("includes gold when filtering by gold", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "xau",
+        instrument: { symbol: "XAU", name: "Gold", assetClass: "gold", unit: "oz", market: "XAU", sector: null, sectorWeights: null, currency: "USD" },
+        marketValueDisplay: "2000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "asset_class", "gold");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "xau", name: "XAU", value: 2000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — edge cases", () => {
+  it("skips holding with null instrument", () => {
+    const holdings = [
+      makeHolding({ instrument: null, marketValueDisplay: "1000" }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+
+  it("skips holding with null marketValueDisplay", () => {
+    const holdings = [
+      makeHolding({
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: null,
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+
+  it("sorts by value descending", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "h1",
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "100",
+      }),
+      makeHolding({
+        instrumentId: "h2",
+        instrument: { symbol: "BBRI", name: "Bank BRI", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "500",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Finance");
+    expect(result[0].key).toBe("h2");
+    expect(result[1].key).toBe("h1");
+  });
+
+  it("combines equities and ETF decompositions in same sector", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, currency: "IDR" },
+        marketValueDisplay: "500",
+      }),
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.2 }, currency: "EUR" },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Technology");
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ key: "vwce", name: "VWCE", value: 2000 });
+    expect(result[1]).toEqual({ key: "goto", name: "GOTO", value: 500 });
+  });
+
+  it("returns empty array for empty holdings", () => {
+    expect(getDrillDownInstruments([], "sector", "Technology")).toEqual([]);
+  });
+});
