@@ -71,25 +71,21 @@ export function getDrillDownInstruments(
       case "region":
         // Check if ETF has countryWeights for detailed breakdown
         if (h.instrument.assetClass === "etf" && h.instrument.countryWeights) {
-          let sumW = 0;
+          let regionTotal = 0;
           for (const [country, w] of Object.entries(h.instrument.countryWeights)) {
             if (countryToRegion(country) === selectedKey && typeof w === "number" && w > 0) {
-              contribution = mv * w;
-              result.push({ key: country, name: country, value: contribution });
-              sumW += w;
+              regionTotal += w;
             }
           }
           // Remainder (unclassified countries) goes to listing venue region
-          if (sumW < 0.9999 && marketToRegion(h.instrument.market) === selectedKey) {
-            const remainder = mv * (1 - sumW);
-            if (remainder > 0) {
-              result.push({ key: `${h.instrumentId}-remainder`, name: h.instrument.symbol, value: remainder });
-            }
+          if (regionTotal < 1 && marketToRegion(h.instrument.market) === selectedKey) {
+            regionTotal += 1 - regionTotal;
           }
-          continue; // Already pushed results, skip the generic push below
-        }
-        // Fallback: use listing venue
-        if (marketToRegion(h.instrument.market) === selectedKey) {
+          if (regionTotal > 0) {
+            contribution = mv * regionTotal;
+          }
+        } else if (marketToRegion(h.instrument.market) === selectedKey) {
+          // Fallback: use listing venue
           contribution = mv;
         }
         break;

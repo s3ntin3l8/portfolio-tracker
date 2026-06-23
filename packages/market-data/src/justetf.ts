@@ -75,19 +75,46 @@ export class JustEtfProvider implements MarketDataProvider {
   /**
    * Fetch country allocation from JustETF AJAX endpoint.
    * Returns country name → fraction (0–1) map.
+   *
+   * JustETF requires a session cookie (JSESSIONID) from a prior page visit
+   * before the AJAX endpoint will return data (otherwise 301 redirect).
+   * Two-step approach: fetch profile page for cookies, then AJAX for data.
    */
   private async fetchCountryAllocation(isin: string): Promise<Record<string, number> | null> {
+    const userAgent =
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36";
+
+    // Step 1: fetch profile page to establish session cookies
     await this.rateLimit();
-
-    const url = `https://www.justetf.com/en/etf-profile.html?0-1.0-holdingsSection-countries-loadMoreCountries&isin=${isin}&_wicket=1`;
-
-    const response = await fetch(url, {
+    const profileUrl = `https://www.justetf.com/en/etf-profile.html?isin=${isin}`;
+    const profileResp = await fetch(profileUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; PortfolioTracker/1.0)",
+        "User-Agent": userAgent,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    if (!profileResp.ok) return null;
+
+    const cookies = profileResp.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+
+    if (!cookies) return null;
+
+    // Step 2: fetch country allocation via AJAX with session cookies
+    await this.rateLimit();
+    const ajaxUrl = `https://www.justetf.com/en/etf-profile.html?0-1.0-holdingsSection-countries-loadMoreCountries&isin=${isin}&_wicket=1`;
+
+    const response = await fetch(ajaxUrl, {
+      headers: {
+        "User-Agent": userAgent,
         "X-Requested-With": "XMLHttpRequest",
         "Wicket-Ajax": "true",
         "Wicket-Ajax-BaseURL": `en/etf-profile.html?isin=${isin}`,
         Accept: "application/xml, text/xml, */*; q=0.01",
+        Cookie: cookies,
       },
     });
 
@@ -108,7 +135,7 @@ export class JustEtfProvider implements MarketDataProvider {
     // <td data-testid="tl_etf-holdings_countries_value_name">Germany</td>
     // <td data-testid="tl_etf-holdings_countries_value_percentage">39.05%</td>
     const rowRegex =
-      /data-testid="etf-holdings_countries_row"[\s\S]*?data-testid="tl_etf-holdings_countries_value_name">([^<]+)<[\s\S]*?data-testid="tl_etf-holdings_countries_value_percentage">([^<]+)<\/td>/g;
+      /data-testid="etf-holdings_countries_row"[\s\S]*?data-testid="tl_etf-holdings_countries_value_name">([^<]+)<[\s\S]*?data-testid="tl_etf-holdings_countries_value_percentage">([^<]+)</g;
 
     let match;
     while ((match = rowRegex.exec(xml)) !== null) {

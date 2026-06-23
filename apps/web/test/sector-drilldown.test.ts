@@ -12,6 +12,7 @@ function makeHolding(
       market: string;
       sector: string | null;
       sectorWeights: Record<string, number> | null;
+      countryWeights: Record<string, number> | null;
     } | null;
     marketValueDisplay: string | null;
     currency: string | null;
@@ -47,7 +48,7 @@ describe("getDrillDownInstruments — sector", () => {
     const holdings = [
       makeHolding({
         instrumentId: "goto",
-        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "500",
       }),
     ];
@@ -59,7 +60,7 @@ describe("getDrillDownInstruments — sector", () => {
   it("excludes equity whose sector does not match", () => {
     const holdings = [
       makeHolding({
-        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null },
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "1000",
       }),
     ];
@@ -70,7 +71,7 @@ describe("getDrillDownInstruments — sector", () => {
     const holdings = [
       makeHolding({
         instrumentId: "sxr8",
-        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.39, Finance: 0.13 } },
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.39, Finance: 0.13 }, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];
@@ -83,7 +84,7 @@ describe("getDrillDownInstruments — sector", () => {
     const holdings = [
       makeHolding({
         instrumentId: "sxr8",
-        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Finance: 0.13 } },
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Finance: 0.13 }, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];
@@ -94,7 +95,7 @@ describe("getDrillDownInstruments — sector", () => {
     const holdings = [
       makeHolding({
         instrumentId: "sxr8",
-        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { "Financial Services": 0.15, Technology: 0.5 } },
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { "Financial Services": 0.15, Technology: 0.5 }, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];
@@ -107,7 +108,7 @@ describe("getDrillDownInstruments — sector", () => {
     const holdings = [
       makeHolding({
         instrumentId: "pfe",
-        instrument: { symbol: "PFE", name: "Pfizer", assetClass: "equity", unit: "shares", market: "NYSE", sector: "Healthcare", sectorWeights: null },
+        instrument: { symbol: "PFE", name: "Pfizer", assetClass: "equity", unit: "shares", market: "NYSE", sector: "Healthcare", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "5000",
       }),
     ];
@@ -126,7 +127,7 @@ describe("getDrillDownInstruments — region", () => {
     const holdings = [
       makeHolding({
         instrumentId: "goto",
-        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "500",
       }),
     ];
@@ -138,7 +139,7 @@ describe("getDrillDownInstruments — region", () => {
   it("excludes equity whose market maps to different region", () => {
     const holdings = [
       makeHolding({
-        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null },
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: null },
         marketValueDisplay: "1000",
       }),
     ];
@@ -149,7 +150,7 @@ describe("getDrillDownInstruments — region", () => {
     const holdings = [
       makeHolding({
         instrumentId: "vwce",
-        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null },
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];
@@ -162,7 +163,7 @@ describe("getDrillDownInstruments — region", () => {
     const holdings = [
       makeHolding({
         instrumentId: "aapl",
-        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "5000",
       }),
     ];
@@ -181,7 +182,7 @@ describe("getDrillDownInstruments — currency", () => {
     const holdings = [
       makeHolding({
         instrumentId: "aapl",
-        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "AAPL", name: "Apple", assetClass: "equity", unit: "shares", market: "NASDAQ", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "5000",
         currency: "USD",
       }),
@@ -194,7 +195,7 @@ describe("getDrillDownInstruments — currency", () => {
   it("excludes equity whose currency does not match", () => {
     const holdings = [
       makeHolding({
-        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null },
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "1000",
         currency: "IDR",
       }),
@@ -206,7 +207,7 @@ describe("getDrillDownInstruments — currency", () => {
     const holdings = [
       makeHolding({
         instrumentId: "sxr8",
-        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null },
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: null },
         marketValueDisplay: "10000",
         currency: "EUR",
       }),
@@ -226,7 +227,7 @@ describe("getDrillDownInstruments — asset_class", () => {
     const holdings = [
       makeHolding({
         instrumentId: "goto",
-        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "500",
       }),
     ];
@@ -238,7 +239,7 @@ describe("getDrillDownInstruments — asset_class", () => {
   it("excludes ETF when filtering by equity", () => {
     const holdings = [
       makeHolding({
-        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null },
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];
@@ -249,7 +250,7 @@ describe("getDrillDownInstruments — asset_class", () => {
     const holdings = [
       makeHolding({
         instrumentId: "xau",
-        instrument: { symbol: "XAU", name: "Gold", assetClass: "gold", unit: "oz", market: "XAU", sector: null, sectorWeights: null },
+        instrument: { symbol: "XAU", name: "Gold", assetClass: "gold", unit: "oz", market: "XAU", sector: null, sectorWeights: null, countryWeights: null },
         marketValueDisplay: "2000",
       }),
     ];
@@ -274,7 +275,7 @@ describe("getDrillDownInstruments — edge cases", () => {
   it("skips holding with null marketValueDisplay", () => {
     const holdings = [
       makeHolding({
-        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: null,
       }),
     ];
@@ -285,12 +286,12 @@ describe("getDrillDownInstruments — edge cases", () => {
     const holdings = [
       makeHolding({
         instrumentId: "h1",
-        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null },
+        instrument: { symbol: "BBCA", name: "Bank BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "100",
       }),
       makeHolding({
         instrumentId: "h2",
-        instrument: { symbol: "BBRI", name: "Bank BRI", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null },
+        instrument: { symbol: "BBRI", name: "Bank BRI", assetClass: "equity", unit: "shares", market: "IDX", sector: "Finance", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "500",
       }),
     ];
@@ -303,12 +304,12 @@ describe("getDrillDownInstruments — edge cases", () => {
     const holdings = [
       makeHolding({
         instrumentId: "goto",
-        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null },
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
         marketValueDisplay: "500",
       }),
       makeHolding({
         instrumentId: "vwce",
-        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.2 } },
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { Technology: 0.2 }, countryWeights: null },
         marketValueDisplay: "10000",
       }),
     ];

@@ -82,21 +82,25 @@ export class MarketDataService {
   }
 
   /**
-   * Fetch instrument profile metadata (sector, industry, country). Tries all supporting
-   * providers in registration order, returning the first non-null result.
+   * Fetch instrument profile metadata (sector, industry, country). Calls ALL
+   * supporting providers and merges their results — different providers return
+   * different fields (e.g. EODHD returns sectorWeights, JustETF returns
+   * countryWeights), so merging gives a complete picture.
    */
   async getProfile(ref: InstrumentRef): Promise<InstrumentProfile | null> {
+    const parts: InstrumentProfile[] = [];
     for (const provider of this.providersFor(ref.assetClass, ref.market)) {
       if (!provider.getProfile) continue;
       try {
         this.opts.onCall?.(provider.name);
         const profile = await provider.getProfile(ref);
-        if (profile != null) return profile;
+        if (profile != null) parts.push(profile);
       } catch {
         // A failing provider shouldn't block the others.
       }
     }
-    return null;
+    if (parts.length === 0) return null;
+    return Object.assign({}, ...parts);
   }
 
   /**

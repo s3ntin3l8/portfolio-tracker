@@ -5,6 +5,34 @@ describe("JustEtfProvider", () => {
   let provider: JustEtfProvider;
   let fetchSpy: ReturnType<typeof vi.fn>;
 
+  const mockProfilePage = "<html>ETF profile page</html>";
+  const mockCookies = [
+    "JSESSIONID=ABC123; Path=/; HttpOnly",
+    "XSRF-TOKEN=xyz; Path=/; HttpOnly",
+  ];
+
+  function mockSuccess(xml: string) {
+    // First call: profile page with cookies
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      headers: { getSetCookie: () => mockCookies },
+      text: () => Promise.resolve(mockProfilePage),
+    });
+    // Second call: AJAX endpoint with country data
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: () => Promise.resolve(xml),
+    });
+  }
+
+  function mockProfilePageOnly() {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      headers: { getSetCookie: () => mockCookies },
+      text: () => Promise.resolve(mockProfilePage),
+    });
+  }
+
   beforeEach(() => {
     provider = new JustEtfProvider();
     fetchSpy = vi.fn();
@@ -52,7 +80,7 @@ describe("JustEtfProvider", () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it("fetches and parses country allocation", async () => {
+    it("fetches session then country allocation", async () => {
       const mockXml = `
         <tbody>
           <tr data-testid="etf-holdings_countries_row">
@@ -70,10 +98,7 @@ describe("JustEtfProvider", () => {
         </tbody>
       `;
 
-      fetchSpy.mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve(mockXml),
-      });
+      mockSuccess(mockXml);
 
       const result = await provider.getProfile({
         symbol: "MWOF",
@@ -90,23 +115,63 @@ describe("JustEtfProvider", () => {
       expect(result!.countryWeights!["United States"]).toBeCloseTo(0.1523, 4);
       expect(result!.countryWeights!.France).toBeCloseTo(0.105, 4);
 
-      expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining("isin=IE00B4K48X80"),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            "X-Requested-With": "XMLHttpRequest",
-            "Wicket-Ajax": "true",
-          }),
-        }),
-      );
+      // Two fetch calls: profile page + AJAX
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      // First call: profile page
+      expect(fetchSpy.mock.calls[0][0]).toContain("isin=IE00B4K48X80");
+      expect(fetchSpy.mock.calls[0][0]).not.toContain("_wicket=1");
+
+      // Second call: AJAX endpoint
+      expect(fetchSpy.mock.calls[1][0]).toContain("_wicket=1");
+      expect(fetchSpy.mock.calls[1][0]).toContain("isin=IE00B4K48X80");
+      expect(fetchSpy.mock.calls[1][1].headers["X-Requested-With"]).toBe("XMLHttpRequest");
+      expect(fetchSpy.mock.calls[1][1].headers["Cookie"]).toContain("JSESSIONID=ABC123");
+    });
+
+    it("returns null when profile page fails", async () => {
+      fetchSpy.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: { getSetCookie: () => [] },
+      });
+
+      const result = await provider.getProfile({
+        symbol: "MWOF",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        isin: "IE00B4K48X80",
+      });
+
+      expect(result).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns null when no cookies returned", async () => {
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        headers: { getSetCookie: () => [] },
+        text: () => Promise.resolve(mockProfilePage),
+      });
+
+      const result = await provider.getProfile({
+        symbol: "MWOF",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        isin: "IE00B4K48X80",
+      });
+
+      expect(result).toBeNull();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
     it("returns null when no countries found", async () => {
-      const mockXml = `<tbody></tbody>`;
-
+      mockProfilePageOnly();
       fetchSpy.mockResolvedValueOnce({
         ok: true,
-        text: () => Promise.resolve(mockXml),
+        text: () => Promise.resolve(`<tbody></tbody>`),
       });
 
       const result = await provider.getProfile({
@@ -120,7 +185,8 @@ describe("JustEtfProvider", () => {
       expect(result).toBeNull();
     });
 
-    it("returns null on fetch error", async () => {
+    it("returns null on AJAX endpoint failure", async () => {
+      mockProfilePageOnly();
       fetchSpy.mockResolvedValueOnce({
         ok: false,
         status: 404,
@@ -161,10 +227,7 @@ describe("JustEtfProvider", () => {
         </tbody>
       `;
 
-      fetchSpy.mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve(mockXml),
-      });
+      mockSuccess(mockXml);
 
       const result = await provider.getProfile({
         symbol: "MWOF",
@@ -192,14 +255,15 @@ describe("JustEtfProvider", () => {
         </tbody>
       `;
 
+      // Each call makes 2 requests (page + AJAX)
       fetchSpy.mockResolvedValue({
         ok: true,
+        headers: { getSetCookie: () => mockCookies },
         text: () => Promise.resolve(mockXml),
       });
 
       const start = Date.now();
 
-      // Make two requests
       await provider.getProfile({
         symbol: "ETF1",
         market: "XETRA",
@@ -217,7 +281,8 @@ describe("JustEtfProvider", () => {
       });
 
       const elapsed = Date.now() - start;
-      expect(elapsed).toBeGreaterThanOrEqual(900); // Allow some tolerance
+      // 4 requests total, each with 1s gap = ~3s minimum
+      expect(elapsed).toBeGreaterThanOrEqual(2900);
     });
   });
 });

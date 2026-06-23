@@ -355,6 +355,54 @@ describe("MarketDataService", () => {
     expect(await svc.search("  ")).toEqual([]);
     expect(await svc.search("x")).toHaveLength(10);
   });
+
+  it("merges getProfile results from multiple providers", async () => {
+    const sectorProvider: MarketDataProvider = {
+      name: "sector",
+      supports: (ac) => ac === "etf",
+      getQuote: async () => null,
+      getProfile: async () => ({
+        sectorWeights: { Technology: 0.3, Financials: 0.2 },
+      }),
+    };
+    const countryProvider: MarketDataProvider = {
+      name: "country",
+      supports: (ac) => ac === "etf",
+      getQuote: async () => null,
+      getProfile: async () => ({
+        countryWeights: { "United States": 0.5, Japan: 0.12 },
+      }),
+    };
+    const svc = new MarketDataService([sectorProvider, countryProvider]);
+    const profile = await svc.getProfile({
+      symbol: "VWCE",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    });
+    expect(profile).toEqual({
+      sectorWeights: { Technology: 0.3, Financials: 0.2 },
+      countryWeights: { "United States": 0.5, Japan: 0.12 },
+    });
+  });
+
+  it("getProfile returns null when all providers return null", async () => {
+    const noop: MarketDataProvider = {
+      name: "noop",
+      supports: (ac) => ac === "etf",
+      getQuote: async () => null,
+      getProfile: async () => null,
+    };
+    const svc = new MarketDataService([noop]);
+    expect(
+      await svc.getProfile({
+        symbol: "VWCE",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("YahooFinanceProvider", () => {

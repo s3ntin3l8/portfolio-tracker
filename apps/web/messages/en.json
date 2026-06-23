@@ -521,15 +521,10 @@
     "topMovers": "Top movers"
   },
   "Region": {
-    "ID": "Indonesia",
-    "EU": "Europe",
-    "US": "United States",
-    "Commodity": "Commodity",
-    "CA": "Canada",
-    "AU": "Australia",
-    "SG": "Singapore",
-    "HK": "Hong Kong",
-    "JP": "Japan",
+    "North America": "North America",
+    "Latin America": "Latin America",
+    "Europe": "Europe",
+    "Africa & ME": "Africa & ME",
     "Asia": "Asia",
     "Other": "Other"
   },
