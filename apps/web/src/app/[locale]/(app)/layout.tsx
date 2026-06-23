@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { SessionErrorGuard } from "@/components/session-error-guard";
+import { Toaster } from "@/components/ui/sonner";
 import { resolveSelection, loadMe, loadAccountHolders } from "@/lib/server-api";
 import { qualifyingHolders } from "@/lib/portfolio-selection";
 import { auth } from "@/auth";
@@ -43,6 +44,7 @@ export default async function AppLayout({
   return (
     <>
       <SessionErrorGuard />
+      <Toaster richColors position="bottom-right" />
       <AppShell
         portfolios={selection.portfolios.map((p) => ({
           id: p.id,

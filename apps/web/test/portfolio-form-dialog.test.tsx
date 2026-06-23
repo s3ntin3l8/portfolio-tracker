@@ -43,6 +43,7 @@ const getTrConnection = vi.fn(
     lastError: null,
     importCategories: null,
     lastReconciliation: null,
+    syncing: false,
   }),
 );
 
@@ -410,6 +411,7 @@ describe("PortfolioFormDialog", () => {
       lastError: null,
       importCategories: null,
       lastReconciliation: null,
+      syncing: false,
     });
     renderEdit({
       id: "p-tr",

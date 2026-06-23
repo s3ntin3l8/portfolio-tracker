@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, RefreshCw, Plug, Smartphone, Unplug } from "lucide-react";
+import { toast } from "sonner";
 import { apiErrorCode } from "@portfolio/api-client";
 import type {
   ApiClient,
   TrConnection,
-  TrSyncResult,
   TrImportCategory,
 } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,6 @@ export function TrConnectFlow({
   const [wafToken, setWafToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sync, setSync] = useState<TrSyncResult | null>(null);
   const [categories, setCategories] = useState<Set<TrImportCategory>>(
     new Set(initial.importCategories ?? DEFAULT_CATEGORIES),
   );
@@ -173,17 +172,18 @@ export function TrConnectFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  const doSync = () =>
-    void run(async () => {
-      const result = await client.syncTr();
-      setSync(result);
+  const doSync = () => {
+    void client.syncTr().then(() => {
+      toast.success(t("syncQueued"));
       onChanged?.();
+    }).catch((err: unknown) => {
+      toast.error(messageForError(err));
     });
+  };
 
   const disconnect = () =>
     void run(async () => {
       await client.disconnectTr();
-      setSync(null);
       setPhase("form");
       onChanged?.();
     });
@@ -192,7 +192,6 @@ export function TrConnectFlow({
     void run(async () => {
       await client.reimportTr();
       setConfirmingReimport(false);
-      setSync(null);
       onChanged?.();
     });
 
@@ -304,14 +303,9 @@ export function TrConnectFlow({
       {phase === "connected" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{t("connectedHint")}</p>
-          {sync && (
-            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-              {t("synced", { drafts: sync.drafts ?? 0 })}
-            </div>
-          )}
 
           {(() => {
-            const recon = sync?.reconciliation ?? initial.lastReconciliation;
+            const recon = initial.lastReconciliation;
             if (!recon) return null;
             return (
               <div className="space-y-1 rounded-md border px-3 py-2 text-sm">

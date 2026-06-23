@@ -13,6 +13,7 @@ import { requireUser } from "../plugins/auth.js";
 import { PytrApprovalError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
 import { enrichTransactionsFromStoredDocuments } from "../services/enrichment.js";
+import { enqueueTrSync } from "../services/scheduler.js";
 
 const connectBodySchema = z.object({
   phone: z.string().min(3),
@@ -43,6 +44,8 @@ function serialize(conn: TrConnection | null) {
     importCategories: conn?.importCategories ?? null,
     // TR's reported cash vs our derived cash at the last sync (null until first synced).
     lastReconciliation: conn?.lastReconciliation ?? null,
+    // True while a background sync job is running.
+    syncing: conn?.syncing ?? false,
   };
 }
 
@@ -201,8 +204,10 @@ export async function trRoute(app: FastifyInstance) {
     },
   );
 
-  // Sync now: pull the timeline into a draft import the user then confirms. Runs
-  // inline (the same logic the hourly cron uses) so the UI gets an immediate result.
+  // Sync now: enqueue a background pg-boss job (deduped per connection). Returns 202
+  // immediately so the UI stays unblocked; the frontend polls GET /tr/connection watching
+  // `syncing` + `lastSyncAt` to know when it's done. Falls back to inline sync when
+  // pg-boss is unavailable (PGlite / tests).
   app.post(
     "/tr/connection/sync",
     { preHandler: app.authenticate },
@@ -212,6 +217,17 @@ export async function trRoute(app: FastifyInstance) {
       if (!conn || conn.status !== "connected") {
         return reply.code(409).send({ error: "not_connected" });
       }
+      const { queued } = await enqueueTrSync(conn.id);
+      if (queued) {
+        // Mark syncing immediately so the poller sees it without waiting for the worker to pick up.
+        await app.db
+          .update(trConnections)
+          .set({ syncing: true, updatedAt: new Date() })
+          .where(eq(trConnections.id, conn.id));
+        reply.code(202);
+        return { queued: true };
+      }
+      // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
       try {
         const result = await syncTrConnection(app.db, app.encryption, app.pytr, conn, request.log, app.storage);
         request.log.info(

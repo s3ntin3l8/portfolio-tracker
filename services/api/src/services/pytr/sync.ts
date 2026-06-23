@@ -147,6 +147,7 @@ export async function syncTrConnection(
       .set({
         status,
         lastError,
+        syncing: false,
         updatedAt: new Date(),
       })
       .where(eq(trConnections.id, connection.id));
@@ -403,6 +404,7 @@ export async function syncTrConnection(
       status: "connected",
       lastSyncAt: new Date(),
       lastError: null,
+      syncing: false,
       updatedAt: new Date(),
       ...(reconciliation ? { lastReconciliation: reconciliation } : {}),
     })

@@ -1,0 +1,1 @@
+ALTER TABLE "tr_connections" ADD COLUMN "syncing" boolean DEFAULT false NOT NULL;
