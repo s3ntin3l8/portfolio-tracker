@@ -296,20 +296,47 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail(`${type} row missing a share count`);
         continue;
       }
-      candidate = {
-        ...base,
-        ...instrument,
-        action: "bonus",
-        quantity: dec(Math.abs(shares)),
-        unit: "shares",
-        price: "0", // shares received with no cash consideration
-        fees: "0",
-        // A FREE_RECEIPT is an inbound securities transfer — contributed capital at its
-        // carried cost basis (the user sets the price when editing). DIVIDEND_OPTION/
-        // _REINVESTMENT are reinvested income, not contributions, so they stay untagged.
-        // See CLAUDE.md "one boundary per portfolio".
-        kind: type === "FREE_RECEIPT" ? "transfer_in" : null,
-      };
+      if (type === "FREE_RECEIPT") {
+        // Discriminator: a TR-issued grant (BTC/ETH promo) has a price; a genuine
+        // depot-to-depot share transfer (Depotübertrag) has no price.
+        if (priceCol != null && priceCol !== 0) {
+          // Crypto/promo grant: income at market basis. NOT a contribution.
+          candidate = {
+            ...base,
+            ...instrument,
+            action: "bonus",
+            quantity: dec(Math.abs(shares)),
+            unit: assetClass === "crypto" ? "units" : "shares",
+            price: dec(Math.abs(priceCol)),
+            fees: "0",
+          };
+        } else {
+          // Depot transfer: carried cost basis is unknown — emit a low-confidence draft
+          // so the review screen prompts the user to set the original cost basis.
+          // action:"transfer_in" is the first-class type from PR #309.
+          candidate = {
+            ...base,
+            ...instrument,
+            action: "transfer_in",
+            quantity: dec(Math.abs(shares)),
+            unit: "shares",
+            price: "0", // user must set the carried cost basis at confirm
+            fees: "0",
+            confidence: 0.5, // prompts review; sub-1 surfaces in import-review.tsx
+          };
+        }
+      } else {
+        // DIVIDEND_OPTION / DIVIDEND_REINVESTMENT: reinvested income, not a contribution.
+        candidate = {
+          ...base,
+          ...instrument,
+          action: "bonus",
+          quantity: dec(Math.abs(shares)),
+          unit: "shares",
+          price: "0",
+          fees: "0",
+        };
+      }
     } else if (UNSUPPORTED.has(type)) {
       fail(`${type}: ${UNSUPPORTED.get(type)}`);
       continue;

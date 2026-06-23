@@ -99,10 +99,22 @@ function acquisitionCost(tx: CoreTransaction, fx: FxRateFn, display: string): De
 function isExternalAcquisition(tx: CoreTransaction): boolean {
   if (tx.kind && EXCLUDED_ACQUISITION_KINDS.has(tx.kind)) return false;
   if (tx.type === "buy" || tx.type === "savings_plan") return true;
+  // First-class transfer_in: shares owned elsewhere arrive at carried cost.
+  // They represent capital the user already deployed — count as contributed.
+  if (tx.type === "transfer_in") return true;
   // `bonus` rows are zero-cash share receipts (corporate actions, reinvested
-  // dividends) — only an explicitly-tagged transfer-in is contributed capital.
+  // dividends) — only a legacy transfer_in-tagged row is contributed capital.
   if (tx.type === "bonus") return tx.kind === "transfer_in";
   return false;
+}
+
+/**
+ * Cash amount of a securities transfer landing inside the boundary (at carried cost).
+ * Fees reduce the net value (mirror of acquisitionCost but named for clarity here).
+ */
+function transferInflow(tx: CoreTransaction, fx: FxRateFn, display: string): Decimal {
+  const gross = D(tx.quantity).abs().mul(D(tx.price)).add(D(tx.fees));
+  return D(convert(gross.toString(), tx.currency, display, fx));
 }
 
 /** Per-month {inflow, outflow} when cash is INSIDE the boundary: net external cash. */
@@ -113,11 +125,22 @@ function insideMonths(
 ): Map<string, MonthAgg> {
   const months = new Map<string, MonthAgg>();
   for (const tx of txns) {
-    if (tx.type !== "deposit" && tx.type !== "withdrawal") continue;
     const key = monthKey(tx.executedAt);
     const m = months.get(key) ?? { inflow: D(0), outflow: D(0) };
-    if (tx.type === "deposit") m.inflow = m.inflow.add(depositInflow(tx, fx, display));
-    else m.outflow = m.outflow.add(withdrawalOutflow(tx, fx, display));
+    if (tx.type === "deposit") {
+      m.inflow = m.inflow.add(depositInflow(tx, fx, display));
+    } else if (tx.type === "withdrawal") {
+      m.outflow = m.outflow.add(withdrawalOutflow(tx, fx, display));
+    } else if (tx.type === "transfer_in") {
+      // Inbound transfer: shares arrive at carried cost — that value crosses the boundary
+      // as contributed capital (same logic as a deposit for an inside-boundary portfolio).
+      m.inflow = m.inflow.add(transferInflow(tx, fx, display));
+    } else if (tx.type === "transfer_out") {
+      // Outbound transfer: capital leaves the boundary at carried cost basis.
+      m.outflow = m.outflow.add(transferInflow(tx, fx, display));
+    } else {
+      continue;
+    }
     months.set(key, m);
   }
   return months;
@@ -147,13 +170,26 @@ function outsideMonths(
     const key = monthKey(tx.executedAt);
     const m = months.get(key) ?? { inflow: D(0), outflow: D(0) };
 
-    if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "bonus") {
+    if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "bonus" ||
+        tx.type === "transfer_in") {
       const cost = acquisitionCost(tx, fx, display);
       const p = pool.get(tx.instrumentId) ?? { qty: D(0), cost: D(0) };
       p.qty = p.qty.add(D(tx.quantity).abs());
       p.cost = p.cost.add(cost);
       pool.set(tx.instrumentId, p);
       if (isExternalAcquisition(tx)) m.inflow = m.inflow.add(cost);
+    } else if (tx.type === "transfer_out") {
+      // Outbound transfer removes from the avg-cost pool and counts as outflow
+      // (capital leaving the boundary), analogous to a sell but with no P&L.
+      if (!tx.instrumentId) continue;
+      const p = pool.get(tx.instrumentId) ?? { qty: D(0), cost: D(0) };
+      const transferQty = Decimal.min(D(tx.quantity).abs(), p.qty);
+      const avg = p.qty.gt(0) ? p.cost.div(p.qty) : D(0);
+      const costOfTransferred = avg.mul(transferQty);
+      p.qty = p.qty.sub(transferQty);
+      p.cost = p.cost.sub(costOfTransferred);
+      pool.set(tx.instrumentId, p);
+      m.outflow = m.outflow.add(D(convert(costOfTransferred.toString(), tx.currency, display, fx)));
     } else if (tx.type === "sell") {
       const p = pool.get(tx.instrumentId) ?? { qty: D(0), cost: D(0) };
       const sellQty = Decimal.min(D(tx.quantity).abs(), p.qty);

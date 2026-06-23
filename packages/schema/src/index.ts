@@ -39,6 +39,13 @@ export const transactionTypeSchema = z.enum([
   // liability is derived from these; excluded from XIRR/contributions by design.
   "loan_drawdown",
   "loan_repayment",
+  // Depot-to-depot securities transfers (Depotübertrag). Cash-neutral — shares move
+  // in/out at the user's carried cost basis, not at market. NOT a contribution (transfer_in
+  // is capital already owned, not new money injected) — BUT for cash-inside portfolios the
+  // carried cost is counted as contributed value (see contributions.ts insideMonths).
+  // Replaces the former `bonus` + `kind:"transfer_in"` convention (PR #309).
+  "transfer_in",
+  "transfer_out",
 ]);
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
 
@@ -314,6 +321,7 @@ export type TaxComponents = z.infer<typeof taxComponentsSchema>;
 // `bonus` = shares received with no cash (stock dividend / corporate bonus issue) —
 // mirrored from the DB transaction type so share-based corp actions can be auto-mapped.
 // `bonus_cash` = broker-credited cash bonus (e.g. TR Kindergeld/promo).
+// `transfer_in` = inbound depot transfer (Depotübertrag) — first-class type from PR #309.
 export const parsedActionSchema = z.enum([
   "buy",
   "sell",
@@ -325,6 +333,7 @@ export const parsedActionSchema = z.enum([
   "withdrawal",
   "bonus",
   "bonus_cash",
+  "transfer_in",
 ]);
 export type ParsedAction = z.infer<typeof parsedActionSchema>;
 

@@ -77,9 +77,14 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   Cash-outside: contribution = net invested capital (kind-aware buys − sells), value =
   securities only, cash excluded from net worth. Never mix boundaries (cash in the value but
   not the contribution, or vice versa) — that manufactures phantom gains. Income (dividends/
-  interest/coupons, `saveback`, bonus shares) is return, never contribution; an explicitly
-  tagged `transfer_in` is contributed capital at its carried cost basis. Lives in
+  interest/coupons, `saveback`, bonus shares) is return, never contribution; `transfer_in` is
+  contributed capital at its carried cost basis. Lives in
   `packages/core/src/contributions.ts` + the `boundaryFlows`/`summarizePortfolio` plumbing.
+- **`transfer_in` / `transfer_out` are first-class transaction types** (since PR #309,
+  migration 0044). Depot-to-depot share transfers (Depotübertrag): cash-neutral, shares move
+  at carried cost basis — no P&L on `transfer_out` (not a disposal). This replaces the legacy
+  `bonus`+`kind:"transfer_in"` sub-type pattern (those rows should be migrated). Inside-
+  boundary: `transfer_in` is an inflow at carried cost; outside-boundary: at avg cost.
 - **Imports never auto-commit.** Screenshot/CSV parses become *draft* records that the
   user confirms before a transaction is written. Dedup runs at three levels: **file-level**
   (same file re-upload → `contentHash`), **within-source transaction-level** (the

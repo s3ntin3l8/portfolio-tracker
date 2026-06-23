@@ -811,11 +811,13 @@
         "units": "Unit"
       },
       "enrichHint": "Unggah PDF penyelesaian untuk menambahkan rincian pajak lengkap.",
+      "transferBasis": "Harga perolehan (per lembar)",
+      "transferBasisPlaceholder": "mis. 125,40",
+      "transferBasisHint": "Masukkan harga pembelian awal per lembar. Biarkan 0 untuk diisi nanti — harga perolehan yang kosong menciptakan keuntungan tidak nyata.",
       "subType": "Sub-jenis",
       "subTypeNone": "(tidak ada)",
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Pembulatan",
-      "subTypeTransferIn": "Transfer masuk (gratis)",
       "subTypeMerger": "Merger"
     }
   },
@@ -834,7 +836,9 @@
     "interest": "Bunga",
     "bonus_cash": "Bonus",
     "loan_drawdown": "Pinjaman cair",
-    "loan_repayment": "Cicilan pinjaman"
+    "loan_repayment": "Cicilan pinjaman",
+    "transfer_in": "Transfer masuk",
+    "transfer_out": "Transfer keluar"
   },
   "AssetClass": {
     "equity": "Saham",

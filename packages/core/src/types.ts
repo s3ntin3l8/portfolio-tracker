@@ -21,7 +21,13 @@ export type TransactionType =
   // outstanding-liability balance; deliberately excluded from XIRR/contributions
   // (which whitelist deposit/withdrawal), so booking a loan is not a capital flow.
   | "loan_drawdown"
-  | "loan_repayment";
+  | "loan_repayment"
+  // Depot-to-depot securities transfers (Depotübertrag). Cash-neutral — shares move
+  // in/out at carried cost basis. For inside-boundary portfolios, transfer_in is counted
+  // as contributed value at the carried basis (insideMonths). NOT realized P&L.
+  // Replaces the former `bonus` + `kind:"transfer_in"` hack (PR #309).
+  | "transfer_in"
+  | "transfer_out";
 
 /** Minimal transaction shape the engine needs. Money/qty are decimal strings. */
 export interface CoreTransaction {

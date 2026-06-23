@@ -396,7 +396,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const p = D(tx.price);
       const f = D(tx.fees);
 
-      if (tx.type === "buy" || tx.type === "savings_plan") {
+      if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "transfer_in") {
         if (q.lte(0)) continue;
         if (!episode) episode = makeEpisode(tx.executedAt);
         const cost = q.mul(p).add(f);
@@ -493,6 +493,24 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
           avgCost = ZERO;
         }
       }
+      else if (tx.type === "transfer_out") {
+        // Outbound depot transfer: shares leave at average cost, no realized P&L.
+        // Drain the lot ledger so future sells don't over-count the removed shares.
+        if (!episode || avgQty.lte(0)) continue;
+        let remaining = Decimal.min(q, avgQty);
+        while (remaining.gt(0) && lots.length > 0) {
+          const lot = lots[0];
+          const take = Decimal.min(lot.qty, remaining);
+          lot.qty = lot.qty.sub(take);
+          remaining = remaining.sub(take);
+          if (lot.qty.lte(0)) lots.shift();
+        }
+        const transferQty = Decimal.min(q, avgQty);
+        const avg = avgQty.gt(0) ? avgCost.div(avgQty) : ZERO;
+        avgCost = avgCost.sub(avg.mul(transferQty));
+        avgQty = avgQty.sub(transferQty);
+        // Don't close the episode — remaining shares may still be held.
+      }
       // dividend/coupon/interest/fee/deposit/withdrawal/loan_*/bonus|split|rights TYPE:
       // no effect on the lot ledger (income is folded by window; CAs handled above).
     }
@@ -524,8 +542,9 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
   // bonusesByYear — broker-credited rewards, purely informational, NOT in totalReturn.
   //   • bonus_cash (e.g. Kindergeld, promo cash) — cash flow as lump sum income.
   //   • buy / savings_plan with kind="saveback" — reinvested cashback (notional cost).
-  //   • bonus with kind="transfer_in" — free share receipts (notional value q×p).
+  //   • bonus with kind="transfer_in" — legacy rows before PR #309 (kept for compat).
   // roundup is excluded: it is the user's own spare change, not broker-credited.
+  // transfer_in/out are NOT included here — they're capital, not broker-credited rewards.
   const bonusMap = new Map<number, Decimal>();
   for (const tx of input.transactions) {
     let bonusAmount: Decimal | null = null;
@@ -540,6 +559,8 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         tx.currency,
       );
     } else if (tx.type === "bonus" && tx.kind === "transfer_in") {
+      // Legacy: pre-PR#309 rows tagged bonus+kind:transfer_in. Still handle until
+      // the data migration converts them to type:transfer_in.
       bonusAmount = conv(D(tx.quantity).mul(D(tx.price)), tx.currency);
     }
     if (bonusAmount !== null) {

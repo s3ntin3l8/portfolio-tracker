@@ -340,7 +340,7 @@ describe("PortfolioFormDialog", () => {
     expect(screen.queryByRole("button", { name: m.save })).not.toBeInTheDocument();
   });
 
-  it("keeps the dialog open after saving a standard TR account (connect section stays)", async () => {
+  it("closes the dialog after saving a standard TR account in edit mode", async () => {
     renderEdit({
       id: "p-tr",
       name: "TR Portfolio",
@@ -358,9 +358,9 @@ describe("PortfolioFormDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: m.save }));
 
     await waitFor(() => expect(updatePortfolio).toHaveBeenCalledWith("p-tr", expect.anything()));
-    // Dialog stays open so the user can pair — the TR section remains visible.
-    expect(screen.getByText(m.trSectionTitle)).toBeInTheDocument();
-    expect(screen.getByLabelText(m.name)).toBeInTheDocument();
+    // Dialog closes after saving in edit mode (TR section only stays for create-then-connect).
+    await waitFor(() => expect(screen.queryByLabelText(m.name)).not.toBeInTheDocument());
+    expect(screen.queryByText(m.trSectionTitle)).not.toBeInTheDocument();
   });
 
   it("does not show the TR section for a non-TR portfolio", async () => {

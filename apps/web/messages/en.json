@@ -813,11 +813,13 @@
         "units": "Units"
       },
       "enrichHint": "Upload the settlement PDF to add the full tax breakdown.",
+      "transferBasis": "Carried cost basis (per share)",
+      "transferBasisPlaceholder": "e.g. 125.40",
+      "transferBasisHint": "Enter the original purchase price per share. Leave at 0 to set later — a missing basis creates a phantom unrealized gain.",
       "subType": "Sub-type",
       "subTypeNone": "(none)",
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Round-up",
-      "subTypeTransferIn": "Transfer-in (free)",
       "subTypeMerger": "Merger"
     }
   },
@@ -836,7 +838,9 @@
     "interest": "Interest",
     "bonus_cash": "Bonus",
     "loan_drawdown": "Loan drawdown",
-    "loan_repayment": "Loan repayment"
+    "loan_repayment": "Loan repayment",
+    "transfer_in": "Transfer in",
+    "transfer_out": "Transfer out"
   },
   "AssetClass": {
     "equity": "Stocks",

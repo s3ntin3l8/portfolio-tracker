@@ -71,11 +71,14 @@ const ACQUISITION_TYPES = ["buy", "sell", "savings_plan"] as const;
 const SHARE_RECEIPT_TYPES = ["bonus", "split", "rights"] as const;
 const INCOME_TYPES = ["dividend", "coupon"] as const;
 const CASH_TYPES = ["deposit", "withdrawal", "fee", "interest", "bonus_cash"] as const;
+// First-class transfer types (depot-to-depot, PR #309). Cash-neutral; price = carried basis.
+const TRANSFER_TYPES = ["transfer_in", "transfer_out"] as const;
 
 /** Types the user can freely select. Loan types are excluded. */
 const SELECTABLE_TYPES = [
   ...ACQUISITION_TYPES,
   ...SHARE_RECEIPT_TYPES,
+  ...TRANSFER_TYPES,
   ...INCOME_TYPES,
   ...CASH_TYPES,
 ] as const;
@@ -193,6 +196,8 @@ export function AddTransactionForm({
   // Per-type field groups — drive which fields are shown and validated.
   const isAcquisition = (ACQUISITION_TYPES as readonly string[]).includes(type);
   const isShareReceipt = (SHARE_RECEIPT_TYPES as readonly string[]).includes(type);
+  // Transfers: instrument + quantity + carried-cost-basis price. Cash-neutral, no fees/tax.
+  const isTransfer = (TRANSFER_TYPES as readonly string[]).includes(type);
   const isIncome = (INCOME_TYPES as readonly string[]).includes(type);
   const isCash = (CASH_TYPES as readonly string[]).includes(type) ||
     type === "loan_drawdown" || type === "loan_repayment";
@@ -200,13 +205,14 @@ export function AddTransactionForm({
   /** Shows the instrument picker. */
   const hasInstrument = !isCash;
   /** Shows the quantity field. */
-  const showQuantity = isAcquisition || isShareReceipt;
-  /** Shows fees (acquisitions only). */
+  const showQuantity = isAcquisition || isShareReceipt || isTransfer;
+  /** Shows fees (acquisitions only — transfers are typically fee-free). */
   const showFees = isAcquisition;
   /** Shows tax withheld (acquisitions + income). */
   const showTax = isAcquisition || isIncome;
-  /** Price is mandatory except for share receipts (bonus shares are commonly price 0). */
-  const priceRequired = !isShareReceipt;
+  /** Price is mandatory except for share receipts (bonus shares are commonly price 0).
+   *  Transfers show the price field as "Carried cost basis" — not required (0 = unknown). */
+  const priceRequired = !isShareReceipt && !isTransfer;
   // Gold gets a dedicated entry flow (source + label, no symbol/search). For an already
   // selected instrument (edit) trust its own class; otherwise the picked asset kind.
   const isGold = hasInstrument && (selected ? selected.assetClass : assetClass) === "gold";
@@ -550,7 +556,15 @@ export function AddTransactionForm({
           </Field>
         )}
         <Field
-          label={isGold && showQuantity ? t("pricePerGram") : showQuantity ? t("price") : t("amount")}
+          label={
+            isTransfer
+              ? t("transferBasis")
+              : isGold && showQuantity
+                ? t("pricePerGram")
+                : showQuantity
+                  ? t("price")
+                  : t("amount")
+          }
           htmlFor="tx-price"
         >
           <Input
@@ -559,7 +573,11 @@ export function AddTransactionForm({
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             required={priceRequired}
+            placeholder={isTransfer ? t("transferBasisPlaceholder") : undefined}
           />
+          {isTransfer && (
+            <p className="mt-1 text-xs text-muted-foreground">{t("transferBasisHint")}</p>
+          )}
         </Field>
         {showFees && (
           <Field label={t("fees")} htmlFor="tx-fees">
@@ -645,7 +663,6 @@ export function AddTransactionForm({
               <option value="">{t("subTypeNone")}</option>
               <option value="saveback">{t("subTypeSaveback")}</option>
               <option value="roundup">{t("subTypeRoundup")}</option>
-              <option value="transfer_in">{t("subTypeTransferIn")}</option>
               <option value="merger">{t("subTypeMerger")}</option>
             </Select>
           </Field>

@@ -290,6 +290,9 @@ export async function transactionsRoute(app: FastifyInstance) {
     const isInvestmentFlow = (t: CoreTransaction): boolean => {
       if (t.type === "sell" || t.type === "dividend" || t.type === "coupon") return true;
       if (t.type === "buy" || t.type === "savings_plan") return t.kind !== "saveback";
+      // First-class transfer type (PR #309): transfer_in/out are investment flows for XIRR.
+      if (t.type === "transfer_in" || t.type === "transfer_out") return true;
+      // Legacy: bonus+kind:transfer_in (pre-PR#309 rows, kept until data migration).
       if (t.type === "bonus") return t.kind === "transfer_in";
       return false;
     };

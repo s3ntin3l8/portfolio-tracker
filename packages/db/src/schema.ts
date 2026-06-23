@@ -53,6 +53,11 @@ export const txTypeEnum = pgEnum("transaction_type", [
   // contributions by the deposit/withdrawal whitelists, so a loan is not a flow.
   "loan_drawdown",
   "loan_repayment",
+  // Depot-to-depot securities transfers (Depotübertrag). Cash-neutral — shares move in/out
+  // at carried cost basis (the user's original acquisition price), not at market. Replaces
+  // the former `bonus` + `kind:"transfer_in"` hack (PR #309 / migration 0044).
+  "transfer_in",
+  "transfer_out",
 ]);
 
 export const txSourceEnum = pgEnum("transaction_source", [

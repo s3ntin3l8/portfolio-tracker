@@ -70,7 +70,8 @@ export function computeHoldings(
       const p = D(price);
       const f = D(fees);
 
-      if (type === "buy" || type === "savings_plan" || type === "sell") {
+      if (type === "buy" || type === "savings_plan" || type === "sell" ||
+          type === "transfer_in" || type === "transfer_out") {
         if (costCurrency === null) {
           costCurrency = ev.tx.currency;
         } else if (ev.tx.currency !== costCurrency) {
@@ -84,6 +85,11 @@ export function computeHoldings(
       if (type === "buy" || type === "savings_plan") {
         qty = qty.add(q);
         costBasis = costBasis.add(q.mul(p)).add(f);
+      } else if (type === "transfer_in") {
+        // Inbound depot transfer: shares arrive at the user's carried cost basis.
+        // Fees are typically 0 on a transfer but are added to basis if present.
+        qty = qty.add(q);
+        costBasis = costBasis.add(q.mul(p)).add(f);
       } else if (type === "sell") {
         const sellQty = Decimal.min(q, qty);
         const avg = qty.gt(0) ? costBasis.div(qty) : ZERO;
@@ -92,8 +98,16 @@ export function computeHoldings(
         realized = realized.add(proceeds.sub(costOfSold));
         qty = qty.sub(sellQty);
         costBasis = costBasis.sub(costOfSold);
+      } else if (type === "transfer_out") {
+        // Outbound depot transfer: shares leave at average cost. NOT a disposal for
+        // P&L purposes (no realized gain/loss — the shares move to another depot, not sold).
+        const transferQty = Decimal.min(q, qty);
+        const avg = qty.gt(0) ? costBasis.div(qty) : ZERO;
+        const costOfTransferred = avg.mul(transferQty);
+        qty = qty.sub(transferQty);
+        costBasis = costBasis.sub(costOfTransferred);
       }
-      // dividend/coupon/fee/deposit/withdrawal don't change holdings.
+      // dividend/coupon/fee/deposit/withdrawal/bonus/split/rights don't change holdings.
     }
 
     const avgCost = qty.gt(0) ? costBasis.div(qty) : ZERO;

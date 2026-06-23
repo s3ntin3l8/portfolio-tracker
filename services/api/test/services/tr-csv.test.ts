@@ -96,6 +96,10 @@ const ROWS: Record<string, string>[] = [
   { datetime: "2026-01-28T07:42:17.274554Z", category: "CASH", type: "EARNINGS", asset_class: "FUND",
     name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", amount: "0.000000", tax: "-0.06",
     currency: "EUR", description: "Vorabpauschale for ISIN IE00BK5BQT80", transaction_id: id(23) },
+  // FREE_RECEIPT WITH a price = crypto grant (income at market basis, NOT a transfer)
+  { datetime: "2021-07-01T00:00:00.000Z", category: "DELIVERY", type: "FREE_RECEIPT", asset_class: "CRYPTO",
+    name: "Bitcoin", symbol: "BTC", shares: "0.001", price: "32000.00",
+    currency: "EUR", transaction_id: id(25) },
   // --- unmappable: surfaced as errors, never silently dropped ---
   { datetime: "2025-04-24T13:03:27.956868Z", category: "CASH", type: "TAX_OPTIMIZATION",
     amount: "0.000000", tax: "-1.77", currency: "EUR", description: "Tax Optimisation", transaction_id: id(16) },
@@ -114,8 +118,8 @@ describe("parseTrCsv", () => {
   const byId = new Map(drafts.map((d) => [d.externalId, d]));
   const draft = (n: number) => byId.get(`tr-csv:${id(n)}`);
 
-  it("maps 20 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
-    expect(drafts).toHaveLength(20);
+  it("maps 21 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
+    expect(drafts).toHaveLength(21);
     expect(errors).toHaveLength(4);
     expect(errors.map((e) => e.message)).toEqual([
       expect.stringContaining("TAX_OPTIMIZATION"),
@@ -198,8 +202,19 @@ describe("parseTrCsv", () => {
     expect(draft(12)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "22.86" });
   });
 
-  it("maps share-in corporate actions to a zero-price bonus, defaulting blank currency to EUR", () => {
-    expect(draft(13)).toMatchObject({ action: "bonus", isin: "GB0007188757", quantity: "21", price: "0", currency: "EUR" });
+  it("maps FREE_RECEIPT (no price) to transfer_in at confidence 0.5, with EUR default", () => {
+    // A depot-to-depot share transfer: no price column → action:transfer_in, confidence 0.5.
+    // NOT also an attention error (drafts and attention are mutually exclusive per row).
+    expect(draft(13)).toMatchObject({
+      action: "transfer_in", isin: "GB0007188757", quantity: "21",
+      price: "0", currency: "EUR", confidence: 0.5,
+    });
+    // The low-confidence draft must NOT generate a duplicate attention issue.
+    const attentionForId13 = errors.find((e) => e.eventId?.includes(id(13)));
+    expect(attentionForId13).toBeUndefined();
+  });
+
+  it("maps DIVIDEND_REINVESTMENT to a zero-price bonus (reinvested income, not a transfer)", () => {
     expect(draft(14)).toMatchObject({ action: "bonus", quantity: "1.01327", price: "0" });
   });
 
@@ -252,6 +267,22 @@ describe("parseTrCsv", () => {
     expect(attentionTypes).not.toContain("TRANSFER_IN");
     expect(attentionTypes).not.toContain("STOCKPERK");
     expect(attentionTypes).not.toContain("EARNINGS");
+  });
+
+  it("maps FREE_RECEIPT WITH a price (crypto grant) to bonus at that price, not a transfer", () => {
+    // A TR-issued crypto promo grant: has a price → income at market basis, NOT a transfer.
+    expect(draft(25)).toMatchObject({
+      action: "bonus",
+      assetClass: "crypto",
+      ticker: "BTC",
+      quantity: "0.001",
+      price: "32000",
+      fees: "0",
+    });
+    // Must NOT be a transfer_in — this is income, not contributed capital.
+    expect(draft(25)?.action).not.toBe("transfer_in");
+    // Confidence 1 (not flagged for review — price is known).
+    expect(draft(25)?.confidence).toBe(1);
   });
 
   it("stamps a stable TR event-UUID external id and coerces the datetime", () => {

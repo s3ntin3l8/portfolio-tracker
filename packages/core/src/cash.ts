@@ -39,6 +39,9 @@ export function cashFlow(tx: CoreTransaction): Decimal {
     case "split":
     case "bonus":
     case "rights":
+    case "transfer_in":
+    case "transfer_out":
+      // Securities transfers are cash-neutral — only fees (typically 0) affect cash.
       return f.neg();
     default:
       return new Decimal(0);
