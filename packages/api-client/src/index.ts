@@ -988,6 +988,9 @@ export interface Trade {
   entryDate: string; // YYYY-MM-DD
   exitDate: string | null;
   holdingDays: number;
+  /** Capital-weighted average holding period in days; equals holdingDays for a
+   * lump-sum position, shorter for savings plans (gradual capital deployment). */
+  avgHoldingDays: number;
   longTerm: boolean;
   quantity: string;
   avgEntryPrice: string; // instrument currency

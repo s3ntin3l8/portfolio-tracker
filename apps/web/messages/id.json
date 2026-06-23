@@ -524,7 +524,16 @@
     "Europe": "Eropa",
     "Africa & ME": "Afrika & Timur Tengah",
     "Asia": "Asia",
-    "Other": "Lainnya"
+    "Other": "Lainnya",
+    "US": "Amerika Utara",
+    "CA": "Amerika Utara",
+    "EU": "Eropa",
+    "ID": "Asia",
+    "JP": "Asia",
+    "SG": "Asia",
+    "HK": "Asia",
+    "AU": "Asia",
+    "Commodity": "Lainnya"
   },
   "Empty": {
     "unavailableTitle": "Tidak dapat menjangkau API",
@@ -914,6 +923,9 @@
     "dividends": "Dividen",
     "totalReturn": "Total imbal hasil",
     "annualized": "Tahunan",
+    "annualizedTooltip": "Imbal hasil berbobot uang (IRR). Mencerminkan kapan setiap dana diinvestasikan — untuk rencana tabungan, angka ini melebihi total imbal hasil ÷ periode kalender karena modal diinvestasikan secara bertahap.",
+    "avgHeld": "rata-rata",
+    "avgHeldTooltip": "Periode kepemilikan rata-rata berbobot modal. Lebih pendek dari periode kalender jika pembelian tersebar dari waktu ke waktu (misalnya rencana tabungan).",
     "longTerm": "Bebas pajak (>1th)",
     "yearsAbbr": "th",
     "daysAbbr": "h",

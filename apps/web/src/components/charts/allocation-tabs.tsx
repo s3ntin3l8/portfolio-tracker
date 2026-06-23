@@ -111,12 +111,14 @@ function TabBody({
 function DimensionDrillDown({
   dimension,
   selectedKey,
+  selectedKeyLabel,
   holdings,
   currency,
   onBack,
 }: {
   dimension: DrillDownDimension;
   selectedKey: string;
+  selectedKeyLabel: string;
   holdings: HoldingValuation[];
   currency: string;
   onBack: () => void;
@@ -138,7 +140,7 @@ function DimensionDrillDown({
           data={instruments.map((i) => ({ key: i.key, label: i.name, value: i.value }))}
           currency={currency}
           total={total}
-          label={selectedKey}
+          label={selectedKeyLabel}
         />
       ) : (
         <p className="text-center text-sm text-muted-foreground py-8">—</p>
@@ -233,10 +235,12 @@ export function AllocationTabs({
     dimensionLabel: string,
   ) => {
     if (selectedDimension === dimension && selectedKey && holdings) {
+      const selectedKeyLabel = slices.find((s) => s.key === selectedKey)?.label ?? selectedKey;
       return (
         <DimensionDrillDown
           dimension={dimension}
           selectedKey={selectedKey}
+          selectedKeyLabel={selectedKeyLabel}
           holdings={holdings}
           currency={currency}
           onBack={handleBack}

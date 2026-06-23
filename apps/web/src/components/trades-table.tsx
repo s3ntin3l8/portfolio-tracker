@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import type { Trade } from "@portfolio/api-client";
 import {
   Table,
@@ -107,7 +107,12 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                 <SortableTableHead colKey="realized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("realized")}</SortableTableHead>
                 <SortableTableHead colKey="dividends" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("dividends")}</SortableTableHead>
                 <SortableTableHead colKey="totalReturn" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("totalReturn")}</SortableTableHead>
-                <SortableTableHead colKey="annualized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("annualized")}</SortableTableHead>
+                <SortableTableHead colKey="annualized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">
+                  <span className="inline-flex items-center gap-1" title={t("annualizedTooltip")}>
+                    {t("annualized")}
+                    <Info className="size-3 text-muted-foreground" aria-hidden />
+                  </span>
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -154,6 +159,14 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                       <TableCell className="text-muted-foreground">{tr.exitDate ?? "—"}</TableCell>
                       <TableCell className="tabular text-right">
                         {heldLabel(tr.holdingDays)}
+                        {Math.abs(tr.holdingDays - tr.avgHoldingDays) > 7 && (
+                          <div
+                            className="text-xs text-muted-foreground"
+                            title={t("avgHeldTooltip")}
+                          >
+                            ~{heldLabel(tr.avgHoldingDays)} {t("avgHeld")}
+                          </div>
+                        )}
                         {tr.longTerm && (
                           <div className="text-xs text-success">{t("longTerm")}</div>
                         )}

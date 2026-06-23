@@ -526,7 +526,16 @@
     "Europe": "Europe",
     "Africa & ME": "Africa & ME",
     "Asia": "Asia",
-    "Other": "Other"
+    "Other": "Other",
+    "US": "North America",
+    "CA": "North America",
+    "EU": "Europe",
+    "ID": "Asia",
+    "JP": "Asia",
+    "SG": "Asia",
+    "HK": "Asia",
+    "AU": "Asia",
+    "Commodity": "Other"
   },
   "Empty": {
     "unavailableTitle": "Can't reach the API",
@@ -916,6 +925,9 @@
     "dividends": "Dividends",
     "totalReturn": "Total return",
     "annualized": "Annualized",
+    "annualizedTooltip": "Money-weighted return (IRR). Reflects when each amount was invested — for savings plans this exceeds total return ÷ calendar period because capital was deployed gradually.",
+    "avgHeld": "avg",
+    "avgHeldTooltip": "Capital-weighted average holding period. Shorter than the calendar period when purchases were spread over time (e.g. savings plans).",
     "longTerm": "Tax-free (>1y)",
     "yearsAbbr": "y",
     "daysAbbr": "d",

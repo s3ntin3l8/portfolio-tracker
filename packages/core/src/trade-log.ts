@@ -62,6 +62,11 @@ export interface Trade {
   entryDate: string; // YYYY-MM-DD
   exitDate: string | null; // YYYY-MM-DD, null while open
   holdingDays: number;
+  /** Capital-weighted average holding period. Equals `holdingDays` for a single
+   * lump-sum buy; shorter than `holdingDays` for savings plans because capital
+   * deployed later was invested for less time. Used to reconcile annualized (XIRR)
+   * with total return — `totalReturnPct / (avgHoldingDays / 365) ≈ annualizedPct`. */
+  avgHoldingDays: number;
   longTerm: boolean;
   /** Open: current units held. Closed: total units acquired over the episode. */
   quantity: string;
@@ -295,6 +300,39 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const ann = xirr(flows);
       const annualizedPct = Number.isFinite(ann) ? ann : null;
 
+      // Capital-weighted average holding period (in days).
+      // Derived from the same `flows` array that feeds XIRR, so it is always
+      // consistent with the money-weighted return.  The formula mirrors XIRR's
+      // own time-axis: t0 = earliest flow date, tᵢ = (flowDate − t0) / MS_PER_YEAR.
+      //   avgT(side) = Σ(|amount| · tᵢ) / Σ|amount|
+      //   avgHoldingYears = avgT(inflows) − avgT(outflows)
+      // For a single buy + single sell: avgHoldingYears == calendar years exactly.
+      // For a savings plan: shorter, because later tranches were invested less time.
+      // Falls back to holdingDays when avgHoldingYears ≤ 0 (e.g. open position with
+      // no price quote, so the only inflow is dividends-only or the side is empty).
+      let avgHoldingDays = holdingDays;
+      if (flows.length >= 2) {
+        const MS_PER_YEAR = MS_PER_DAY * 365;
+        const t0 = Math.min(...flows.map((f) => f.date.getTime()));
+        const outflows = flows.filter((f) => Number(f.amount) < 0);
+        const inflows = flows.filter((f) => Number(f.amount) > 0);
+        const wavg = (side: typeof flows) => {
+          const totalAmt = side.reduce((s, f) => s + Math.abs(Number(f.amount)), 0);
+          if (totalAmt === 0) return 0;
+          return (
+            side.reduce(
+              (s, f) =>
+                s + Math.abs(Number(f.amount)) * ((f.date.getTime() - t0) / MS_PER_YEAR),
+              0,
+            ) / totalAmt
+          );
+        };
+        const avgHoldingYears = wavg(inflows) - wavg(outflows);
+        if (avgHoldingYears > 0) {
+          avgHoldingDays = Math.round(avgHoldingYears * 365);
+        }
+      }
+
       const qtyShown = status === "open" ? currentQty : ep.acqQty;
       const avgEntryPrice = ep.acqQty.gt(0)
         ? ep.acqQtyPrice.div(ep.acqQty).toString()
@@ -312,6 +350,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         entryDate: toDateStr(entryDate),
         exitDate: exitDate ? toDateStr(exitDate) : null,
         holdingDays,
+        avgHoldingDays,
         longTerm: holdingDays >= LONG_TERM_DAYS && isTaxFreeEligible(instrumentId),
         quantity: qtyShown.toString(),
         avgEntryPrice,

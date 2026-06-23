@@ -344,6 +344,170 @@ describe("computeTrades — summary", () => {
 });
 
 // ---------------------------------------------------------------------------
+// avgHoldingDays — capital-weighted average holding period (issue #308)
+// ---------------------------------------------------------------------------
+// The "Annualized" figure is XIRR (money-weighted), not CAGR.  For a savings
+// plan where capital is deployed gradually, XIRR ≈ totalReturn ÷ avgHoldingYears
+// (dollar-weighted) NOT totalReturn ÷ calendarYears.  The mismatch makes the
+// annualized figure look ~2× the "naive" expected rate next to the calendar
+// period in the UI.  avgHoldingDays surfaces the reconciling denominator.
+describe("computeTrades — avgHoldingDays (issue #308)", () => {
+  // Savings-plan scenario: 7 equal monthly buys spread over ~1 year, then a
+  // single closing sell.  This mirrors the ABBV pattern reported in the issue.
+  const SP = "inst-savings";
+  const buyDates = [
+    "2023-01-01",
+    "2023-03-01",
+    "2023-05-01",
+    "2023-07-01",
+    "2023-09-01",
+    "2023-11-01",
+    "2024-01-01",
+  ];
+  const savingsPlanTxns: CoreTransaction[] = [
+    ...buyDates.map((d) => ({
+      instrumentId: SP,
+      type: "buy" as const,
+      quantity: "1",
+      price: "100",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date(d),
+    })),
+    // Sell all 7 shares at a small gain ~2 months after the last buy.
+    {
+      instrumentId: SP,
+      type: "sell" as const,
+      quantity: "7",
+      price: "101",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date("2024-03-01"),
+    },
+  ];
+
+  it("lump-sum: avgHoldingDays equals holdingDays exactly", () => {
+    // A single buy followed by a single sell — no gradual deployment.
+    // avgHoldingDays must equal holdingDays: the formula should not diverge here.
+    const txns: CoreTransaction[] = [
+      {
+        instrumentId: SP,
+        type: "buy",
+        quantity: "7",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2023-01-01"),
+      },
+      {
+        instrumentId: SP,
+        type: "sell",
+        quantity: "7",
+        price: "101",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2024-03-01"),
+      },
+    ];
+    const { trades } = computeTrades({
+      transactions: txns,
+      prices: {},
+      displayCurrency: "EUR",
+      now: new Date("2024-06-01"),
+    });
+    expect(trades).toHaveLength(1);
+    const t = trades[0];
+    // For a single buy + single sell the weighted average equals the calendar period.
+    expect(t.avgHoldingDays).toBe(t.holdingDays);
+  });
+
+  it("savings plan: avgHoldingDays is materially shorter than holdingDays", () => {
+    // Capital deployed gradually → dollar-weighted average holding < calendar holding.
+    const { trades } = computeTrades({
+      transactions: savingsPlanTxns,
+      prices: {},
+      displayCurrency: "EUR",
+      now: new Date("2024-06-01"),
+    });
+    expect(trades).toHaveLength(1);
+    const t = trades[0];
+    expect(t.status).toBe("closed");
+    // Calendar period: 2023-01-01 → 2024-03-01 ≈ 425 days
+    expect(t.holdingDays).toBeGreaterThan(400);
+    // Weighted average must be shorter because the later tranches had less time invested.
+    expect(t.avgHoldingDays).toBeLessThan(t.holdingDays);
+    // Weighted average should be roughly half the calendar period (equal tranches,
+    // equally spaced → avg is near the midpoint of the deployment window).
+    expect(t.avgHoldingDays).toBeLessThan(t.holdingDays * 0.75);
+    expect(t.avgHoldingDays).toBeGreaterThan(0);
+  });
+
+  it("savings plan: annualizedPct materially exceeds naive CAGR (totalReturn ÷ calendar)", () => {
+    // This is the core invariant from issue #308: XIRR > totalReturn ÷ calendarYears
+    // because money-weighting recognises that most capital was deployed near the end.
+    const { trades } = computeTrades({
+      transactions: savingsPlanTxns,
+      prices: {},
+      displayCurrency: "EUR",
+      now: new Date("2024-06-01"),
+    });
+    const t = trades[0];
+    const naiveCagr = (t.totalReturnPct ?? 0) / (t.holdingDays / 365);
+    // XIRR should noticeably exceed the naive CAGR for a gradual savings plan.
+    expect(t.annualizedPct).not.toBeNull();
+    expect(t.annualizedPct!).toBeGreaterThan(naiveCagr * 1.3);
+  });
+
+  it("savings plan: totalReturn ÷ avgHoldingYears approximates annualizedPct", () => {
+    // The reconciliation that resolves issue #308: once you substitute the
+    // capital-weighted holding period for the calendar period, the implied
+    // annualized return converges to the XIRR.
+    const { trades } = computeTrades({
+      transactions: savingsPlanTxns,
+      prices: {},
+      displayCurrency: "EUR",
+      now: new Date("2024-06-01"),
+    });
+    const t = trades[0];
+    const impliedAnn = (t.totalReturnPct ?? 0) / (t.avgHoldingDays / 365);
+    // Should be within 20 % of the actual XIRR (loose tolerance — both metrics
+    // capture the same economic reality but use different mathematical approaches).
+    expect(Math.abs(impliedAnn - t.annualizedPct!)).toBeLessThan(
+      Math.abs(t.annualizedPct!) * 0.2,
+    );
+  });
+
+  it("open unpriced position falls back to holdingDays (no misleading 0d avg)", () => {
+    // If a position has no current price and no dividends, inflows are empty.
+    // avgHoldingYears would be ≤0; we must fall back to holdingDays rather than
+    // rendering "0d avg" next to a multi-year calendar hold.
+    const txns: CoreTransaction[] = [
+      {
+        instrumentId: SP,
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2022-01-01"),
+      },
+    ];
+    const { trades } = computeTrades({
+      transactions: txns,
+      prices: {}, // no price → no terminal MV flow → inflows empty
+      displayCurrency: "EUR",
+      now: new Date("2024-06-01"),
+    });
+    expect(trades).toHaveLength(1);
+    const t = trades[0];
+    expect(t.status).toBe("open");
+    // Must fall back to holdingDays, not 0.
+    expect(t.avgHoldingDays).toBe(t.holdingDays);
+    expect(t.avgHoldingDays).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-currency: cost ccy (EUR) ≠ quote ccy (USD)
 // ---------------------------------------------------------------------------
 // Regression for the PEP bug: a USD-quoted US stock bought in EUR via a
