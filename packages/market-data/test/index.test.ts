@@ -1310,10 +1310,10 @@ describe("YahooFinanceProvider getProfile", () => {
           {
             topHoldings: {
               sectorWeightings: [
-                { technology: 0.25 },
-                { financial_services: 0.18 },
-                { healthcare: 0.12 },
-                { realestate: 0 }, // zero → excluded
+                { technology: { raw: 0.25, fmt: "25.00%" } },
+                { financial_services: { raw: 0.18, fmt: "18.00%" } },
+                { healthcare: { raw: 0.12, fmt: "12.00%" } },
+                { realestate: { raw: 0, fmt: "0.00%" } }, // zero → excluded
               ],
             },
           },
@@ -1340,6 +1340,35 @@ describe("YahooFinanceProvider getProfile", () => {
     expect(profile?.sector).toBeUndefined();
   });
 
+  it("extracts .raw from Yahoo's {raw, fmt} sector weighting objects", async () => {
+    const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
+    const body = {
+      quoteSummary: {
+        result: [
+          {
+            topHoldings: {
+              sectorWeightings: [
+                { technology: { raw: 0.39, fmt: "39.05%" } },
+                { financial_services: { raw: 0.11, fmt: "11.07%" } },
+                { healthcare: { raw: 0.083, fmt: "8.30%" } },
+                { realestate: { raw: 0, fmt: "0.00%" } }, // zero → excluded
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    const profile = await p.getProfile(ref);
+    expect(profile).not.toBeNull();
+    expect(profile?.sectorWeights).toEqual({
+      Technology: 0.39,
+      "Financial Services": 0.11,
+      Healthcare: 0.083,
+      // "Real Estate" excluded because raw was 0
+    });
+  });
+
   it("returns null when ETF topHoldings is missing", async () => {
     const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
     const body = { quoteSummary: { result: [{}] } };
@@ -1350,7 +1379,7 @@ describe("YahooFinanceProvider getProfile", () => {
   it("returns null when ETF sectorWeightings are all zero/empty", async () => {
     const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
     const body = {
-      quoteSummary: { result: [{ topHoldings: { sectorWeightings: [{ technology: 0 }] } }] },
+      quoteSummary: { result: [{ topHoldings: { sectorWeightings: [{ technology: { raw: 0, fmt: "0.00%" } }] } }] },
     };
     const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
     expect(await p.getProfile(ref)).toBeNull();
