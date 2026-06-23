@@ -191,7 +191,7 @@ const COUNTRY_TO_REGION: Record<string, string> = {
   "South Africa": "Other",
   Mexico: "Other",
   "United Arab Emirates": "Other",
-  Saudi Arabia: "Other",
+  "Saudi Arabia": "Other",
 };
 
 /**
