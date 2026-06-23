@@ -399,6 +399,32 @@ async def _fetch_cash(tr):
         return None
 
 
+async def _fetch_positions(tr):
+    """TR's reported position snapshot per ISIN (compactPortfolio), for reconciliation
+    against our event-derived holdings. Returns [{isin, qty}] for non-zero positions."""
+    try:
+        await tr.compact_portfolio()
+        resp = await _await_subscription(tr, "compactPortfolio")
+        positions = resp.get("positions", []) if isinstance(resp, dict) else []
+        result = []
+        for p in positions:
+            if not isinstance(p, dict):
+                continue
+            isin = p.get("instrumentId")
+            net_size = p.get("netSize")
+            if not isin or net_size is None:
+                continue
+            try:
+                if float(net_size) == 0:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            result.append({"isin": isin, "qty": str(net_size)})
+        return result
+    except Exception:  # noqa: BLE001 - best effort; reconciliation is optional
+        return None
+
+
 async def _probe_instrument(tr, isin) -> int:
     """One-shot diagnostic: dump TR's instrument/stock detail for an ISIN.
 
@@ -468,7 +494,8 @@ async def _run(tr) -> int:
         sys.stdout.write(json.dumps(_normalize(event, wkn_by_isin)) + "\n")
     # A trailing, clearly-tagged summary line (not an event) carrying TR's reported balances.
     cash = await _fetch_cash(tr)
-    sys.stdout.write(json.dumps({"__summary__": {"cash": cash}}) + "\n")
+    positions = await _fetch_positions(tr)
+    sys.stdout.write(json.dumps({"__summary__": {"cash": cash, "positions": positions}}) + "\n")
     sys.stdout.flush()
     # Persist the rolling session so the next sync can resume without re-pairing.
     try:

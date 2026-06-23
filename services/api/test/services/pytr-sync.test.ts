@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Decimal } from "decimal.js";
 import crypto from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import {
@@ -274,6 +275,53 @@ describe("syncTrConnection", () => {
 
     const [updated] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
     expect((updated.lastReconciliation as { cash: unknown[] }).cash).toHaveLength(1);
+  });
+
+  it("reconciles positions against TR's compactPortfolio snapshot", async () => {
+    const conn = await makeConnection("reconcile-positions");
+    const db = getDb();
+    // One buy of 10 shares of DE0007236101. TR reports 12 → diff = 2.
+    const evs = [
+      { id: "pos-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "DE0007236101", currency: "EUR" },
+    ];
+    const runner = runnerWith(async () => ({
+      events: evs,
+      sessionData: "J",
+      summary: {
+        cash: [{ currency: "EUR", amount: 0 }],
+        positions: [{ isin: "DE0007236101", qty: "12.000000" }],
+      },
+    }));
+
+    const result = await syncTrConnection(db, enc, runner, conn);
+    expect(result.reconciliation?.positions).toBeDefined();
+    const pos = result.reconciliation!.positions!;
+    const siemens = pos.find((p) => p.isin === "DE0007236101");
+    expect(siemens).toBeDefined();
+    // Derived = 10 (from the buy event), reported = 12, diff = 2
+    expect(new Decimal(siemens!.reported).toFixed(0)).toBe("12");
+    expect(new Decimal(siemens!.derived).toFixed(0)).toBe("10");
+    expect(new Decimal(siemens!.diff).toFixed(0)).toBe("2");
+
+    const [updated] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
+    const rec = updated.lastReconciliation as { positions?: unknown[] };
+    expect(Array.isArray(rec.positions)).toBe(true);
+    expect((rec.positions as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("stores no positions field when summary has no positions", async () => {
+    const conn = await makeConnection("reconcile-no-positions");
+    const db = getDb();
+    const evs = [{ id: "d-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" }];
+    const runner = runnerWith(async () => ({
+      events: evs,
+      sessionData: "J",
+      summary: { cash: [{ currency: "EUR", amount: 100 }] },
+      // No positions field in summary → reconcilePositions returns undefined
+    }));
+
+    const result = await syncTrConnection(db, enc, runner, conn);
+    expect(result.reconciliation?.positions).toBeUndefined();
   });
 
   it("reconciles correctly even before any events are confirmed (fresh full import)", async () => {

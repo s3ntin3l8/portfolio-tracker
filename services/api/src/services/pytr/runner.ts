@@ -75,6 +75,8 @@ export type RawTrEvent = Record<string, unknown>;
 // figures against the broker's. `amount` is a decimal-ish value (number or string).
 export interface TrExportSummary {
   cash?: { currency: string; amount: number | string }[] | null;
+  /** Per-ISIN position snapshot from compactPortfolio (qty is decimal-ish). */
+  positions?: { isin: string; qty: number | string }[] | null;
 }
 
 interface PendingPairing {

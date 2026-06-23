@@ -265,6 +265,71 @@ describe("reconciliation_gap", () => {
   });
 });
 
+// ── Position gap ─────────────────────────────────────────────────────────────
+
+describe("position_gap", () => {
+  it("flags a position gap exceeding the threshold (0.0001 shares)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [],
+        positions: [{ isin: "DE000A0D9PT0", reported: "10.000000", derived: "9.000000", diff: "1.000000" }],
+      },
+    });
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0]).toMatchObject({
+      code: "position_gap",
+      severity: "warning",
+      scope: "portfolio",
+      meta: { isin: "DE000A0D9PT0", reported: "10.000000", derived: "9.000000", diff: "1.000000" },
+    });
+  });
+
+  it("does NOT flag a position gap within the threshold (< 0.0001 shares)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [],
+        positions: [{ isin: "DE000A0D9PT0", reported: "10.000000", derived: "10.000050", diff: "0.000050" }],
+      },
+    });
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it("flags multiple position gaps independently", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [],
+        positions: [
+          { isin: "IE00B4L5Y983", reported: "5.500000", derived: "5.000000", diff: "0.500000" },
+          { isin: "US5949181045", reported: "0.000000", derived: "2.000000", diff: "-2.000000" },
+          { isin: "DE000A0D9PT0", reported: "1.000000", derived: "1.000001", diff: "0.000001" },
+        ],
+      },
+    });
+    const gaps = anomalies.filter((a) => a.code === "position_gap");
+    expect(gaps).toHaveLength(2);
+    expect(gaps.map((g) => (g.meta as Record<string, unknown>).isin)).toEqual(
+      expect.arrayContaining(["IE00B4L5Y983", "US5949181045"]),
+    );
+  });
+
+  it("handles missing positions field on reconciliationGap (backward compat)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [{ currency: "EUR", reported: "100.00", derived: "100.00", diff: "0.00" }],
+        // positions absent — older sync record
+      },
+    });
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it("ignores null positions field", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: { cash: [], positions: null },
+    });
+    expect(anomalies).toHaveLength(0);
+  });
+});
+
 // ── Edge cases ────────────────────────────────────────────────────────────────
 
 describe("edge cases", () => {

@@ -23,6 +23,8 @@ type TrConnectionRow = typeof trConnections.$inferSelect;
 export interface CashReconciliation {
   checkedAt: string;
   cash: { currency: string; reported: string; derived: string; diff: string }[];
+  /** Per-ISIN position snapshot diff (null/absent until first position-enabled sync). */
+  positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
 }
 
 export interface SyncResult {
@@ -98,6 +100,49 @@ function reconcileCash(
     };
   });
   return { checkedAt: new Date().toISOString(), cash };
+}
+
+// Derive per-ISIN held quantities from the full event timeline. Maps all TR timeline
+// events (same input as reconcileCash) so the derived side answers "what does the full
+// event record say we hold?" regardless of what the user has confirmed. Excludes events
+// whose status is not EXECUTED (same filter as the mapper).
+function reconcilePositions(
+  allEvents: unknown[],
+  summary: TrExportSummary | undefined,
+): { isin: string; reported: string; derived: string; diff: string }[] | undefined {
+  const reported = summary?.positions;
+  if (!reported || reported.length === 0) return undefined;
+
+  const { drafts } = mapTrEvents(allEvents);
+  const derived = new Map<string, Decimal>();
+  for (const d of drafts) {
+    if (!d.isin || !d.quantity) continue;
+    const isin = d.isin;
+    const prev = derived.get(isin) ?? new Decimal(0);
+    const qty = new Decimal(d.quantity);
+    const action = d.action as string;
+    if (action === "buy" || action === "savings_plan" || action === "transfer_in") {
+      derived.set(isin, prev.add(qty));
+    } else if (action === "sell" || action === "transfer_out") {
+      derived.set(isin, prev.sub(qty));
+    }
+  }
+
+  const reportedMap = new Map(
+    reported.map((p) => [p.isin, new Decimal(String(p.qty))]),
+  );
+  const allIsins = new Set([...reportedMap.keys(), ...derived.keys()]);
+  return [...allIsins]
+    .map((isin) => {
+      const rep = reportedMap.get(isin) ?? new Decimal(0);
+      const der = derived.get(isin) ?? new Decimal(0);
+      return {
+        isin,
+        reported: rep.toFixed(6),
+        derived: der.toFixed(6),
+        diff: rep.sub(der).toFixed(6),
+      };
+    });
 }
 
 /**
@@ -395,8 +440,16 @@ export async function syncTrConnection(
     }
   }
 
-  // 7. Reconcile cash against TR's reported balance, then roll the session forward.
-  const reconciliation = reconcileCash(events, result.summary);
+  // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
+  const cashRec = reconcileCash(events, result.summary);
+  const posRec = reconcilePositions(events, result.summary);
+  const reconciliation: CashReconciliation | undefined =
+    cashRec || posRec
+      ? {
+          ...(cashRec ?? { checkedAt: new Date().toISOString(), cash: [] }),
+          ...(posRec ? { positions: posRec } : {}),
+        }
+      : undefined;
   await db
     .update(trConnections)
     .set({
