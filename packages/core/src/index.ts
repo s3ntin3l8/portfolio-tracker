@@ -114,3 +114,9 @@ export {
   type AllowanceUsageInput,
   type HarvestSuggestionsInput,
 } from "./tax.js";
+export {
+  detectAnomalies,
+  type Anomaly,
+  type AnomalyCode,
+  type ReconciliationGap,
+} from "./anomalies.js";

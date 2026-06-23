@@ -154,7 +154,7 @@ describe("CSV import → confirm flow", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    expect(holdings.json()).toHaveLength(1);
+    expect(holdings.json().holdings).toHaveLength(1);
 
     const again = await app.inject({
       method: "POST",
@@ -340,7 +340,7 @@ describe("CSV import → confirm flow", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    expect(holdings.json()).toHaveLength(0);
+    expect(holdings.json().holdings).toHaveLength(0);
     expect(
       (await app.inject({ method: "GET", url: `/imports/${confirmImp.importId}`, headers: auth(t) }))
         .json().status,
@@ -939,7 +939,7 @@ describe("CSV import → confirm flow", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    expect(holdings.json()).toHaveLength(1);
+    expect(holdings.json().holdings).toHaveLength(1);
   });
 
   it("partial-then-rest confirm writes each unique transaction exactly once", async () => {
@@ -1003,7 +1003,7 @@ describe("CSV import → confirm flow", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    expect(holdings.json()).toHaveLength(2);
+    expect(holdings.json().holdings).toHaveLength(2);
   });
 
   it("auto-detects and imports an IBKR Flex Trades CSV", async () => {
@@ -1613,7 +1613,7 @@ describe("gold installment contract import → confirm → undo", () => {
     // 4 booking legs (buy, drawdown, admin, discount); no installments due yet.
     expect(confirm.json().confirmed).toBe(4);
 
-    const holdings = (
+    const { holdings } = (
       await gApp.inject({
         method: "GET",
         url: `/portfolios/${portfolioId}/holdings`,
@@ -1656,7 +1656,7 @@ describe("gold installment contract import → confirm → undo", () => {
     expect(undo.statusCode).toBe(200);
     expect(undo.json().removed).toBe(4);
 
-    const afterHoldings = (
+    const { holdings: afterHoldings } = (
       await gApp.inject({
         method: "GET",
         url: `/portfolios/${portfolioId}/holdings`,
@@ -2237,7 +2237,7 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
 
     // Holdings count is still 1 (no duplicate tx created).
     const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
-    expect(holdings.json()).toHaveLength(1);
+    expect(holdings.json().holdings).toHaveLength(1);
 
     await a.close();
   });
@@ -2265,7 +2265,7 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
 
     // Holdings still has exactly 1 row (no duplicate tx created).
     const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
-    expect(holdings.json()).toHaveLength(1);
+    expect(holdings.json().holdings).toHaveLength(1);
 
     await a.close();
   });

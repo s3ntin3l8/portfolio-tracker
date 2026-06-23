@@ -12,6 +12,7 @@ import {
   portfolioSnapshots,
   transactions,
   transactionSources,
+  trConnections,
   users,
 } from "@portfolio/db";
 import {
@@ -28,6 +29,7 @@ import {
 import { transactionInputSchema } from "@portfolio/schema";
 import {
   computeHoldings,
+  detectAnomalies,
   aggregatePortfolios,
   allocationBreakdown,
   rebalancingDrift,
@@ -969,21 +971,31 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
-  // Derived holdings for a portfolio (computed via @portfolio/core).
+  // Derived holdings + data-integrity anomalies for a portfolio.
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/holdings",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
       const { portfolioId } = request.params;
-      if (!(await ownedPortfolio(id, portfolioId))) {
+      const portfolio = await ownedPortfolio(id, portfolioId);
+      if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const rows = await app.db
-        .select()
-        .from(transactions)
-        .where(eq(transactions.portfolioId, portfolioId));
+      const [rows, trConn] = await Promise.all([
+        app.db
+          .select()
+          .from(transactions)
+          .where(eq(transactions.portfolioId, portfolioId)),
+        app.db
+          .select({ lastReconciliation: trConnections.lastReconciliation })
+          .from(trConnections)
+          .where(eq(trConnections.portfolioId, portfolioId))
+          .limit(1)
+          .then((r) => r[0] ?? null),
+      ]);
       const coreTxns: CoreTransaction[] = rows.map((r) => ({
+        id: r.id,
         instrumentId: r.instrumentId,
         type: r.type,
         quantity: r.quantity,
@@ -991,9 +1003,20 @@ export async function transactionsRoute(app: FastifyInstance) {
         fees: r.fees,
         currency: r.currency,
         executedAt: r.executedAt,
+        kind: r.kind,
+        tax: r.tax,
       }));
       const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
-      return computeHoldings(coreTxns, cas);
+      const holdings = computeHoldings(coreTxns, cas);
+      const reconciliation = trConn?.lastReconciliation as
+        | { cash: { currency: string; reported: string; derived: string; diff: string }[] }
+        | null
+        | undefined;
+      const anomalies = detectAnomalies(coreTxns, cas, {
+        cashCounted: portfolio.cashCounted,
+        reconciliationGap: reconciliation ?? null,
+      });
+      return { holdings, anomalies };
     },
   );
 

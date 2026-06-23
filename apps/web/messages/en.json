@@ -1032,6 +1032,24 @@
       "tfApplied": "TF {pct}% applied"
     }
   },
+  "Anomalies": {
+    "bannerError": "{count, plural, one {# data error} other {# data errors}} found",
+    "bannerWarning": "{count, plural, one {# data warning} other {# data warnings}} found",
+    "bannerBoth": "{errors, plural, one {# error} other {# errors}} and {warnings, plural, one {# warning} other {# warnings}} found in your data",
+    "showFlagged": "Show flagged only",
+    "viewTransactions": "View transactions",
+    "codes": {
+      "oversell": "Oversell: sold more than available quantity",
+      "sell_before_acquisition": "Sell before acquisition: no shares held at this date",
+      "negative_cash": "Negative cash balance",
+      "income_on_non_held": "Income on instrument not held at this date",
+      "missing_transfer_basis": "Missing cost basis: transfer-in price is 0 — set the carried cost",
+      "zero_price": "Zero price: buy or sell recorded at €0",
+      "reconciliation_gap": "Cash reconciliation gap vs. broker ({currency}: reported {reported}, derived {derived})"
+    },
+    "noneTitle": "No data issues found",
+    "noneBody": "All transactions are consistent."
+  },
   "PeriodSelector": {
     "ytd": "YTD",
     "1y": "1Y",

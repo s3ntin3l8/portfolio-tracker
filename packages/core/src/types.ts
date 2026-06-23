@@ -31,6 +31,8 @@ export type TransactionType =
 
 /** Minimal transaction shape the engine needs. Money/qty are decimal strings. */
 export interface CoreTransaction {
+  /** DB primary key; optional so in-memory/test fixtures can omit it. */
+  id?: string;
   instrumentId: string | null; // null for cash movements
   type: TransactionType;
   quantity: string;

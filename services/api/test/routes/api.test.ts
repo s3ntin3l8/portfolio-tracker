@@ -324,7 +324,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(holdings.statusCode).toBe(200);
-    expect(holdings.json()).toEqual([
+    expect(holdings.json().holdings).toEqual([
       {
         instrumentId: bbca.id,
         quantity: "100",
@@ -1163,7 +1163,7 @@ describe("auth + portfolios + transactions", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    const held = holdings.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id);
+    const held = holdings.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id);
     expect(held.quantity).toBe("200"); // 100 shares → 200 after the split
     expect(held.costBasis).toBe("100000"); // basis unchanged
 
@@ -1234,7 +1234,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(
-      afterEdit.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+      afterEdit.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
     ).toBe("300");
 
     // DELETE removes it; holdings fall back to the raw 100 shares.
@@ -1250,7 +1250,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(
-      afterDelete.json().find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+      afterDelete.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
     ).toBe("100");
 
     // Unknown ids 404.

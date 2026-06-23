@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Plus, TrendingUp, Wallet } from "lucide-react";
+import { Plus, TrendingUp, Wallet, AlertCircle, AlertTriangle } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -14,7 +14,7 @@ import { GoldTicker } from "@/components/gold-ticker";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId, loadPreferences } from "@/lib/server-api";
+import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId, loadPreferences, loadAnomalies } from "@/lib/server-api";
 import { cn, formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
 import { PeriodSelector } from "@/components/period-selector";
@@ -36,15 +36,17 @@ export default async function DashboardPage({
   const period = ["ytd", "1y", "5y", "max"].includes(periodParam ?? "") ? periodParam! : "max";
   setRequestLocale(locale);
   const t = await getTranslations("Dashboard");
+  const ta = await getTranslations("Anomalies");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
   const th = await getTranslations("Holdings");
 
-  const [result, history, selectedId, preferences] = await Promise.all([
+  const [result, history, selectedId, preferences, anomalies] = await Promise.all([
     loadNetWorth(costBasis, period),
     loadNetWorthHistory(),
     getSelectedPortfolioId(),
     loadPreferences(),
+    loadAnomalies(),
   ]);
 
   const Heading = (
@@ -143,9 +145,36 @@ export default async function DashboardPage({
   // empty state (allocation is optional on PortfolioSummary for back-compat).
   const allocation = summary.allocation;
 
+  // Anomaly badge — only in single-portfolio scope (loadAnomalies returns null in aggregate).
+  const anomalyErrors = (anomalies ?? []).filter((a) => a.severity === "error");
+  const anomalyWarnings = (anomalies ?? []).filter((a) => a.severity === "warning");
+  const anomalyBadge =
+    anomalies && (anomalyErrors.length > 0 || anomalyWarnings.length > 0) ? (
+      <Link
+        href="/transactions"
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:opacity-80 ${
+          anomalyErrors.length > 0
+            ? "border-destructive/40 bg-destructive/5 text-destructive"
+            : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+        }`}
+      >
+        {anomalyErrors.length > 0 ? (
+          <AlertCircle className="size-3.5" />
+        ) : (
+          <AlertTriangle className="size-3.5" />
+        )}
+        {anomalyErrors.length > 0 && anomalyWarnings.length > 0
+          ? ta("bannerBoth", { errors: anomalyErrors.length, warnings: anomalyWarnings.length })
+          : anomalyErrors.length > 0
+            ? ta("bannerError", { count: anomalyErrors.length })
+            : ta("bannerWarning", { count: anomalyWarnings.length })}
+      </Link>
+    ) : null;
+
   return (
     <div className="space-y-6">
       {Heading}
+      {anomalyBadge}
 
       <GoldTicker currency={currency} />
 

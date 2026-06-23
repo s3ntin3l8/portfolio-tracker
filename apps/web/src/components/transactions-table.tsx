@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Search,
   X,
+  AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -37,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
-import type { SourceSummary } from "@portfolio/api-client";
+import type { SourceSummary, Anomaly } from "@portfolio/api-client";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
@@ -149,10 +151,13 @@ export function TransactionsTable({
   rows,
   showPortfolio = false,
   defaultInvestmentsOnly = false,
+  anomalies = [],
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
   defaultInvestmentsOnly?: boolean;
+  /** Per-transaction anomalies keyed by transactionId; shows a flag icon on the row. */
+  anomalies?: Anomaly[];
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -163,6 +168,20 @@ export function TransactionsTable({
   const router = useRouter();
 
   const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<TxRow>(TX_COLS);
+
+  // Build a lookup: transactionId → worst-severity anomaly for that row.
+  const anomalyByTxId = useMemo(() => {
+    const m = new Map<string, Anomaly>();
+    for (const a of anomalies) {
+      if (!a.transactionId) continue;
+      const existing = m.get(a.transactionId);
+      // Prefer error over warning.
+      if (!existing || (existing.severity === "warning" && a.severity === "error")) {
+        m.set(a.transactionId, a);
+      }
+    }
+    return m;
+  }, [anomalies]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
@@ -422,6 +441,7 @@ export function TransactionsTable({
               const amount = txAmount(tx);
               const netAmount = txNetAmount(tx);
               const isSelected = selected.has(tx.id);
+              const anomaly = anomalyByTxId.get(tx.id);
               return (
                 <TableRow
                   key={tx.id}
@@ -449,12 +469,25 @@ export function TransactionsTable({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="font-medium">{tx.instrument?.symbol ?? "—"}</div>
-                    {tx.instrument?.name && (
-                      <div className="text-xs text-muted-foreground">
-                        {tx.instrument.name}
+                    <div className="flex items-center gap-1.5">
+                      {anomaly && (
+                        <span title={anomaly.code} aria-label={anomaly.code}>
+                          {anomaly.severity === "error" ? (
+                            <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                          ) : (
+                            <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                          )}
+                        </span>
+                      )}
+                      <div>
+                        <div className="font-medium">{tx.instrument?.symbol ?? "—"}</div>
+                        {tx.instrument?.name && (
+                          <div className="text-xs text-muted-foreground">
+                            {tx.instrument.name}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </TableCell>
                   {showPortfolio && (
                     <TableCell className="text-muted-foreground">

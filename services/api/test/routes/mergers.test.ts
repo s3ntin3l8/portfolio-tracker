@@ -55,7 +55,7 @@ async function buy(t: string, pf: string, instrumentId: string, quantity: string
 
 async function holdings(t: string, pf: string) {
   const res = await app.inject({ method: "GET", url: `/portfolios/${pf}/holdings`, headers: auth(t) });
-  return res.json() as { instrumentId: string; quantity: string; costBasis: string; avgCost: string; realizedPnL: string }[];
+  return (res.json() as { holdings: { instrumentId: string; quantity: string; costBasis: string; avgCost: string; realizedPnL: string }[] }).holdings;
 }
 
 describe("POST /portfolios/:id/mergers", () => {

@@ -585,6 +585,29 @@ export interface Holding {
   costCurrency: string | null;
 }
 
+export type AnomalyCode =
+  | "oversell"
+  | "sell_before_acquisition"
+  | "negative_cash"
+  | "income_on_non_held"
+  | "missing_transfer_basis"
+  | "zero_price"
+  | "reconciliation_gap";
+
+export interface Anomaly {
+  code: AnomalyCode;
+  severity: "error" | "warning";
+  scope: "transaction" | "instrument" | "portfolio";
+  transactionId?: string;
+  instrumentId?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface HoldingsResult {
+  holdings: Holding[];
+  anomalies: Anomaly[];
+}
+
 export interface HoldingValuation extends Holding {
   price: string | null;
   currency: string | null;
@@ -1565,7 +1588,7 @@ export function createApiClient(config: ApiClientConfig) {
       request<CorporateAction[]>("GET", `/instruments/${instrumentId}/corporate-actions`),
 
     getHoldings: (portfolioId: string) =>
-      request<Holding[]>("GET", `/portfolios/${portfolioId}/holdings`),
+      request<HoldingsResult>("GET", `/portfolios/${portfolioId}/holdings`),
     getSummary: (portfolioId: string, costBasis?: "purchase_price" | "total_paid") =>
       request<PortfolioSummary>(
         "GET",

@@ -29,6 +29,7 @@ import {
   type AdminStorageResponse,
   type TaxSummaryHolder,
   type UserPreferences,
+  type Anomaly,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import {
@@ -346,6 +347,23 @@ export async function loadHoldings(
       cash: {},
       cashTracked: false,
     };
+  }
+}
+
+/**
+ * Fetch data-integrity anomalies for the currently selected portfolio.
+ * Only available in single-portfolio scope — returns null in aggregate mode.
+ */
+export async function loadAnomalies(): Promise<Anomaly[] | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  const portfolioId = await getSelectedPortfolioId();
+  if (!portfolioId) return null;
+  try {
+    const { anomalies } = await api.getHoldings(portfolioId);
+    return anomalies;
+  } catch {
+    return null;
   }
 }
 

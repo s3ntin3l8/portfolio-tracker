@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowLeft, LineChart, Receipt, Wallet } from "lucide-react";
+import { ArrowLeft, LineChart, Receipt, Wallet, AlertCircle, AlertTriangle } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stat-card";
 import { PriceChart } from "@/components/charts/price-chart";
 import { CorporateActionsManager } from "@/components/corporate-actions-manager";
 import { TransactionsTable } from "@/components/transactions-table";
-import { loadInstrument, loadInstrumentScope } from "@/lib/server-api";
+import { loadInstrument, loadInstrumentScope, loadAnomalies } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function InstrumentPage({
@@ -20,12 +20,18 @@ export default async function InstrumentPage({
   const { locale, id } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Instrument");
+  const ta = await getTranslations("Anomalies");
   const tc = await getTranslations("AssetClass");
 
-  const [data, scope] = await Promise.all([
+  const [data, scope, allAnomalies] = await Promise.all([
     loadInstrument(id),
     loadInstrumentScope(id),
+    loadAnomalies(),
   ]);
+  // Filter anomalies to those affecting this specific instrument.
+  const instrumentAnomalies = (allAnomalies ?? []).filter(
+    (a) => a.instrumentId === id || a.scope === "portfolio",
+  );
 
   const back = (
     <Button variant="ghost" size="icon" asChild aria-label={t("priceHistory")}>
@@ -146,13 +152,35 @@ export default async function InstrumentPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("transactions")}</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle>{t("transactions")}</CardTitle>
+            {instrumentAnomalies.length > 0 && (
+              <span
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  instrumentAnomalies.some((a) => a.severity === "error")
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                }`}
+              >
+                {instrumentAnomalies.some((a) => a.severity === "error") ? (
+                  <AlertCircle className="size-3" />
+                ) : (
+                  <AlertTriangle className="size-3" />
+                )}
+                {instrumentAnomalies.length > 0 &&
+                  (instrumentAnomalies.some((a) => a.severity === "error")
+                    ? ta("bannerError", { count: instrumentAnomalies.filter((a) => a.severity === "error").length })
+                    : ta("bannerWarning", { count: instrumentAnomalies.length }))}
+              </span>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-0">
           {scope.transactions.length > 0 ? (
             <TransactionsTable
               rows={scope.transactions}
               showPortfolio={scope.aggregate}
+              anomalies={instrumentAnomalies}
             />
           ) : (
             <EmptyState

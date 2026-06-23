@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Layers, Plus } from "lucide-react";
+import { Layers, Plus, AlertCircle, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
@@ -8,7 +8,7 @@ import { HoldingsTable } from "@/components/holdings-table";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
-import { loadHoldings } from "@/lib/server-api";
+import { loadHoldings, loadAnomalies } from "@/lib/server-api";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
 
@@ -27,11 +27,12 @@ export default async function HoldingsPage({
     costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
   setRequestLocale(locale);
   const t = await getTranslations("Holdings");
+  const ta = await getTranslations("Anomalies");
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
   const tf = await getTranslations("PortfolioForm");
 
-  const result = await loadHoldings(costBasis);
+  const [result, anomalies] = await Promise.all([loadHoldings(costBasis), loadAnomalies()]);
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =
@@ -174,9 +175,37 @@ export default async function HoldingsPage({
     );
   }
 
+  const errors = anomalies?.filter((a) => a.severity === "error") ?? [];
+  const warnings = anomalies?.filter((a) => a.severity === "warning") ?? [];
+  const anomalyBanner =
+    anomalies && (errors.length > 0 || warnings.length > 0) ? (
+      <div
+        role="alert"
+        className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
+          errors.length > 0
+            ? "border-destructive/40 bg-destructive/5 text-destructive"
+            : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+        }`}
+      >
+        {errors.length > 0 ? (
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+        ) : (
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+        )}
+        <span>
+          {errors.length > 0 && warnings.length > 0
+            ? ta("bannerBoth", { errors: errors.length, warnings: warnings.length })
+            : errors.length > 0
+              ? ta("bannerError", { count: errors.length })
+              : ta("bannerWarning", { count: warnings.length })}
+        </span>
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-6">
       {Heading}
+      {anomalyBanner}
 
       <Tabs defaultValue="all">
         <div className="overflow-x-auto">
