@@ -130,7 +130,7 @@ const CURRENCY_TO_REGION: Record<string, string> = {
   CNY: "Asia",
 };
 
-function marketToRegion(market: string): string {
+export function marketToRegion(market: string): string {
   return MARKET_TO_REGION[market.toUpperCase()] ?? "Other";
 }
 

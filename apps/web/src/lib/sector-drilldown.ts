@@ -1,17 +1,18 @@
-import { normalizeSector } from "@portfolio/core";
+import type { HoldingValuation } from "@portfolio/api-client";
+import { marketToRegion, normalizeSector } from "@portfolio/core";
 
-// These helpers are internal to @portfolio/core; re-implement here to avoid
-// exporting them from the core package just for the web drill-down UI.
-const MARKET_TO_REGION: Record<string, string> = {
-  IDX: "ID", BEI: "ID", XETRA: "EU", XFRA: "EU", FSX: "EU", AMS: "EU",
-  NYSE: "US", NASDAQ: "US", US: "US", NASDAQ_GS: "US", NASDAQ_GM: "US",
-  XAU: "Commodity", AMEX: "US", TSX: "CA", ASX: "AU", SGX: "SG", HKG: "HK", TYO: "JP",
-};
+export type DrillDownDimension = "sector" | "region" | "currency" | "asset_class";
 
-export function marketToRegion(market: string): string {
-  return MARKET_TO_REGION[market.toUpperCase()] ?? "Other";
+export interface DrillDownInstrument {
+  key: string;
+  name: string;
+  value: number;
 }
 
+/**
+ * Maps JustETF country names to geographic region buckets.
+ * Used to decompose ETF countryWeights into region breakdown.
+ */
 const COUNTRY_TO_REGION: Record<string, string> = {
   "United States": "US", Canada: "CA",
   Germany: "EU", France: "EU", "United Kingdom": "EU", Italy: "EU", Spain: "EU",
@@ -26,81 +27,52 @@ const COUNTRY_TO_REGION: Record<string, string> = {
   "United Arab Emirates": "Other", "Saudi Arabia": "Other",
 };
 
-export function countryToRegion(country: string): string {
+function countryToRegion(country: string): string {
   return COUNTRY_TO_REGION[country] ?? "Other";
 }
 
-/** Minimal instrument metadata needed for drill-down. */
-export interface DrillDownInstrument {
-  instrumentId: string;
-  instrument: {
-    symbol: string;
-    assetClass: string;
-    market: string;
-    sector?: string | null;
-    sectorWeights?: Record<string, number> | null;
-    countryWeights?: Record<string, number> | null;
-  } | null;
-  marketValueDisplay: string | null;
-}
-
-/** A single slice in the drill-down sub-donut. */
-export interface DrillDownSlice {
-  key: string;
-  name: string;
-  value: number;
-}
-
 /**
- * Get instruments (or country weights) that contribute to a specific allocation slice.
+ * Compute per-instrument breakdown for a given dimension + selected key.
  *
- * For region drill-down: decomposes ETFs with countryWeights into individual countries
- * that map to the selected region. Falls back to listing venue when no countryWeights.
+ * - **sector**: ETF decomposed by `sectorWeights[key] × mv`; equity filtered by `sector === key`
+ * - **region**: ETF with countryWeights decomposed by country → region mapping;
+ *              others use `marketToRegion(instrument.market) === key` → `mv`
+ * - **currency**: `instrument.currency === key` → `mv`
+ * - **asset_class**: `instrument.assetClass === key` → `mv`
  *
- * For sector drill-down: decomposes ETFs with sectorWeights into individual sectors.
- *
- * For other dimensions: returns instruments matching the selected key.
+ * Cash holdings (null instrument) are always excluded.
  */
 export function getDrillDownInstruments(
-  holdings: Array<{
-    instrumentId: string;
-    instrument: {
-      symbol: string;
-      assetClass: string;
-      market: string;
-      sector?: string | null;
-      sectorWeights?: Record<string, number> | null;
-      countryWeights?: Record<string, number> | null;
-    } | null;
-    marketValueDisplay: string | null;
-  }>,
-  dimension: "asset_class" | "currency" | "region" | "sector",
+  holdings: HoldingValuation[],
+  dimension: DrillDownDimension,
   selectedKey: string,
-): DrillDownSlice[] {
-  const result: DrillDownSlice[] = [];
+): DrillDownInstrument[] {
+  const result: DrillDownInstrument[] = [];
 
   for (const h of holdings) {
-    if (h.marketValueDisplay == null || h.instrument == null) continue;
+    if (!h.instrument || !h.marketValueDisplay) continue;
     const mv = Number(h.marketValueDisplay);
     if (!Number.isFinite(mv) || mv <= 0) continue;
-
-    const m = h.instrument;
 
     let contribution = 0;
 
     switch (dimension) {
-      case "asset_class":
-        if (m.assetClass === selectedKey) {
+      case "sector":
+        if (h.instrument.assetClass === "etf" && h.instrument.sectorWeights) {
+          for (const [rawKey, w] of Object.entries(h.instrument.sectorWeights)) {
+            if (normalizeSector(rawKey) === selectedKey && typeof w === "number" && w > 0) {
+              contribution = mv * w;
+            }
+          }
+        } else if (normalizeSector(h.instrument.sector ?? "") === selectedKey) {
           contribution = mv;
-          result.push({ key: h.instrumentId, name: m.symbol, value: contribution });
         }
         break;
-
       case "region":
         // Check if ETF has countryWeights for detailed breakdown
-        if (m.assetClass === "etf" && m.countryWeights) {
+        if (h.instrument.assetClass === "etf" && h.instrument.countryWeights) {
           let sumW = 0;
-          for (const [country, w] of Object.entries(m.countryWeights)) {
+          for (const [country, w] of Object.entries(h.instrument.countryWeights)) {
             if (countryToRegion(country) === selectedKey && typeof w === "number" && w > 0) {
               contribution = mv * w;
               result.push({ key: country, name: country, value: contribution });
@@ -108,52 +80,35 @@ export function getDrillDownInstruments(
             }
           }
           // Remainder (unclassified countries) goes to listing venue region
-          if (sumW < 0.9999 && marketToRegion(m.market) === selectedKey) {
+          if (sumW < 0.9999 && marketToRegion(h.instrument.market) === selectedKey) {
             const remainder = mv * (1 - sumW);
             if (remainder > 0) {
-              result.push({ key: `${h.instrumentId}-remainder`, name: m.symbol, value: remainder });
+              result.push({ key: `${h.instrumentId}-remainder`, name: h.instrument.symbol, value: remainder });
             }
           }
-        } else {
-          // Fallback: use listing venue
-          if (marketToRegion(m.market) === selectedKey) {
-            contribution = mv;
-            result.push({ key: h.instrumentId, name: m.symbol, value: contribution });
-          }
+          continue; // Already pushed results, skip the generic push below
+        }
+        // Fallback: use listing venue
+        if (marketToRegion(h.instrument.market) === selectedKey) {
+          contribution = mv;
         }
         break;
-
-      case "sector":
-        // ETFs with sectorWeights: decompose proportionally
-        if (m.assetClass === "etf" && m.sectorWeights) {
-          let sumW = 0;
-          for (const [sector, w] of Object.entries(m.sectorWeights)) {
-            if (normalizeSector(sector) === selectedKey && typeof w === "number" && w > 0) {
-              contribution = mv * w;
-              result.push({ key: sector, name: sector, value: contribution });
-              sumW += w;
-            }
-          }
-          // Remainder goes to "Other"
-          if (sumW < 0.9999 && selectedKey === "Other") {
-            const remainder = mv * (1 - sumW);
-            if (remainder > 0) {
-              result.push({ key: `${h.instrumentId}-other`, name: m.symbol, value: remainder });
-            }
-          }
-        } else if (m.sector) {
-          // Single sector
-          if (normalizeSector(m.sector) === selectedKey) {
-            contribution = mv;
-            result.push({ key: h.instrumentId, name: m.symbol, value: contribution });
-          }
-        } else if (selectedKey === "uncategorized") {
+      case "currency":
+        if (h.currency === selectedKey) {
           contribution = mv;
-          result.push({ key: h.instrumentId, name: m.symbol, value: contribution });
+        }
+        break;
+      case "asset_class":
+        if (h.instrument.assetClass === selectedKey) {
+          contribution = mv;
         }
         break;
     }
+
+    if (contribution > 0) {
+      result.push({ key: h.instrumentId, name: h.instrument.symbol, value: contribution });
+    }
   }
 
-  return result;
+  return result.sort((a, b) => b.value - a.value);
 }
