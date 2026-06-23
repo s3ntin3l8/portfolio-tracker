@@ -875,6 +875,7 @@
     "connectedHint": "Akun Anda terhubung. Sinkronisasi menarik aktivitas baru sebagai draf transaksi untuk Anda konfirmasi.",
     "synced": "Tersinkron — {drafts} draf transaksi disiapkan. Tinjau di halaman Impor.",
     "syncNow": "Sinkronkan sekarang",
+    "syncQueued": "Sinkronisasi dimulai — transaksi baru akan muncul sebentar lagi.",
     "categories": {
       "title": "Apa yang diimpor",
       "hint": "Trade Republic adalah rekening bank penuh. Pilih aktivitas mana yang dijadikan draf.",

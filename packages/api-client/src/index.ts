@@ -1177,6 +1177,8 @@ export interface TrConnection {
   importCategories: TrImportCategory[] | null;
   /** Last cash reconciliation (TR-reported vs derived), or null until first synced. */
   lastReconciliation: CashReconciliation | null;
+  /** True while a background sync job is running. Poll GET /tr/connection to observe. */
+  syncing: boolean;
 }
 
 export interface TrConnectInput {
@@ -1769,7 +1771,7 @@ export function createApiClient(config: ApiClientConfig) {
     // No code in the v2 push-approval flow: this long-polls until the user approves the
     // login in the TR mobile app (or it is declined / the window expires).
     verifyTr: () => request<{ status: TrStatus }>("POST", "/tr/connection/verify"),
-    syncTr: () => request<TrSyncResult>("POST", "/tr/connection/sync"),
+    syncTr: () => request<{ queued: boolean } | TrSyncResult>("POST", "/tr/connection/sync"),
     updateTrCategories: (importCategories: TrImportCategory[]) =>
       request<TrConnection>("PATCH", "/tr/connection", { importCategories }),
     reimportTr: () => request<{ removed: number }>("POST", "/tr/connection/reimport"),

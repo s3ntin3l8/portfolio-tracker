@@ -877,6 +877,7 @@
     "connectedHint": "Your account is connected. Sync pulls new activity as draft transactions you confirm.",
     "synced": "Synced — {drafts} draft transactions staged. Review them on the Import page.",
     "syncNow": "Sync now",
+    "syncQueued": "Sync started — new transactions will appear shortly.",
     "categories": {
       "title": "What to import",
       "hint": "Trade Republic is a full bank account. Choose which activity to stage as drafts.",

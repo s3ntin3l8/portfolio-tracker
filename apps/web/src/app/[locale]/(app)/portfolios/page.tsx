@@ -85,7 +85,7 @@ export default async function PortfoliosPage({
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      {isTrConnected && <TrSyncButton />}
+                      {isTrConnected && <TrSyncButton initialSyncing={connection?.syncing ?? false} />}
                       <PortfolioFormDialog
                         mode="edit"
                         portfolio={portfolio}
