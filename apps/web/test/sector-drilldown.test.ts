@@ -89,6 +89,32 @@ describe("getDrillDownInstruments — sector", () => {
     ];
     expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
   });
+
+  it("normalizes 'Financial Services' to match 'Financials' (selectedKey)", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "sxr8",
+        instrument: { symbol: "SXR8", name: "S&P 500 ETF", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: { "Financial Services": 0.15, Technology: 0.5 } },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Financials");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "sxr8", name: "SXR8", value: 1500 });
+  });
+
+  it("normalizes equity 'Healthcare' to match 'Health Care' (selectedKey)", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "pfe",
+        instrument: { symbol: "PFE", name: "Pfizer", assetClass: "equity", unit: "shares", market: "NYSE", sector: "Healthcare", sectorWeights: null },
+        marketValueDisplay: "5000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "sector", "Health Care");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ key: "pfe", name: "PFE", value: 5000 });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import type { HoldingValuation } from "@portfolio/api-client";
-import { marketToRegion } from "@portfolio/core";
+import { marketToRegion, normalizeSector } from "@portfolio/core";
 
 export type DrillDownDimension = "sector" | "region" | "currency" | "asset_class";
 
@@ -36,11 +36,12 @@ export function getDrillDownInstruments(
     switch (dimension) {
       case "sector":
         if (h.instrument.assetClass === "etf" && h.instrument.sectorWeights) {
-          const w = h.instrument.sectorWeights[selectedKey];
-          if (typeof w === "number" && w > 0) {
-            contribution = mv * w;
+          for (const [rawKey, w] of Object.entries(h.instrument.sectorWeights)) {
+            if (normalizeSector(rawKey) === selectedKey && typeof w === "number" && w > 0) {
+              contribution = mv * w;
+            }
           }
-        } else if (h.instrument.sector === selectedKey) {
+        } else if (normalizeSector(h.instrument.sector ?? "") === selectedKey) {
           contribution = mv;
         }
         break;
@@ -50,7 +51,7 @@ export function getDrillDownInstruments(
         }
         break;
       case "currency":
-        if (h.instrument.currency === selectedKey) {
+        if (h.currency === selectedKey) {
           contribution = mv;
         }
         break;
