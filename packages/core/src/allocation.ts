@@ -138,6 +138,69 @@ function currencyToRegion(currency: string): string {
   return CURRENCY_TO_REGION[currency.toUpperCase()] ?? "Other";
 }
 
+/**
+ * Maps JustETF country names to geographic region buckets.
+ * Used to decompose ETF countryWeights into region breakdown.
+ */
+const COUNTRY_TO_REGION: Record<string, string> = {
+  // North America
+  "United States": "US",
+  Canada: "CA",
+
+  // Europe
+  Germany: "EU",
+  France: "EU",
+  "United Kingdom": "EU",
+  Italy: "EU",
+  Spain: "EU",
+  Netherlands: "EU",
+  Switzerland: "EU",
+  Austria: "EU",
+  Belgium: "EU",
+  Denmark: "EU",
+  Finland: "EU",
+  Ireland: "EU",
+  Luxembourg: "EU",
+  Norway: "EU",
+  Poland: "EU",
+  Portugal: "EU",
+  Sweden: "EU",
+  Czechia: "EU",
+  Greece: "EU",
+  Hungary: "EU",
+  Romania: "EU",
+  Turkey: "EU",
+
+  // Asia
+  Japan: "JP",
+  China: "Asia",
+  India: "Asia",
+  "South Korea": "Asia",
+  Taiwan: "Asia",
+  "Hong Kong": "HK",
+  Singapore: "SG",
+  Thailand: "Asia",
+  Indonesia: "ID",
+  Malaysia: "Asia",
+  Philippines: "Asia",
+  Vietnam: "Asia",
+
+  // Other
+  Australia: "AU",
+  Brazil: "Other",
+  "South Africa": "Other",
+  Mexico: "Other",
+  "United Arab Emirates": "Other",
+  Saudi Arabia: "Other",
+};
+
+/**
+ * Maps a JustETF country name to a geographic region bucket.
+ */
+export function countryToRegion(country: string): string {
+  return COUNTRY_TO_REGION[country] ?? "Other";
+}
+
 function add(map: Map<string, Decimal>, key: string, val: Decimal): void {
   map.set(key, (map.get(key) ?? new Decimal(0)).add(val));
 }
