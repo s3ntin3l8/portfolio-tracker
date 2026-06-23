@@ -24,6 +24,7 @@ export type TrConnectClient = Pick<
   | "getTrConnection"
   | "updateTrCategories"
   | "reimportTr"
+  | "reprocessTrDocuments"
 >;
 
 // Default staged categories when the connection hasn't been customised (card spending off).
@@ -194,6 +195,13 @@ export function TrConnectFlow({
       onChanged?.();
     });
 
+  const [reprocessDone, setReprocessDone] = useState(false);
+  const reprocess = () =>
+    void run(async () => {
+      await client.reprocessTrDocuments();
+      setReprocessDone(true);
+    });
+
   // Toggle a staged category and persist it. At least one must stay enabled (server-enforced).
   const toggleCategory = (cat: TrImportCategory) => {
     const next = new Set(categories);
@@ -349,6 +357,23 @@ export function TrConnectFlow({
               <Unplug className="size-4" />
               {t("disconnect")}
             </Button>
+          </div>
+
+          {/* Re-process retained settlement PDFs: enriches tax/fee/price on confirmed
+              transactions from stored PDFs without wiping any data. */}
+          <div className="border-t pt-3">
+            {reprocessDone ? (
+              <p className="text-xs text-muted-foreground">{t("reprocess.done")}</p>
+            ) : (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline"
+                onClick={reprocess}
+                disabled={busy}
+              >
+                {t("reprocess.action")}
+              </button>
+            )}
           </div>
 
           {/* Re-import: clears the resolved-events ledger + pytr transactions and re-stages

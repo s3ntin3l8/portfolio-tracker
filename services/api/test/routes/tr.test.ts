@@ -334,6 +334,43 @@ describe("Trade Republic connection (encryption enabled)", () => {
     ).toHaveLength(0);
   });
 
+  it("reprocess-documents returns processed count and 409s when not connected", async () => {
+    const t = await token("tr-reprocess");
+    const portfolioId = await portfolioFor(app, t);
+
+    // 409 before connecting.
+    const before = await app.inject({
+      method: "POST",
+      url: "/tr/connection/reprocess-documents",
+      headers: auth(t),
+    });
+    expect(before.statusCode).toBe(409);
+    expect(before.json()).toEqual({ error: "not_connected" });
+
+    // Connect.
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+49150", pin: "1234", portfolioId },
+    });
+    await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
+
+    // Seed two pytr transactions (no documentRefs — enrichment no-ops but still counts them).
+    await getDb().insert(transactions).values([
+      { portfolioId, type: "deposit", price: "100", currency: "EUR", executedAt: new Date("2026-03-01T10:00:00.000Z"), source: "pytr", externalId: "rp-ev-1" },
+      { portfolioId, type: "buy", price: "50", currency: "EUR", quantity: "2", executedAt: new Date("2026-03-02T10:00:00.000Z"), source: "pytr", externalId: "rp-ev-2" },
+    ] as const);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/reprocess-documents",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ processed: 2 });
+  });
+
   it("GET /tr/connection includes syncing=false in the serialized response", async () => {
     const t = await token("tr-syncing-check");
     await portfolioFor(app, t);

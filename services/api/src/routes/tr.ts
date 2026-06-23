@@ -12,6 +12,7 @@ import {
 import { requireUser } from "../plugins/auth.js";
 import { PytrApprovalError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
+import { enrichTransactionsFromStoredDocuments } from "../services/enrichment.js";
 import { enqueueTrSync } from "../services/scheduler.js";
 
 const connectBodySchema = z.object({
@@ -274,6 +275,37 @@ export async function trRoute(app: FastifyInstance) {
       return { removed: removed.length };
     });
   });
+
+  // Re-process retained settlement PDFs: enrich all already-confirmed pytr transactions
+  // from their linked retained documents (tax components, fee, price, FX rate). Non-
+  // destructive — does NOT delete or re-stage transactions. Useful after a batch of
+  // settlement PDFs are retained by a fresh sync to backfill tax on older confirmed rows.
+  app.post(
+    "/tr/connection/reprocess-documents",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const conn = await getConnection(id);
+      if (!conn || !conn.portfolioId) {
+        return reply.code(409).send({ error: "not_connected" });
+      }
+      const txIds = (
+        await app.db
+          .select({ id: transactions.id })
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.portfolioId, conn.portfolioId),
+              eq(transactions.source, "pytr"),
+            ),
+          )
+      ).map((r) => r.id);
+
+      await enrichTransactionsFromStoredDocuments(app, txIds);
+      request.log.info({ userId: id, portfolioId: conn.portfolioId, count: txIds.length }, "tr reprocess-documents done");
+      return { processed: txIds.length };
+    },
+  );
 
   // Disconnect: wipe the stored connection (and any pending pairing).
   app.delete(

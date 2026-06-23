@@ -1775,6 +1775,8 @@ export function createApiClient(config: ApiClientConfig) {
     updateTrCategories: (importCategories: TrImportCategory[]) =>
       request<TrConnection>("PATCH", "/tr/connection", { importCategories }),
     reimportTr: () => request<{ removed: number }>("POST", "/tr/connection/reimport"),
+    reprocessTrDocuments: () =>
+      request<{ processed: number }>("POST", "/tr/connection/reprocess-documents"),
     disconnectTr: () => request<void>("DELETE", "/tr/connection"),
   };
 }

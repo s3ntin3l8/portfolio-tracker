@@ -16,6 +16,7 @@ function makeClient(over: Partial<TrConnectClient> = {}): TrConnectClient {
     syncTr: vi.fn(async () => ({ status: "connected" as const, drafts: 3 })),
     disconnectTr: vi.fn(async () => undefined),
     reimportTr: vi.fn(async () => ({ removed: 0 })),
+    reprocessTrDocuments: vi.fn(async () => ({ processed: 0 })),
     updateTrCategories: vi.fn(async (importCategories) => ({
       status: "connected" as const,
       portfolioId: "p1",
@@ -170,6 +171,22 @@ describe("TrConnectFlow", () => {
     fireEvent.click(screen.getByRole("button", { name: /Sync now/ }));
     await waitFor(() => expect(client.syncTr).toHaveBeenCalled());
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it("re-processes retained PDFs from the connected state", async () => {
+    const client = makeClient();
+    renderFlow(client, {
+      status: "connected",
+      portfolioId: "p1",
+      lastSyncAt: null,
+      lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
+      syncing: false,
+    });
+    fireEvent.click(screen.getByText(messages.TradeRepublic.reprocess.action));
+    await waitFor(() => expect(client.reprocessTrDocuments).toHaveBeenCalled());
+    expect(await screen.findByText(messages.TradeRepublic.reprocess.done)).toBeTruthy();
   });
 
   it("shows the reconnect hint when the session expired", () => {

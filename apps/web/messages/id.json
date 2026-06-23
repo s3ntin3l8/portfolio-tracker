@@ -890,6 +890,10 @@
       "off": "selisih {diff}",
       "match": "cocok"
     },
+    "reprocess": {
+      "action": "Proses ulang PDF yang tersimpan",
+      "done": "Selesai — detail pajak dan biaya diperbarui dari PDF penyelesaian yang tersimpan."
+    },
     "reimport": {
       "action": "Impor ulang semuanya…",
       "warning": "Ini menghapus semua transaksi Trade Republic di portofolio ini dan menyiapkan ulang seluruh linimasa untuk dikonfirmasi lagi. Suntingan manual pada baris tersebut akan hilang.",

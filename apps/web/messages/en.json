@@ -892,6 +892,10 @@
       "off": "off by {diff}",
       "match": "matches"
     },
+    "reprocess": {
+      "action": "Re-process retained PDFs",
+      "done": "Done — tax and fee details updated from stored settlement PDFs."
+    },
     "reimport": {
       "action": "Re-import everything…",
       "warning": "This deletes all Trade Republic transactions in this portfolio and re-stages the full timeline to confirm again. Manual edits to those rows are lost.",
