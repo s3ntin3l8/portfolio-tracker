@@ -230,10 +230,7 @@ export function PortfolioFormDialog({
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
         router.refresh();
-        // Keep the dialog open only when the TR connection section is actually shown
-        // (standard TR accounts) so the user can pair; otherwise close as usual. Gating
-        // on isTr alone trapped TR child accounts (Kinderdepot), whose section is hidden.
-        if (!showTrSection) setOpen(false);
+        setOpen(false);
       } else {
         const created = await api.createPortfolio(input);
         router.refresh();
