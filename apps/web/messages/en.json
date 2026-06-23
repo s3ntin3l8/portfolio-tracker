@@ -1045,7 +1045,8 @@
       "income_on_non_held": "Income on instrument not held at this date",
       "missing_transfer_basis": "Missing cost basis: transfer-in price is 0 — set the carried cost",
       "zero_price": "Zero price: buy or sell recorded at €0",
-      "reconciliation_gap": "Cash reconciliation gap vs. broker ({currency}: reported {reported}, derived {derived})"
+      "reconciliation_gap": "Cash reconciliation gap vs. broker ({currency}: reported {reported}, derived {derived})",
+      "position_gap": "Position reconciliation gap vs. broker ({isin}: reported {reported}, derived {derived})"
     },
     "noneTitle": "No data issues found",
     "noneBody": "All transactions are consistent."

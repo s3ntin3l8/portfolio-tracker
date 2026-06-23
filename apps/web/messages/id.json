@@ -1043,7 +1043,8 @@
       "income_on_non_held": "Pendapatan pada instrumen yang tidak dimiliki",
       "missing_transfer_basis": "Basis biaya tidak ada: harga transfer masuk adalah 0 — tetapkan biaya yang dibawa",
       "zero_price": "Harga nol: beli atau jual dicatat dengan harga Rp0",
-      "reconciliation_gap": "Selisih rekonsiliasi kas vs. broker ({currency}: dilaporkan {reported}, dihitung {derived})"
+      "reconciliation_gap": "Selisih rekonsiliasi kas vs. broker ({currency}: dilaporkan {reported}, dihitung {derived})",
+      "position_gap": "Selisih rekonsiliasi posisi vs. broker ({isin}: dilaporkan {reported}, dihitung {derived})"
     },
     "noneTitle": "Tidak ada masalah data",
     "noneBody": "Semua transaksi konsisten."

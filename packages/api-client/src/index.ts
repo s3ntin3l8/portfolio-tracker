@@ -592,7 +592,8 @@ export type AnomalyCode =
   | "income_on_non_held"
   | "missing_transfer_basis"
   | "zero_price"
-  | "reconciliation_gap";
+  | "reconciliation_gap"
+  | "position_gap";
 
 export interface Anomaly {
   code: AnomalyCode;
@@ -1184,10 +1185,12 @@ export type TrStatus =
 
 export type TrImportCategory = "trade" | "income" | "cashflow" | "card";
 
-/** TR's reported cash vs our derived cash, per currency (decimal strings). */
+/** TR's reported cash + position snapshot vs our derived figures (decimal strings). */
 export interface CashReconciliation {
   checkedAt: string;
   cash: { currency: string; reported: string; derived: string; diff: string }[];
+  /** Per-ISIN position diff (absent on older syncs before position snapshot was added). */
+  positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
 }
 
 /** Public state of the user's Trade Republic connection — never includes secrets. */

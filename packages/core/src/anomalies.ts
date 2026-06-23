@@ -12,7 +12,8 @@ export type AnomalyCode =
   | "income_on_non_held"
   | "missing_transfer_basis"
   | "zero_price"
-  | "reconciliation_gap";
+  | "reconciliation_gap"
+  | "position_gap";
 
 export interface Anomaly {
   code: AnomalyCode;
@@ -25,6 +26,8 @@ export interface Anomaly {
 
 export interface ReconciliationGap {
   cash: { currency: string; reported: string; derived: string; diff: string }[];
+  /** Per-ISIN position diff from TR's compactPortfolio snapshot (absent on older syncs). */
+  positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
 }
 
 type TxWithId = CoreTransaction & { id?: string };
@@ -34,6 +37,9 @@ type Event =
   | { kind: "ca"; at: Date; ca: CorporateAction };
 
 const GAP_THRESHOLD = new Decimal("0.01");
+// Position qty tolerance: TR savings-plan fractions go to ~6 dp. 1e-4 ignores floating-
+// point noise while still catching meaningful discrepancies (e.g. a missed buy event).
+const POSITION_GAP_THRESHOLD = new Decimal("0.0001");
 
 /**
  * Detect data-integrity anomalies in a portfolio's transactions.
@@ -176,7 +182,7 @@ export function detectAnomalies(
     }
   }
 
-  // ── 3. Reconciliation gap ──────────────────────────────────────────────────
+  // ── 3. Reconciliation gaps ─────────────────────────────────────────────────
   if (opts?.reconciliationGap) {
     for (const { currency, reported, derived, diff } of opts.reconciliationGap.cash) {
       if (new Decimal(diff).abs().gte(GAP_THRESHOLD)) {
@@ -185,6 +191,16 @@ export function detectAnomalies(
           severity: "warning",
           scope: "portfolio",
           meta: { currency, reported, derived, diff },
+        });
+      }
+    }
+    for (const { isin, reported, derived, diff } of opts.reconciliationGap.positions ?? []) {
+      if (new Decimal(diff).abs().gte(POSITION_GAP_THRESHOLD)) {
+        anomalies.push({
+          code: "position_gap",
+          severity: "warning",
+          scope: "portfolio",
+          meta: { isin, reported, derived, diff },
         });
       }
     }
