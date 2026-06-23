@@ -6,7 +6,7 @@ import {
   transactions,
   lastPrices,
 } from "@portfolio/db";
-import type { MarketDataService } from "@portfolio/market-data";
+import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { refreshHeldPrices } from "../../src/services/refresh.js";
 
@@ -80,5 +80,55 @@ describe("refreshHeldPrices", () => {
     );
     expect(n).toBe(0);
     expect(counter.n).toBe(0); // provider never consulted
+  });
+
+  it("passes the instrument's ISIN into the InstrumentRef for provider-side disambiguation", async () => {
+    // Regression: refresh.ts was building refs without `isin`, disabling Yahoo's
+    // resolveIsinSymbol fallback. With an ISIN on the ref, a provider can correct a
+    // mis-resolved symbol (e.g. SXR8 stored as CSSPX/US) by searching by ISIN.
+    const db = await ensureDb();
+    const [isinUser] = await db
+      .insert(users)
+      .values({ authSub: "refresh|isin", email: "isin@example.com" })
+      .returning();
+    const [isinPf] = await db
+      .insert(portfolios)
+      .values({ userId: isinUser.id, name: "ISIN-test", baseCurrency: "EUR" })
+      .returning();
+    const [isinInst] = await db
+      .insert(instruments)
+      .values({
+        symbol: "SXR8",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        name: "iShares Core S&P 500",
+        isin: "IE00B5BMR087",
+      })
+      .returning();
+    await db.insert(transactions).values({
+      portfolioId: isinPf.id,
+      instrumentId: isinInst.id,
+      type: "buy",
+      quantity: "1",
+      price: "600",
+      currency: "EUR",
+      executedAt: new Date("2026-06-01T00:00:00.000Z"),
+    });
+
+    const capturedRefs: InstrumentRef[] = [];
+    const capturingSvc: MarketDataService = {
+      getQuotes: async (refs: Array<{ id: string; ref: InstrumentRef }>) => {
+        for (const { ref } of refs) capturedRefs.push(ref);
+        return {};
+      },
+    } as unknown as MarketDataService;
+
+    // Monday 09:00 UTC → XETRA open.
+    await refreshHeldPrices(db, capturingSvc, new Date(Date.UTC(2026, 1, 9, 9)));
+
+    const xetraRef = capturedRefs.find((r) => r.market === "XETRA");
+    expect(xetraRef).toBeDefined();
+    expect(xetraRef?.isin).toBe("IE00B5BMR087");
   });
 });

@@ -1236,7 +1236,16 @@ export async function importsRoute(app: FastifyInstance) {
               // often another venue that no provider covers / defaults to USD (PR #130).
               symbol = r.symbol;
               assetClass = r.assetClass;
-              if (PRICEABLE_FOREIGN_MARKETS.has(r.market)) {
+              // Adopt the resolved venue/currency only for markets that differ from the
+              // broker's Xetra/EUR default AND make sense for the ISIN's domicile country.
+              // For US listings: only allow the US market when the ISIN is itself
+              // US-domiciled — a non-US ISIN (IE…, DE…, GB…) that resolves to a US ticker
+              // is a cross-listing collision (e.g. CSSPX = iShares on Xetra vs Cohen &
+              // Steers on NYSE). Crypto (CRYPTO_MARKET) is unaffected by the ISIN check.
+              if (
+                PRICEABLE_FOREIGN_MARKETS.has(r.market) &&
+                (r.market !== "US" || (d.isin ?? "").toUpperCase().startsWith("US"))
+              ) {
                 market = r.market;
                 instrumentCurrency = r.currency;
               }

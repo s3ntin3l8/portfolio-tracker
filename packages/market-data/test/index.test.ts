@@ -1449,6 +1449,44 @@ describe("OpenFigiProvider", () => {
     expect(resolved).toMatchObject({ symbol: "VZ", exchange: "US" });
   });
 
+  it("prefers the Xetra listing for a non-US ISIN even when a US record appears first", async () => {
+    // Regression: IE00B5BMR087 (iShares Core S&P 500 UCITS ETF, Xetra SXR8) was resolved
+    // to CSSPX/US because OpenFIGI returned a US cross-listing line first. The resolver
+    // must prefer the GR (Xetra) record for a non-US (IE) ISIN.
+    const p = new OpenFigiProvider({
+      fetch: mockFetch(() => ({
+        body: [
+          {
+            data: [
+              { ticker: "CSSPX", name: "ISHARES CORE S&P500 ETF", exchCode: "US" },
+              { ticker: "SXR8", name: "ISHARES CORE S&P500 ETF", exchCode: "GR" },
+            ],
+          },
+        ],
+      })),
+    });
+    const resolved = await p.resolveISIN("IE00B5BMR087");
+    expect(resolved).toMatchObject({ symbol: "SXR8", exchange: "GR" });
+  });
+
+  it("falls back to any EUR-venue record for a non-US ISIN when no Xetra line is present", async () => {
+    // e.g. an Irish UCITS ETF listed only on Euronext Amsterdam — should not return the US line.
+    const p = new OpenFigiProvider({
+      fetch: mockFetch(() => ({
+        body: [
+          {
+            data: [
+              { ticker: "VCGB", name: "VANGUARD USD CORP BOND", exchCode: "US" },
+              { ticker: "VCGB", name: "VANGUARD USD CORP BOND", exchCode: "AMS" },
+            ],
+          },
+        ],
+      })),
+    });
+    const resolved = await p.resolveISIN("IE00B4231740");
+    expect(resolved).toMatchObject({ symbol: "VCGB", exchange: "AMS" });
+  });
+
   it("returns null for malformed ISINs, empty data, and failed requests", async () => {
     const ok = new OpenFigiProvider({
       fetch: mockFetch(() => ({ body: [{ data: [] }] })),
@@ -2286,6 +2324,25 @@ describe("OpenFigiProvider.resolveWKN", () => {
     });
     expect(await provider.resolveWKN("NOT-WKN")).toBeNull(); // fails isWkn guard
     expect(await provider.resolveWKN("A1T8FV")).toBeNull(); // empty records
+  });
+
+  it("prefers the Xetra record for a WKN even when a US record appears first", async () => {
+    // WKN is German-specific — always prefer the XETRA/EUR listing regardless of
+    // record ordering; never pick a US cross-listing as the canonical venue.
+    const provider = new OpenFigiProvider({
+      fetch: mockFetch(() => ({
+        body: [
+          {
+            data: [
+              { ticker: "DDAIF", name: "DAIMLER AG", exchCode: "US" },
+              { ticker: "MBG", name: "DAIMLER AG", exchCode: "GER" },
+            ],
+          },
+        ],
+      })),
+    });
+    const result = await provider.resolveWKN("710000");
+    expect(result).toMatchObject({ symbol: "MBG", exchange: "GER" });
   });
 });
 

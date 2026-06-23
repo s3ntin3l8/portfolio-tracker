@@ -39,6 +39,9 @@ export async function refreshHeldPrices(
         market: i.market,
         assetClass: i.assetClass,
         currency: i.currency,
+        // Pass the ISIN so providers can use it for cross-listing disambiguation when the
+        // stored symbol resolves to a wrong listing (Yahoo's resolveIsinSymbol fallback).
+        isin: i.isin ?? undefined,
       } satisfies InstrumentRef,
     })),
   );

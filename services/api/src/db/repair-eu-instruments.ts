@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { instruments, lastPrices } from "@portfolio/db";
 import { isIsin, yahooSuffixForMarket } from "@portfolio/market-data";
 import { ensureDb, closeDb } from "./client.js";
@@ -6,35 +6,40 @@ import { getMarketData } from "../services/market-data.js";
 
 /**
  * One-off CLI to repair foreign (DKB / Trade Republic) instruments that were stored with
- * the wrong asset class or venue before the import resolution was fixed — most importantly
- * UCITS ETFs mislabelled `mutual_fund` (OpenFIGI reports them as securityType "ETP" but
- * securityType2 "Mutual Fund"), which no quote provider covers for Xetra, so they showed
- * no price (#112 / #111).
+ * the wrong asset class or venue before the import resolution was fixed. Two passes:
  *
- * For each non-Indonesian instrument still classed `mutual_fund` it re-resolves the ISIN
- * via the live provider chain and, when warranted, upgrades the asset class, swaps an
- * ISIN-as-symbol for the real ticker, and normalises an unpriceable venue to Xetra/EUR
- * (the broker's execution venue). It then clears the cached `last_prices` row so the next
- * valuation refetches through the now-correct route. Idempotent — safe to re-run.
+ * **Pass 1 — mutual_fund reclassification (historical, original):** UCITS ETFs mislabelled
+ * `mutual_fund` (OpenFIGI reports them as securityType "ETP" but securityType2 "Mutual
+ * Fund") showed no price because no quote provider covers Xetra mutual_funds (#112/#111).
+ * Re-resolves via the live provider chain and upgrades asset class, symbol, and venue.
  *
- * Reads DATABASE_URL from the environment (`npm run repair:instruments` loads ../../.env;
- * in a container run `node dist/db/repair-eu-instruments.js` with env already set).
+ * **Pass 2 — US cross-listing collision fix (new):** Non-US ISINs (IE…, DE…, GB…) that
+ * were incorrectly pinned to `market=US, currency=USD` due to OpenFIGI's former US-first
+ * preference. Re-resolves via the (now domicile-aware) provider chain and re-pins to the
+ * correct Xetra/EUR venue. Clears cached prices so the next valuation re-fetches correctly.
+ * Example: CSSPX (IE00B5BMR087 = iShares Core S&P 500 UCITS, Xetra SXR8) was priced as
+ * Cohen & Steers Global Realty (US-listed CSSPX, ~$59).
+ *
+ * Idempotent — safe to re-run. Reads DATABASE_URL from the environment
+ * (`npm run repair:instruments` loads ../../.env; in a container run
+ * `node dist/db/repair-eu-instruments.js` with env already set).
  */
 async function main() {
   const db = await ensureDb();
   const md = await getMarketData();
 
-  const all = await db
+  // ── Pass 1: mutual_fund reclassification ────────────────────────────────────
+  const allMutual = await db
     .select()
     .from(instruments)
     .where(eq(instruments.assetClass, "mutual_fund"));
   // Indonesian reksa dana (ISIN starting "ID") are genuine open-end funds — leave them.
-  const candidates = all.filter((i) => i.isin && !i.isin.startsWith("ID"));
+  const mutualCandidates = allMutual.filter((i) => i.isin && !i.isin.startsWith("ID"));
 
-  console.log(`Found ${candidates.length} foreign mutual_fund instrument(s) to inspect.`);
+  console.log(`\nPass 1: Found ${mutualCandidates.length} foreign mutual_fund instrument(s) to inspect.`);
 
   let fixed = 0;
-  for (const inst of candidates) {
+  for (const inst of mutualCandidates) {
     const [hit] = await md.search(inst.isin!);
     if (!hit) {
       console.log(`  ${inst.symbol} (${inst.isin}): no resolution — skip (re-run later)`);
@@ -67,11 +72,70 @@ async function main() {
     fixed++;
     console.log(
       `  ${inst.symbol}: ${inst.market}/${inst.currency}/${inst.assetClass} -> ` +
-        `${market}/${currency}/${assetClass} (symbol ${symbol}); cleared cached price`,
+        `${market}/${currency}/${assetClass} (symbol ${inst.symbol} -> ${symbol}); cleared cached price`,
     );
   }
 
-  console.log(`Repaired ${fixed} instrument(s).`);
+  console.log(`Pass 1: Repaired ${fixed} instrument(s).`);
+
+  // ── Pass 2: US cross-listing collision fix ──────────────────────────────────
+  const allUsRows = await db
+    .select()
+    .from(instruments)
+    .where(and(eq(instruments.market, "US"), isNotNull(instruments.isin)));
+  // Only those with a non-US ISIN — these were incorrectly pinned to the US market.
+  const usCandidates = allUsRows.filter(
+    (i) => i.isin && !i.isin.toUpperCase().startsWith("US"),
+  );
+
+  console.log(
+    `\nPass 2: Found ${usCandidates.length} non-US ISIN instrument(s) mis-pinned to market=US.`,
+  );
+
+  let fixed2 = 0;
+  for (const inst of usCandidates) {
+    const [hit] = await md.search(inst.isin!);
+
+    // Determine the correct market/currency. The resolver is now domicile-aware, so it
+    // should return a Xetra listing. Guard defensively: if it still returns "US" (shouldn't
+    // happen, but be safe), or resolution fails entirely, fall back to XETRA/EUR.
+    const resolvedMarket =
+      hit && hit.market !== "US" ? hit.market : "XETRA";
+    const resolvedCurrency =
+      hit && hit.market !== "US" ? hit.currency : "EUR";
+    // Adopt the resolved symbol only when it's a real ticker (not another ISIN).
+    const resolvedSymbol =
+      hit && !isIsin(hit.symbol) ? hit.symbol : inst.symbol;
+    const resolvedAssetClass = hit?.assetClass ?? inst.assetClass;
+
+    if (
+      resolvedSymbol === inst.symbol &&
+      resolvedAssetClass === inst.assetClass &&
+      resolvedMarket === inst.market &&
+      resolvedCurrency === inst.currency
+    ) {
+      console.log(`  ${inst.symbol} (${inst.isin}): already correct — skip`);
+      continue;
+    }
+
+    await db
+      .update(instruments)
+      .set({
+        symbol: resolvedSymbol,
+        assetClass: resolvedAssetClass,
+        market: resolvedMarket,
+        currency: resolvedCurrency,
+      })
+      .where(eq(instruments.id, inst.id));
+    await db.delete(lastPrices).where(eq(lastPrices.instrumentId, inst.id));
+    fixed2++;
+    console.log(
+      `  ${inst.name} (${inst.isin}): ${inst.market}/${inst.currency} -> ` +
+        `${resolvedMarket}/${resolvedCurrency} (symbol ${inst.symbol} -> ${resolvedSymbol}); cleared cached price`,
+    );
+  }
+
+  console.log(`Pass 2: Repaired ${fixed2} instrument(s).`);
   await closeDb();
 }
 

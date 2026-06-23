@@ -1,5 +1,6 @@
 import type { AssetClass, InstrumentRef, MarketDataProvider, Quote } from "./types.js";
 import { isIsin, isWkn } from "./types.js";
+import { mapExchange } from "./instrument-mapping.js";
 
 export interface OpenFigiOptions {
   baseUrl?: string;
@@ -59,15 +60,27 @@ export class OpenFigiProvider implements MarketDataProvider {
 
     const payload = (await res.json()) as { data?: FigiRecord[]; error?: string }[];
     const records = payload?.[0]?.data ?? [];
-    // Prefer the composite US listing (exchCode "US"): it carries the canonical US ticker,
-    // and OpenFIGI sometimes orders foreign venues first where the *local* ticker differs —
-    // e.g. Verizon (US92343V1044) lists as "BAC" on German exchanges but "VZ" in the US.
-    // Fall back to any record with a ticker (non-US instruments have no US line), then the
-    // first record at all.
-    const match =
-      records.find((r) => r.exchCode === "US" && r.ticker) ??
-      records.find((r) => r.ticker) ??
-      records[0];
+    // Select the best listing, honouring the instrument's domicile country.
+    //
+    // US-domiciled ISINs (prefix "US"): prefer the composite US listing (exchCode "US")
+    // because it carries the canonical ticker. OpenFIGI sometimes orders foreign venues
+    // first where the *local* ticker differs — e.g. Verizon (US92343V1044) lists as "BAC"
+    // on German exchanges but "VZ" in the US.
+    //
+    // Non-US ISINs (IE…, DE…, GB…, etc.): prefer the German/Xetra listing first. These
+    // instruments are held via EU brokers (Trade Republic, DKB) that execute on Xetra;
+    // their ISIN often collides with an unrelated US fund sharing the same ticker
+    // (e.g. CSSPX = iShares S&P 500 on Xetra vs Cohen & Steers Global Realty on NYSE).
+    // Prefer XETRA, then any EUR venue, then any record with a ticker, then the first record.
+    const isUsDomicile = isin.toUpperCase().startsWith("US");
+    const match = isUsDomicile
+      ? (records.find((r) => r.exchCode === "US" && r.ticker) ??
+         records.find((r) => r.ticker) ??
+         records[0])
+      : (records.find((r) => mapExchange(r.exchCode)?.market === "XETRA" && r.ticker) ??
+         records.find((r) => mapExchange(r.exchCode)?.currency === "EUR" && r.ticker) ??
+         records.find((r) => r.ticker) ??
+         records[0]);
     if (!match?.ticker) return null;
 
     return {
@@ -100,8 +113,10 @@ export class OpenFigiProvider implements MarketDataProvider {
 
     const payload = (await res.json()) as { data?: FigiRecord[]; error?: string }[];
     const records = payload?.[0]?.data ?? [];
+    // WKN is a German identifier — always prefer the Xetra/EUR listing.
     const match =
-      records.find((r) => r.exchCode === "US" && r.ticker) ??
+      records.find((r) => mapExchange(r.exchCode)?.market === "XETRA" && r.ticker) ??
+      records.find((r) => mapExchange(r.exchCode)?.currency === "EUR" && r.ticker) ??
       records.find((r) => r.ticker) ??
       records[0];
     if (!match?.ticker) return null;

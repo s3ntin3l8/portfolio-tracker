@@ -3,8 +3,10 @@ import { eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT } from "jose";
 import { instruments, portfolios, screenshotImports, trResolvedEvents } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
+import { MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { getDb, closeDb } from "../../src/db/client.js";
+import { overrideMarketData, invalidateMarketData } from "../../src/services/market-data.js";
 
 const ISSUER = "https://auth.test/o/p/";
 const AUDIENCE = "portfolio-tracker";
@@ -212,6 +214,38 @@ describe("pytr import → confirm", () => {
       securityDraft({ isin: "IE00BK5BQT80", wkn: "A2PKXG", name: "Vanguard FTSE All-World", externalId: "wkn-1" }),
     );
     expect(inst).toMatchObject({ isin: "IE00BK5BQT80", wkn: "A2PKXG", market: "XETRA" });
+  });
+
+  it("rejects a US-market resolution for a non-US ISIN and keeps Xetra/EUR (backstop guard)", async () => {
+    // Regression: IE00B5BMR087 (iShares Core S&P 500 UCITS ETF) was pinned to market=US
+    // when the provider returned the US cross-listing (CSSPX/US) before the Xetra one.
+    // The guard in imports.ts must block `market=US` for any non-US-domiciled ISIN.
+    const usMock = new MarketDataService([
+      {
+        name: "mock-us-first",
+        supports: () => false,
+        getQuote: async () => null,
+        resolveISIN: async (isin: string) =>
+          isin === "IE00B5BMR087"
+            ? { symbol: "CSSPX", exchange: "US", name: "WRONG US fund" }
+            : null,
+      },
+    ]);
+    overrideMarketData(usMock);
+    try {
+      const inst = await confirmDraftInstrument(
+        await token("tr-backstop"),
+        securityDraft({
+          isin: "IE00B5BMR087",
+          name: "iShares Core S&P 500",
+          externalId: "backstop-1",
+        }),
+      );
+      // The guard must block the US override → instrument stays on the Xetra/EUR default.
+      expect(inst).toMatchObject({ market: "XETRA", currency: "EUR" });
+    } finally {
+      invalidateMarketData(); // restore default fixture provider
+    }
   });
 
   it("persists detail enrichment (tax, executedPrice, fxRate, kind, docs) on the transaction", async () => {
