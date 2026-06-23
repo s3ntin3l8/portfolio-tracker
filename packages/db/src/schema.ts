@@ -316,6 +316,8 @@ export const trConnections = pgTable("tr_connections", {
   lastReconciliation: jsonb("last_reconciliation"),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // True while a background sync job is running. Reset to false on job completion (success or failure).
+  syncing: boolean("syncing").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

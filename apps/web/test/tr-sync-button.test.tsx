@@ -4,17 +4,26 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
-const syncTr = vi.fn(async () => ({ status: "connected" as const, drafts: 5 }));
+const syncTr = vi.fn(async () => ({ queued: true as const }));
+const getTrConnection = vi.fn(async () => ({
+  status: "connected" as const,
+  portfolioId: "p1",
+  lastSyncAt: null,
+  lastError: null,
+  importCategories: null,
+  lastReconciliation: null,
+  syncing: false,
+}));
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("@/lib/api", () => ({ useApiClient: () => ({ syncTr }) }));
+vi.mock("@/lib/api", () => ({ useApiClient: () => ({ syncTr, getTrConnection }) }));
 
 import { TrSyncButton } from "../src/components/tr-sync-button";
 
-function renderButton() {
+function renderButton(props?: Parameters<typeof TrSyncButton>[0]) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <TrSyncButton />
+      <TrSyncButton {...props} />
     </NextIntlClientProvider>,
   );
 }
@@ -23,21 +32,33 @@ describe("TrSyncButton", () => {
   beforeEach(() => {
     refresh.mockClear();
     syncTr.mockClear();
+    getTrConnection.mockClear();
   });
 
-  it("calls syncTr and refreshes the router on click", async () => {
+  it("calls syncTr and refreshes the router once the poll sees syncing=false", async () => {
+    // Simulate: sync is queued, poller sees syncing=false on first check.
+    getTrConnection.mockResolvedValue({
+      status: "connected" as const,
+      portfolioId: "p1",
+      lastSyncAt: null,
+      lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
+      syncing: false,
+    });
+
     renderButton();
     fireEvent.click(screen.getByRole("button", { name: messages.TradeRepublic.syncNow }));
 
     await waitFor(() => expect(syncTr).toHaveBeenCalled());
-    expect(refresh).toHaveBeenCalled();
+    await waitFor(() => expect(refresh).toHaveBeenCalled(), { timeout: 8000 });
   });
 
   it("disables the button while syncing", async () => {
-    // Hold the sync open so we can observe the in-flight state.
-    let resolve!: () => void;
+    // Hold the syncTr open so we can observe the in-flight state before polling starts.
+    let resolveSyncTr!: () => void;
     syncTr.mockImplementationOnce(
-      () => new Promise<never>((res) => { resolve = res as () => void; }),
+      () => new Promise<{ queued: boolean }>((res) => { resolveSyncTr = () => res({ queued: true }); }),
     );
 
     renderButton();
@@ -46,8 +67,7 @@ describe("TrSyncButton", () => {
 
     await waitFor(() => expect(btn).toBeDisabled());
 
-    // Clean up the dangling promise so the component unmounts cleanly.
-    resolve();
+    resolveSyncTr();
   });
 
   it("re-enables the button after a sync error without throwing", async () => {
@@ -58,5 +78,26 @@ describe("TrSyncButton", () => {
 
     await waitFor(() => expect(btn).not.toBeDisabled());
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("starts spinning immediately when initialSyncing=true and refreshes when done", async () => {
+    getTrConnection.mockResolvedValue({
+      status: "connected" as const,
+      portfolioId: "p1",
+      lastSyncAt: null,
+      lastError: null,
+      importCategories: null,
+      lastReconciliation: null,
+      syncing: false,
+    });
+
+    renderButton({ initialSyncing: true });
+    const btn = screen.getByRole("button", { name: messages.TradeRepublic.syncNow });
+
+    // Should be disabled immediately (already syncing).
+    expect(btn).toBeDisabled();
+
+    // Once the poll returns syncing=false the router refreshes and button re-enables.
+    await waitFor(() => expect(refresh).toHaveBeenCalled(), { timeout: 8000 });
   });
 });

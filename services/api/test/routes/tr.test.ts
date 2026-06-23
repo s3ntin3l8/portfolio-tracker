@@ -334,6 +334,30 @@ describe("Trade Republic connection (encryption enabled)", () => {
     ).toHaveLength(0);
   });
 
+  it("GET /tr/connection includes syncing=false in the serialized response", async () => {
+    const t = await token("tr-syncing-check");
+    await portfolioFor(app, t);
+    const res = await app.inject({
+      method: "GET",
+      url: "/tr/connection",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    // New field is always present; false by default (no active background job).
+    expect(res.json()).toMatchObject({ syncing: false });
+  });
+
+  it("POST /tr/connection/sync 409s when not connected", async () => {
+    const t = await token("tr-sync-not-connected");
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/sync",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "not_connected" });
+  });
+
   it("disconnects: DELETE wipes the connection", async () => {
     const t = await token("tr-disc");
     const portfolioId = await portfolioFor(app, t);

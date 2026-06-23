@@ -1,5 +1,5 @@
 import { PgBoss } from "pg-boss";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { trConnections } from "@portfolio/db";
 import { getDb } from "../db/client.js";
@@ -147,6 +147,21 @@ export async function triggerJob(
 }
 
 /**
+ * Enqueue a per-connection TR sync, deduplicated so double-clicking doesn't queue two
+ * concurrent syncs for the same connection. Returns `{ queued: true }` when the job was
+ * enqueued, `{ queued: false }` when pg-boss is unavailable (caller falls back to inline).
+ */
+export async function enqueueTrSync(connectionId: string): Promise<{ queued: boolean }> {
+  if (!activeBoss) return { queued: false };
+  await activeBoss.send(
+    TR_SYNC_QUEUE,
+    { connectionId },
+    { singletonKey: `tr-sync:${connectionId}`, singletonSeconds: 30 },
+  );
+  return { queued: true };
+}
+
+/**
  * Enqueue a history recompute for a portfolio, collapsed (debounced) via singletonKey so
  * rapid bulk-edits (multi-file import, TR sync) collapse to one job. fromDate bounds the
  * recompute to transactions on or after that date (pass min(changed executedAt)).
@@ -240,16 +255,27 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(SNAPSHOT_QUEUE, SNAPSHOT_CRON);
 
-  // Hourly Trade Republic sync: stage each connected account's timeline as a draft
-  // import the user later confirms. syncTrConnection itself is unit-tested apart from
-  // pg-boss; here we just fan it across the connected rows.
+  // Hourly Trade Republic sync + on-demand per-connection trigger.
+  // When job data carries `connectionId`, only that connection is synced (the manual-sync
+  // path triggered via POST /tr/connection/sync); otherwise all connected accounts are
+  // synced (the cron path). `syncing` is cleared after each connection whether it
+  // succeeded or failed, so the frontend poller always sees a terminal state.
   await boss.createQueue(TR_SYNC_QUEUE);
-  await boss.work(TR_SYNC_QUEUE, async () => {
+  await boss.work(TR_SYNC_QUEUE, async (jobs) => {
+    const connectionId =
+      Array.isArray(jobs) && jobs.length > 0
+        ? (jobs[0]?.data as Record<string, unknown> | null)?.connectionId
+        : undefined;
+    const targetId = typeof connectionId === "string" ? connectionId : undefined;
     try {
       const conns = await getDb()
         .select()
         .from(trConnections)
-        .where(eq(trConnections.status, "connected"));
+        .where(
+          targetId
+            ? and(eq(trConnections.id, targetId), eq(trConnections.status, "connected"))
+            : eq(trConnections.status, "connected"),
+        );
       for (const conn of conns) {
         const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log, app.storage);
         if (result.status === "connected") {
@@ -259,6 +285,18 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         }
       }
     } catch (err) {
+      // On unexpected failure, clear the syncing flag for the targeted connection so the
+      // frontend doesn't spin forever. All-connections errors log but don't flip syncing.
+      if (targetId) {
+        try {
+          await getDb()
+            .update(trConnections)
+            .set({ syncing: false, updatedAt: new Date() })
+            .where(eq(trConnections.id, targetId));
+        } catch {
+          // best-effort
+        }
+      }
       app.log.error({ err }, "tr sync failed");
     }
   });
