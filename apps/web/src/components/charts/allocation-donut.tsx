@@ -22,12 +22,20 @@ const COLORS = [
 export function AllocationDonut({
   data,
   currency = "IDR",
+  onSliceClick,
 }: {
   data: DonutSlice[];
   currency?: string;
+  onSliceClick?: (key: string) => void;
 }) {
   const locale = useLocale();
   const total = data.reduce((s, d) => s + d.value, 0);
+
+  const handleClick = (entry: DonutSlice) => {
+    if (onSliceClick) {
+      onSliceClick(entry.key);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -42,6 +50,8 @@ export function AllocationDonut({
               outerRadius={84}
               paddingAngle={2}
               strokeWidth={0}
+              onClick={(_: unknown, index: number) => handleClick(data[index])}
+              style={{ cursor: onSliceClick ? "pointer" : "default" }}
             >
               {data.map((_, i) => (
                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -56,6 +66,7 @@ export function AllocationDonut({
                 color: "var(--color-popover-foreground)",
                 fontSize: 12,
               }}
+              wrapperStyle={{ zIndex: 50 }}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -63,13 +74,17 @@ export function AllocationDonut({
       <ul className="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm">
         {data.map((d, i) => (
           <li key={d.key} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleClick(d)}
+              className={`flex items-center gap-2 ${onSliceClick ? "cursor-pointer hover:underline" : "cursor-default"}`}
+            >
               <span
                 className="size-2.5 rounded-full"
                 style={{ background: COLORS[i % COLORS.length] }}
               />
-              {d.label}
-            </span>
+              <span className="max-w-[100px] text-center leading-tight">{d.label}</span>
+            </button>
             <span className="tabular text-muted-foreground">
               {((d.value / total) * 100).toFixed(1)}%
             </span>

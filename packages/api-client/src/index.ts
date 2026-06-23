@@ -362,6 +362,10 @@ export interface InstrumentMeta {
   market: string;
   /** GICS-style sector populated by the sector-enrichment job; null until enriched. */
   sector: string | null;
+  /** Per-sector allocation weights for ETFs (sector name → fraction 0–1). Null for non-ETFs. */
+  sectorWeights: Record<string, number> | null;
+  /** Per-country allocation weights for ETFs (country name → fraction 0–1). Null for non-ETFs. */
+  countryWeights: Record<string, number> | null;
 }
 
 /** A single slice in an allocation breakdown (one category in one dimension). */

@@ -52,6 +52,8 @@ const makeHolding = (
     unit: "shares",
     market: "IDX",
     sector: null,
+    sectorWeights: null,
+    countryWeights: null,
   },
 });
 

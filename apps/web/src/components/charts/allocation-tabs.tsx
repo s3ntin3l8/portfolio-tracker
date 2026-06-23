@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { AllocationDonut } from "./allocation-donut";
 import { TargetDialog, type TargetSlice } from "@/components/allocation/target-dialog";
+import { getDrillDownInstruments, type DrillDownInstrument } from "@/lib/sector-drilldown";
 import type { AllocationBreakdown, DriftRow } from "@portfolio/api-client";
 
 /** Convert a decimal-string slice value to a number, clamping negatives to 0. */
@@ -53,11 +55,15 @@ function DriftHint({
 
 interface TabBodyProps {
   slices: Array<{ key: string; label: string; value: number; actualPct: number }>;
-  dimension: string;
+  dimension: "asset_class" | "currency" | "region" | "sector";
   dimensionLabel: string;
   currency: string;
   drift?: Record<string, DriftRow[]>;
   portfolioId?: string;
+  holdings?: DrillDownInstrument[];
+  drillDown?: { dimension: string; key: string } | null;
+  onSliceClick?: (key: string) => void;
+  onBack?: () => void;
 }
 
 function TabBody({
@@ -67,6 +73,10 @@ function TabBody({
   currency,
   drift,
   portfolioId,
+  holdings,
+  drillDown,
+  onSliceClick,
+  onBack,
 }: TabBodyProps) {
   const dimDrift = drift?.[dimension];
   const targetSlices: TargetSlice[] = slices.map((s) => ({
@@ -75,24 +85,55 @@ function TabBody({
     actualPct: s.actualPct,
   }));
 
+  // Compute drill-down slices if we have holdings and are drilling down
+  const drillDownSlices = drillDown && holdings
+    ? getDrillDownInstruments(holdings, dimension as "asset_class" | "currency" | "region" | "sector", drillDown.key)
+    : null;
+
+  const displaySlices = drillDownSlices
+    ? drillDownSlices.map((s) => ({
+        key: s.key,
+        label: s.name,
+        value: s.value,
+        actualPct: 0, // Will be computed by AllocationDonut
+      }))
+    : slices;
+
   return (
     <div>
-      {slices.length > 0 ? (
-        <AllocationDonut data={slices} currency={currency} />
+      {drillDown && onBack && (
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            ← Back to {dimensionLabel}
+          </button>
+        </div>
+      )}
+      {displaySlices.length > 0 ? (
+        <AllocationDonut
+          data={displaySlices}
+          currency={currency}
+          onSliceClick={drillDown ? undefined : onSliceClick}
+        />
       ) : (
         <p className="text-center text-sm text-muted-foreground py-8">—</p>
       )}
-      {dimDrift && dimDrift.length > 0 && (
+      {dimDrift && dimDrift.length > 0 && !drillDown && (
         <DriftHint drift={dimDrift} dimensionLabel={dimensionLabel} />
       )}
-      <div className="flex justify-end mt-2">
-        <TargetDialog
-          portfolioId={portfolioId}
-          dimension={dimension}
-          dimensionLabel={dimensionLabel}
-          slices={targetSlices}
-        />
-      </div>
+      {!drillDown && (
+        <div className="flex justify-end mt-2">
+          <TargetDialog
+            portfolioId={portfolioId}
+            dimension={dimension}
+            dimensionLabel={dimensionLabel}
+            slices={targetSlices}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -109,21 +150,40 @@ function TabBody({
  * When `drift` is provided (user has saved targets), each tab shows a compact
  * drift hint and a "Set targets" trigger button.
  * When `portfolioId` is provided, targets are portfolio-scoped; otherwise aggregate.
+ *
+ * When `holdings` is provided, clicking a slice drills down into the breakdown:
+ * - Region → Country (using countryWeights)
+ * - Sector → Individual sectors (using sectorWeights)
  */
 export function AllocationTabs({
   allocation,
   currency,
   drift,
   portfolioId,
+  holdings,
 }: {
   allocation: AllocationBreakdown;
   currency: string;
   drift?: Record<string, DriftRow[]>;
   portfolioId?: string;
+  holdings?: DrillDownInstrument[];
 }) {
   const t = useTranslations("Dashboard");
   const ta = useTranslations("AssetClass");
   const tr = useTranslations("Region");
+
+  const [drillDown, setDrillDown] = useState<{ dimension: string; key: string } | null>(null);
+
+  const handleSliceClick = (key: string) => {
+    // Only allow drill-down for region and sector dimensions
+    if (drillDown?.dimension === "region" || drillDown?.dimension === "sector") {
+      setDrillDown({ dimension: drillDown.dimension, key });
+    }
+  };
+
+  const handleBack = () => {
+    setDrillDown(null);
+  };
 
   const assetClassSlices = allocation.byAssetClass
     .map((s) => ({
@@ -176,6 +236,10 @@ export function AllocationTabs({
           currency={currency}
           drift={drift}
           portfolioId={portfolioId}
+          holdings={holdings}
+          drillDown={drillDown?.dimension === "asset_class" ? drillDown : null}
+          onSliceClick={handleSliceClick}
+          onBack={handleBack}
         />
       </TabsContent>
 
@@ -187,6 +251,10 @@ export function AllocationTabs({
           currency={currency}
           drift={drift}
           portfolioId={portfolioId}
+          holdings={holdings}
+          drillDown={drillDown?.dimension === "currency" ? drillDown : null}
+          onSliceClick={handleSliceClick}
+          onBack={handleBack}
         />
       </TabsContent>
 
@@ -198,6 +266,10 @@ export function AllocationTabs({
           currency={currency}
           drift={drift}
           portfolioId={portfolioId}
+          holdings={holdings}
+          drillDown={drillDown?.dimension === "region" ? drillDown : null}
+          onSliceClick={handleSliceClick}
+          onBack={handleBack}
         />
       </TabsContent>
 
@@ -209,6 +281,10 @@ export function AllocationTabs({
           currency={currency}
           drift={drift}
           portfolioId={portfolioId}
+          holdings={holdings}
+          drillDown={drillDown?.dimension === "sector" ? drillDown : null}
+          onSliceClick={handleSliceClick}
+          onBack={handleBack}
         />
       </TabsContent>
     </Tabs>
