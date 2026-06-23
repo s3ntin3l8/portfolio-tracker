@@ -46,7 +46,7 @@ describe("mapTrEventToDraft", () => {
     expect(sell).toMatchObject({ action: "sell", quantity: "5", price: "100" });
   });
 
-  it("excludes fees from the per-share price and carries them separately", () => {
+  it("excludes fees from the per-share buy price and carries them separately", () => {
     const buy = draftOf({
       ...base,
       eventType: "TRADE_INVOICE",
@@ -55,7 +55,34 @@ describe("mapTrEventToDraft", () => {
       shares: 10,
       isin: "DE0007236101",
     });
+    // buy: price = (|amount| − fees) / shares = (1010 − 10) / 10 = 100
     expect(buy).toMatchObject({ action: "buy", quantity: "10", price: "100", fees: "10" });
+  });
+
+  it("uses gross sell price so cashFlow = qty×price − fees − tax = net amount", () => {
+    // Sell: amount = net cash (gross − fees − tax). Reconstruct gross so P&L is pre-tax.
+    const sellWithTax = draftOf({
+      ...base,
+      eventType: "ORDER_EXECUTED",
+      amount: 497, // net: 500 gross − 1 fee − 2 tax
+      fees: -1,    // pytr signs are negative for costs
+      tax: -2,
+      shares: -5,  // negative shares for a sell
+      isin: "DE0007236101",
+    });
+    // gross price = (497 + 1 + 2) / 5 = 100
+    expect(sellWithTax).toMatchObject({ action: "sell", quantity: "5", price: "100", fees: "1", tax: "2" });
+
+    const sellWithFeesOnly = draftOf({
+      ...base,
+      eventType: "ORDER_EXECUTED",
+      amount: 490, // net: 500 − 10 fee
+      fees: -10,
+      shares: -5,
+      isin: "DE0007236101",
+    });
+    // gross price = (490 + 10 + 0) / 5 = 100
+    expect(sellWithFeesOnly).toMatchObject({ action: "sell", price: "100", fees: "10" });
   });
 
   it("maps savings plan executions and keeps the plan id", () => {

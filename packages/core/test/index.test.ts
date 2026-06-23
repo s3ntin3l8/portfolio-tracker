@@ -175,6 +175,8 @@ describe("cashFlow", () => {
     expect(cashFlow({ ...base, type: "buy", quantity: "10", price: "100", fees: "5" }).toString()).toBe("-1005");
     expect(cashFlow({ ...base, type: "savings_plan", quantity: "10", price: "100" }).toString()).toBe("-1000");
     expect(cashFlow({ ...base, type: "sell", quantity: "10", price: "100", fees: "5" }).toString()).toBe("995");
+    // With capital-gains tax: gross proceeds − fees − tax
+    expect(cashFlow({ ...base, type: "sell", quantity: "10", price: "100", fees: "5", tax: "3" }).toString()).toBe("992");
     expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "250" }).toString()).toBe("250");
     expect(cashFlow({ ...base, type: "dividend", quantity: "10", price: "25" }).toString()).toBe("250");
     expect(cashFlow({ ...base, type: "coupon", price: "300" }).toString()).toBe("300");

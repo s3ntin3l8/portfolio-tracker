@@ -246,7 +246,15 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
       return skip(`${ev.eventType} without a share count`, "attention", ev);
     }
     quantity = dstr(shares);
-    price = dstr((amount - fees) / shares); // per-share, fees carried separately
+    if (action === "sell") {
+      // pytr `amount` = net cash credited (gross proceeds − fees − tax).
+      // Reconstruct gross price so cashFlow = qty·grossPrice − fees − tax = amount.
+      const sellTax = Math.abs(ev.tax ?? 0);
+      price = dstr((amount + fees + sellTax) / shares);
+    } else {
+      // buy / savings_plan: amount = gross debit (before fees); reconstruct net per-share.
+      price = dstr((amount - fees) / shares);
+    }
 
     // Reconciliation: the executed price × shares should land near the booked total (fees +
     // tax are small). A large gap means the share count or price was mis-parsed — flag it for

@@ -100,6 +100,14 @@ const ROWS: Record<string, string>[] = [
   { datetime: "2021-07-01T00:00:00.000Z", category: "DELIVERY", type: "FREE_RECEIPT", asset_class: "CRYPTO",
     name: "Bitcoin", symbol: "BTC", shares: "0.001", price: "32000.00",
     currency: "EUR", transaction_id: id(25) },
+  // sell WITH withholding tax: amount=net cash, fee separate, tax separate
+  // gross 500, fee 1, tax 2 → net amount = 500 − 1 − 2 = 497; price column = 100 (per share)
+  { datetime: "2024-06-10T10:00:00.000Z", category: "TRADING", type: "SELL", asset_class: "STOCK",
+    name: "Siemens", symbol: "DE0007236101", shares: "-5.0000000000", price: "100.000000",
+    amount: "497.00", fee: "-1.00", tax: "-2.00", currency: "EUR", transaction_id: id(26) },
+  // interest WITH withholding tax: amount=gross, tax=negative withholding → price=net
+  { datetime: "2024-08-01T00:00:00.000Z", category: "CASH", type: "INTEREST_PAYMENT",
+    amount: "10.00", tax: "-1.50", currency: "EUR", transaction_id: id(27) },
   // --- unmappable: surfaced as errors, never silently dropped ---
   { datetime: "2025-04-24T13:03:27.956868Z", category: "CASH", type: "TAX_OPTIMIZATION",
     amount: "0.000000", tax: "-1.77", currency: "EUR", description: "Tax Optimisation", transaction_id: id(16) },
@@ -118,8 +126,8 @@ describe("parseTrCsv", () => {
   const byId = new Map(drafts.map((d) => [d.externalId, d]));
   const draft = (n: number) => byId.get(`tr-csv:${id(n)}`);
 
-  it("maps 21 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
-    expect(drafts).toHaveLength(21);
+  it("maps 23 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
+    expect(drafts).toHaveLength(23);
     expect(errors).toHaveLength(4);
     expect(errors.map((e) => e.message)).toEqual([
       expect.stringContaining("TAX_OPTIMIZATION"),
@@ -283,6 +291,22 @@ describe("parseTrCsv", () => {
     expect(draft(25)?.action).not.toBe("transfer_in");
     // Confidence 1 (not flagged for review — price is known).
     expect(draft(25)?.confidence).toBe(1);
+  });
+
+  it("captures withholding tax on sells so cashFlow = qty×price − fees − tax = net cash", () => {
+    // Sell row: price=100 gross, fee=1, tax=2 → amount (net) = 497
+    expect(draft(26)).toMatchObject({
+      action: "sell", quantity: "5", price: "100", fees: "1", tax: "2",
+    });
+    // Sanity: no-tax sell (row 4) must not get a tax field
+    expect(draft(4)?.tax).toBeUndefined();
+  });
+
+  it("nets interest against withholding tax so cashFlow = amount + tax", () => {
+    // Interest row: gross 10, tax withheld 1.5 → net price 8.5; stored tax 1.5 (positive=withheld)
+    expect(draft(27)).toMatchObject({ action: "interest", price: "8.5", tax: "1.5" });
+    // Zero-tax interest row (row 7) must still have no tax field
+    expect(draft(7)?.tax).toBeUndefined();
   });
 
   it("stamps a stable TR event-UUID external id and coerces the datetime", () => {

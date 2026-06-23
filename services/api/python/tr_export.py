@@ -64,27 +64,34 @@ async def _collect_transactions(tr):
     return list(events.values())
 
 
-async def _attach_details(tr, events):
-    for event in events:
+async def _attach_details(tr, events, concurrency=8):
+    """Enrich every event with its detail payload, fetching up to `concurrency` at once.
+
+    Serial fetching of ~900 events exceeds the 300s export timeout; bounded concurrency
+    collapses that to ~90 batched round-trips while still attaching a detail to every
+    event (reconcileCash re-maps the full timeline so skipping details would drop trades).
+    """
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _fetch_one(event):
         event_id = event["id"]
-        try:
-            await tr.timeline_detail_v2(event_id)
-            event["details"] = await _await_subscription(
-                tr,
-                "timelineDetailV2",
-                match=lambda s: s.get("id") == event_id,
-            )
-        except Exception as exc:  # noqa: BLE001 - details are best-effort
-            # A transient TR backend error (or a 30s silent timeout) leaves this event
-            # without its enrichment (shares/tax/fx/venue → null). Surface which event so a
-            # thin draft is explained rather than silently shipped; it self-heals on the
-            # next sync that re-fetches the detail (until the event is confirmed/discarded).
-            event["details"] = None
-            print(
-                f"detail fetch failed for {event_id} "
-                f"({event.get('eventType')}): {exc}",
-                file=sys.stderr,
-            )
+        async with sem:
+            try:
+                await tr.timeline_detail_v2(event_id)
+                event["details"] = await _await_subscription(
+                    tr,
+                    "timelineDetailV2",
+                    match=lambda s: s.get("id") == event_id,
+                )
+            except Exception as exc:  # noqa: BLE001 - details are best-effort
+                event["details"] = None
+                print(
+                    f"detail fetch failed for {event_id} "
+                    f"({event.get('eventType')}): {exc}",
+                    file=sys.stderr,
+                )
+
+    await asyncio.gather(*(_fetch_one(ev) for ev in events))
     return events
 
 
@@ -207,9 +214,25 @@ def _extract_price(details):
     return _field(details, ["aktienkurs", "anteilspreis", "bezugspreis", "share price"])
 
 
+_DATE_RE = re.compile(r"^\d{1,2}\.\d{2}\.\d{4}$")
+
+
 def _extract_tax(details):
-    """Tax withheld/corrected (Steuer/Steuern/Steuerkorrektur), signed as TR shows it."""
-    return _field(details, ["steuer"])  # matches Steuer, Steuern, Steuerkorrektur
+    """Tax withheld/corrected (Steuer/Steuern/Steuerkorrektur), signed as TR shows it.
+
+    Guard: reject rows whose text looks like a date (DD.MM.YYYY). `_num` would otherwise
+    parse '19.12.2024' as 19122024 — stripping the dots yields an 8-digit integer that
+    masquerades as a tax amount.
+    """
+    for title, text in _walk_rows(details or {}):
+        if "steuer" in title:
+            stripped = text.strip()
+            if _DATE_RE.match(stripped):
+                continue  # skip date-like values (Buchungsdatum etc.)
+            value = _num(stripped)
+            if value is not None:
+                return value
+    return None
 
 
 def _extract_fx(details):

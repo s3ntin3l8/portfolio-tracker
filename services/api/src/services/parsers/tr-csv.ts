@@ -176,14 +176,19 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail(`${type} row missing shares/price/amount`);
         continue;
       }
+      // CSV sell `tax` column: negative = capital-gains tax withheld. Captured so
+      // cashFlow (sell) = qty·price − fees − tax matches the invariant Σ(amount+fee+tax).
+      // Buy rows don't carry tax (German KapSt only applies to proceeds, not purchases).
+      const sellTax = type === "SELL" && tax != null && tax !== 0 ? dec(Math.abs(tax)) : undefined;
       candidate = {
         ...base,
         ...instrument,
         action: type === "BUY" ? "buy" : "sell",
         quantity: dec(Math.abs(shares)),
         unit: assetClass === "crypto" ? "units" : "shares",
-        price: dec(Math.abs(priceCol)),
+        price: dec(Math.abs(priceCol)), // gross per-share price (amount / shares)
         fees: fee != null ? dec(Math.abs(fee)) : "0",
+        tax: sellTax,
         total: dec(Math.abs(amount) + Math.abs(fee ?? 0)), // gross consideration incl. fee
       };
     } else if (DIVIDEND_TYPES.has(type)) {
@@ -214,12 +219,16 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail("INTEREST_PAYMENT row missing amount");
         continue;
       }
+      // Mirror the dividend net-into-price convention (lines above): `price` = net cash so
+      // cashFlow reads the right amount. CSV tax is negative for a withholding.
+      const taxSigned = tax ?? 0;
+      const net = amount + taxSigned; // amount - |withheld|
       candidate = {
         ...base,
         action: "interest",
         quantity: "0",
-        price: dec(Math.abs(amount)),
-        tax: tax ? dec(Math.abs(tax)) : undefined,
+        price: dec(Math.abs(net)),
+        tax: taxSigned !== 0 ? dec(-taxSigned) : undefined, // +withheld / −refund
         fees: "0",
       };
     } else if (type === "EARNINGS") {

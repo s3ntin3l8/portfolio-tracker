@@ -140,6 +140,22 @@ class TestFieldExtractors:
     def test_tax_from_steuern(self):
         assert tx._extract_tax(DIV_DETAIL) == -0.37
 
+    def test_tax_date_guard_rejects_booking_date(self):
+        # A 'Steuer' section sometimes carries a Buchungsdatum (e.g. '19.12.2024') before
+        # the actual tax amount. Without the guard, _num('19.12.2024') = 19122024.
+        details_with_date = {"sections": [{"type": "table", "data": [
+            {"title": "Steuer", "detail": {"text": "19.12.2024"}},
+            {"title": "Steuer", "detail": {"text": "-2,50 €"}},
+        ]}]}
+        assert tx._extract_tax(details_with_date) == -2.50
+
+    def test_tax_date_only_returns_none(self):
+        # If the only 'Steuer' row has a date text, return None rather than a giant integer.
+        details_date_only = {"sections": [{"type": "table", "data": [
+            {"title": "Steuern", "detail": {"text": "19.12.2024"}},
+        ]}]}
+        assert tx._extract_tax(details_date_only) is None
+
     def test_fx_from_wechselkurs(self):
         # '1 $ 0,84492 €' → the EUR-per-foreign rate, ignoring the leading '1 $'.
         assert tx._extract_fx(DIV_DETAIL) == 0.84492

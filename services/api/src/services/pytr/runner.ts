@@ -117,7 +117,7 @@ export class PytrRunner {
       enabled: options.enabled,
       spawn: options.spawn ?? nodeSpawn,
       pairingTimeoutMs: options.pairingTimeoutMs ?? 210_000,
-      exportTimeoutMs: options.exportTimeoutMs ?? 120_000,
+      exportTimeoutMs: options.exportTimeoutMs ?? 300_000,
     };
   }
 

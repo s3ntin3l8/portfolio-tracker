@@ -382,6 +382,7 @@ export async function backfillPortfolioHistory(
     quantity: r.quantity,
     price: r.price,
     fees: r.fees,
+    tax: r.tax,
     currency: r.currency,
     executedAt: r.executedAt,
     loanId: r.loanId,

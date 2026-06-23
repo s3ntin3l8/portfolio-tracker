@@ -19,7 +19,10 @@ export function cashFlow(tx: CoreTransaction): Decimal {
     case "savings_plan":
       return notional.neg().sub(f);
     case "sell":
-      return notional.sub(f);
+      // Gross sell proceeds minus fees and capital-gains tax withheld. `price` must be
+      // the gross per-share price (not net-of-tax) so that P&L stays pre-tax while cash
+      // is correctly net-of-tax. See PR #312 for the pytr/CSV path alignment.
+      return notional.sub(f).sub(D(tx.tax ?? "0"));
     case "dividend":
     case "coupon":
     case "interest":
