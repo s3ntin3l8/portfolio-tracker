@@ -128,6 +128,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           market: i.market,
           sector: i.sector ?? null,
           sectorWeights: (i.sectorWeights as Record<string, number> | null) ?? null,
+          countryWeights: (i.countryWeights as Record<string, number> | null) ?? null,
           sectorCheckedAt: i.sectorCheckedAt ? new Date(i.sectorCheckedAt) : null,
         },
       ]),

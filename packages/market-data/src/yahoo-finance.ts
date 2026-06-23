@@ -388,7 +388,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
       quoteSummary?: {
         result?: Array<{
           assetProfile?: { sector?: string; industry?: string; country?: string };
-          topHoldings?: { sectorWeightings?: Array<Record<string, number>> };
+          topHoldings?: { sectorWeightings?: Array<Record<string, number | { raw: number; fmt: string }>> };
         }> | null;
         error?: unknown;
       };
@@ -401,11 +401,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const sectorWeights: Record<string, number> = {};
       for (const entry of weightings) {
         for (const [rawKey, v] of Object.entries(entry)) {
-          if (!v || v <= 0) continue;
+          // Yahoo returns { raw: number, fmt: string } objects; extract the number.
+          const num = typeof v === "object" && v !== null && "raw" in v ? v.raw : v;
+          if (typeof num !== "number" || num <= 0) continue;
           // Map Yahoo's lowercase key (e.g. "realestate") to a proper-case name
           // that normalizeSector() in @portfolio/core can aggregate consistently.
           const key = YAHOO_ETF_SECTOR_KEY[rawKey] ?? rawKey;
-          sectorWeights[key] = v;
+          sectorWeights[key] = num;
         }
       }
       return Object.keys(sectorWeights).length > 0 ? { sectorWeights } : null;

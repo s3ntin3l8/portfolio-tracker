@@ -519,15 +519,10 @@
     "topMovers": "Pergerak teratas"
   },
   "Region": {
-    "ID": "Indonesia",
-    "EU": "Eropa",
-    "US": "Amerika Serikat",
-    "Commodity": "Komoditas",
-    "CA": "Kanada",
-    "AU": "Australia",
-    "SG": "Singapura",
-    "HK": "Hong Kong",
-    "JP": "Jepang",
+    "North America": "Amerika Utara",
+    "Latin America": "Amerika Latin",
+    "Europe": "Eropa",
+    "Africa & ME": "Afrika & Timur Tengah",
     "Asia": "Asia",
     "Other": "Lainnya"
   },

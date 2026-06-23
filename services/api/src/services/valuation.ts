@@ -27,6 +27,11 @@ export interface InstrumentMeta {
    * Null for non-ETFs. Used for proportional sector look-through in allocationBreakdown.
    */
   sectorWeights: Record<string, number> | null;
+  /**
+   * Per-country allocation weights for ETFs (country name → fraction 0–1).
+   * Null for non-ETFs. Used for proportional region look-through in allocationBreakdown.
+   */
+  countryWeights: Record<string, number> | null;
   /** Timestamp of last sector enrichment attempt; null = never attempted. */
   sectorCheckedAt: Date | null;
 }
@@ -82,6 +87,7 @@ export async function valuePortfolio(
         market: i.market,
         sector: i.sector ?? null,
         sectorWeights: (i.sectorWeights as Record<string, number> | null) ?? null,
+        countryWeights: (i.countryWeights as Record<string, number> | null) ?? null,
         sectorCheckedAt: i.sectorCheckedAt ? new Date(i.sectorCheckedAt) : null,
       },
     ]),

@@ -4,6 +4,7 @@ import {
   EodhdProvider,
   FixtureProvider,
   GoldApiProvider,
+  JustEtfProvider,
   MarketDataService,
   NavProvider,
   OpenFigiProvider,
@@ -174,6 +175,13 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     defaultPriority: 8,
     configured: () => true, // keyless fallback
     create: () => new YahooFinanceProvider(),
+  },
+  {
+    id: "justetf",
+    label: "JustETF",
+    defaultPriority: 9,
+    configured: () => true, // free, no API key needed
+    create: () => new JustEtfProvider(),
   },
 ];
 

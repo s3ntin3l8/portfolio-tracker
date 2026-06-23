@@ -142,6 +142,55 @@ export async function refreshInstrumentMetadata(
     }
   }
 
+  // Country allocation enrichment (ETFs only, requires ISIN)
+  // This is a separate step from sector enrichment to avoid double-calling getProfile()
+  const etfsWithIsin = rows.filter(
+    (i) => i.assetClass === "etf" && i.isin && !SKIP_ASSET_CLASSES.has(i.assetClass),
+  );
+
+  for (const inst of etfsWithIsin) {
+    // Check if country enrichment is needed
+    const needsCountry =
+      opts.force ||
+      inst.countryCheckedAt == null ||
+      new Date(inst.countryCheckedAt) < staleCutoff;
+
+    if (!needsCountry) continue;
+
+    try {
+      const profile = await service.getProfile({
+        symbol: inst.symbol,
+        market: inst.market,
+        assetClass: "etf",
+        currency: inst.currency,
+        isin: inst.isin!,
+      });
+
+      const now = new Date();
+
+      if (profile?.countryWeights) {
+        await db
+          .update(instruments)
+          .set({ countryWeights: profile.countryWeights, countryCheckedAt: now })
+          .where(eq(instruments.id, inst.id));
+        enriched++;
+      } else {
+        // Stamp attempt even when no data (retry after STALE_DAYS)
+        await db
+          .update(instruments)
+          .set({ countryCheckedAt: now })
+          .where(eq(instruments.id, inst.id));
+        skipped++;
+      }
+    } catch (err) {
+      // Non-fatal: log error, don't stamp (will retry next run)
+      console.warn(
+        `[instrument-metadata] country enrichment failed for ${inst.symbol} (${inst.isin}):`,
+        err,
+      );
+    }
+  }
+
   console.info(
     `[instrument-metadata] batch complete — enriched: ${enriched}, no-data: ${skipped}, total attempted: ${toEnrich.length}`,
   );

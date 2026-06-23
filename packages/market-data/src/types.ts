@@ -80,6 +80,13 @@ export interface InstrumentProfile {
    * Example: { "Technology": 0.29, "Financials": 0.13, … }
    */
   sectorWeights?: Record<string, number> | null;
+  /**
+   * Per-country allocation weights for ETFs. Keys are country names (as returned
+   * by JustETF); values are fractions 0–1. Sum is typically ≤ 1 (remaining
+   * fraction may be cash/unclassified). Null for non-ETFs or ETFs without ISINs.
+   * Example: { "United States": 0.59, "Japan": 0.12, "Germany": 0.08, … }
+   */
+  countryWeights?: Record<string, number> | null;
   /** GICS industry (sub-sector). Informational; not stored in the DB yet. */
   industry?: string | null;
   /** Country of incorporation / primary listing. */

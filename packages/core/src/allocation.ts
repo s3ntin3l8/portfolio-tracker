@@ -20,6 +20,14 @@ export interface AllocationInstrumentMeta {
    * Null/absent for non-ETF instruments.
    */
   sectorWeights?: Record<string, number> | null;
+  /**
+   * Per-country weights for ETFs (country name → fraction 0–1).
+   * When present, the holding's market value is decomposed proportionally
+   * across countries in `byRegion` (via countryToRegion mapping).
+   * The remainder (1 − Σw) is attributed to the listing venue region.
+   * Null/absent for non-ETF instruments or ETFs without ISINs.
+   */
+  countryWeights?: Record<string, number> | null;
   /** Timestamp of last enrichment attempt. Null = never attempted. */
   sectorCheckedAt?: Date | string | null;
   /** Human-readable name, used for topHoldings labelling. */
@@ -130,6 +138,71 @@ function currencyToRegion(currency: string): string {
   return CURRENCY_TO_REGION[currency.toUpperCase()] ?? "Other";
 }
 
+/**
+ * Maps JustETF country names to geographic region buckets.
+ * Used to decompose ETF countryWeights into region breakdown.
+ */
+const COUNTRY_TO_REGION: Record<string, string> = {
+  // North America
+  "United States": "North America",
+  Canada: "North America",
+  Mexico: "North America",
+
+  // Latin America
+  Brazil: "Latin America",
+
+  // Europe
+  Germany: "Europe",
+  France: "Europe",
+  "United Kingdom": "Europe",
+  Italy: "Europe",
+  Spain: "Europe",
+  Netherlands: "Europe",
+  Switzerland: "Europe",
+  Austria: "Europe",
+  Belgium: "Europe",
+  Denmark: "Europe",
+  Finland: "Europe",
+  Ireland: "Europe",
+  Luxembourg: "Europe",
+  Norway: "Europe",
+  Poland: "Europe",
+  Portugal: "Europe",
+  Sweden: "Europe",
+  Czechia: "Europe",
+  Greece: "Europe",
+  Hungary: "Europe",
+  Romania: "Europe",
+  Turkey: "Europe",
+
+  // Africa & Middle East
+  "South Africa": "Africa & ME",
+  "United Arab Emirates": "Africa & ME",
+  "Saudi Arabia": "Africa & ME",
+
+  // Asia Pacific
+  Japan: "Asia",
+  China: "Asia",
+  India: "Asia",
+  "South Korea": "Asia",
+  Taiwan: "Asia",
+  "Hong Kong": "Asia",
+  Singapore: "Asia",
+  Australia: "Asia",
+  Thailand: "Asia",
+  Indonesia: "Asia",
+  Malaysia: "Asia",
+  Philippines: "Asia",
+  Vietnam: "Asia",
+};
+
+/**
+ * Maps a JustETF country name to a geographic region bucket.
+ */
+export function countryToRegion(country: string): string {
+  return COUNTRY_TO_REGION[country] ?? "Other";
+}
+
 function add(map: Map<string, Decimal>, key: string, val: Decimal): void {
   map.set(key, (map.get(key) ?? new Decimal(0)).add(val));
 }
@@ -236,7 +309,25 @@ export function allocationBreakdown(
     const m = meta(h.instrumentId);
 
     add(byAssetClass, m?.assetClass ?? "unknown", mv);
-    add(byRegion, marketToRegion(m?.market ?? ""), mv);
+
+    // Region: ETFs with countryWeights decompose proportionally by country;
+    // others use the listing venue (existing behavior).
+    if (m?.countryWeights && Object.keys(m.countryWeights).length > 0) {
+      let sumW = 0;
+      for (const [country, w] of Object.entries(m.countryWeights)) {
+        if (w > 0) {
+          add(byRegion, countryToRegion(country), mv.mul(w));
+          sumW += w;
+        }
+      }
+      // Remainder (cash/unclassified within ETF) goes to listing venue region
+      if (sumW < 0.9999) {
+        add(byRegion, marketToRegion(m?.market ?? ""), mv.mul(1 - sumW));
+      }
+    } else {
+      // Fallback: use listing venue (existing behavior)
+      add(byRegion, marketToRegion(m?.market ?? ""), mv);
+    }
 
     // Sector: ETFs decompose proportionally across their constituent weights;
     // stocks use the single sector field; uncategorized when neither is set.

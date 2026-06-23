@@ -364,6 +364,8 @@ export interface InstrumentMeta {
   sector: string | null;
   /** Per-sector weights for ETFs (GICS-style sector name → fraction 0–1). Null for non-ETFs. */
   sectorWeights: Record<string, number> | null;
+  /** Per-country weights for ETFs (country name → fraction 0–1). Null for non-ETFs. */
+  countryWeights: Record<string, number> | null;
 }
 
 /** A single slice in an allocation breakdown (one category in one dimension). */

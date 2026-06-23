@@ -272,4 +272,127 @@ describe("refreshInstrumentMetadata", () => {
     // Gold must never be passed to getProfile regardless of force.
     expect(calledSymbols).not.toContain("FORCE_GOLD_TEST");
   });
+
+  // ── Country enrichment ─────────────────────────────────────────────────────
+
+  it("writes countryWeights for an ETF with ISIN and profile", async () => {
+    const db = getDb();
+    const id = await createHeld({ symbol: "VWCE_COUNTRY_TEST", assetClass: "etf" });
+
+    // Set ISIN on the instrument so country enrichment runs
+    await db.update(instruments).set({ isin: "IE00BKM4GZ66" }).where(eq(instruments.id, id));
+
+    const countryWeights = { "United States": 0.57, Germany: 0.05, Japan: 0.06 };
+    const enriched = await refreshInstrumentMetadata(
+      db,
+      makeService({ countryWeights }),
+    );
+
+    expect(enriched).toBeGreaterThanOrEqual(1);
+
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.countryWeights).toEqual(countryWeights);
+    expect(row.countryCheckedAt).not.toBeNull();
+  });
+
+  it("stamps countryCheckedAt when provider returns null for country", async () => {
+    const db = getDb();
+    const id = await createHeld({ symbol: "NULL_COUNTRY_TEST", assetClass: "etf" });
+    await db.update(instruments).set({ isin: "IE0000000001" }).where(eq(instruments.id, id));
+
+    await refreshInstrumentMetadata(db, makeService(null));
+
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.countryCheckedAt).not.toBeNull();
+    expect(row.countryWeights).toBeNull();
+  });
+
+  it("skips country enrichment for ETF without ISIN", async () => {
+    const db = getDb();
+    // createHeld does NOT set isin
+    const id = await createHeld({ symbol: "NO_ISIN_COUNTRY_TEST", assetClass: "etf" });
+
+    const calledSymbols: string[] = [];
+    const svc = {
+      getProfile: async (ref: { symbol: string }) => {
+        calledSymbols.push(ref.symbol);
+        return { countryWeights: { "United States": 1 } };
+      },
+    } as unknown as MarketDataService;
+
+    await refreshInstrumentMetadata(db, svc);
+
+    // getProfile may be called for sector enrichment, but countryCheckedAt should not be stamped
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.countryCheckedAt).toBeNull();
+  });
+
+  it("force=true triggers country enrichment for ETF with ISIN", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "FORCE_COUNTRY_TEST",
+      assetClass: "etf",
+      sectorCheckedAt: new Date(),
+    });
+    await db.update(instruments).set({
+      isin: "IE0000000002",
+      countryCheckedAt: new Date(),
+    }).where(eq(instruments.id, id));
+
+    let calledWithIsin = false;
+    const svc = {
+      getProfile: async (ref: { isin?: string }) => {
+        if (ref.isin) calledWithIsin = true;
+        return { countryWeights: { Canada: 1 } };
+      },
+    } as unknown as MarketDataService;
+
+    await refreshInstrumentMetadata(db, svc, { force: true });
+
+    expect(calledWithIsin).toBe(true);
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.countryWeights).toEqual({ Canada: 1 });
+  });
+
+  it("does not stamp countryCheckedAt on provider error (allows retry)", async () => {
+    const db = getDb();
+    const id = await createHeld({ symbol: "ERR_COUNTRY_TEST", assetClass: "etf" });
+    await db.update(instruments).set({ isin: "IE0000000003" }).where(eq(instruments.id, id));
+
+    const svc = {
+      getProfile: async () => { throw new Error("network timeout"); },
+    } as unknown as MarketDataService;
+
+    await refreshInstrumentMetadata(db, svc);
+
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    // Error path must NOT stamp countryCheckedAt so next run retries
+    expect(row.countryCheckedAt).toBeNull();
+  });
+
+  it("skips country enrichment for already-fresh countryCheckedAt", async () => {
+    const db = getDb();
+    const id = await createHeld({ symbol: "FRESH_COUNTRY_TEST", assetClass: "equity" });
+    await db.update(instruments).set({
+      isin: "IE0000000004",
+      countryCheckedAt: new Date(),
+      sectorCheckedAt: new Date(),
+    }).where(eq(instruments.id, id));
+
+    const calledSymbols: string[] = [];
+    const svc = {
+      getProfile: async (ref: { symbol: string }) => {
+        calledSymbols.push(ref.symbol);
+        return { countryWeights: { "United States": 1 } };
+      },
+    } as unknown as MarketDataService;
+
+    await refreshInstrumentMetadata(db, svc);
+
+    // FRESH_COUNTRY_TEST should NOT be passed to getProfile (both sector and country fresh)
+    expect(calledSymbols).not.toContain("FRESH_COUNTRY_TEST");
+
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.countryWeights).toBeNull();
+  });
 });

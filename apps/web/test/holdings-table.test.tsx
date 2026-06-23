@@ -53,6 +53,7 @@ const makeHolding = (
     market: "IDX",
     sector: null,
     sectorWeights: null,
+    countryWeights: null,
   },
 });
 

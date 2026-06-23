@@ -91,6 +91,7 @@ export {
   concentration,
   normalizeSector,
   marketToRegion,
+  countryToRegion,
   type AllocationInstrumentMeta,
   type AllocationSlice,
   type TopHolding,

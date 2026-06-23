@@ -220,6 +220,19 @@ export const instruments = pgTable(
      * the provider has no sector data for them. Null = never attempted.
      */
     sectorCheckedAt: timestamp("sector_checked_at", { withTimezone: true }),
+    /**
+     * Per-country allocation weights for ETFs (country name → fraction 0–1).
+     * Populated by the refresh-instrument-metadata job from JustETF.
+     * Null for non-ETFs or ETFs without ISIN codes.
+     * Example: { "United States": 0.59, "Japan": 0.12, "Germany": 0.08, … }
+     */
+    countryWeights: jsonb("country_weights").$type<Record<string, number>>(),
+    /**
+     * Timestamp of the last country allocation enrichment *attempt*.
+     * Used to avoid re-querying instruments indefinitely when JustETF
+     * has no data for them. Null = never attempted.
+     */
+    countryCheckedAt: timestamp("country_checked_at", { withTimezone: true }),
     // Bond-specific (nullable for non-bonds).
     faceValue: numeric("face_value"),
     couponRate: numeric("coupon_rate"),

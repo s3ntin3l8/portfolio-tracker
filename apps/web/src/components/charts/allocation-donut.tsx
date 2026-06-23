@@ -91,13 +91,17 @@ export function AllocationDonut({
       <ul className="grid w-full grid-cols-2 gap-x-4 gap-y-2 text-sm">
         {data.map((d, i) => (
           <li key={d.key} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSliceClick?.(d.key)}
+              className={`flex items-center gap-2 ${onSliceClick ? "cursor-pointer hover:underline" : "cursor-default"}`}
+            >
               <span
                 className="size-2.5 rounded-full"
                 style={{ background: COLORS[i % COLORS.length] }}
               />
               {d.label}
-            </span>
+            </button>
             <span className="tabular text-muted-foreground">
               {((d.value / sum) * 100).toFixed(1)}%
             </span>
