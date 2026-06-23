@@ -261,6 +261,82 @@ describe("getDrillDownInstruments — asset_class", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Region dimension — ETF countryWeights decomposition
+// ---------------------------------------------------------------------------
+
+describe("getDrillDownInstruments — region with countryWeights", () => {
+  it("decomposes ETF by countryWeights into region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: { "United States": 0.57, Germany: 0.05, Japan: 0.06 } },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "North America");
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBeCloseTo(5700);
+  });
+
+  it("sums multiple countries in same region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: { "United States": 0.57, Canada: 0.03 } },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "North America");
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBeCloseTo(6000);
+  });
+
+  it("adds remainder to listing venue region when countryWeights < 1", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: { "United States": 0.8 } },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    // 80% US → North America; remainder attributed to listing venue (EU)
+    const euResult = getDrillDownInstruments(holdings, "region", "EU");
+    expect(euResult).toHaveLength(1);
+    // remainder = 1 - 0 (regionTotal for EU) = 1, so contribution = 10000
+    expect(euResult[0].value).toBeCloseTo(10000);
+
+    // 80% US → North America
+    const naResult = getDrillDownInstruments(holdings, "region", "North America");
+    expect(naResult).toHaveLength(1);
+    expect(naResult[0].value).toBeCloseTo(8000);
+  });
+
+  it("returns empty when countryWeights has no countries in selected region", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: { "United States": 0.8 } },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "region", "Asia")).toEqual([]);
+  });
+
+  it("falls back to listing venue when ETF has no countryWeights", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "vwce",
+        instrument: { symbol: "VWCE", name: "Vanguard FTSE", assetClass: "etf", unit: "shares", market: "XETRA", sector: null, sectorWeights: null, countryWeights: null },
+        marketValueDisplay: "10000",
+      }),
+    ];
+    const result = getDrillDownInstruments(holdings, "region", "EU");
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBe(10000);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 
@@ -321,5 +397,38 @@ describe("getDrillDownInstruments — edge cases", () => {
 
   it("returns empty array for empty holdings", () => {
     expect(getDrillDownInstruments([], "sector", "Technology")).toEqual([]);
+  });
+
+  it("skips holding with non-finite marketValueDisplay", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
+        marketValueDisplay: "NaN",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+
+  it("skips holding with negative marketValueDisplay", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
+        marketValueDisplay: "-500",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
+  });
+
+  it("skips holding with zero marketValueDisplay", () => {
+    const holdings = [
+      makeHolding({
+        instrumentId: "goto",
+        instrument: { symbol: "GOTO", name: "GoTo", assetClass: "equity", unit: "shares", market: "IDX", sector: "Technology", sectorWeights: null, countryWeights: null },
+        marketValueDisplay: "0",
+      }),
+    ];
+    expect(getDrillDownInstruments(holdings, "sector", "Technology")).toEqual([]);
   });
 });

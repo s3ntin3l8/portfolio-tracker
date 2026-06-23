@@ -3,6 +3,8 @@ import {
   allocationBreakdown,
   concentration,
   normalizeSector,
+  marketToRegion,
+  countryToRegion,
   summarizePortfolio,
   type CoreTransaction,
   type AllocationInstrumentMeta,
@@ -508,5 +510,137 @@ describe("concentration", () => {
     expect(c.label).toBe("diversified");
     expect(c.top1Pct).toBe(0);
     expect(c.top5Pct).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// countryToRegion
+// ---------------------------------------------------------------------------
+
+describe("countryToRegion", () => {
+  it("maps United States to North America", () => {
+    expect(countryToRegion("United States")).toBe("North America");
+  });
+
+  it("maps Germany to Europe", () => {
+    expect(countryToRegion("Germany")).toBe("Europe");
+  });
+
+  it("maps Japan to Asia", () => {
+    expect(countryToRegion("Japan")).toBe("Asia");
+  });
+
+  it("maps unknown country to Other", () => {
+    expect(countryToRegion("Atlantis")).toBe("Other");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// marketToRegion
+// ---------------------------------------------------------------------------
+
+describe("marketToRegion", () => {
+  it("maps IDX to ID", () => {
+    expect(marketToRegion("IDX")).toBe("ID");
+  });
+
+  it("is case-insensitive", () => {
+    expect(marketToRegion("xetra")).toBe("EU");
+  });
+
+  it("maps unknown market to Other", () => {
+    expect(marketToRegion("UNKNOWN")).toBe("Other");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// allocationBreakdown — ETF countryWeights look-through
+// ---------------------------------------------------------------------------
+
+describe("allocationBreakdown — ETF countryWeights look-through", () => {
+  const ETF_CW = "inst-etf-cw";
+
+  function makeEtfCwSummary(): PortfolioSummary {
+    return summarizePortfolio({
+      transactions: [
+        { instrumentId: null, type: "deposit", price: "1", quantity: "1", fees: "0", currency: "USD", executedAt: new Date("2026-01-01") },
+        { instrumentId: ETF_CW, type: "buy", price: "1", quantity: "1", fees: "0", currency: "USD", executedAt: new Date("2026-01-01") },
+      ],
+      prices: { [ETF_CW]: { price: "10000", currency: "USD" } },
+      displayCurrency: "USD",
+      cashCounted: true,
+      fxRate: (_f, _t) => "1",
+    });
+  }
+
+  it("decomposes ETF countryWeights into region breakdown", () => {
+    const inst: Record<string, AllocationInstrumentMeta> = {
+      [ETF_CW]: {
+        assetClass: "etf",
+        market: "XETRA",
+        countryWeights: { "United States": 0.6, Germany: 0.2, Japan: 0.1 },
+      },
+    };
+    const result = allocationBreakdown(makeEtfCwSummary(), inst);
+
+    // US → North America: 6000, Germany → Europe: 2000, Japan → Asia: 1000
+    const na = result.byRegion.find((s) => s.key === "North America");
+    expect(na).toBeDefined();
+    expect(Math.abs(Number(na!.value) - 6000)).toBeLessThan(1);
+
+    const eu = result.byRegion.find((s) => s.key === "Europe");
+    expect(eu).toBeDefined();
+    expect(Math.abs(Number(eu!.value) - 2000)).toBeLessThan(1);
+
+    const asia = result.byRegion.find((s) => s.key === "Asia");
+    expect(asia).toBeDefined();
+    expect(Math.abs(Number(asia!.value) - 1000)).toBeLessThan(1);
+  });
+
+  it("adds remainder to listing venue region when countryWeights < 1", () => {
+    const inst: Record<string, AllocationInstrumentMeta> = {
+      [ETF_CW]: {
+        assetClass: "etf",
+        market: "XETRA",
+        countryWeights: { "United States": 0.7 },
+      },
+    };
+    const result = allocationBreakdown(makeEtfCwSummary(), inst);
+
+    // 70% US → North America = 7000, 30% remainder → EU (XETRA listing venue)
+    const na = result.byRegion.find((s) => s.key === "North America");
+    expect(na).toBeDefined();
+    expect(Math.abs(Number(na!.value) - 7000)).toBeLessThan(1);
+
+    const eu = result.byRegion.find((s) => s.key === "EU");
+    expect(eu).toBeDefined();
+    expect(Math.abs(Number(eu!.value) - 3000)).toBeLessThan(1);
+  });
+
+  it("region values sum to total when using countryWeights", () => {
+    const inst: Record<string, AllocationInstrumentMeta> = {
+      [ETF_CW]: {
+        assetClass: "etf",
+        market: "XETRA",
+        countryWeights: { "United States": 0.5, Germany: 0.3 },
+      },
+    };
+    const result = allocationBreakdown(makeEtfCwSummary(), inst);
+    const regionTotal = result.byRegion.reduce((acc, s) => acc + Number(s.value), 0);
+    expect(Math.abs(regionTotal - 10000)).toBeLessThan(0.01);
+  });
+
+  it("ETF with empty countryWeights falls back to listing venue", () => {
+    const inst: Record<string, AllocationInstrumentMeta> = {
+      [ETF_CW]: {
+        assetClass: "etf",
+        market: "XETRA",
+        countryWeights: {},
+      },
+    };
+    const result = allocationBreakdown(makeEtfCwSummary(), inst);
+    const eu = result.byRegion.find((s) => s.key === "EU");
+    expect(eu).toBeDefined();
+    expect(Math.abs(Number(eu!.value) - 10000)).toBeLessThan(1);
   });
 });
