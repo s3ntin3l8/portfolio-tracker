@@ -3,6 +3,7 @@ import type {
   InstrumentProfile,
   InstrumentRef,
   MarketDataProvider,
+  Quote,
 } from "./types.js";
 
 /**
@@ -23,6 +24,13 @@ export class JustEtfProvider implements MarketDataProvider {
    */
   supports(_assetClass: AssetClass, _market: string): boolean {
     return _assetClass === "etf";
+  }
+
+  /**
+   * JustETF doesn't provide quotes - only country allocation data.
+   */
+  async getQuote(_ref: InstrumentRef): Promise<Quote | null> {
+    return null;
   }
 
   /**
