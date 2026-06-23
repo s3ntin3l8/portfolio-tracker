@@ -90,6 +90,7 @@ export {
   allocationBreakdown,
   concentration,
   normalizeSector,
+  marketToRegion,
   type AllocationInstrumentMeta,
   type AllocationSlice,
   type TopHolding,

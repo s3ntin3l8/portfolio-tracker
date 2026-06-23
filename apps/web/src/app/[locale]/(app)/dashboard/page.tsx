@@ -227,6 +227,7 @@ export default async function DashboardPage({
                 allocation={allocation}
                 currency={currency}
                 drift={summary.drift}
+                holdings={openHoldings}
               />
             ) : (
               <p className="text-center text-sm text-muted-foreground py-8">—</p>

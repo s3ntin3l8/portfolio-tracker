@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { AllocationDonut } from "./allocation-donut";
 import { TargetDialog, type TargetSlice } from "@/components/allocation/target-dialog";
-import type { AllocationBreakdown, DriftRow } from "@portfolio/api-client";
+import { getDrillDownInstruments, type DrillDownDimension } from "@/lib/sector-drilldown";
+import type { AllocationBreakdown, DriftRow, HoldingValuation } from "@portfolio/api-client";
 
 /** Convert a decimal-string slice value to a number, clamping negatives to 0. */
 function toNumber(v: string): number {
@@ -56,8 +59,10 @@ interface TabBodyProps {
   dimension: string;
   dimensionLabel: string;
   currency: string;
+  total: number;
   drift?: Record<string, DriftRow[]>;
   portfolioId?: string;
+  onSliceClick?: (key: string) => void;
 }
 
 function TabBody({
@@ -65,8 +70,10 @@ function TabBody({
   dimension,
   dimensionLabel,
   currency,
+  total,
   drift,
   portfolioId,
+  onSliceClick,
 }: TabBodyProps) {
   const dimDrift = drift?.[dimension];
   const targetSlices: TargetSlice[] = slices.map((s) => ({
@@ -78,7 +85,7 @@ function TabBody({
   return (
     <div>
       {slices.length > 0 ? (
-        <AllocationDonut data={slices} currency={currency} />
+        <AllocationDonut data={slices} currency={currency} total={total} onSliceClick={onSliceClick} />
       ) : (
         <p className="text-center text-sm text-muted-foreground py-8">—</p>
       )}
@@ -98,6 +105,49 @@ function TabBody({
 }
 
 // ---------------------------------------------------------------------------
+// DimensionDrillDown
+// ---------------------------------------------------------------------------
+
+function DimensionDrillDown({
+  dimension,
+  selectedKey,
+  holdings,
+  currency,
+  onBack,
+}: {
+  dimension: DrillDownDimension;
+  selectedKey: string;
+  holdings: HoldingValuation[];
+  currency: string;
+  onBack: () => void;
+}) {
+  const instruments = getDrillDownInstruments(holdings, dimension, selectedKey);
+  const total = instruments.reduce((sum, i) => sum + i.value, 0);
+
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3 transition-colors"
+      >
+        <ArrowLeft className="size-4" />
+        Back
+      </button>
+      {instruments.length > 0 ? (
+        <AllocationDonut
+          data={instruments.map((i) => ({ key: i.key, label: i.name, value: i.value }))}
+          currency={currency}
+          total={total}
+          label={selectedKey}
+        />
+      ) : (
+        <p className="text-center text-sm text-muted-foreground py-8">—</p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AllocationTabs
 // ---------------------------------------------------------------------------
 
@@ -109,21 +159,29 @@ function TabBody({
  * When `drift` is provided (user has saved targets), each tab shows a compact
  * drift hint and a "Set targets" trigger button.
  * When `portfolioId` is provided, targets are portfolio-scoped; otherwise aggregate.
+ *
+ * When `holdings` is provided, clicking a donut slice drills into a sub-donut
+ * showing the instruments that contribute to that bucket.
  */
 export function AllocationTabs({
   allocation,
   currency,
   drift,
   portfolioId,
+  holdings,
 }: {
   allocation: AllocationBreakdown;
   currency: string;
   drift?: Record<string, DriftRow[]>;
   portfolioId?: string;
+  holdings?: HoldingValuation[];
 }) {
   const t = useTranslations("Dashboard");
   const ta = useTranslations("AssetClass");
   const tr = useTranslations("Region");
+
+  const [selectedDimension, setSelectedDimension] = useState<DrillDownDimension | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const assetClassSlices = allocation.byAssetClass
     .map((s) => ({
@@ -133,6 +191,8 @@ export function AllocationTabs({
       actualPct: s.pct,
     }))
     .filter((s) => s.value > 0);
+
+  const total = assetClassSlices.reduce((sum, s) => sum + s.value, 0);
 
   const currencySlices = allocation.byCurrency
     .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value), actualPct: s.pct }))
@@ -151,8 +211,54 @@ export function AllocationTabs({
     .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value), actualPct: s.pct }))
     .filter((s) => s.value > 0);
 
+  const handleSliceClick = (dimension: DrillDownDimension) => (key: string) => {
+    if (!holdings) return;
+    setSelectedDimension(dimension);
+    setSelectedKey(key);
+  };
+
+  const handleBack = () => {
+    setSelectedDimension(null);
+    setSelectedKey(null);
+  };
+
+  const handleTabChange = () => {
+    setSelectedDimension(null);
+    setSelectedKey(null);
+  };
+
+  const renderDimension = (
+    dimension: DrillDownDimension,
+    slices: Array<{ key: string; label: string; value: number; actualPct: number }>,
+    dimensionLabel: string,
+  ) => {
+    if (selectedDimension === dimension && selectedKey && holdings) {
+      return (
+        <DimensionDrillDown
+          dimension={dimension}
+          selectedKey={selectedKey}
+          holdings={holdings}
+          currency={currency}
+          onBack={handleBack}
+        />
+      );
+    }
+    return (
+      <TabBody
+        slices={slices}
+        dimension={dimension}
+        dimensionLabel={dimensionLabel}
+        currency={currency}
+        total={total}
+        drift={drift}
+        portfolioId={portfolioId}
+        onSliceClick={holdings ? handleSliceClick(dimension) : undefined}
+      />
+    );
+  };
+
   return (
-    <Tabs defaultValue="class">
+    <Tabs defaultValue="class" onValueChange={handleTabChange}>
       <TabsList className="mb-3 flex w-full">
         <TabsTrigger value="class" className="flex-1">
           {t("allocationTabClass")}
@@ -169,47 +275,19 @@ export function AllocationTabs({
       </TabsList>
 
       <TabsContent value="class">
-        <TabBody
-          slices={assetClassSlices}
-          dimension="asset_class"
-          dimensionLabel={t("allocationTabClass")}
-          currency={currency}
-          drift={drift}
-          portfolioId={portfolioId}
-        />
+        {renderDimension("asset_class", assetClassSlices, t("allocationTabClass"))}
       </TabsContent>
 
       <TabsContent value="currency">
-        <TabBody
-          slices={currencySlices}
-          dimension="currency"
-          dimensionLabel={t("allocationTabCurrency")}
-          currency={currency}
-          drift={drift}
-          portfolioId={portfolioId}
-        />
+        {renderDimension("currency", currencySlices, t("allocationTabCurrency"))}
       </TabsContent>
 
       <TabsContent value="region">
-        <TabBody
-          slices={regionSlices}
-          dimension="region"
-          dimensionLabel={t("allocationTabRegion")}
-          currency={currency}
-          drift={drift}
-          portfolioId={portfolioId}
-        />
+        {renderDimension("region", regionSlices, t("allocationTabRegion"))}
       </TabsContent>
 
       <TabsContent value="sector">
-        <TabBody
-          slices={sectorSlices}
-          dimension="sector"
-          dimensionLabel={t("allocationTabSector")}
-          currency={currency}
-          drift={drift}
-          portfolioId={portfolioId}
-        />
+        {renderDimension("sector", sectorSlices, t("allocationTabSector"))}
       </TabsContent>
     </Tabs>
   );

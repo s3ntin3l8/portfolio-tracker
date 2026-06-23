@@ -44,7 +44,7 @@ const closed: Trade = {
       taxYear: 2021,
     },
   ],
-  instrument: { symbol: "TLKM", name: "Telkom", assetClass: "equity", unit: "shares", market: "IDX", sector: null },
+  instrument: { symbol: "TLKM", name: "Telkom", assetClass: "equity", unit: "shares", market: "IDX", sector: null, sectorWeights: null },
 };
 
 const open: Trade = {
@@ -66,7 +66,7 @@ const open: Trade = {
   totalReturnPct: 0.0578,
   annualizedPct: null,
   legs: [],
-  instrument: { symbol: "BBCA", name: "BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: null },
+  instrument: { symbol: "BBCA", name: "BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: null, sectorWeights: null },
 };
 
 function renderTable(trades: Trade[]) {
