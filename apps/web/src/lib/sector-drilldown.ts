@@ -14,17 +14,17 @@ export interface DrillDownInstrument {
  * Used to decompose ETF countryWeights into region breakdown.
  */
 const COUNTRY_TO_REGION: Record<string, string> = {
-  "United States": "US", Canada: "CA",
-  Germany: "EU", France: "EU", "United Kingdom": "EU", Italy: "EU", Spain: "EU",
-  Netherlands: "EU", Switzerland: "EU", Austria: "EU", Belgium: "EU", Denmark: "EU",
-  Finland: "EU", Ireland: "EU", Luxembourg: "EU", Norway: "EU", Poland: "EU",
-  Portugal: "EU", Sweden: "EU", Czechia: "EU", Greece: "EU", Hungary: "EU",
-  Romania: "EU", Turkey: "EU",
-  Japan: "JP", China: "Asia", India: "Asia", "South Korea": "Asia", Taiwan: "Asia",
-  "Hong Kong": "HK", Singapore: "SG", Thailand: "Asia", Indonesia: "ID",
-  Malaysia: "Asia", Philippines: "Asia", Vietnam: "Asia",
-  Australia: "AU", Brazil: "Other", "South Africa": "Other", Mexico: "Other",
-  "United Arab Emirates": "Other", "Saudi Arabia": "Other",
+  "United States": "North America", Canada: "North America", Mexico: "North America",
+  Brazil: "Latin America",
+  Germany: "Europe", France: "Europe", "United Kingdom": "Europe", Italy: "Europe", Spain: "Europe",
+  Netherlands: "Europe", Switzerland: "Europe", Austria: "Europe", Belgium: "Europe", Denmark: "Europe",
+  Finland: "Europe", Ireland: "Europe", Luxembourg: "Europe", Norway: "Europe", Poland: "Europe",
+  Portugal: "Europe", Sweden: "Europe", Czechia: "Europe", Greece: "Europe", Hungary: "Europe",
+  Romania: "Europe", Turkey: "Europe",
+  "South Africa": "Africa & ME", "United Arab Emirates": "Africa & ME", "Saudi Arabia": "Africa & ME",
+  Japan: "Asia", China: "Asia", India: "Asia", "South Korea": "Asia", Taiwan: "Asia",
+  "Hong Kong": "Asia", Singapore: "Asia", Australia: "Asia", Thailand: "Asia",
+  Indonesia: "Asia", Malaysia: "Asia", Philippines: "Asia", Vietnam: "Asia",
 };
 
 function countryToRegion(country: string): string {
