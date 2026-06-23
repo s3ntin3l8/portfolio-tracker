@@ -33,3 +33,4 @@ __pycache__/
 *.pyc
 .venv-pytr/
 .claude/projects/
+.superpowers

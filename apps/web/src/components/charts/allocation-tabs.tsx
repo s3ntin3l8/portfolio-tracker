@@ -56,6 +56,7 @@ interface TabBodyProps {
   dimension: string;
   dimensionLabel: string;
   currency: string;
+  total: number;
   drift?: Record<string, DriftRow[]>;
   portfolioId?: string;
 }
@@ -65,6 +66,7 @@ function TabBody({
   dimension,
   dimensionLabel,
   currency,
+  total,
   drift,
   portfolioId,
 }: TabBodyProps) {
@@ -78,7 +80,7 @@ function TabBody({
   return (
     <div>
       {slices.length > 0 ? (
-        <AllocationDonut data={slices} currency={currency} />
+        <AllocationDonut data={slices} currency={currency} total={total} />
       ) : (
         <p className="text-center text-sm text-muted-foreground py-8">—</p>
       )}
@@ -134,6 +136,8 @@ export function AllocationTabs({
     }))
     .filter((s) => s.value > 0);
 
+  const total = assetClassSlices.reduce((sum, s) => sum + s.value, 0);
+
   const currencySlices = allocation.byCurrency
     .map((s) => ({ key: s.key, label: s.key, value: toNumber(s.value), actualPct: s.pct }))
     .filter((s) => s.value > 0);
@@ -174,6 +178,7 @@ export function AllocationTabs({
           dimension="asset_class"
           dimensionLabel={t("allocationTabClass")}
           currency={currency}
+          total={total}
           drift={drift}
           portfolioId={portfolioId}
         />
@@ -185,6 +190,7 @@ export function AllocationTabs({
           dimension="currency"
           dimensionLabel={t("allocationTabCurrency")}
           currency={currency}
+          total={total}
           drift={drift}
           portfolioId={portfolioId}
         />
@@ -196,6 +202,7 @@ export function AllocationTabs({
           dimension="region"
           dimensionLabel={t("allocationTabRegion")}
           currency={currency}
+          total={total}
           drift={drift}
           portfolioId={portfolioId}
         />
@@ -207,6 +214,7 @@ export function AllocationTabs({
           dimension="sector"
           dimensionLabel={t("allocationTabSector")}
           currency={currency}
+          total={total}
           drift={drift}
           portfolioId={portfolioId}
         />
