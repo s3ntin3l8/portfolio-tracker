@@ -18,7 +18,185 @@ acceptance criterion is reconciliation against a REAL payload — drop one captu
 xfail test will start exercising it. See `tr_export.py --probe-instrument`.
 """
 
+import asyncio
+
 import tr_export as tx
+
+
+# --- concurrent detail-fetch dispatcher -----------------------------------------------
+# These tests drive _attach_details against a fake TR stub to prove that the single-reader
+# dispatcher correctly routes responses by subscription-id even when they arrive
+# out of order — the exact failure mode of the old multi-recv design.
+
+
+class _ErrorPayload:
+    """Sentinel that makes FakeTr.recv() raise an exception for a specific subscription."""
+    def __init__(self, sub_id: str):
+        self.sub_id = sub_id
+
+
+class FakeTr:
+    """Minimal TR WebSocket stub for _attach_details tests.
+
+    Works entirely without a live websocket or pytr installation.  Responses are
+    delivered via an asyncio.Queue; call enqueue_response()/enqueue_error() *after*
+    all subscriptions have been registered (use the event returned by expect_count()).
+    """
+
+    def __init__(self):
+        self._next_sub_id = 0
+        self._sub_to_event: dict = {}
+        self._queue: asyncio.Queue = asyncio.Queue()
+        self._ready: "asyncio.Event | None" = None
+        self._ready_at: int = 0
+
+    def expect_count(self, n: int) -> "asyncio.Event":
+        """Return an asyncio.Event that fires once n subscriptions have been registered."""
+        self._ready_at = n
+        self._ready = asyncio.Event()
+        return self._ready
+
+    async def timeline_detail_v2(self, event_id: str) -> str:
+        sub_id = str(self._next_sub_id)
+        self._next_sub_id += 1
+        self._sub_to_event[sub_id] = event_id
+        if self._ready is not None and len(self._sub_to_event) == self._ready_at:
+            self._ready.set()
+        return sub_id
+
+    async def unsubscribe(self, sub_id: str) -> None:  # noqa: ARG002
+        pass
+
+    async def recv(self) -> tuple:
+        item = await self._queue.get()
+        if isinstance(item, _ErrorPayload):
+            # Mimics pytr.TradeRepublicError: first arg is the subscription_id string.
+            raise Exception(item.sub_id, "simulated subscription error")
+        sub_id, payload = item
+        return sub_id, {"type": "timelineDetailV2"}, payload
+
+    def enqueue_response(self, sub_id: str, payload: dict) -> None:
+        self._queue.put_nowait((sub_id, payload))
+
+    def enqueue_error(self, sub_id: str) -> None:
+        self._queue.put_nowait(_ErrorPayload(sub_id))
+
+
+class TestAttachDetails:
+    @staticmethod
+    def _events(n: int) -> list:
+        return [{"id": f"evt-{i}", "eventType": "ORDER_EXECUTED"} for i in range(n)]
+
+    def test_empty_events_returns_immediately_without_touching_tr(self):
+        """_attach_details with an empty event list must not call recv() or subscribe."""
+        class NeverCallTr:
+            async def timeline_detail_v2(self, _):
+                raise AssertionError("timeline_detail_v2 must not be called for empty events")
+            async def recv(self):
+                raise AssertionError("recv() must not be called for empty events")
+            async def unsubscribe(self, _):
+                raise AssertionError("unsubscribe() must not be called for empty events")
+
+        async def _run():
+            result = await tx._attach_details(NeverCallTr(), [])
+            assert result == []
+
+        asyncio.run(_run())
+
+    def test_responses_in_order_populate_all_details(self):
+        """Happy path: responses arrive in the same order as subscriptions."""
+        async def _run():
+            N = 3
+            events = self._events(N)
+            tr = FakeTr()
+            ready = tr.expect_count(N)
+
+            async def injector():
+                await ready.wait()
+                for sub_id, event_id in tr._sub_to_event.items():
+                    tr.enqueue_response(sub_id, {"event_id": event_id, "shares": 5.0})
+
+            result, _ = await asyncio.gather(
+                tx._attach_details(tr, events, concurrency=N),
+                injector(),
+            )
+            for ev in result:
+                assert ev["details"] is not None, f"details missing for {ev['id']}"
+                assert ev["details"]["event_id"] == ev["id"]
+
+        asyncio.run(_run())
+
+    def test_out_of_order_responses_routed_to_correct_events(self):
+        """Critical regression: responses arrive in REVERSE sub-id order.
+
+        In the old code, all N coroutines called tr.recv() directly.  Each would discard
+        messages intended for the others (matching by event-id failed, triggering
+        'continue'), so every event timed out with details=None.  The new single-reader
+        dispatcher routes each response to the correct Future by subscription-id,
+        regardless of arrival order.
+        """
+        async def _run():
+            N = 5
+            events = self._events(N)
+            tr = FakeTr()
+            ready = tr.expect_count(N)
+
+            async def injector():
+                await ready.wait()
+                # Enqueue in REVERSE subscription order (4,3,2,1,0).
+                sub_ids = list(tr._sub_to_event.keys())
+                for sub_id in reversed(sub_ids):
+                    event_id = tr._sub_to_event[sub_id]
+                    tr.enqueue_response(sub_id, {"event_id": event_id, "n": int(sub_id)})
+
+            result, _ = await asyncio.gather(
+                tx._attach_details(tr, events, concurrency=N),
+                injector(),
+            )
+            for ev in result:
+                assert ev["details"] is not None, f"details missing for {ev['id']}"
+                assert ev["details"]["event_id"] == ev["id"], (
+                    f"wrong details routed to {ev['id']}: got {ev['details']['event_id']!r}"
+                )
+
+        asyncio.run(_run())
+
+    def test_subscription_error_fails_only_that_event_others_still_resolve(self):
+        """A subscription-level error (TradeRepublicError-like) is routed to its waiter.
+
+        The single reader must NOT tear down on a per-subscription error — it should fail
+        that one Future, let _fetch_one catch it (setting details=None), and continue
+        serving the remaining subscriptions.
+        """
+        async def _run():
+            N = 4
+            FAILING = 2  # sub-id index that will receive a simulated subscription error
+            events = self._events(N)
+            tr = FakeTr()
+            ready = tr.expect_count(N)
+
+            async def injector():
+                await ready.wait()
+                sub_ids = list(tr._sub_to_event.keys())
+                for i, sub_id in enumerate(sub_ids):
+                    if i == FAILING:
+                        tr.enqueue_error(sub_id)
+                    else:
+                        event_id = tr._sub_to_event[sub_id]
+                        tr.enqueue_response(sub_id, {"event_id": event_id, "shares": 1.0})
+
+            result, _ = await asyncio.gather(
+                tx._attach_details(tr, events, concurrency=N),
+                injector(),
+            )
+            failed = [ev for ev in result if ev["details"] is None]
+            succeeded = [ev for ev in result if ev["details"] is not None]
+            assert len(failed) == 1, f"expected 1 failed event, got {len(failed)}"
+            assert len(succeeded) == N - 1
+            for ev in succeeded:
+                assert ev["details"]["event_id"] == ev["id"]
+
+        asyncio.run(_run())
 
 
 # --- number parsing -------------------------------------------------------------------

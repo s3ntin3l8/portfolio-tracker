@@ -65,24 +65,68 @@ async def _collect_transactions(tr):
 
 
 async def _attach_details(tr, events, concurrency=8):
-    """Enrich every event with its detail payload, fetching up to `concurrency` at once.
+    """Enrich every event with its detail payload via a single-reader dispatcher.
 
-    Serial fetching of ~900 events exceeds the 300s export timeout; bounded concurrency
-    collapses that to ~90 batched round-trips while still attaching a detail to every
-    event (reconcileCash re-maps the full timeline so skipping details would drop trades).
+    A semaphore limits how many subscriptions are in-flight; a single background reader
+    task owns tr.recv() and routes each response to its waiter's Future by subscription-id.
+    This avoids the message-stealing that the previous design suffered: when `concurrency`
+    coroutines all called tr.recv() directly, each would discard messages intended for the
+    others (via the 'continue' in _await_subscription), causing every event to time out
+    with details=None and shares=null — making the Node mapper reject all security events
+    as "without a share count".
+
+    Serial fetching of ~900 events would exceed the 300s export timeout; bounded
+    concurrency collapses that to ~90 batched round-trips while still attaching a detail
+    to every event (reconcileCash re-maps the full timeline so skipping details would drop
+    cash legs from the derived balance).
     """
+    if not events:
+        return events
+
+    pending: dict = {}  # subscription_id -> asyncio.Future
+    loop = asyncio.get_running_loop()
+
+    async def _reader():
+        """Sole owner of tr.recv().  Routes each arriving message to its registered Future."""
+        while True:
+            try:
+                sub_id, _sub, resp = await tr.recv()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                # A subscription-level error (pytr's TradeRepublicError) carries the
+                # subscription_id as exc.args[0]; route it to the correct waiter so the
+                # rest of the session can continue.
+                sub_err_id = (
+                    exc.args[0]
+                    if exc.args and isinstance(exc.args[0], str)
+                    else None
+                )
+                fut = pending.get(sub_err_id) if sub_err_id else None
+                if fut is not None and not fut.done():
+                    fut.set_exception(exc)
+                    continue
+                # Unknown / socket-level error: fail every pending waiter and stop.
+                for f in list(pending.values()):
+                    if not f.done():
+                        f.set_exception(exc)
+                return
+            fut = pending.get(sub_id)
+            if fut is not None and not fut.done():
+                fut.set_result(resp)
+
+    reader_task = asyncio.create_task(_reader())
     sem = asyncio.Semaphore(concurrency)
 
     async def _fetch_one(event):
         event_id = event["id"]
+        sub_id = None
         async with sem:
             try:
-                await tr.timeline_detail_v2(event_id)
-                event["details"] = await _await_subscription(
-                    tr,
-                    "timelineDetailV2",
-                    match=lambda s: s.get("id") == event_id,
-                )
+                sub_id = await tr.timeline_detail_v2(event_id)
+                fut = loop.create_future()
+                pending[sub_id] = fut
+                event["details"] = await asyncio.wait_for(fut, RECV_TIMEOUT_S)
             except Exception as exc:  # noqa: BLE001 - details are best-effort
                 event["details"] = None
                 print(
@@ -90,8 +134,22 @@ async def _attach_details(tr, events, concurrency=8):
                     f"({event.get('eventType')}): {exc}",
                     file=sys.stderr,
                 )
+            finally:
+                if sub_id is not None:
+                    pending.pop(sub_id, None)
+                    try:
+                        await tr.unsubscribe(sub_id)
+                    except Exception:  # noqa: BLE001
+                        pass
 
-    await asyncio.gather(*(_fetch_one(ev) for ev in events))
+    try:
+        await asyncio.gather(*(_fetch_one(ev) for ev in events))
+    finally:
+        reader_task.cancel()
+        try:
+            await reader_task
+        except asyncio.CancelledError:
+            pass
     return events
 
 

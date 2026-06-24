@@ -307,6 +307,25 @@ describe("mapTrEventToDraft", () => {
       skip: true,
     });
   });
+
+  it("carries the event cash leg and type on a share-count rejection so reconciliation can account for it", () => {
+    // When tr_export.py fails to extract a share count (e.g. due to a transient detail
+    // fetch failure), the mapper surfaces an attention error.  The raw.amount field lets
+    // a future cash-reconciliation pass identify the cash movement even without shares.
+    const result = mapTrEventToDraft({
+      ...base,
+      eventType: "ORDER_EXECUTED",
+      amount: -75.5,
+      isin: "DE0007236101",
+      // shares intentionally absent → triggers "without a share count"
+    });
+    expect("skip" in result && result.skip).toBe(true);
+    if (!("skip" in result)) throw new Error("expected a skip result");
+    expect(result.severity).toBe("attention");
+    expect(result.reason).toMatch(/share count/i);
+    expect(result.eventType).toBe("ORDER_EXECUTED");
+    expect(result.raw).toMatchObject({ amount: -75.5, isin: "DE0007236101" });
+  });
 });
 
 describe("mapTrEvents", () => {
