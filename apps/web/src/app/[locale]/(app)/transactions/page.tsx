@@ -11,7 +11,6 @@ import { ExportDocumentsButton } from "@/components/export-documents-button";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { RecentImportsSection } from "@/components/recent-imports-section";
 import { Link } from "@/i18n/navigation";
-import { AlertCircle, AlertTriangle } from "lucide-react";
 import {
   getSelectedPortfolioId,
   loadImports,
@@ -29,7 +28,6 @@ export default async function TransactionsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Transactions");
-  const ta = await getTranslations("Anomalies");
   const te = await getTranslations("Empty");
   const tm = await getTranslations("Manage");
 
@@ -173,38 +171,9 @@ export default async function TransactionsPage({
     );
   }
 
-  // Anomaly banner — only in single-portfolio view.
-  const errors = anomalies?.filter((a) => a.severity === "error") ?? [];
-  const warnings = anomalies?.filter((a) => a.severity === "warning") ?? [];
-  const anomalyBanner =
-    anomalies && (errors.length > 0 || warnings.length > 0) ? (
-      <div
-        role="alert"
-        className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
-          errors.length > 0
-            ? "border-destructive/40 bg-destructive/5 text-destructive"
-            : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-        }`}
-      >
-        {errors.length > 0 ? (
-          <AlertCircle className="mt-0.5 size-4 shrink-0" />
-        ) : (
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        )}
-        <span>
-          {errors.length > 0 && warnings.length > 0
-            ? ta("bannerBoth", { errors: errors.length, warnings: warnings.length })
-            : errors.length > 0
-              ? ta("bannerError", { count: errors.length })
-              : ta("bannerWarning", { count: warnings.length })}
-        </span>
-      </div>
-    ) : null;
-
   return (
     <div className="space-y-6">
       {heading(addButton)}
-      {anomalyBanner}
       <TransactionsTable
         rows={rows}
         showPortfolio={aggregate}

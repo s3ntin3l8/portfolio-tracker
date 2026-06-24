@@ -162,6 +162,7 @@ export function TransactionsTable({
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
   const tm = useTranslations("Manage");
+  const ta = useTranslations("Anomalies");
   const tb = useTranslations("Transactions.batch");
   const locale = useLocale();
   const api = useApiClient();
@@ -183,6 +184,10 @@ export function TransactionsTable({
     return m;
   }, [anomalies]);
 
+  // Number of rows that actually carry a transaction-scoped anomaly (portfolio-scoped
+  // anomalies like reconciliation_gap have no transactionId, so they don't filter to a row).
+  const flaggedCount = anomalyByTxId.size;
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -191,6 +196,7 @@ export function TransactionsTable({
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [showFlagged, setShowFlagged] = useState(false);
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
 
   // Derive distinct options from `rows` so selects only show values present in the data.
@@ -220,6 +226,7 @@ export function TransactionsTable({
     const q = query.trim().toLowerCase();
     return rows.filter(
       (r) =>
+        (!showFlagged || anomalyByTxId.has(r.id)) &&
         (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
         (typeFilter === "all" || r.type === typeFilter) &&
         (instrumentFilter === "all" ||
@@ -236,7 +243,7 @@ export function TransactionsTable({
           (r.portfolioName ?? "").toLowerCase().includes(q) ||
           r.source.toLowerCase().includes(q)),
     );
-  }, [rows, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
+  }, [rows, showFlagged, anomalyByTxId, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
 
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
@@ -288,8 +295,48 @@ export function TransactionsTable({
   // tax + netAmount + fxRate(sm) + source(sm) + actions = 12 or 13
   const colSpan = showPortfolio ? 13 : 12;
 
+  // Anomaly banner — only when anomalies exist (only passed in single-portfolio view).
+  const anomalyErrors = anomalies.filter((a) => a.severity === "error");
+  const anomalyWarnings = anomalies.filter((a) => a.severity === "warning");
+  const anomalyBanner =
+    anomalyErrors.length > 0 || anomalyWarnings.length > 0 ? (
+      <div
+        role="alert"
+        className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm ${
+          anomalyErrors.length > 0
+            ? "border-destructive/40 bg-destructive/5 text-destructive"
+            : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+        }`}
+      >
+        {anomalyErrors.length > 0 ? (
+          <AlertCircle className="size-4 shrink-0" />
+        ) : (
+          <AlertTriangle className="size-4 shrink-0" />
+        )}
+        <span className="flex-1">
+          {anomalyErrors.length > 0 && anomalyWarnings.length > 0
+            ? ta("bannerBoth", { errors: anomalyErrors.length, warnings: anomalyWarnings.length })
+            : anomalyErrors.length > 0
+              ? ta("bannerError", { count: anomalyErrors.length })
+              : ta("bannerWarning", { count: anomalyWarnings.length })}
+        </span>
+        {flaggedCount > 0 && (
+          <Button
+            type="button"
+            size="sm"
+            variant={showFlagged ? "secondary" : "outline"}
+            aria-pressed={showFlagged}
+            onClick={() => setShowFlagged((v) => !v)}
+          >
+            {ta("showFlagged")}
+          </Button>
+        )}
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-3">
+      {anomalyBanner}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <select
           aria-label={t("filterScope")}
@@ -571,7 +618,7 @@ export function TransactionsTable({
                   colSpan={colSpan}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
-                  {query.trim() ? t("noResults") : t("empty")}
+                  {query.trim() || showFlagged ? t("noResults") : t("empty")}
                 </TableCell>
               </TableRow>
             )}

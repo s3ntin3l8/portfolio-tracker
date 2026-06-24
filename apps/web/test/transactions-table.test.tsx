@@ -377,6 +377,127 @@ describe("TransactionsTable", () => {
     });
   });
 
+  describe("anomaly banner and flagged-rows filter", () => {
+    const ANOMALY_ROWS: TxRow[] = [
+      {
+        id: "a1",
+        portfolioId: "p1",
+        type: "sell",
+        quantity: "100",
+        price: "10",
+        fees: "0",
+        tax: null,
+        fxRate: null,
+        currency: "IDR",
+        executedAt: "2026-05-01T00:00:00.000Z",
+        source: "manual",
+        instrument: { symbol: "BBCA", name: "Bank Central Asia" },
+      },
+      {
+        id: "a2",
+        portfolioId: "p1",
+        type: "buy",
+        quantity: "50",
+        price: "10",
+        fees: "0",
+        tax: null,
+        fxRate: null,
+        currency: "IDR",
+        executedAt: "2026-04-01T00:00:00.000Z",
+        source: "manual",
+        instrument: { symbol: "TLKM", name: "Telkom" },
+      },
+      {
+        id: "a3",
+        portfolioId: "p1",
+        type: "buy",
+        quantity: "10",
+        price: "0",
+        fees: "0",
+        tax: null,
+        fxRate: null,
+        currency: "IDR",
+        executedAt: "2026-03-01T00:00:00.000Z",
+        source: "manual",
+        instrument: { symbol: "AAPL", name: "Apple" },
+      },
+    ];
+
+    // a1 has an error, a3 has a warning, a2 is clean.
+    const MIXED_ANOMALIES = [
+      { code: "oversell" as const, severity: "error" as const, scope: "transaction" as const, transactionId: "a1" },
+      { code: "zero_price" as const, severity: "warning" as const, scope: "transaction" as const, transactionId: "a3" },
+    ];
+
+    it("renders the anomaly banner when transaction-scoped anomalies are present", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
+        </NextIntlClientProvider>,
+      );
+      // Banner text: 1 error + 1 warning → bannerBoth pattern
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+
+    it("shows the 'Show flagged only' toggle when there are row-flagged anomalies", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByRole("button", { name: messages.Anomalies.showFlagged })).toBeInTheDocument();
+    });
+
+    it("clicking the toggle shows only flagged rows; clicking again restores all", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
+        </NextIntlClientProvider>,
+      );
+      const toggle = screen.getByRole("button", { name: messages.Anomalies.showFlagged });
+
+      // Before: all 3 rows visible.
+      expect(screen.getAllByRole("row").slice(1).length).toBe(3);
+
+      fireEvent.click(toggle);
+      // After toggling: only a1 (error) and a3 (warning) — a2 (clean) hidden.
+      const filtered = screen.getAllByRole("row").slice(1);
+      expect(filtered.length).toBe(2);
+      expect(filtered.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
+      expect(filtered.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
+      expect(filtered.every((r) => !r.textContent?.includes("TLKM"))).toBe(true);
+
+      // Toggle off: all restored.
+      fireEvent.click(toggle);
+      expect(screen.getAllByRole("row").slice(1).length).toBe(3);
+    });
+
+    it("does not show the toggle when only portfolio-scoped anomalies are present", () => {
+      const portfolioOnlyAnomalies = [
+        { code: "reconciliation_gap" as const, severity: "warning" as const, scope: "portfolio" as const },
+      ];
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={portfolioOnlyAnomalies} />
+        </NextIntlClientProvider>,
+      );
+      // Banner should appear (warning exists)...
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      // ...but no toggle (no transactionIds → flaggedCount === 0).
+      expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
+    });
+
+    it("shows no banner when anomalies array is empty (aggregate view)", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={[]} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
+    });
+  });
+
   describe("text search", () => {
     function getSearchInput() {
       return screen.getByPlaceholderText(messages.Transactions.searchPlaceholder);
