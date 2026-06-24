@@ -126,32 +126,36 @@ export default async function PortfoliosPage({
                     portfolio.documentRetention ||
                     portfolio.taxAllowanceAnnual != null ||
                     !portfolio.includeInAggregate) && (
-                    <div className="mt-auto flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
-                      {portfolio.cashCounted && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Coins className="size-3.5 shrink-0" />
-                          {t("cashIn")}
-                        </span>
-                      )}
-                      {portfolio.documentRetention && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <FolderCheck className="size-3.5 shrink-0" />
-                          {t("docsKept")}
-                        </span>
-                      )}
-                      {portfolio.taxAllowanceAnnual != null && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <ShieldCheck className="size-3.5 shrink-0" />
-                          {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
-                        </span>
-                      )}
-                      {!portfolio.includeInAggregate && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <EyeOff className="size-3.5 shrink-0" />
-                          {t("excluded")}
-                        </span>
-                      )}
-                    </div>
+                    <>
+                      {/* flex-1 pushes footer to card bottom; min-h-3 keeps a minimum gap */}
+                      <div className="min-h-3 flex-1" />
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
+                        {portfolio.cashCounted && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Coins className="size-3.5 shrink-0" />
+                            {t("cashIn")}
+                          </span>
+                        )}
+                        {portfolio.documentRetention && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <FolderCheck className="size-3.5 shrink-0" />
+                            {t("docsKept")}
+                          </span>
+                        )}
+                        {portfolio.taxAllowanceAnnual != null && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <ShieldCheck className="size-3.5 shrink-0" />
+                            {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
+                          </span>
+                        )}
+                        {!portfolio.includeInAggregate && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <EyeOff className="size-3.5 shrink-0" />
+                            {t("excluded")}
+                          </span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
