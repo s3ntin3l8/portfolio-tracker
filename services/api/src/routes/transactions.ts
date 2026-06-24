@@ -2467,18 +2467,22 @@ export async function transactionsRoute(app: FastifyInstance) {
         const mergedLog = mergeTradeLogs(logs, display, "fifo");
 
         const tfRates = await tfRatesFor(mergedLog.trades.map((t) => t.instrumentId));
-        // allowanceAnnual for the aggregate computation = sum of all depot allocations.
-        const allowanceAnnual = totalAllocated.toFixed(2);
         const taxRate = holder.capitalGainsTaxRate ?? "0.25";
         const forecastIncomeRestOfYear = totalForecastGross > 0 ? totalForecastGross.toFixed(2) : "0";
-
-        const usage = allowanceUsageYTD({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, forecastIncomeRestOfYear });
-        const suggestions = harvestSuggestions({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, usage });
 
         // Distribution context: how much of the per-person cap has been allocated.
         const holderAllowanceCap = Number(holder.taxAllowanceAnnual ?? 1000);
         const remainingToDistribute = Math.max(0, holderAllowanceCap - totalAllocated);
         const overAllocated = totalAllocated > holderAllowanceCap;
+
+        // allowanceAnnual for the aggregate computation = the person's legal Sparerpauschbetrag
+        // cap (holder.taxAllowanceAnnual, default €1,000). The FSA sum is for the distribution
+        // display only — under-allocation is reconciled via Anlage KAP at year-end, so harvest
+        // suggestion headroom is correctly the full cap, not the allocated portion.
+        const allowanceAnnual = holderAllowanceCap.toFixed(2);
+
+        const usage = allowanceUsageYTD({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, forecastIncomeRestOfYear });
+        const suggestions = harvestSuggestions({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, usage });
 
         result.push({
           holder: {

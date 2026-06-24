@@ -366,6 +366,69 @@ describe("tax routes", () => {
       expect(entry.allowanceUsage.currency).toBeDefined();
       expect(Array.isArray(entry.harvestSuggestions)).toBe(true);
     });
+
+    it("distribution field carries FSA allocation breakdown against the cap", async () => {
+      const t = await token("tax-nw-dist");
+      const holderId = await createHolder(t, {
+        name: "Dist Holder",
+        taxAllowanceAnnual: "1000",
+      });
+      // Two depots each with partial FSA allocations summing to 700.
+      await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "400" });
+      await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "300" });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/networth/tax?year=2025",
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const [entry] = res.json() as Array<{
+        allowanceUsage: { allowanceAnnual: string };
+        distribution: {
+          holderAllowanceCap: string;
+          totalAllocated: string;
+          remainingToDistribute: string;
+          overAllocated: boolean;
+        };
+      }>;
+      // allowanceUsage uses the holder cap (€1,000), not the FSA sum (€700).
+      expect(entry.allowanceUsage.allowanceAnnual).toBe("1000.00");
+      // Distribution shows cap vs. allocated vs. remaining.
+      expect(entry.distribution.holderAllowanceCap).toBe("1000.00");
+      expect(entry.distribution.totalAllocated).toBe("700.00");
+      expect(entry.distribution.remainingToDistribute).toBe("300.00");
+      expect(entry.distribution.overAllocated).toBe(false);
+    });
+
+    it("flags over-allocation when depot FSA sum exceeds the holder cap", async () => {
+      const t = await token("tax-nw-overalloc");
+      const holderId = await createHolder(t, {
+        name: "Over Holder",
+        taxAllowanceAnnual: "1000",
+      });
+      // Two depots together exceed the €1,000 cap.
+      await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "700" });
+      await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "500" });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/networth/tax?year=2025",
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(200);
+      const [entry] = res.json() as Array<{
+        distribution: {
+          holderAllowanceCap: string;
+          totalAllocated: string;
+          remainingToDistribute: string;
+          overAllocated: boolean;
+        };
+      }>;
+      expect(entry.distribution.totalAllocated).toBe("1200.00");
+      expect(entry.distribution.remainingToDistribute).toBe("0.00");
+      expect(entry.distribution.overAllocated).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------

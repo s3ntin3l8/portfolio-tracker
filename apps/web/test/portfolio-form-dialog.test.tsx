@@ -415,6 +415,115 @@ describe("PortfolioFormDialog", () => {
     await waitFor(() => expect(getTrConnection).toHaveBeenCalled());
   });
 
+  // ---------------------------------------------------------------------------
+  // FSA allocation helper tests
+  // ---------------------------------------------------------------------------
+
+  it("shows the FSA allocation helper when a holder with sibling portfolios is selected", async () => {
+    // Holder "FSA Holder" has a €1,000 cap; one sibling portfolio has €600 FSA allocated.
+    listAccountHolders.mockResolvedValue([
+      {
+        id: "h-fsa",
+        userId: "u1",
+        name: "FSA Holder",
+        type: "self",
+        birthYear: null,
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: null,
+        churchTax: null,
+        taxResidence: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    listPortfolios.mockResolvedValue([
+      {
+        id: "p-sibling",
+        name: "Depot A",
+        baseCurrency: "EUR",
+        accountHolderId: "h-fsa",
+        portfolioType: "standard",
+        brokerage: null,
+        accountNumber: null,
+        includeInAggregate: true,
+        cashCounted: false,
+        documentRetention: false,
+        taxAllowanceAnnual: "600",
+        userId: "u1",
+      } as unknown as Portfolio,
+    ]);
+
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+
+    // Wait for holders to load (from open), then select the holder.
+    await screen.findByRole("option", { name: /FSA Holder/ });
+    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "h-fsa" } });
+
+    // Helper text should show the sibling allocation vs. cap.
+    await waitFor(() =>
+      expect(screen.getByText(/€600 of €1000 cap allocated/)).toBeInTheDocument(),
+    );
+    // Remaining should be €400 (1000 - 600 = 400).
+    expect(screen.getByText(/€400 left/)).toBeInTheDocument();
+  });
+
+  it("shows the over-allocation warning when entered FSA would exceed the holder cap", async () => {
+    listAccountHolders.mockResolvedValue([
+      {
+        id: "h-fsa2",
+        userId: "u1",
+        name: "Over Holder",
+        type: "self",
+        birthYear: null,
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: null,
+        churchTax: null,
+        taxResidence: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    // Sibling already has €600 allocated; typing €500 more pushes total to €1,100.
+    listPortfolios.mockResolvedValue([
+      {
+        id: "p-sib2",
+        name: "Depot B",
+        baseCurrency: "EUR",
+        accountHolderId: "h-fsa2",
+        portfolioType: "standard",
+        brokerage: null,
+        accountNumber: null,
+        includeInAggregate: true,
+        cashCounted: false,
+        documentRetention: false,
+        taxAllowanceAnnual: "600",
+        userId: "u1",
+      } as unknown as Portfolio,
+    ]);
+
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+
+    await screen.findByRole("option", { name: /Over Holder/ });
+    fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "h-fsa2" } });
+
+    // Wait for sibling portfolios to resolve (the helper appears first).
+    await waitFor(() =>
+      expect(screen.getByText(/€600 of €1000 cap allocated/)).toBeInTheDocument(),
+    );
+
+    // Enter a value that pushes the total over €1,000.
+    fireEvent.change(screen.getByLabelText(m.taxAllowanceAnnual), { target: { value: "500" } });
+
+    // The over-allocation warning should replace the helper.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Total allocation exceeds the €1000 cap/),
+      ).toBeInTheDocument(),
+    );
+    // Normal helper text should be gone.
+    expect(screen.queryByText(/€400 left/)).not.toBeInTheDocument();
+  });
+
   it("shows the reconnect form for an expired connection (not a stuck loading spinner)", async () => {
     getTrConnection.mockResolvedValueOnce({
       status: "expired" as const,
