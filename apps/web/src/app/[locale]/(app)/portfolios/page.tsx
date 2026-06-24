@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Archive, Briefcase, Coins, EyeOff, Plus, ShieldCheck } from "lucide-react";
+import { Briefcase, Coins, EyeOff, FolderCheck, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,8 +9,6 @@ import { PortfolioCardMenu } from "@/components/portfolio-card-menu";
 import { PortfolioCardLink } from "@/components/portfolio-card-link";
 import { AccountHoldersManager } from "@/components/account-holders-manager";
 import { BrokerageIcon } from "@/components/brokerage-icon";
-import { TrSyncButton } from "@/components/tr-sync-button";
-import { IbkrSyncButton } from "@/components/ibkr-sync-button";
 import { loadAccountHolders, loadPortfolios, loadTrConnection, loadIbkrConnection } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 
@@ -80,10 +78,10 @@ export default async function PortfoliosPage({
             const isIbkrBound = portfolio.id === ibkrPortfolioId;
             const isIbkrConnected = isIbkrBound && ibkrConn?.status === "connected";
             return (
-              <Card key={portfolio.id} className="relative transition-colors hover:bg-accent/50">
+              <Card key={portfolio.id} className="relative flex flex-col transition-colors hover:bg-accent/50">
                 {/* Overlay button — sets the pf cookie and navigates to /holdings */}
                 <PortfolioCardLink portfolioId={portfolio.id} name={portfolio.name} />
-                <CardContent className="p-5">
+                <CardContent className="flex flex-1 flex-col p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <BrokerageIcon brokerage={portfolio.brokerage} />
@@ -98,9 +96,11 @@ export default async function PortfoliosPage({
                     </div>
                     {/* Interactive controls — z-20 to sit above the overlay link */}
                     <div className="relative z-20 flex shrink-0 items-center gap-1">
-                      {isTrConnected && <TrSyncButton initialSyncing={connection?.syncing ?? false} />}
-                      {isIbkrConnected && <IbkrSyncButton initialSyncing={ibkrConn?.syncing ?? false} />}
-                      <PortfolioCardMenu portfolio={portfolio} />
+                      <PortfolioCardMenu
+                        portfolio={portfolio}
+                        trSync={isTrConnected ? { initialSyncing: connection?.syncing ?? false } : undefined}
+                        ibkrSync={isIbkrConnected ? { initialSyncing: ibkrConn?.syncing ?? false } : undefined}
+                      />
                     </div>
                   </div>
                   {isTrBound && connection && (
@@ -126,32 +126,36 @@ export default async function PortfoliosPage({
                     portfolio.documentRetention ||
                     portfolio.taxAllowanceAnnual != null ||
                     !portfolio.includeInAggregate) && (
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
-                      {portfolio.cashCounted && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Coins className="size-3.5 shrink-0" />
-                          {t("cashIn")}
-                        </span>
-                      )}
-                      {portfolio.documentRetention && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Archive className="size-3.5 shrink-0" />
-                          {t("docsKept")}
-                        </span>
-                      )}
-                      {portfolio.taxAllowanceAnnual != null && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <ShieldCheck className="size-3.5 shrink-0" />
-                          {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
-                        </span>
-                      )}
-                      {!portfolio.includeInAggregate && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <EyeOff className="size-3.5 shrink-0" />
-                          {t("excluded")}
-                        </span>
-                      )}
-                    </div>
+                    <>
+                      {/* flex-1 pushes footer to card bottom; min-h-3 keeps a minimum gap */}
+                      <div className="min-h-3 flex-1" />
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
+                        {portfolio.cashCounted && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Coins className="size-3.5 shrink-0" />
+                            {t("cashIn")}
+                          </span>
+                        )}
+                        {portfolio.documentRetention && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <FolderCheck className="size-3.5 shrink-0" />
+                            {t("docsKept")}
+                          </span>
+                        )}
+                        {portfolio.taxAllowanceAnnual != null && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <ShieldCheck className="size-3.5 shrink-0" />
+                            {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
+                          </span>
+                        )}
+                        {!portfolio.includeInAggregate && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <EyeOff className="size-3.5 shrink-0" />
+                            {t("excluded")}
+                          </span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
