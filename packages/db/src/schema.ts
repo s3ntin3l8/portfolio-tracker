@@ -66,6 +66,7 @@ export const txSourceEnum = pgEnum("transaction_source", [
   "manual",
   "pytr",
   "pdf",
+  "ibkr",
 ]);
 
 // Source-type enum for transaction_sources rows. Richer than txSourceEnum: `pdf`
@@ -77,6 +78,7 @@ export const txSourceTypeEnum = pgEnum("tx_source_type", [
   "screenshot",
   "pytr",
   "manual",
+  "ibkr",
 ]);
 
 export const corpActionTypeEnum = pgEnum("corporate_action_type", [

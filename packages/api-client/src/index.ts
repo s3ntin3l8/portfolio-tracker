@@ -1718,7 +1718,7 @@ export function createApiClient(config: ApiClientConfig) {
     // re-flagged at confirm time, so this never silently creates true duplicates (#229).
     importCsv: (
       content: string,
-      format: "auto" | "generic" | "dkb" | "ibkr" | "coinbase" = "auto",
+      format: "auto" | "generic" | "dkb" | "ibkr" | "ibkr-xml" | "coinbase" | "tr-csv" = "auto",
       force = false,
     ) =>
       request<CsvImportResult>("POST", `/imports/csv${force ? "?force=true" : ""}`, {

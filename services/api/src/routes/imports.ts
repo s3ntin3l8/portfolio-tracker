@@ -33,6 +33,8 @@ import { extractPdfText } from "../services/parsers/pdf-text.js";
 import { parseIbkr } from "../services/parsers/ibkr.js";
 import { parseCoinbase } from "../services/parsers/coinbase.js";
 import { parseTrCsv } from "../services/parsers/tr-csv.js";
+import { parseFlexXml } from "../services/ibkr/flex-parse.js";
+import { mapFlexToDrafts } from "../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../services/parsers/hash.js";
 import { findCrossSourceDuplicates, classifyMatch, parserToTxSource } from "../services/parsers/dedup.js";
@@ -59,27 +61,51 @@ import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 const csvBodySchema = z.object({
   content: z.string().min(1),
   // `auto` sniffs the content (default); otherwise force a specific parser: `dkb`
-  // (German DKB depot/Girokonto), `ibkr` (Interactive Brokers Flex Trades), `coinbase`,
-  // `tr-csv` (Trade Republic transaction export), or `generic` (the simple column CSV).
+  // (German DKB depot/Girokonto), `ibkr` (Interactive Brokers Flex Trades CSV), `ibkr-xml`
+  // (Interactive Brokers Activity Flex Statement XML — richer: dividends, cash, positions),
+  // `coinbase`, `tr-csv` (Trade Republic transaction export), or `generic` (simple column CSV).
   format: z
-    .enum(["auto", "generic", "dkb", "ibkr", "coinbase", "tr-csv"])
+    .enum(["auto", "generic", "dkb", "ibkr", "ibkr-xml", "coinbase", "tr-csv"])
     .default("auto"),
 });
+
+// Wrapper so the IBKR Activity Flex XML parser fits the CsvParseResult contract.
+function parseIbkrFlex(content: string): ReturnType<typeof parseCsv> {
+  try {
+    const statements = parseFlexXml(content);
+    if (statements.length === 0) return { drafts: [], errors: [] };
+    // A single Activity Flex export always has one statement; take the first.
+    const { drafts, errors } = mapFlexToDrafts(statements[0]!);
+    const accountNumber = statements[0]?.accountId || undefined;
+    return {
+      drafts,
+      errors: errors.map((e) => ({ line: e.line ?? 0, message: e.message })),
+      accountNumber,
+    };
+  } catch (err) {
+    return {
+      drafts: [],
+      errors: [{ line: 0, message: err instanceof Error ? err.message : "XML parse error" }],
+    };
+  }
+}
 
 const CSV_PARSERS = {
   dkb: parseDkb,
   ibkr: parseIbkr,
+  "ibkr-xml": parseIbkrFlex,
   coinbase: parseCoinbase,
   "tr-csv": parseTrCsv,
   generic: parseCsv,
 } as const;
 
 // How a resolved format maps to the stored `parser` tag (DKB keeps its own; Trade
-// Republic keeps its own so confirm resolves ISINs as an EU broker; the rest are the
-// generic CSV source).
-const PARSER_TAG: Record<string, "dkb" | "csv" | "tr-csv"> = {
+// Republic keeps its own so confirm resolves ISINs as an EU broker; IBKR XML gets its
+// own so confirm routes it to source="ibkr" + EU ISIN resolution; the rest are "csv").
+const PARSER_TAG: Record<string, "dkb" | "csv" | "tr-csv" | "ibkr"> = {
   dkb: "dkb",
   "tr-csv": "tr-csv",
+  "ibkr-xml": "ibkr",
 };
 /** Accepted MIME types for screenshot/PDF imports. */
 function isAcceptedMime(mimeType: string): boolean {
@@ -1130,17 +1156,24 @@ export async function importsRoute(app: FastifyInstance) {
       // so we can route them to source="pdf" and preserve EU/ISIN instrument resolution.
       const isDkbPdf = imp.parser === "dkb-pdf";
       const isTrPdf = imp.parser === "tr-pdf";
-      // pytr is its own source; DKB/TR PDFs get the new "pdf" source; DKB-CSV and TR-CSV
-      // exports are CSV; everything else (LLM vision) is screenshot.
+      // IBKR Activity Flex XML: its own source tag so dedup, enrichment, and the rank
+      // rollup treat it correctly. ISIN resolution uses the same EU/OpenFIGI path since
+      // IBKR carries ISINs in the Flex data (global, not EU-only, but the code path works).
+      const isIbkr = imp.parser === "ibkr";
+      // pytr is its own source; DKB/TR PDFs get the new "pdf" source; IBKR gets "ibkr";
+      // DKB-CSV and TR-CSV exports are CSV; everything else (LLM vision) is screenshot.
       const source = isPytr
         ? "pytr"
-        : (isDkbPdf || isTrPdf)
-          ? "pdf"
-          : imp.parser === "csv" || isDkb || isTrCsv
-            ? "csv"
-            : "screenshot";
-      // DKB and Trade Republic are both EU/ISIN brokers — identical instrument resolution.
-      const isEu = isDkb || isPytr || isTrCsv || isDkbPdf || isTrPdf;
+        : isIbkr
+          ? "ibkr"
+          : (isDkbPdf || isTrPdf)
+            ? "pdf"
+            : imp.parser === "csv" || isDkb || isTrCsv
+              ? "csv"
+              : "screenshot";
+      // DKB, Trade Republic, and IBKR all carry ISINs in their exports — use the
+      // OpenFIGI ISIN-resolution path for all of them.
+      const isEu = isDkb || isPytr || isTrCsv || isDkbPdf || isTrPdf || isIbkr;
 
       request.log.info(
         { importId: imp.id, parser: imp.parser, source, txDrafts: drafts.length, contracts: contracts.length },

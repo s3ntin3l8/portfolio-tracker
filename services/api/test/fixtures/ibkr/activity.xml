@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FlexQueryResponse queryName="Portfolio Tracker Activity" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U1234567" fromDate="2024-01-01" toDate="2024-12-31" period="Annual" whenGenerated="2024-12-31;23:59:59">
+      <Trades>
+        <Trade assetCategory="STK" symbol="AAPL" description="APPLE INC" isin="US0378331005" conid="265598" tradeID="1001" ibOrderID="2001" tradeDate="2024-02-15" currency="USD" quantity="10" tradePrice="184.92" ibCommission="-0.35" ibCommissionCurrency="USD" taxes="0" fxRateToBase="0.9231" buySell="BUY" openCloseIndicator="O" levelOfDetail="EXECUTION" />
+        <Trade assetCategory="STK" symbol="AAPL" description="APPLE INC" isin="US0378331005" conid="265598" tradeID="1002" ibOrderID="2002" tradeDate="2024-06-10" currency="USD" quantity="-5" tradePrice="213.25" ibCommission="-0.35" ibCommissionCurrency="USD" taxes="0" fxRateToBase="0.9312" buySell="SELL" openCloseIndicator="C" levelOfDetail="EXECUTION" />
+        <Trade assetCategory="ETF" symbol="IWDA" description="ISHARES CORE MSCI WORLD" isin="IE00B4L5Y983" conid="99999" tradeID="1003" ibOrderID="2003" tradeDate="2024-03-20" currency="EUR" quantity="50" tradePrice="86.45" ibCommission="-1.25" ibCommissionCurrency="EUR" taxes="0" buySell="BUY" openCloseIndicator="O" levelOfDetail="EXECUTION" />
+      </Trades>
+      <CashTransactions>
+        <CashTransaction assetCategory="STK" symbol="AAPL" description="APPLE INC(US0378331005) CASH DIVIDEND USD 0.25 PER SHARE - US TAX" isin="US0378331005" currency="USD" amount="2.13" dateTime="2024-05-16" type="Dividends" transactionID="5001" reportDate="2024-05-16" />
+        <CashTransaction assetCategory="STK" symbol="AAPL" description="APPLE INC(US0378331005) CASH DIVIDEND - US TAX" isin="US0378331005" currency="USD" amount="-0.32" dateTime="2024-05-16" type="Withholding Tax" transactionID="5002" reportDate="2024-05-16" />
+        <CashTransaction assetCategory="" symbol="" description="CASH DEPOSIT" currency="EUR" amount="10000.00" dateTime="2024-01-02" type="Deposits/Withdrawals" transactionID="6001" />
+        <CashTransaction assetCategory="" symbol="" description="CASH WITHDRAWAL" currency="EUR" amount="-500.00" dateTime="2024-11-15" type="Deposits/Withdrawals" transactionID="6002" />
+        <CashTransaction assetCategory="" symbol="" description="EUR CREDIT INT FOR DEC-2024" currency="EUR" amount="18.45" dateTime="2024-12-31" type="Credit Interest" transactionID="7001" />
+      </CashTransactions>
+      <Transfers>
+        <Transfer assetCategory="STK" symbol="MSFT" description="MICROSOFT CORP" isin="US5949181045" currency="USD" quantity="20" date="2024-04-01" type="IN" direction="IN" costBasisMoney="6200.00" costBasisPrice="310.00" priceFactor="1" />
+      </Transfers>
+      <OpenPositions>
+        <OpenPosition assetCategory="STK" symbol="AAPL" isin="US0378331005" currency="USD" reportDate="2024-12-31" position="5" markPrice="243.01" positionValue="1215.05" costBasisPrice="184.92" costBasisMoney="924.60" />
+        <OpenPosition assetCategory="ETF" symbol="IWDA" isin="IE00B4L5Y983" currency="EUR" reportDate="2024-12-31" position="50" markPrice="95.12" positionValue="4756.00" costBasisPrice="86.45" costBasisMoney="4322.50" />
+      </OpenPositions>
+      <CorporateActions>
+      </CorporateActions>
+      <CashReport>
+        <CashReportCurrency currency="USD" endingCash="2345.67" />
+        <CashReportCurrency currency="EUR" endingCash="5123.45" />
+      </CashReport>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

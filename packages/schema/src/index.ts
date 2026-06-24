@@ -326,7 +326,8 @@ export type TaxComponents = z.infer<typeof taxComponentsSchema>;
 // `bonus` = shares received with no cash (stock dividend / corporate bonus issue) —
 // mirrored from the DB transaction type so share-based corp actions can be auto-mapped.
 // `bonus_cash` = broker-credited cash bonus (e.g. TR Kindergeld/promo).
-// `transfer_in` = inbound depot transfer (Depotübertrag) — first-class type from PR #309.
+// `transfer_in`/`transfer_out` = depot-level position transfers (Depotübertrag), first-class
+// from PR #309; both directions may appear in a broker export (e.g. IBKR Activity Flex).
 export const parsedActionSchema = z.enum([
   "buy",
   "sell",
@@ -339,6 +340,7 @@ export const parsedActionSchema = z.enum([
   "bonus",
   "bonus_cash",
   "transfer_in",
+  "transfer_out",
 ]);
 export type ParsedAction = z.infer<typeof parsedActionSchema>;
 

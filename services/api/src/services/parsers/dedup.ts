@@ -95,6 +95,7 @@ export function withinDayTolerance(a: Date | string, b: Date | string): boolean 
  */
 export function parserToTxSource(parser: string): string {
   if (parser === "pytr") return "pytr";
+  if (parser === "ibkr") return "ibkr";
   if (parser === "dkb-pdf" || parser === "tr-pdf") return "pdf";
   if (parser === "csv" || parser === "dkb" || parser === "tr-csv") return "csv";
   return "screenshot";
@@ -182,6 +183,7 @@ const SOURCE_RANK: Record<string, number> = {
   manual: 100,
   pdf: 40,
   pytr: 30,
+  ibkr: 25, // IBKR Flex XML: richer than plain CSV but no settlement PDFs
   csv: 20,
   screenshot: 10,
 };

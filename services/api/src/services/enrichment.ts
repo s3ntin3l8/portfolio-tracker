@@ -47,6 +47,7 @@ function draftSourceType(
   if (draft.taxComponents && Object.keys(draft.taxComponents).length > 0) return "pdf";
   // Map transaction sources to the txSourceTypeEnum values.
   if (importSource === "pytr") return "pytr";
+  if (importSource === "ibkr") return "ibkr";
   if (importSource === "manual") return "manual";
   if (importSource === "screenshot") return "screenshot";
   if (importSource === "pdf") return "pdf";
