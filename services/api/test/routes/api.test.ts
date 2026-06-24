@@ -127,6 +127,38 @@ describe("auth + portfolios + transactions", () => {
     expect(created2.json().brokerage).toBeNull();
   });
 
+  it("GET /portfolios/values returns id+netWorth for each portfolio", async () => {
+    const t = await token("values-user");
+    const p1Id = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Main", baseCurrency: "idr" },
+      })
+    ).json().id;
+    const p2Id = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Euro", baseCurrency: "eur" },
+      })
+    ).json().id;
+
+    const res = await app.inject({ method: "GET", url: "/portfolios/values", headers: auth(t) });
+    expect(res.statusCode).toBe(200);
+    const values: { id: string; netWorth: string }[] = res.json();
+    expect(values).toHaveLength(2);
+    const ids = values.map((v) => v.id).sort();
+    expect(ids).toEqual([p1Id, p2Id].sort());
+    // Empty portfolios have zero net worth.
+    for (const v of values) {
+      expect(v).toHaveProperty("netWorth");
+      expect(typeof v.netWorth).toBe("string");
+    }
+  });
+
   it("sets and clears the brokerage via PATCH", async () => {
     const t = await token("broker-user");
     const portfolioId = (

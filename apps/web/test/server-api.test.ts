@@ -178,6 +178,73 @@ describe("loadHoldings", () => {
     h.session = null;
     expect(await api.loadHoldings()).toMatchObject({ status: "unavailable" });
   });
+
+  it("uses portfolioOverride instead of the cookie when the override is valid", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" }; // cookie says p1
+    const getSummary = vi.fn(async () => ({
+      holdings: [],
+      displayCurrency: "EUR",
+      cash: {},
+      cashTracked: false,
+    }));
+    h.client.getSummary = getSummary;
+    h.client.getNetWorth = vi.fn();
+
+    const res = await api.loadHoldings(undefined, "p2"); // override says p2
+    expect(res).toMatchObject({ status: "ok", displayCurrency: "EUR" });
+    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
+    expect(h.client.getNetWorth).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the cookie when portfolioOverride is stale/unknown", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    const getSummary = vi.fn(async () => ({
+      holdings: [],
+      displayCurrency: "IDR",
+      cash: {},
+      cashTracked: false,
+    }));
+    h.client.getSummary = getSummary;
+
+    await api.loadHoldings(undefined, "ghost"); // stale override
+    expect(getSummary).toHaveBeenCalledWith("p1", undefined); // falls back to cookie
+  });
+});
+
+describe("loadAnomalies", () => {
+  it("returns null when no portfolio is selected (aggregate scope)", async () => {
+    h.cookies = {};
+    expect(await api.loadAnomalies()).toBeNull();
+  });
+
+  it("fetches anomalies for the selected portfolio", async () => {
+    h.cookies = { pf: "p1" };
+    h.client.getHoldings = async () => ({
+      anomalies: [{ id: "a1", severity: "warning", message: "test" }],
+    });
+    const res = await api.loadAnomalies();
+    expect(Array.isArray(res)).toBe(true);
+    expect(res).toHaveLength(1);
+  });
+
+  it("uses portfolioOverride instead of the cookie for anomalies", async () => {
+    h.cookies = { pf: "p1" }; // cookie says p1
+    const getHoldings = vi.fn(async () => ({ anomalies: [] }));
+    h.client.getHoldings = getHoldings;
+
+    await api.loadAnomalies("p2"); // override says p2
+    expect(getHoldings).toHaveBeenCalledWith("p2");
+  });
+
+  it("returns null on error", async () => {
+    h.cookies = { pf: "p1" };
+    h.client.getHoldings = async () => {
+      throw new Error("x");
+    };
+    expect(await api.loadAnomalies()).toBeNull();
+  });
 });
 
 describe("loadTransactionsAcrossPortfolios", () => {
