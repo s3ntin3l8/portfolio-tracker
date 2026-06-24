@@ -92,9 +92,6 @@ export default async function PortfoliosPage({
                         {portfolio.accountHolder && (
                           <p className="truncate text-xs text-muted-foreground">
                             {portfolio.accountHolder}
-                            {portfolio.portfolioType === "child" &&
-                              portfolio.birthYear !== null &&
-                              ` · ${t("born", { year: String(portfolio.birthYear) })}`}
                           </p>
                         )}
                       </div>
