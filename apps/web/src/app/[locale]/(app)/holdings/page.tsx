@@ -19,10 +19,10 @@ export default async function HoldingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ costBasis?: string }>;
+  searchParams: Promise<{ costBasis?: string; portfolio?: string }>;
 }) {
   const { locale } = await params;
-  const { costBasis: costBasisParam } = await searchParams;
+  const { costBasis: costBasisParam, portfolio: portfolioParam } = await searchParams;
   const costBasis: CostBasisMode =
     costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
   setRequestLocale(locale);
@@ -32,7 +32,10 @@ export default async function HoldingsPage({
   const te = await getTranslations("Empty");
   const tf = await getTranslations("PortfolioForm");
 
-  const [result, anomalies] = await Promise.all([loadHoldings(costBasis), loadAnomalies()]);
+  const [result, anomalies] = await Promise.all([
+    loadHoldings(costBasis, portfolioParam),
+    loadAnomalies(portfolioParam),
+  ]);
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =

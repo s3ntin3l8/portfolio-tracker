@@ -1554,6 +1554,7 @@ export function createApiClient(config: ApiClientConfig) {
       ),
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
+    listPortfolioValues: () => request<{ id: string; netWorth: string }[]>("GET", "/portfolios/values"),
     createPortfolio: (input: PortfolioInput) => request<Portfolio>("POST", "/portfolios", input),
     updatePortfolio: (portfolioId: string, input: Partial<PortfolioInput>) =>
       request<Portfolio>("PATCH", `/portfolios/${portfolioId}`, input),

@@ -176,13 +176,12 @@ export async function loadPortfolios(): Promise<{
   const api = await getServerApi();
   if (!api) return { status: "unavailable", portfolios: [] };
   try {
-    const list = await api.listPortfolios();
-    const portfolios = await Promise.all(
-      list.map(async (portfolio) => ({
-        portfolio,
-        netWorth: (await api.getSummary(portfolio.id)).netWorth,
-      })),
-    );
+    const [list, values] = await Promise.all([api.listPortfolios(), api.listPortfolioValues()]);
+    const valueMap = new Map(values.map((v) => [v.id, v.netWorth]));
+    const portfolios = list.map((portfolio) => ({
+      portfolio,
+      netWorth: valueMap.get(portfolio.id) ?? "0",
+    }));
     return { status: "ok", portfolios };
   } catch {
     return { status: "unavailable", portfolios: [] };
@@ -307,6 +306,10 @@ export interface HoldingsView {
  */
 export async function loadHoldings(
   costBasis?: "purchase_price" | "total_paid",
+  /** Optional per-page portfolio override (e.g. from ?portfolio= query param).
+   *  Validated against the live portfolio list; falls back to the global cookie
+   *  when absent or stale. Does NOT write the selection cookie. */
+  portfolioOverride?: string,
 ): Promise<HoldingsView> {
   const api = await getServerApi();
   if (!api)
@@ -328,7 +331,11 @@ export async function loadHoldings(
         cashTracked: false,
       };
     }
-    const wanted = await getSelectedPortfolioId();
+    const overrideId =
+      portfolioOverride && portfolios.some((p) => p.id === portfolioOverride)
+        ? portfolioOverride
+        : null;
+    const wanted = overrideId ?? (await getSelectedPortfolioId());
     const selected = portfolios.find((p) => p.id === wanted);
     const holderId = selected ? undefined : await resolveHolderScope(portfolios);
     const data = selected
@@ -355,11 +362,12 @@ export async function loadHoldings(
 /**
  * Fetch data-integrity anomalies for the currently selected portfolio.
  * Only available in single-portfolio scope — returns null in aggregate mode.
+ * Accepts an optional per-page portfolio override (same semantics as loadHoldings).
  */
-export async function loadAnomalies(): Promise<Anomaly[] | null> {
+export async function loadAnomalies(portfolioOverride?: string): Promise<Anomaly[] | null> {
   const api = await getServerApi();
   if (!api) return null;
-  const portfolioId = await getSelectedPortfolioId();
+  const portfolioId = portfolioOverride ?? (await getSelectedPortfolioId());
   if (!portfolioId) return null;
   try {
     const { anomalies } = await api.getHoldings(portfolioId);

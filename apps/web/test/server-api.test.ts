@@ -328,7 +328,10 @@ describe("aggregate + misc loaders", () => {
 
   it("loadPortfolios values each portfolio's net worth", async () => {
     h.client.listPortfolios = async () => PF;
-    h.client.getSummary = async (id: string) => ({ netWorth: id === "p1" ? "10" : "20" });
+    h.client.listPortfolioValues = async () => [
+      { id: "p1", netWorth: "10" },
+      { id: "p2", netWorth: "20" },
+    ];
     const res = await api.loadPortfolios();
     expect(res.status).toBe("ok");
     expect(res.portfolios.map((p) => p.netWorth)).toEqual(["10", "20"]);

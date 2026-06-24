@@ -12,7 +12,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { BrokerageIcon } from "@/components/brokerage-icon";
-import { useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   SELECTED_PORTFOLIO_COOKIE,
@@ -49,16 +50,29 @@ export function PortfolioSwitcher({
 }) {
   const t = useTranslations("PortfolioSwitcher");
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // When the user drills into a portfolio from /portfolios (card click), we land on
+  // /holdings?portfolio=<id> without touching the global cookie. Reflect that transient
+  // override in the switcher so the label is accurate, but leave the cookie alone.
+  const overrideParam = pathname === "/holdings" ? searchParams.get("portfolio") : null;
+  const overrideActive = !!overrideParam && portfolios.some((p) => p.id === overrideParam);
+  const effectiveSelectedId = overrideActive ? overrideParam : selectedId;
+  const effectiveHolderId = overrideActive ? null : selectedHolderId;
 
   if (portfolios.length === 0) return null;
 
   function onSelect(value: string) {
     document.cookie = `${SELECTED_PORTFOLIO_COOKIE}=${value}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
+    // Selecting anything from the switcher while on a drill-in URL should drop
+    // the ?portfolio= param so the cookie governs from here on.
+    if (overrideActive) router.replace(pathname);
     router.refresh();
   }
 
-  const selectedPortfolio = portfolios.find((p) => p.id === selectedId);
-  const selectedHolder = holders.find((h) => h.id === selectedHolderId);
+  const selectedPortfolio = portfolios.find((p) => p.id === effectiveSelectedId);
+  const selectedHolder = holders.find((h) => h.id === effectiveHolderId);
 
   const portfolioLabel = (p: Pick<Portfolio, "name" | "brokerage" | "accountHolder">) => {
     const parts = [p.name];
@@ -115,7 +129,7 @@ export function PortfolioSwitcher({
           <Check
             className={cn(
               "ml-auto size-4 shrink-0",
-              !selectedPortfolio && !selectedHolder ? "visible" : "invisible",
+              !effectiveSelectedId && !effectiveHolderId ? "visible" : "invisible",
             )}
           />
         </DropdownMenuItem>
@@ -135,7 +149,7 @@ export function PortfolioSwitcher({
                 <Check
                   className={cn(
                     "ml-auto size-4 shrink-0",
-                    h.id === selectedHolderId ? "visible" : "invisible",
+                    h.id === effectiveHolderId ? "visible" : "invisible",
                   )}
                 />
               </DropdownMenuItem>
@@ -153,7 +167,7 @@ export function PortfolioSwitcher({
             <Check
               className={cn(
                 "ml-auto size-4 shrink-0",
-                p.id === selectedId ? "visible" : "invisible",
+                p.id === effectiveSelectedId ? "visible" : "invisible",
               )}
             />
           </DropdownMenuItem>

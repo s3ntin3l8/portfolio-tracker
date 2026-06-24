@@ -1,10 +1,12 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Briefcase, Pencil, Plus } from "lucide-react";
+import { Archive, Briefcase, Coins, EyeOff, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
+import { PortfolioCardMenu } from "@/components/portfolio-card-menu";
+import { PortfolioCardLink } from "@/components/portfolio-card-link";
 import { AccountHoldersManager } from "@/components/account-holders-manager";
 import { BrokerageIcon } from "@/components/brokerage-icon";
 import { TrSyncButton } from "@/components/tr-sync-button";
@@ -78,35 +80,30 @@ export default async function PortfoliosPage({
             const isIbkrBound = portfolio.id === ibkrPortfolioId;
             const isIbkrConnected = isIbkrBound && ibkrConn?.status === "connected";
             return (
-              <Card key={portfolio.id}>
+              <Card key={portfolio.id} className="relative transition-colors hover:bg-accent/50">
+                {/* Overlay button — sets the pf cookie and navigates to /holdings */}
+                <PortfolioCardLink portfolioId={portfolio.id} name={portfolio.name} />
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <BrokerageIcon brokerage={portfolio.brokerage} />
                       <div className="min-w-0">
                         <p className="truncate font-medium">{portfolio.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {portfolio.baseCurrency}
-                          {portfolio.brokerage && ` · ${portfolio.brokerage}`}
-                          {portfolio.accountHolder && ` · ${portfolio.accountHolder}`}
-                          {portfolio.portfolioType === "child" &&
-                            portfolio.birthYear !== null &&
-                            ` · ${t("born", { year: String(portfolio.birthYear) })}`}
-                        </p>
+                        {portfolio.accountHolder && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {portfolio.accountHolder}
+                            {portfolio.portfolioType === "child" &&
+                              portfolio.birthYear !== null &&
+                              ` · ${t("born", { year: String(portfolio.birthYear) })}`}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    {/* Interactive controls — z-20 to sit above the overlay link */}
+                    <div className="relative z-20 flex shrink-0 items-center gap-1">
                       {isTrConnected && <TrSyncButton initialSyncing={connection?.syncing ?? false} />}
                       {isIbkrConnected && <IbkrSyncButton initialSyncing={ibkrConn?.syncing ?? false} />}
-                      <PortfolioFormDialog
-                        mode="edit"
-                        portfolio={portfolio}
-                        trigger={
-                          <Button size="icon" variant="ghost" aria-label={tf("edit")}>
-                            <Pencil className="size-4" />
-                          </Button>
-                        }
-                      />
+                      <PortfolioCardMenu portfolio={portfolio} />
                     </div>
                   </div>
                   {isTrBound && connection && (
@@ -127,6 +124,38 @@ export default async function PortfoliosPage({
                     {formatMoney(Number(netWorth), portfolio.baseCurrency, locale)}
                   </p>
                   <p className="text-xs text-muted-foreground">{t("value")}</p>
+                  {/* Footer flag strip — only rendered when at least one non-default flag is set */}
+                  {(portfolio.cashCounted ||
+                    portfolio.documentRetention ||
+                    portfolio.taxAllowanceAnnual != null ||
+                    !portfolio.includeInAggregate) && (
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
+                      {portfolio.cashCounted && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Coins className="size-3.5 shrink-0" />
+                          {t("cashIn")}
+                        </span>
+                      )}
+                      {portfolio.documentRetention && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Archive className="size-3.5 shrink-0" />
+                          {t("docsKept")}
+                        </span>
+                      )}
+                      {portfolio.taxAllowanceAnnual != null && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <ShieldCheck className="size-3.5 shrink-0" />
+                          {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
+                        </span>
+                      )}
+                      {!portfolio.includeInAggregate && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <EyeOff className="size-3.5 shrink-0" />
+                          {t("excluded")}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );
