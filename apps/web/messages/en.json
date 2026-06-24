@@ -245,7 +245,10 @@
     "value": "Value",
     "create": "Create a portfolio",
     "empty": "No portfolios yet — create your first one.",
-    "born": "Born {year}"
+    "born": "Born {year}",
+    "cashIn": "Cash in",
+    "docsKept": "Docs kept",
+    "excluded": "Excluded"
   },
   "AccountHolders": {
     "title": "Account holders",

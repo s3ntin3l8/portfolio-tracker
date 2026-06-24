@@ -69,13 +69,17 @@ export function AppShell({
     pathname === p || pathname.startsWith(p + "/"),
   );
 
+  // Suspense required: PortfolioSwitcher reads useSearchParams (for the transient
+  // drill-in override on /holdings) and this shell renders on every route.
   const switcher = hideSelector ? null : (
-    <PortfolioSwitcher
-      portfolios={portfolios}
-      holders={holders}
-      selectedId={selectedId}
-      selectedHolderId={selectedHolderId}
-    />
+    <Suspense fallback={null}>
+      <PortfolioSwitcher
+        portfolios={portfolios}
+        holders={holders}
+        selectedId={selectedId}
+        selectedHolderId={selectedHolderId}
+      />
+    </Suspense>
   );
 
   const signOutButton = (

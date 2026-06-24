@@ -4,8 +4,16 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
+const replace = vi.fn();
+let mockPathname = "/";
+let mockSearchParams = new URLSearchParams();
+
 vi.mock("@/i18n/navigation", () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, replace }),
+  usePathname: () => mockPathname,
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => mockSearchParams,
 }));
 
 import { PortfolioSwitcher } from "../src/components/portfolio-switcher";
@@ -35,6 +43,9 @@ function openMenu() {
 describe("PortfolioSwitcher", () => {
   beforeEach(() => {
     refresh.mockClear();
+    replace.mockClear();
+    mockPathname = "/";
+    mockSearchParams = new URLSearchParams();
     document.cookie = "pf=; max-age=0; path=/";
   });
 
@@ -183,5 +194,35 @@ describe("PortfolioSwitcher", () => {
       selectedId: null,
     });
     expect(trigger()).toBeInTheDocument();
+  });
+
+  it("shows the drilled-in portfolio on /holdings?portfolio= even when selectedId is null", () => {
+    mockPathname = "/holdings";
+    mockSearchParams = new URLSearchParams("portfolio=p2");
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
+      ],
+      selectedId: null,
+    });
+    expect(trigger()).toHaveTextContent("DKB");
+    expect(trigger()).not.toHaveTextContent(messages.PortfolioSwitcher.all);
+  });
+
+  it("drops ?portfolio= param when the user picks from the switcher during a drill-in", () => {
+    mockPathname = "/holdings";
+    mockSearchParams = new URLSearchParams("portfolio=p2");
+    renderSwitcher({
+      portfolios: [
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
+      ],
+      selectedId: null,
+    });
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: messages.PortfolioSwitcher.all }));
+    expect(replace).toHaveBeenCalledWith("/holdings");
+    expect(refresh).toHaveBeenCalled();
   });
 });

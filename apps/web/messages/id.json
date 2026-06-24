@@ -245,7 +245,10 @@
     "value": "Nilai",
     "create": "Buat portofolio",
     "empty": "Belum ada portofolio — buat yang pertama.",
-    "born": "Lahir {year}"
+    "born": "Lahir {year}",
+    "cashIn": "Kas termasuk",
+    "docsKept": "Dok tersimpan",
+    "excluded": "Tidak termasuk"
   },
   "AccountHolders": {
     "title": "Pemilik akun",
