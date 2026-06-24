@@ -10,7 +10,7 @@ import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { loadHoldings, loadAnomalies } from "@/lib/server-api";
 
-const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund"] as const;
+const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto"] as const;
 
 type CostBasisMode = "purchase_price" | "total_paid";
 
