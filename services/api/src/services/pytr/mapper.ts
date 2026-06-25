@@ -91,7 +91,11 @@ const FIXED_ACTIONS: Record<string, ParsedAction> = {
   BANK_TRANSACTION_INCOMING: "deposit",
   // Interest on the cash balance is income, not a deposit (would otherwise be counted as a
   // contribution and skew invested capital / money-weighted return).
+  // INTEREST_PAYOUT_CREATED is the pre-late-2024 name for the same monthly cash-interest
+  // booking — validated against a real account (disjoint, continuous months with no overlap;
+  // TR renamed the event type in late 2024, not a notice-then-settlement pair).
   INTEREST_PAYOUT: "interest",
+  INTEREST_PAYOUT_CREATED: "interest",
   CARD_REFUND: "deposit",
   // --- cash out ---
   PAYMENT_OUTBOUND: "withdrawal",
@@ -122,7 +126,6 @@ const CASH_CORPORATE_ACTION = "SSP_CORPORATE_ACTION_CASH";
 const SKIP_EVENTS = new Map<string, string>([
   ["CARD_VERIFICATION", "card verification (no cash movement)"],
   ["TRADING_SAVINGSPLAN_EXECUTION_FAILED", "failed savings-plan execution"],
-  ["INTEREST_PAYOUT_CREATED", "interest accrual notice (settled by INTEREST_PAYOUT)"],
 ]);
 
 // Skipped events the user may actually want to map (vs. ignorable info like a card ping).

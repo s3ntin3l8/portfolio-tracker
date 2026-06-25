@@ -140,11 +140,20 @@ describe("mapTrEventToDraft", () => {
 
   it("maps cash movements with no instrument", () => {
     // Interest is income, not a deposit (so it isn't counted as a contribution).
+    // Both the current and the pre-late-2024 event name map to the same action.
     expect(draftOf({ ...base, eventType: "INTEREST_PAYOUT", amount: 3 })).toMatchObject({
       action: "interest",
       isin: null,
       quantity: "0",
       price: "3",
+    });
+    // INTEREST_PAYOUT_CREATED is the pre-late-2024 name for the same monthly cash-interest
+    // booking (TR renamed the event type; the streams are disjoint, never co-occurring).
+    expect(draftOf({ ...base, eventType: "INTEREST_PAYOUT_CREATED", amount: 1.69 })).toMatchObject({
+      action: "interest",
+      isin: null,
+      quantity: "0",
+      price: "1.69",
     });
     expect(draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 1000 }).action).toBe(
       "deposit",
@@ -248,10 +257,9 @@ describe("mapTrEventToDraft", () => {
     );
   });
 
-  it("skips known no-ops with a reason (card verification, failed/accrual events)", () => {
+  it("skips known no-ops with a reason (card verification, failed execution events)", () => {
     for (const eventType of [
       "CARD_VERIFICATION",
-      "INTEREST_PAYOUT_CREATED",
       "TRADING_SAVINGSPLAN_EXECUTION_FAILED",
     ]) {
       expect(mapTrEventToDraft({ ...base, eventType, amount: 0 })).toMatchObject({

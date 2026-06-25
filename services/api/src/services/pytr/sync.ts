@@ -77,11 +77,14 @@ function reconcileCash(
   // non-EXECUTED events). Convert the resulting drafts to CoreTransaction for cashBalances.
   const { drafts } = mapTrEvents(allEvents);
   const coreTxns: CoreTransaction[] = drafts.map((d) => ({
-    instrumentId: null, // cashBalances only uses type/qty/price/fees/currency
+    instrumentId: null,
     type: d.action as CoreTransaction["type"],
     quantity: d.quantity,
     price: d.price,
     fees: d.fees,
+    // tax must be carried through: cashFlow() for sells subtracts tax from gross proceeds.
+    // Omitting it would over-credit derived cash by the full capital-gains tax on each sell.
+    tax: d.tax,
     currency: d.currency,
     executedAt: d.executedAt,
   }));

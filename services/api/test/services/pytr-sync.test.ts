@@ -347,6 +347,40 @@ describe("syncTrConnection", () => {
     ]);
   });
 
+  it("reconcile cash correctly subtracts sell tax (regression: omitted tax overstated derived)", async () => {
+    const conn = await makeConnection("reconcile-sell-tax");
+    const db = getDb();
+    // A sell of 5 shares at 100 gross each = 500 notional; 1 fee; 2 tax withheld.
+    // Net cash TR reports: 500 − 1 − 2 = 497 EUR.
+    // Before the fix, `tax` was not passed to CoreTransaction → cashFlow() treated it as 0
+    // → derived was 499 (wrong, over by 2).  After the fix derived must be 497 (= 500 − 1 − 2).
+    const evs = [
+      {
+        id: "sell-1",
+        timestamp: "2026-04-01T10:00:00.000Z",
+        eventType: "ORDER_EXECUTED",
+        amount: 497,   // net cash (sign: positive = cash in)
+        shares: -5,    // pytr: negative shares for a sell
+        fees: -1,      // pytr: negative for costs
+        tax: -2,       // pytr: negative for costs
+        isin: "DE0007236101",
+        currency: "EUR",
+      },
+    ];
+    const runner = runnerWith(async () => ({
+      events: evs,
+      sessionData: "J",
+      // TR reports the actual net cash received after fees and tax.
+      summary: { cash: [{ currency: "EUR", amount: 497 }] },
+    }));
+
+    const result = await syncTrConnection(db, enc, runner, conn);
+    // Derived must match TR's reported 497 → diff 0.00 (not +2 from a missing tax subtraction).
+    expect(result.reconciliation?.cash).toEqual([
+      { currency: "EUR", reported: "497", derived: "497", diff: "0.00" },
+    ]);
+  });
+
   it("a purposely-deleted confirmed transaction stays gone (durable ledger)", async () => {
     const conn = await makeConnection("durable");
     const db = getDb();
