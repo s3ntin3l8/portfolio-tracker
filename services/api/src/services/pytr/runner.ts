@@ -11,6 +11,13 @@ export interface DocDownloadResult {
   mimeType: string;
 }
 
+export interface DownloadDocumentsResult {
+  /** Successfully downloaded docs, keyed by docId. */
+  docs: Map<string, DocDownloadResult>;
+  /** Per-doc failures (parse errors, 4xx from TR, file-read failures, etc.). */
+  failures: { docId: string | null; error: string }[];
+}
+
 // The injectable spawn seam — tests pass a fake so CI never launches real Python.
 export type SpawnFn = typeof nodeSpawn;
 
@@ -391,9 +398,9 @@ export class PytrRunner {
    * Download postbox document bytes for a set of (eventId, docId) pairs.
    *
    * Spawns `tr_documents.py --cookies-file COOKIES --out OUTDIR`, feeds pairs as NDJSON
-   * on stdin, reads per-doc results from stdout. Per-doc failures are logged and dropped
-   * (best-effort) — they never throw. Returns a Map of docId → {buf, mimeType} for all
-   * successfully downloaded docs.
+   * on stdin, reads per-doc results from stdout. Per-doc failures are collected in
+   * `result.failures` (logged + surfaced to callers) rather than silently dropped.
+   * Process-level errors still throw (PytrAuthError on code 2, PytrError on code≠0).
    *
    * The bytes channel is an `--out` temp dir (mirrors the `--cookies-file` seam) rather
    * than stdout so binary content never corrupts the NDJSON stream.
@@ -401,9 +408,9 @@ export class PytrRunner {
   async downloadDocuments(
     session: { phone: string; pin: string; sessionData: string },
     pairs: { eventId: string; docId: string }[],
-  ): Promise<Map<string, DocDownloadResult>> {
+  ): Promise<DownloadDocumentsResult> {
     if (!this.opts.enabled) throw new PytrUnavailableError();
-    if (pairs.length === 0) return new Map();
+    if (pairs.length === 0) return { docs: new Map(), failures: [] };
 
     const tmpDir = await mkdtemp(join(tmpdir(), "pytr-docs-"));
     const cookiesFile = join(tmpDir, "cookies.txt");
@@ -432,8 +439,10 @@ export class PytrRunner {
         throw new PytrError(stderr.trim() || `tr_documents.py exited with code ${code}`);
       }
 
-      // Parse NDJSON result lines; load bytes for each ok result.
-      const result = new Map<string, DocDownloadResult>();
+      // Parse NDJSON result lines; load bytes for each ok result. Per-doc failures are
+      // collected (not dropped) so callers can surface them in logs and metrics.
+      const docs = new Map<string, DocDownloadResult>();
+      const failures: { docId: string | null; error: string }[] = [];
       const lines = stdout
         .split("\n")
         .map((l) => l.trim())
@@ -445,25 +454,30 @@ export class PytrRunner {
           parsed = JSON.parse(line);
         } catch {
           this.log?.warn({ line }, "tr_documents: unparseable stdout line");
+          failures.push({ docId: null, error: `unparseable line: ${line.slice(0, 100)}` });
           continue;
         }
         if (!parsed.ok || !parsed.docId || !parsed.file) {
+          const reason = parsed.error ?? (parsed.docId ? "missing file field" : "missing docId");
           this.log?.warn(
-            { docId: parsed.docId, error: parsed.error },
-            "tr_documents: per-doc failure (non-fatal)",
+            { docId: parsed.docId, error: reason },
+            "tr_documents: per-doc failure",
           );
+          failures.push({ docId: parsed.docId ?? null, error: reason });
           continue;
         }
         try {
           const buf = await readFile(join(outDir, parsed.file));
-          result.set(parsed.docId, { buf, mimeType: parsed.mimeType ?? "application/pdf" });
+          docs.set(parsed.docId, { buf, mimeType: parsed.mimeType ?? "application/pdf" });
         } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
           this.log?.warn({ docId: parsed.docId, err }, "tr_documents: failed to read output file");
+          failures.push({ docId: parsed.docId, error: `file read failed: ${reason}` });
         }
       }
 
-      this.log?.debug({ requested: pairs.length, downloaded: result.size }, "pytr documents fetched");
-      return result;
+      this.log?.debug({ requested: pairs.length, downloaded: docs.size, failed: failures.length }, "pytr documents fetched");
+      return { docs, failures };
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

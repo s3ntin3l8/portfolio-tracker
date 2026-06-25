@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import type { FastifyBaseLogger } from "fastify";
 import pino from "pino";
 import type { DestinationStream } from "pino";
+import pinoRoll from "pino-roll";
 import sensible from "@fastify/sensible";
 import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
@@ -57,6 +58,36 @@ export type BuildAppOptions = AuthPluginOptions & {
   logStream?: DestinationStream;
 };
 
+/**
+ * Resolve the pino destination stream.
+ * - Tests pass an explicit logStream (in-memory capture) — returned as-is.
+ * - When LOG_DIR is set in the environment, fan out to both stdout AND a rolling
+ *   file (daily rotation, 20 MB size cap, 14 days of retention). Both sinks inherit
+ *   the pino instance's `redact` config, so secrets never reach the file.
+ * - Otherwise, log to stdout only (default and Docker/prod behaviour).
+ */
+async function resolveLogDestination(
+  injected?: DestinationStream,
+): Promise<DestinationStream> {
+  if (injected) return injected;
+
+  const logDir = process.env.LOG_DIR?.trim();
+  if (!logDir) return process.stdout;
+
+  // pino-roll opens the file and rotates; the import is dynamic to avoid the
+  // overhead + any file-handle leak in test runs (tests inject a stream directly).
+  const rollStream = await pinoRoll({
+    file: `${logDir}/api.log`,
+    frequency: "daily",
+    size: "20m",
+    limit: { count: 14 },
+    mkdir: true,
+    sync: false,
+  });
+
+  return pino.multistream([{ stream: process.stdout }, { stream: rollStream }]);
+}
+
 export async function buildApp(opts: BuildAppOptions = {}) {
   // Build the pino logger eagerly so we can (a) set redact paths at construction time
   // (they can't be patched in after the fact) and (b) accept a custom stream for test
@@ -89,7 +120,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
         censor: "[Redacted]",
       },
     },
-    opts.logStream ?? process.stdout,
+    await resolveLogDestination(opts.logStream),
   );
 
   // Cast to FastifyBaseLogger: pino.Logger is a superset of FastifyBaseLogger. The cast

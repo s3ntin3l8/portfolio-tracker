@@ -142,6 +142,15 @@ const schema = {
       type: "string",
       default: "",
     },
+    // Directory for rolling log files. Empty (default) = disabled; logs go to stdout only.
+    // Set to an absolute path (e.g. /var/log/api) or a relative one (e.g. ./logs) in .env
+    // to also persist logs to a rotating file (daily rotation, 20 MB size cap, 14-day retention).
+    // The directory is created automatically. Docker/production environments that capture
+    // stdout via journald/CloudWatch should leave this unset.
+    LOG_DIR: {
+      type: "string",
+      default: "",
+    },
   },
 };
 
@@ -184,6 +193,7 @@ declare module "fastify" {
       STORAGE_SIGNED_URL_TTL: number;
       STORAGE_FOLDER_PATH: string;
       STORAGE_PUBLIC_URL: string;
+      LOG_DIR: string;
     };
   }
 }

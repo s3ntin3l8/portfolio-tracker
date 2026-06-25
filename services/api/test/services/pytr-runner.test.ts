@@ -283,11 +283,12 @@ describe("PytrRunner.isAvailable", () => {
 describe("PytrRunner.downloadDocuments", () => {
   const SESSION = { phone: "+4915", pin: "1234", sessionData: "COOKIE_JAR" };
 
-  it("returns an empty Map immediately when pairs is empty (no spawn)", async () => {
+  it("returns an empty docs Map immediately when pairs is empty (no spawn)", async () => {
     const { spawn } = makeSpawn();
     const runner = makeRunner(spawn);
     const result = await runner.downloadDocuments(SESSION, []);
-    expect(result.size).toBe(0);
+    expect(result.docs.size).toBe(0);
+    expect(result.failures).toEqual([]);
   });
 
   it("throws PytrUnavailableError when disabled", async () => {
@@ -325,8 +326,9 @@ describe("PytrRunner.downloadDocuments", () => {
     child.emit("exit", 0);
 
     const result = await downloadP;
-    expect(result.size).toBe(1);
-    const entry = result.get("doc-A");
+    expect(result.docs.size).toBe(1);
+    expect(result.failures).toEqual([]);
+    const entry = result.docs.get("doc-A");
     expect(entry?.mimeType).toBe("application/pdf");
     expect(entry?.buf.toString()).toBe("%PDF-1.4");
   });
@@ -350,7 +352,7 @@ describe("PytrRunner.downloadDocuments", () => {
     await expect(p).rejects.toThrow(PytrError);
   });
 
-  it("skips docs with ok:false and returns only successful ones", async () => {
+  it("collects per-doc failures and returns only successful docs", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn, { exportTimeoutMs: 5000 });
     const p = runner.downloadDocuments(SESSION, [
@@ -373,11 +375,14 @@ describe("PytrRunner.downloadDocuments", () => {
     child.emit("exit", 0);
 
     const result = await p;
-    expect(result.has("d1")).toBe(false);
-    expect(result.get("d2")?.buf.toString()).toBe("good-bytes");
+    expect(result.docs.has("d1")).toBe(false);
+    expect(result.docs.get("d2")?.buf.toString()).toBe("good-bytes");
+    // The failure for d1 is surfaced in result.failures, not silently dropped.
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toMatchObject({ docId: "d1", error: "HTTP 403" });
   });
 
-  it("skips unparseable stdout lines without throwing", async () => {
+  it("surfaces unparseable stdout lines in failures without throwing", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn);
     const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
@@ -385,10 +390,12 @@ describe("PytrRunner.downloadDocuments", () => {
     child.stdout.emit("data", Buffer.from("not valid json\n"));
     child.emit("exit", 0);
     const result = await p;
-    expect(result.size).toBe(0);
+    expect(result.docs.size).toBe(0);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].docId).toBeNull();
   });
 
-  it("skips a doc whose output file cannot be read (best-effort)", async () => {
+  it("surfaces a file-read failure in failures without throwing", async () => {
     const { spawn, nextChild } = makeSpawn();
     const runner = makeRunner(spawn);
     const p = runner.downloadDocuments(SESSION, [{ eventId: "e1", docId: "d1" }]);
@@ -400,7 +407,10 @@ describe("PytrRunner.downloadDocuments", () => {
     );
     child.emit("exit", 0);
     const result = await p;
-    expect(result.size).toBe(0);
+    expect(result.docs.size).toBe(0);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].docId).toBe("d1");
+    expect(result.failures[0].error).toContain("file read failed");
   });
 
   // ── runWithStdin failure modes (exercised via downloadDocuments) ──────────
