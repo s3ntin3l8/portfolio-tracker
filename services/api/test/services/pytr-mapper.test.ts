@@ -268,6 +268,40 @@ describe("mapTrEventToDraft", () => {
     }
   });
 
+  it("skips informational admin/report/order-lifecycle events as info (not unmapped gaps)", () => {
+    // Representative sample across the categories added for noise reduction. These must be
+    // `info` skips with a reason — NOT `attention` / `unmapped_event_type`, so they don't
+    // bury the real gaps the safety net flags.
+    for (const eventType of [
+      "ORDER_REJECTED",
+      "TRADING_ORDER_REJECTED",
+      "DOCUMENTS_CREATED",
+      "EX_POST_COST_REPORT",
+      "ADDRESS_CHANGED",
+      "EXEMPTION_ORDER_CHANGED",
+      "GENERAL_MEETING",
+    ]) {
+      const result = mapTrEventToDraft({ ...base, eventType, amount: 0 });
+      expect(result).toMatchObject({ skip: true, severity: "info" });
+      if ("skip" in result) {
+        expect(result.reason).toBeTruthy();
+        expect(result.code).toBeUndefined();
+      }
+    }
+  });
+
+  it("does NOT skip value-bearing types — they stay surfaced until classified", () => {
+    // Guardrail: types that can carry cash/shares must remain unmapped (attention/gap),
+    // never silently absorbed into the info skip-list.
+    for (const eventType of ["TAXES", "MATURITY", "SHAREBOOKING"]) {
+      expect(mapTrEventToDraft({ ...base, eventType, amount: -1 })).toMatchObject({
+        skip: true,
+        severity: "attention",
+        code: "unmapped_event_type",
+      });
+    }
+  });
+
   it("maps SSP_CORPORATE_ACTION_INSTRUMENT to a bonus draft when shares are known", () => {
     // Stock dividend: company issues shares with no cash consideration.
     const result = mapTrEventToDraft({

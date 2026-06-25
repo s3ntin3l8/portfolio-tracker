@@ -123,9 +123,59 @@ const CASH_BY_SIGN = new Set(["JUNIOR_P2P_TRANSFER", "SSP_TAX_CORRECTION", "CARD
 const CASH_CORPORATE_ACTION = "SSP_CORPORATE_ACTION_CASH";
 
 // Events deliberately not turned into transactions, with the reason surfaced (not dropped).
+//
+// These are purely administrative/notification/report/order-lifecycle events with NO cash and
+// NO share movement (validated against pytr's own event taxonomy + #359's ignore list). Each
+// is skipped as `info` so it is recorded with a reason — never silently dropped — and so it
+// no longer surfaces as an "unmapped event type" attention gap (which buries the real gaps the
+// safety net is meant to flag). Anything that *could* carry value (TAXES/Vorabpauschale,
+// MATURITY, SHAREBOOKING, corporate-action instructions, referral perks, …) is intentionally
+// NOT here — those stay surfaced until classified.
 const SKIP_EVENTS = new Map<string, string>([
   ["CARD_VERIFICATION", "card verification (no cash movement)"],
   ["TRADING_SAVINGSPLAN_EXECUTION_FAILED", "failed savings-plan execution"],
+  // Order lifecycle — the only cash leg is the fill (ORDER_EXECUTED); these carry none.
+  ["ORDER_CREATED", "order created (no fill, no cash)"],
+  ["ORDER_CANCELED", "order cancelled (no fill, no cash)"],
+  ["ORDER_EXPIRED", "order expired (no fill, no cash)"],
+  ["ORDER_REJECTED", "order rejected (no fill, no cash)"],
+  ["TRADING_ORDER_REJECTED", "order rejected (no fill, no cash)"],
+  // Documents, statements and regulatory reports — informational, no cash/shares.
+  ["DOCUMENTS_CREATED", "document created (informational)"],
+  ["DOCUMENTS_ACCEPTED", "document accepted (informational)"],
+  ["DOCUMENTS_CHANGED", "document changed (informational)"],
+  ["EX_POST_COST_REPORT", "ex-post cost report (informational)"],
+  ["EX_POST_COST_REPORT_CREATED", "ex-post cost report (informational)"],
+  ["TAX_YEAR_END_REPORT", "year-end tax report (informational)"],
+  ["TAX_YEAR_END_REPORT_CREATED", "year-end tax report (informational)"],
+  ["YEAR_END_TAX_REPORT", "year-end tax report (informational)"],
+  ["QUARTERLY_REPORT", "quarterly report (informational)"],
+  ["CRYPTO_ANNUAL_STATEMENT", "crypto annual statement (informational)"],
+  // Account / profile / device / onboarding admin — no financial effect.
+  ["ADDRESS_CHANGED", "address changed (informational)"],
+  ["REFERENCE_ACCOUNT_CHANGED", "reference account changed (informational)"],
+  ["CASH_ACCOUNT_CHANGED", "cash account changed (informational)"],
+  ["SECURITIES_ACCOUNT_CREATED", "securities account created (informational)"],
+  ["CUSTOMER_CREATED", "customer created (informational)"],
+  ["EMAIL_VALIDATED", "email validated (informational)"],
+  ["DEVICE_RESET", "device reset (informational)"],
+  ["PUK_CREATED", "PUK created (informational)"],
+  ["INPAYMENTS_SEPA_MANDATE_CREATED", "SEPA mandate created (informational)"],
+  ["AML_SOURCE_OF_WEALTH_RESPONSE_EXECUTED", "AML source-of-wealth response (informational)"],
+  ["CSX_CHAT_ACTIVITY", "support chat activity (informational)"],
+  ["RDD_FLOW", "regulatory due-diligence flow (informational)"],
+  ["JUNIOR_ONBOARDING_GUARDIAN_B_CONSENT", "junior onboarding consent (informational)"],
+  ["VERIFICATION_TRANSFER_ACCEPTED", "verification transfer accepted (informational)"],
+  // Freistellungsauftrag (tax exemption order) changes — informational; the tax effect
+  // itself lands on the dividend/interest events, not here.
+  ["EXEMPTION_ORDER_CHANGED", "tax exemption order changed (informational)"],
+  ["EXEMPTION_ORDER_CHANGE_REQUESTED", "tax exemption order change requested (informational)"],
+  [
+    "EXEMPTION_ORDER_CHANGE_REQUESTED_AUTOMATICALLY",
+    "tax exemption order change requested (informational)",
+  ],
+  // Governance notification — no cash/shares (any resulting payout/issue is a separate event).
+  ["GENERAL_MEETING", "general meeting notification (informational)"],
 ]);
 
 // Skipped events the user may actually want to map (vs. ignorable info like a card ping).
