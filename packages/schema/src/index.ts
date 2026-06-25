@@ -441,6 +441,10 @@ export type ParsedGoldContract = z.infer<typeof parsedGoldContractSchema>;
 export const importIssueSchema = z.object({
   message: z.string(),
   severity: z.enum(["info", "attention"]).default("attention"),
+  // Machine-readable cause so surfaces can filter without parsing `message`. The safety net
+  // (dashboard/admin alert) keys off `unmapped_event_type` / `unparseable_event` to flag TR
+  // event types that reach the importer but have no mapping yet — a self-announcing gap.
+  code: z.enum(["unmapped_event_type", "unparseable_event"]).optional(),
   line: z.number().optional(),
   eventId: z.string().optional(),
   eventType: z.string().optional(),

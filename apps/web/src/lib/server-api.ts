@@ -15,6 +15,7 @@ import {
   type HoldingValuation,
   type ImportRecord,
   type ImportDetail,
+  type UnmappedEventType,
   type IncomeStats,
   type ContributionStats,
   type SparplanStats,
@@ -625,6 +626,21 @@ export async function loadImports(): Promise<ImportRecord[]> {
   if (!api) return [];
   try {
     return await api.listImports();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Safety net: event types that reached the importer but have no mapping yet (TR emitted a
+ * type we don't classify). A non-empty list is a self-announcing gap. User-scoped; empty on
+ * error / signed out so it never blocks a page render.
+ */
+export async function loadUnmappedEventTypes(): Promise<UnmappedEventType[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.getUnmappedEventTypes();
   } catch {
     return [];
   }

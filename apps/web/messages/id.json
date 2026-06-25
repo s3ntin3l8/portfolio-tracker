@@ -1127,5 +1127,11 @@
     "positions": "Posisi",
     "save": "Simpan",
     "cancel": "Batal"
+  },
+  "unmappedTypes": {
+    "title": "{count, plural, other {# jenis transaksi Trade Republic belum terpetakan}}",
+    "description": "Ini sampai ke pengimpor tetapi belum memiliki pemetaan, sehingga dikecualikan dari saldo Anda hingga ditambahkan ke mapper.",
+    "unparseable": "(tanpa jenis transaksi)",
+    "debug": "Detail debug"
   }
 }

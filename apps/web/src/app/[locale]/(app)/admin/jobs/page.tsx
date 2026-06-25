@@ -3,8 +3,9 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ChevronLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdminJobs } from "@/components/admin-jobs";
+import { UnmappedTypesAlert } from "@/components/unmapped-types-alert";
 import { Link } from "@/i18n/navigation";
-import { loadMe, loadAdminJobs } from "@/lib/server-api";
+import { loadMe, loadAdminJobs, loadUnmappedEventTypes } from "@/lib/server-api";
 
 export default async function AdminJobsPage({
   params,
@@ -18,7 +19,7 @@ export default async function AdminJobsPage({
   const me = await loadMe();
   if (!me?.isAdmin) notFound();
 
-  const result = await loadAdminJobs();
+  const [result, unmappedTypes] = await Promise.all([loadAdminJobs(), loadUnmappedEventTypes()]);
 
   return (
     <div className="space-y-4">
@@ -29,6 +30,8 @@ export default async function AdminJobsPage({
         <ChevronLeft className="size-4" />
         {t("title")}
       </Link>
+
+      <UnmappedTypesAlert types={unmappedTypes} />
 
       <Card>
         <CardHeader>

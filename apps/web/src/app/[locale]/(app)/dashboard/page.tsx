@@ -14,7 +14,8 @@ import { GoldTicker } from "@/components/gold-ticker";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId, loadPreferences, loadAnomalies } from "@/lib/server-api";
+import { loadNetWorth, loadNetWorthHistory, getSelectedPortfolioId, loadPreferences, loadAnomalies, loadUnmappedEventTypes } from "@/lib/server-api";
+import { UnmappedTypesAlert } from "@/components/unmapped-types-alert";
 import { cn, formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 import { CostBasisToggle } from "@/components/cost-basis-toggle";
 import { PeriodSelector } from "@/components/period-selector";
@@ -41,12 +42,13 @@ export default async function DashboardPage({
   const tm = await getTranslations("Manage");
   const th = await getTranslations("Holdings");
 
-  const [result, history, selectedId, preferences, anomalies] = await Promise.all([
+  const [result, history, selectedId, preferences, anomalies, unmappedTypes] = await Promise.all([
     loadNetWorth(costBasis, period),
     loadNetWorthHistory(),
     getSelectedPortfolioId(),
     loadPreferences(),
     loadAnomalies(),
+    loadUnmappedEventTypes(),
   ]);
 
   const Heading = (
@@ -175,6 +177,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       {Heading}
       {anomalyBadge}
+      <UnmappedTypesAlert types={unmappedTypes} />
 
       <GoldTicker currency={currency} />
 

@@ -152,6 +152,7 @@ export type MapResult =
       skip: true;
       reason: string;
       severity: "info" | "attention";
+      code?: ImportIssue["code"];
       eventId?: string;
       eventType?: string;
       raw?: ImportIssue["raw"];
@@ -169,12 +170,14 @@ function skip(
   reason: string,
   severity: "info" | "attention",
   ev?: TrEvent,
+  code?: ImportIssue["code"],
 ): MapResult {
-  if (!ev) return { skip: true, reason, severity };
+  if (!ev) return { skip: true, reason, severity, code };
   return {
     skip: true,
     reason,
     severity,
+    code,
     eventId: ev.id,
     eventType: ev.eventType,
     raw: {
@@ -196,7 +199,14 @@ function skip(
 export function mapTrEventToDraft(raw: unknown): MapResult {
   const parsed = trEventSchema.safeParse(raw);
   if (!parsed.success) {
-    return skip(`unparseable event: ${parsed.error.issues[0]?.message}`, "attention");
+    // A schema-level reject (e.g. a TR event with no `eventType` — the legacy securities-
+    // transfer shape) surfaces as a self-announcing gap, not a silent drop.
+    return skip(
+      `unparseable event: ${parsed.error.issues[0]?.message}`,
+      "attention",
+      undefined,
+      "unparseable_event",
+    );
   }
   const ev = parsed.data;
 
@@ -228,7 +238,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     action = "bonus";
   }
   if (!action) {
-    return skip(`unmapped event type: ${ev.eventType}`, "attention", ev);
+    return skip(`unmapped event type: ${ev.eventType}`, "attention", ev, "unmapped_event_type");
   }
 
   const amount = Math.abs(ev.amount);
@@ -335,6 +345,7 @@ export function mapTrEvents(rawEvents: unknown[]): {
         line: i,
         message: result.reason,
         severity: result.severity,
+        code: result.code,
         eventId: result.eventId,
         eventType: result.eventType,
         raw: result.raw,

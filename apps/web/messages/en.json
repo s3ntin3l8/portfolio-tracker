@@ -1129,5 +1129,11 @@
     "positions": "Positions",
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "unmappedTypes": {
+    "title": "{count, plural, one {# unmapped Trade Republic event type} other {# unmapped Trade Republic event types}}",
+    "description": "These reached the importer but have no mapping yet, so they're excluded from your balances until added to the mapper.",
+    "unparseable": "(no event type)",
+    "debug": "Debug details"
   }
 }

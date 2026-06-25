@@ -14,6 +14,7 @@ import {
   parsedGoldContractSchema,
   parsedTransactionSchema,
   type AssetClass,
+  type ImportIssue,
   type ParsedTransaction,
 } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
@@ -855,6 +856,54 @@ export async function importsRoute(app: FastifyInstance) {
         };
       }),
     );
+  });
+
+  // Safety net: aggregate event types that reached the importer but have no mapping yet
+  // (TR `unmapped_event_type` / `unparseable_event`), so a future gap is self-announcing on
+  // the dashboard + admin panel instead of buried in a single import's errors JSON. Grouped
+  // by event type (falling back to the message for the null-eventType / unparseable case),
+  // scoped to the user's non-discarded imports, most-frequent first.
+  app.get("/imports/unmapped-types", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const rows = await app.db
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.userId, id))
+      .orderBy(desc(screenshotImports.createdAt));
+    const byKey = new Map<
+      string,
+      {
+        eventType: string | null;
+        code: NonNullable<ImportIssue["code"]>;
+        message: string;
+        count: number;
+        lastSeen: Date;
+        sample: ImportIssue["raw"] | null;
+      }
+    >();
+    for (const r of rows) {
+      if (r.status === "discarded") continue;
+      const parsed = (r.parsedJson ?? {}) as { errors?: ImportIssue[] };
+      for (const e of parsed.errors ?? []) {
+        if (e.code !== "unmapped_event_type" && e.code !== "unparseable_event") continue;
+        const key = `${e.code}:${e.eventType ?? e.message}`;
+        const existing = byKey.get(key);
+        if (existing) {
+          existing.count += 1;
+          if (r.createdAt > existing.lastSeen) existing.lastSeen = r.createdAt;
+        } else {
+          byKey.set(key, {
+            eventType: e.eventType ?? null,
+            code: e.code,
+            message: e.message,
+            count: 1,
+            lastSeen: r.createdAt,
+            sample: e.raw ?? null,
+          });
+        }
+      }
+    }
+    return Array.from(byKey.values()).sort((a, b) => b.count - a.count);
   });
 
   // Discard a draft import (draft → discarded). Confirmed imports are undone via DELETE.

@@ -301,6 +301,21 @@ describe("mapTrEventToDraft", () => {
     ).toMatchObject({ skip: true, severity: "attention", reason: expect.stringContaining("ISIN") });
   });
 
+  it("tags unmapped and unparseable events with a machine-readable code (safety net)", () => {
+    // Unknown event type → flagged for the dashboard/admin safety-net surface.
+    expect(mapTrEventToDraft({ ...base, eventType: "MYSTERY_EVENT", amount: 1 })).toMatchObject({
+      skip: true,
+      code: "unmapped_event_type",
+      eventType: "MYSTERY_EVENT",
+    });
+    // A TR event with no eventType (the legacy securities-transfer shape) fails schema parse
+    // and must surface as a gap — not be silently dropped.
+    expect(mapTrEventToDraft({ id: "x", timestamp: base.timestamp, amount: 0 })).toMatchObject({
+      skip: true,
+      code: "unparseable_event",
+    });
+  });
+
   it("skips (never drops) unknown types and securities missing key data", () => {
     expect(mapTrEventToDraft({ ...base, eventType: "MYSTERY_EVENT", amount: 1 })).toMatchObject(
       { skip: true, reason: expect.stringContaining("unmapped event type") },

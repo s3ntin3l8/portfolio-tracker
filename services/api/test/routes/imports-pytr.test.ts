@@ -476,4 +476,79 @@ describe("pytr import → confirm", () => {
     expect(second.statusCode).toBe(201);
     expect(second.json().confirmed).toBe(0); // dedup index skips the duplicates
   });
+
+  it("aggregates unmapped/unparseable event types for the safety net", async () => {
+    const t = await token("pytr-gap-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "TR Gap", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
+
+    // Two imports (e.g. two syncs) carrying unmapped/unparseable issues + a discarded one
+    // whose issues must NOT count.
+    await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        status: "draft",
+        parsedJson: {
+          drafts: [],
+          errors: [
+            { code: "unmapped_event_type", eventType: "TAXES", severity: "attention", message: "unmapped event type: TAXES", raw: { amount: -1.23 } },
+            { code: "unparseable_event", severity: "attention", message: "unparseable event: eventType Required" },
+            { eventType: "CARD_VERIFICATION", severity: "info", message: "card verification" },
+          ],
+        },
+      });
+    await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        status: "draft",
+        parsedJson: {
+          drafts: [],
+          errors: [
+            { code: "unmapped_event_type", eventType: "TAXES", severity: "attention", message: "unmapped event type: TAXES", raw: { amount: -4.5 } },
+          ],
+        },
+      });
+    await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: pf.userId,
+        portfolioId,
+        parser: "pytr",
+        status: "discarded",
+        parsedJson: {
+          drafts: [],
+          errors: [
+            { code: "unmapped_event_type", eventType: "GHOST", severity: "attention", message: "unmapped event type: GHOST" },
+          ],
+        },
+      });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/imports/unmapped-types",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const types = res.json() as Array<{ eventType: string | null; code: string; count: number }>;
+    // TAXES counted across both active imports (2); the unparseable one (1); discarded GHOST excluded.
+    const taxes = types.find((x) => x.eventType === "TAXES");
+    expect(taxes).toMatchObject({ code: "unmapped_event_type", count: 2 });
+    expect(types.some((x) => x.code === "unparseable_event")).toBe(true);
+    expect(types.some((x) => x.eventType === "GHOST")).toBe(false);
+    // Most-frequent first.
+    expect(types[0].count).toBeGreaterThanOrEqual(types[types.length - 1].count);
+  });
 });
