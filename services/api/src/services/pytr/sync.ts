@@ -10,7 +10,7 @@ import {
 } from "@portfolio/db";
 import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
 import { cashBalances, type CoreTransaction } from "@portfolio/core";
-import { mapTrEvents, categoryForEventType } from "./mapper.js";
+import { mapTrEvents, mapTrEventToDraft, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
 import type { PytrRunner, TrExportSummary } from "./runner.js";
 import type { DB } from "../../db/client.js";
@@ -283,10 +283,50 @@ export async function syncTrConnection(
       .onConflictDoNothing();
   }
   const resolvedRows = await db
-    .select({ eventId: trResolvedEvents.eventId })
+    .select({ eventId: trResolvedEvents.eventId, resolution: trResolvedEvents.resolution })
     .from(trResolvedEvents)
     .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.source, "pytr")));
   const resolved = new Set(resolvedRows.map((r) => r.eventId));
+
+  // 2b. Self-heal discarded events that the mapper can now handle. When an import is
+  //     confirmed, leftover "info" errors (auto-skipped events like CARD_VERIFICATION) are
+  //     written to the ledger as "discarded" so they don't reappear every sync. If the mapper
+  //     is later fixed to recognise one of those event types (e.g. INTEREST_PAYOUT_CREATED
+  //     moved from SKIP_EVENTS to FIXED_ACTIONS), the event is stuck. Fix: on each sync,
+  //     re-run the mapper against every discarded event still present in the export; if it
+  //     would now produce a draft, evict it from the ledger so this sync can re-stage it.
+  //     "confirmed" events are never re-evaluated — only "discarded" ones.
+  const discardedIds = new Set(
+    resolvedRows.filter((r) => r.resolution === "discarded").map((r) => r.eventId),
+  );
+  if (discardedIds.size > 0) {
+    const rawById = new Map(
+      events
+        .map((e) => {
+          const o = e as Record<string, unknown>;
+          return typeof o.id === "string" ? ([o.id, e] as [string, unknown]) : null;
+        })
+        .filter((x): x is [string, unknown] => x !== null),
+    );
+    const healable = [...discardedIds].filter((id) => {
+      const raw = rawById.get(id);
+      if (!raw || cancelledIds.has(id)) return false;
+      return "draft" in mapTrEventToDraft(raw);
+    });
+    if (healable.length > 0) {
+      await db
+        .delete(trResolvedEvents)
+        .where(
+          and(
+            eq(trResolvedEvents.portfolioId, portfolioId),
+            eq(trResolvedEvents.source, "pytr"),
+            inArray(trResolvedEvents.eventId, healable),
+          ),
+        );
+      for (const id of healable) resolved.delete(id);
+      log?.info({ connectionId, healed: healable.length }, "tr discarded events re-staged (mapper updated)");
+    }
+  }
 
   // 3. The open collector draft (at most one). Its current contents are "staged" — shown but
   //    not yet resolved, so don't duplicate them on this sync.

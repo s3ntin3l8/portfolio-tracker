@@ -255,6 +255,64 @@ describe("syncTrConnection", () => {
     expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["card-1", "dep-1"]);
   });
 
+  it("heals a previously-discarded event when the mapper now maps it to a draft", async () => {
+    const conn = await makeConnection("heal-discarded");
+    const db = getDb();
+
+    // Simulate the state after a mapper bug was fixed: an event was written to the resolved
+    // ledger as "discarded" (e.g. a PAYMENT_INBOUND that was somehow skipped), but with the
+    // current mapper it would produce a valid draft.
+    const eventId = "heal-disc-1";
+    await db.insert(trResolvedEvents).values({
+      portfolioId: conn.portfolioId!,
+      source: "pytr",
+      eventId,
+      resolution: "discarded",
+    });
+
+    const evs = [
+      { id: eventId, timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" },
+    ];
+    const runner = runnerWith(async () => ({ events: evs, sessionData: "J" }));
+    const result = await syncTrConnection(db, enc, runner, conn);
+
+    // The discarded entry is evicted and the event is re-staged as a deposit draft.
+    expect(result.drafts).toBe(1);
+    const ledger = await db
+      .select()
+      .from(trResolvedEvents)
+      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, eventId)));
+    expect(ledger).toHaveLength(0); // removed from ledger
+  });
+
+  it("does not heal a discarded event that the mapper still skips", async () => {
+    const conn = await makeConnection("no-heal-skip");
+    const db = getDb();
+
+    // CARD_VERIFICATION is always a skip (info) — should stay discarded.
+    const eventId = "card-ver-1";
+    await db.insert(trResolvedEvents).values({
+      portfolioId: conn.portfolioId!,
+      source: "pytr",
+      eventId,
+      resolution: "discarded",
+    });
+
+    const evs = [
+      { id: eventId, timestamp: "2026-03-01T10:00:00.000Z", eventType: "CARD_VERIFICATION", amount: 0, currency: "EUR" },
+    ];
+    const result = await syncTrConnection(db, enc, runnerWith(async () => ({ events: evs, sessionData: "J" })), conn);
+
+    // Not healed — still skipped, still discarded.
+    expect(result.drafts).toBe(0);
+    const ledger = await db
+      .select()
+      .from(trResolvedEvents)
+      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, eventId)));
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].resolution).toBe("discarded");
+  });
+
   it("reconciles derived cash against TR's reported balance using the full event timeline", async () => {
     const conn = await makeConnection("reconcile");
     const db = getDb();
