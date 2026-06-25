@@ -12,7 +12,7 @@ import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
 import { cashBalances, type CoreTransaction } from "@portfolio/core";
 import { mapTrEvents, mapTrEventToDraft, categoryForEventType } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
-import type { PytrRunner, TrExportSummary } from "./runner.js";
+import type { PytrRunner, TrExportSummary, DownloadDocumentsResult } from "./runner.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 import type { StorageProvider } from "../../storage/types.js";
@@ -36,6 +36,10 @@ export interface SyncResult {
   cancelled?: number;
   /** TR's reported cash vs our derived cash, per currency (when TR reported a balance). */
   reconciliation?: CashReconciliation;
+  /** How many postbox PDFs were requested this sync (only set when documentRetention=true). */
+  documentsRequested?: number;
+  /** How many postbox PDFs were successfully stored this sync. */
+  documentsStored?: number;
 }
 
 // The parsed_json shape of a pytr "collector" draft: the single open draft per connection
@@ -432,6 +436,9 @@ export async function syncTrConnection(
   // Future-only by design: incremental sync skips already-ledger'd events, so events
   // confirmed before retention was enabled won't get their PDFs retroactively. This is
   // intentional (no backfill), since we are pre-release with no live users.
+  let documentsRequested: number | undefined;
+  let documentsStored: number | undefined;
+
   if (storage && importId && newDrafts.length > 0) {
     const [portfolio] = await db
       .select({ documentRetention: portfolios.documentRetention })
@@ -453,16 +460,22 @@ export async function syncTrConnection(
         const appLike = { storage, db, log: log ?? console } as Parameters<typeof storeReceipt>[0];
         const userId = connection.userId;
 
+        documentsRequested = pairs.length;
+        let stored = 0;
+        let failed = 0;
+
         try {
-          const downloaded = await runner.downloadDocuments(
+          const downloaded: DownloadDocumentsResult = await runner.downloadDocuments(
             { phone, pin, sessionData: result.sessionData },
             pairs,
           );
-          for (const [docId, { buf, mimeType }] of downloaded) {
+          // Count per-doc download failures from Python (surfaced in result.failures).
+          failed += downloaded.failures.length;
+          for (const [docId, { buf, mimeType }] of downloaded.docs) {
             // sourceEventId links this doc to its transaction at confirm time
             // (via tx.externalId ↔ document.sourceEventId matching).
             const sourceEventId = pairs.find((p) => p.docId === docId)?.eventId ?? null;
-            await storeReceipt(appLike, {
+            const receipt = await storeReceipt(appLike, {
               userId,
               importId,
               buf,
@@ -471,15 +484,25 @@ export async function syncTrConnection(
               source: "pytr",
               sourceEventId,
             });
+            if (receipt.ok) {
+              stored++;
+            } else {
+              failed++;
+            }
           }
-          log?.info(
-            { connectionId, importId, requested: pairs.length, stored: downloaded.size },
-            "tr postbox documents staged",
-          );
         } catch (err) {
-          // Best-effort: a document-fetch failure must never abort the sync.
+          // Process-level failure (PytrAuthError / PytrError) — best-effort, must never
+          // abort the sync. All remaining pairs count as failed.
+          failed = pairs.length - stored;
           log?.warn({ connectionId, importId, err }, "tr document download failed (non-fatal)");
         }
+
+        documentsStored = stored;
+        // Always emit so partial failures are visible in logs even when stored=0.
+        log?.info(
+          { connectionId, importId, requested: pairs.length, stored, failed },
+          "tr postbox documents staged",
+        );
       }
     }
   }
@@ -487,11 +510,18 @@ export async function syncTrConnection(
   // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
   const cashRec = reconcileCash(events, result.summary);
   const posRec = reconcilePositions(events, result.summary);
+  // Build the reconciliation object; fold in document counts when we attempted a download
+  // so the UI can show "0 of 20 PDFs saved" without needing a separate column/migration.
+  const docsSummary =
+    documentsRequested !== undefined
+      ? { documents: { requested: documentsRequested, stored: documentsStored ?? 0, checkedAt: new Date().toISOString() } }
+      : {};
   const reconciliation: CashReconciliation | undefined =
-    cashRec || posRec
+    cashRec || posRec || documentsRequested !== undefined
       ? {
           ...(cashRec ?? { checkedAt: new Date().toISOString(), cash: [] }),
           ...(posRec ? { positions: posRec } : {}),
+          ...docsSummary,
         }
       : undefined;
   await db
@@ -516,5 +546,6 @@ export async function syncTrConnection(
     errors: newErrors.length,
     cancelled,
     reconciliation,
+    ...(documentsRequested !== undefined ? { documentsRequested, documentsStored } : {}),
   };
 }

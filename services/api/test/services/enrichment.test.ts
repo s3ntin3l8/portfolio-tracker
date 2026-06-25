@@ -464,6 +464,84 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
     expect(Number(updated.tax)).toBeGreaterThan(0);
   });
 
+  it("writes executedPrice and signed sell tax (Steueroptimierung) to the source row", async () => {
+    const SELL_TEXT =
+      "Trade Republic Bank GmbH DATUM 30.05.2024 ORDER aa-bb AUSFÜHRUNG cc-dd DEPOT 1234567890 " +
+      "WERTPAPIERABRECHNUNG ABRECHNUNG POSITION BETRAG Fremdkostenzuschlag -1,00 EUR " +
+      "Kapitalertragsteuer Optimierung 3,38 EUR Solidaritätszuschlag Optimierung 0,18 EUR " +
+      "GESAMT 1.287,40 EUR BUCHUNG VERRECHNUNGSKONTO WERTSTELLUNG BETRAG DE00000000000000000000 " +
+      "03.06.2024 1.287,40 EUR ÜBERSICHT Verkauf POSITION ANZAHL PREIS BETRAG AbbVie Inc. " +
+      "ISIN: US00287Y1091 9 Stk. 142,76 EUR 1.284,84 EUR GESAMT 1.284,84 EUR";
+    mockExtractPdfText.mockResolvedValueOnce(SELL_TEXT);
+
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "sell",
+      documentRefs: [{ id: "doc-sell-001", type: "SECURITIES_SETTLEMENT", date: "2024-05-30" }],
+    });
+    await db.insert(documents).values({
+      userId: user.id,
+      portfolioId: portfolio.id,
+      transactionId: tx.id,
+      storageKey: "receipts/sell-001.pdf",
+      mimeType: "application/pdf",
+      status: "retained",
+    });
+    const app = makeApp(db, new Map([["receipts/sell-001.pdf", Buffer.from("x")]]));
+
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    const [src] = await db
+      .select()
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+    // RC#3: executedPrice now propagates from the parsed draft.
+    expect(src.executedPrice).toBe("142.76");
+    // RC#5: Steueroptimierung refund → negative realised tax + signed breakdown.
+    expect(src.tax).toBe("-3.56");
+    expect((src.taxComponents as { kapitalertragsteuer?: string }).kapitalertragsteuer).toBe("-3.38");
+  });
+
+  it("enriches a dividend whose documentRef type is NOT in the old settlement allowlist", async () => {
+    // RC#1: the SETTLEMENT_TYPES pre-filter is gone — an "INCOME" dividend doc (previously
+    // skipped) is now fed to detectTrPdf/parseTrPdf and yields the withholding tax + FX.
+    const DIV_TEXT =
+      "Trade Republic Bank GmbH DATUM 16.06.2026 DEPOT 1234567890 DIVIDENDE ÜBERSICHT POSITION " +
+      "ANZAHL ERTRAG BETRAG Main Street Capital US56035L1044 28.876429 Stücke 0.26 USD 7.51 USD " +
+      "GESAMT 7.51 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten -1.13 USD " +
+      "Zwischensumme 6.38 USD Zwischensumme 1.1567 USD/EUR 5.51 EUR GESAMT 5.51 EUR BUCHUNG " +
+      "VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 15.06.2026 5.51 EUR";
+    mockExtractPdfText.mockResolvedValueOnce(DIV_TEXT);
+
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "dividend",
+      documentRefs: [{ id: "doc-income-001", type: "INCOME", date: "2026-06-16" }],
+    });
+    await db.insert(documents).values({
+      userId: user.id,
+      portfolioId: portfolio.id,
+      transactionId: tx.id,
+      storageKey: "receipts/income-001.pdf",
+      mimeType: "application/pdf",
+      status: "retained",
+    });
+    const app = makeApp(db, new Map([["receipts/income-001.pdf", Buffer.from("x")]]));
+
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    const [src] = await db
+      .select()
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+    expect(src.fxRate).toBe("1.1567");
+    expect((src.taxComponents as { quellensteuer?: string }).quellensteuer).toBe("0.98");
+  });
+
   it("skips documents that extractPdfText produces non-TR text for", async () => {
     mockExtractPdfText.mockResolvedValueOnce("This is a DKB PDF, not a TR settlement.");
 

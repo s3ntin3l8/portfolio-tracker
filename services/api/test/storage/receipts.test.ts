@@ -60,35 +60,35 @@ function makeFailingStorage(): StorageProvider {
 
 /** Minimal app-like mock: log + storage. storeReceipt catches failures before touching DB. */
 function makeMinimalApp(storage: StorageProvider) {
-  const warns: unknown[] = [];
+  const errors: unknown[] = [];
   return {
     storage,
     // storeReceipt only calls app.db if storage.put succeeds — not reached here.
     db: null as never,
     log: {
-      warn: (...args: unknown[]) => warns.push(args),
+      warn: () => {},
       debug: () => {},
       info: () => {},
-      error: () => {},
+      error: (...args: unknown[]) => errors.push(args),
     },
-    _warns: warns,
+    _errors: errors,
   };
 }
 
 describe("storeReceipt — best-effort", () => {
-  it("does not throw when storage.put fails", async () => {
+  it("does not throw when storage.put fails, returns ok:false", async () => {
     const app = makeMinimalApp(makeFailingStorage());
-    await expect(
-      storeReceipt(app as never, {
-        userId: "u1",
-        importId: "imp1",
-        buf: Buffer.from("hello"),
-        mimeType: "text/plain",
-      }),
-    ).resolves.toBeUndefined();
+    const result = await storeReceipt(app as never, {
+      userId: "u1",
+      importId: "imp1",
+      buf: Buffer.from("hello"),
+      mimeType: "text/plain",
+    });
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain("storage put failed");
   });
 
-  it("emits a warn log when storage.put fails", async () => {
+  it("emits an error log (not warn) when storage.put fails", async () => {
     const app = makeMinimalApp(makeFailingStorage());
     await storeReceipt(app as never, {
       userId: "u1",
@@ -96,6 +96,6 @@ describe("storeReceipt — best-effort", () => {
       buf: Buffer.from("hello"),
       mimeType: "text/plain",
     });
-    expect(app._warns.length).toBeGreaterThan(0);
+    expect(app._errors.length).toBeGreaterThan(0);
   });
 });

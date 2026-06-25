@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, isNotNull, sql } from "drizzle-orm";
 import {
   accountHolders,
+  documents,
   portfolios,
   screenshotImports,
   transactions,
@@ -10,10 +11,16 @@ import {
   trResolvedEvents,
 } from "@portfolio/db";
 import { requireUser } from "../plugins/auth.js";
-import { PytrApprovalError, PytrUnavailableError } from "../services/pytr/runner.js";
+import { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
 import { enrichTransactionsFromStoredDocuments } from "../services/enrichment.js";
 import { enqueueTrSync } from "../services/scheduler.js";
+import {
+  storeReceipt,
+  linkTrReceiptsToTransactions,
+  finalizeReceipts,
+  transactionIdsWithDocuments,
+} from "../storage/receipts.js";
 
 const connectBodySchema = z.object({
   phone: z.string().min(3),
@@ -304,6 +311,334 @@ export async function trRoute(app: FastifyInstance) {
       await enrichTransactionsFromStoredDocuments(app, txIds);
       request.log.info({ userId: id, portfolioId: conn.portfolioId, count: txIds.length }, "tr reprocess-documents done");
       return { processed: txIds.length };
+    },
+  );
+
+  // Diagnose: identify *why* postbox PDF download/storage failed for this connection.
+  //
+  // Runs two independent probes in parallel so one failure can't mask the other:
+  //   • storage self-test: put → getSignedUrl → get → delete via app.storage.
+  //   • python self-test: downloadDocuments for one real (eventId, docId) pair.
+  //
+  // Reading the result:
+  //   storage.ok=false  → mode (b): S3 credentials/bucket misconfigured.
+  //   storage.ok=true + python.status≠"ok" → mode (a): Python/session failure.
+  //   both ok + counts.retainedDocuments=0 + counts.withDocumentRefs>0
+  //     → live path works; use backfill-documents to fetch historical PDFs.
+  app.post(
+    "/tr/connection/diagnose-documents",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const conn = await getConnection(id);
+      if (!conn || conn.status !== "connected") {
+        return reply.code(409).send({ error: "not_connected" });
+      }
+      if (!conn.portfolioId) {
+        return reply.code(409).send({ error: "no_portfolio" });
+      }
+
+      // ── Probe 1: Storage self-test ──────────────────────────────────────────
+      interface StorageResult {
+        ok: boolean;
+        signedUrlOk: boolean;
+        roundTripOk: boolean;
+        error?: { name: string; message: string; httpStatusCode?: number };
+      }
+      const storageResult: StorageResult = { ok: false, signedUrlOk: false, roundTripOk: false };
+      const testKey = `__healthcheck/tr-docs-${id}-${Date.now()}`;
+      try {
+        await app.storage.put(testKey, Buffer.from("tr-doc-healthcheck"), { mimeType: "text/plain" });
+        storageResult.signedUrlOk = true;
+        await app.storage.getSignedUrl(testKey, 60);
+        const bytes = await app.storage.get(testKey);
+        storageResult.roundTripOk = bytes !== null && bytes.byteLength > 0;
+        await app.storage.delete(testKey);
+        storageResult.ok = storageResult.roundTripOk;
+      } catch (err) {
+        const e = err as Record<string, unknown>;
+        const meta = (e["$metadata"] as Record<string, unknown> | undefined);
+        storageResult.error = {
+          name: typeof e["name"] === "string" ? e["name"] : "Error",
+          message: err instanceof Error ? err.message : String(err),
+          ...(meta?.["httpStatusCode"] !== undefined
+            ? { httpStatusCode: meta["httpStatusCode"] as number }
+            : {}),
+        };
+        // Best-effort cleanup after a partial failure.
+        app.storage.delete(testKey).catch(() => undefined);
+      }
+
+      // ── Probe 2: Python download self-test ──────────────────────────────────
+      interface PythonResult {
+        status: "ok" | "session_expired" | "process_failed" | "no_candidate" | "disabled";
+        downloaded?: number;
+        failures?: { docId: string | null; error: string }[];
+        candidate?: { txId: string; eventId: string; docId: string };
+        error?: string;
+      }
+      let pythonResult: PythonResult = { status: "disabled" };
+
+      if (app.pytr.isEnabled !== false) {
+        // Find one confirmed pytr tx with a non-empty documentRefs.
+        const txRows = await app.db
+          .select({ id: transactions.id, externalId: transactions.externalId, documentRefs: transactions.documentRefs })
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.portfolioId, conn.portfolioId),
+              eq(transactions.source, "pytr"),
+              isNotNull(transactions.externalId),
+              isNotNull(transactions.documentRefs),
+            ),
+          );
+        const candidate = txRows.find((tx) => {
+          const refs = tx.documentRefs as { id?: string }[] | null;
+          return Array.isArray(refs) && refs.some((r) => r?.id);
+        });
+
+        if (!candidate || !candidate.externalId) {
+          pythonResult = { status: "no_candidate" };
+        } else {
+          const refs = candidate.documentRefs as { id?: string }[];
+          const docId = refs.find((r) => r?.id)!.id!;
+          const pair = { eventId: candidate.externalId, docId };
+
+          try {
+            const phone = app.encryption.decryptString(conn.phoneEnc!);
+            const pin = app.encryption.decryptString(conn.pinEnc!);
+            const sessionData = app.encryption.decryptString(conn.sessionEnc!);
+
+            const downloaded = await app.pytr.downloadDocuments({ phone, pin, sessionData }, [pair]);
+            pythonResult = {
+              status: "ok",
+              downloaded: downloaded.docs.size,
+              failures: downloaded.failures,
+              candidate: { txId: candidate.id, eventId: pair.eventId, docId },
+            };
+          } catch (err) {
+            if (err instanceof PytrAuthError) {
+              pythonResult = { status: "session_expired", error: err.message };
+            } else if (err instanceof PytrError || err instanceof Error) {
+              pythonResult = { status: "process_failed", error: err.message };
+            } else {
+              pythonResult = { status: "process_failed", error: String(err) };
+            }
+          }
+        }
+      }
+
+      // ── Counts ──────────────────────────────────────────────────────────────
+      const [[{ confirmedPytrTxns }], [{ withDocumentRefs }], [{ retainedDocuments }]] =
+        await Promise.all([
+          app.db
+            .select({ confirmedPytrTxns: count() })
+            .from(transactions)
+            .where(and(eq(transactions.portfolioId, conn.portfolioId), eq(transactions.source, "pytr"))),
+          app.db
+            .select({ withDocumentRefs: count() })
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.portfolioId, conn.portfolioId),
+                eq(transactions.source, "pytr"),
+                isNotNull(transactions.documentRefs),
+                sql`jsonb_array_length(${transactions.documentRefs}) > 0`,
+              ),
+            ),
+          app.db
+            .select({ retainedDocuments: count() })
+            .from(documents)
+            .where(
+              and(
+                eq(documents.userId, id),
+                eq(documents.status, "retained"),
+                eq(documents.source, "pytr"),
+              ),
+            ),
+        ]);
+
+      const [{ documentRetention }] = await app.db
+        .select({ documentRetention: portfolios.documentRetention })
+        .from(portfolios)
+        .where(eq(portfolios.id, conn.portfolioId))
+        .limit(1);
+
+      return {
+        connectionId: conn.id,
+        portfolioId: conn.portfolioId,
+        documentRetention: documentRetention ?? false,
+        storage: storageResult,
+        python: pythonResult,
+        counts: {
+          confirmedPytrTxns: Number(confirmedPytrTxns),
+          withDocumentRefs: Number(withDocumentRefs),
+          retainedDocuments: Number(retainedDocuments),
+        },
+      };
+    },
+  );
+
+  // Non-destructive backfill: fetch and retain postbox PDFs for already-confirmed pytr
+  // transactions that have documentRefs but no stored document yet.
+  //
+  // Unlike reimport (destructive — wipes txns + ledger) and reprocess-documents (enriches
+  // from already-stored docs), this fetches the missing bytes from TR's postbox, stores them
+  // as retained documents linked to their transactions, and optionally enriches tax/fees.
+  //
+  // Idempotent: re-running skips transactions already covered by a retained document.
+  // Gate: portfolio must have documentRetention=true, else 409 (fetching bytes to immediately
+  // discard them is pointless). Run diagnose-documents first to confirm the path is healthy.
+  app.post(
+    "/tr/connection/backfill-documents",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const conn = await getConnection(id);
+      if (!conn || conn.status !== "connected") {
+        return reply.code(409).send({ error: "not_connected" });
+      }
+      if (!conn.portfolioId) {
+        return reply.code(409).send({ error: "no_portfolio" });
+      }
+
+      const [portfolio] = await app.db
+        .select({ documentRetention: portfolios.documentRetention })
+        .from(portfolios)
+        .where(eq(portfolios.id, conn.portfolioId))
+        .limit(1);
+
+      if (!portfolio?.documentRetention) {
+        return reply.code(409).send({ error: "document_retention_disabled" });
+      }
+
+      // Select all confirmed pytr transactions with at least one documentRef.
+      const txRows = await app.db
+        .select({ id: transactions.id, externalId: transactions.externalId, documentRefs: transactions.documentRefs })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.portfolioId, conn.portfolioId),
+            eq(transactions.source, "pytr"),
+            isNotNull(transactions.externalId),
+            isNotNull(transactions.documentRefs),
+          ),
+        );
+
+      const eligible = txRows.filter((tx) => {
+        const refs = tx.documentRefs as { id?: string }[] | null;
+        return Array.isArray(refs) && refs.some((r) => r?.id);
+      });
+
+      if (eligible.length === 0) {
+        return { scanned: txRows.length, eligible: 0, downloaded: 0, stored: 0, linked: 0, failures: [] };
+      }
+
+      // Filter out transactions already covered by a retained document.
+      const txIds = eligible.map((tx) => tx.id);
+      const alreadyCovered = await transactionIdsWithDocuments(app, txIds);
+      const needsDoc = eligible.filter((tx) => !alreadyCovered.has(tx.id));
+
+      if (needsDoc.length === 0) {
+        return { scanned: txRows.length, eligible: eligible.length, downloaded: 0, stored: 0, linked: 0, failures: [] };
+      }
+
+      // Build (eventId, docId) pairs; track the tx they belong to for linking.
+      const pairs: { eventId: string; docId: string; txId: string }[] = [];
+      for (const tx of needsDoc) {
+        if (!tx.externalId) continue;
+        const refs = tx.documentRefs as { id?: string }[];
+        for (const ref of refs) {
+          if (ref?.id) pairs.push({ eventId: tx.externalId, docId: ref.id, txId: tx.id });
+        }
+      }
+
+      const phone = app.encryption.decryptString(conn.phoneEnc!);
+      const pin = app.encryption.decryptString(conn.pinEnc!);
+      const sessionData = app.encryption.decryptString(conn.sessionEnc!);
+
+      let downloaded = 0;
+      let stored = 0;
+      let linked = 0;
+      const failures: { docId: string | null; error: string }[] = [];
+
+      // Create one synthetic carrier import so the staged documents have a valid importId FK.
+      // status="discarded" keeps it invisible to the sync collector and the imports list UI.
+      const [carrierImport] = await app.db
+        .insert(screenshotImports)
+        .values({
+          userId: id,
+          portfolioId: conn.portfolioId,
+          parser: "pytr",
+          parsedJson: { drafts: [], errors: [] },
+          status: "discarded",
+        })
+        .returning({ id: screenshotImports.id });
+      const importId = carrierImport.id;
+
+      try {
+        const result = await app.pytr.downloadDocuments(
+          { phone, pin, sessionData },
+          pairs.map(({ eventId, docId }) => ({ eventId, docId })),
+        );
+
+        downloaded = result.docs.size;
+        failures.push(...result.failures);
+
+        for (const [docId, { buf, mimeType }] of result.docs) {
+          const sourceEventId = pairs.find((p) => p.docId === docId)?.eventId ?? null;
+          const receipt = await storeReceipt(app, {
+            userId: id,
+            importId,
+            buf,
+            mimeType,
+            originalFilename: `${docId}.pdf`,
+            source: "pytr",
+            sourceEventId,
+            status: "staged",
+          });
+          if (receipt.ok) {
+            stored++;
+          } else {
+            failures.push({ docId, error: receipt.error });
+          }
+        }
+
+        // Link staged docs to their transactions (sourceEventId → externalId matching).
+        const links = pairs
+          .filter((p) => result.docs.has(p.docId))
+          .map((p) => ({ sourceEventId: p.eventId, transactionId: p.txId }));
+        if (links.length > 0) {
+          await linkTrReceiptsToTransactions(app, { importId, links });
+          linked = links.length;
+        }
+
+        // Finalize: flip staged→retained and re-key to the structured path.
+        await finalizeReceipts(app, { importId, portfolioId: conn.portfolioId, retain: true });
+
+        // Enrich tax/fees from the now-stored settlement PDFs.
+        const enrichedTxIds = [...new Set(links.map((l) => l.transactionId))];
+        if (enrichedTxIds.length > 0) {
+          await enrichTransactionsFromStoredDocuments(app, enrichedTxIds);
+        }
+      } catch (err) {
+        request.log.warn({ err, importId }, "backfill-documents: download failed (non-fatal)");
+        failures.push({ docId: null, error: err instanceof Error ? err.message : String(err) });
+      }
+
+      request.log.info(
+        { userId: id, portfolioId: conn.portfolioId, scanned: txRows.length, eligible: needsDoc.length, downloaded, stored, linked, failures: failures.length },
+        "tr backfill-documents done",
+      );
+
+      return {
+        scanned: txRows.length,
+        eligible: needsDoc.length,
+        downloaded,
+        stored,
+        linked,
+        failures,
+      };
     },
   );
 

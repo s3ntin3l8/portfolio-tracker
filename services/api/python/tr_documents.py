@@ -115,12 +115,17 @@ async def _download_one(tr, session, event_id, doc_id, out_dir):
             f"no download URL found for doc {doc_id!r} in event {event_id!r}"
         )
 
-    async with session.get(url) as resp:
-        if resp.status != 200:
-            raise OSError(f"HTTP {resp.status} fetching doc {doc_id!r}")
-        body = await resp.read()
-        # Content-Type may carry a charset suffix; take only the MIME part.
-        mime = resp.headers.get("Content-Type", "application/pdf").split(";")[0].strip()
+    # pytr's `_websession` is a synchronous `requests.Session` (api.py:100), not an
+    # aiohttp session — so `.get()` returns a `requests.Response` directly: no
+    # `async with`, `.status_code` (not `.status`), and `.content` (not `await .read()`).
+    # The same session carries TR's auth cookies/headers, which a presigned S3 URL
+    # ignores and a `{path}`-form TR postbox URL requires.
+    resp = session.get(url)
+    if resp.status_code != 200:
+        raise OSError(f"HTTP {resp.status_code} fetching doc {doc_id!r}")
+    body = resp.content
+    # Content-Type may carry a charset suffix; take only the MIME part.
+    mime = resp.headers.get("Content-Type", "application/pdf").split(";")[0].strip()
 
     filename = f"{doc_id}.pdf"
     out_path = Path(out_dir) / filename

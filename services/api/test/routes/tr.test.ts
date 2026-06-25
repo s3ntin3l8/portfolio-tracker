@@ -3,6 +3,8 @@ import crypto from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT } from "jose";
 import {
+  documents,
+  portfolios,
   screenshotImports,
   transactions,
   trConnections,
@@ -39,6 +41,48 @@ class FakePytr {
   cancelPairing(userId: string) {
     this.pending.delete(userId);
   }
+  // Document download (diagnose + backfill). Configurable so route tests never spawn
+  // Python. Default: one in-memory PDF per requested (eventId, docId) pair.
+  downloadResult:
+    | { docs: Map<string, { buf: Buffer; mimeType: string }>; failures: { docId: string | null; error: string }[] }
+    | Error
+    | null = null;
+  async downloadDocuments(
+    _session: { phone: string; pin: string; sessionData: string },
+    pairs: { eventId: string; docId: string }[],
+  ) {
+    if (this.downloadResult instanceof Error) throw this.downloadResult;
+    if (this.downloadResult) return this.downloadResult;
+    const docs = new Map<string, { buf: Buffer; mimeType: string }>();
+    for (const p of pairs) {
+      docs.set(p.docId, { buf: Buffer.from(`pdf-${p.docId}`), mimeType: "application/pdf" });
+    }
+    return { docs, failures: [] as { docId: string | null; error: string }[] };
+  }
+}
+
+// Minimal in-memory StorageProvider for the document-retention routes.
+function makeMemStorage() {
+  const data = new Map<string, Buffer>();
+  return {
+    data,
+    put: async (key: string, body: Buffer) => {
+      data.set(key, Buffer.isBuffer(body) ? body : Buffer.from(body));
+    },
+    get: async (key: string) => data.get(key) ?? null,
+    getSignedUrl: async (key: string) => `https://fake/${key}`,
+    delete: async (key: string) => {
+      data.delete(key);
+    },
+    exists: async (key: string) => data.has(key),
+    move: async (from: string, to: string) => {
+      const b = data.get(from);
+      if (b) {
+        data.set(to, b);
+        data.delete(from);
+      }
+    },
+  };
 }
 
 const asRunner = (f: FakePytr) => f as unknown as PytrRunner;
@@ -439,5 +483,168 @@ describe("Trade Republic connection (encryption disabled)", () => {
     await closeDb();
     delete process.env.AUTHENTIK_ISSUER;
     delete process.env.AUTHENTIK_AUDIENCE;
+  });
+});
+
+describe("TR document diagnose + backfill", () => {
+  let app: App;
+  let fake: FakePytr;
+  let storage: ReturnType<typeof makeMemStorage>;
+
+  beforeAll(async () => {
+    const kp = await generateKeyPair("ES256");
+    privateKey = kp.privateKey;
+    publicKey = kp.publicKey;
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = AUDIENCE;
+    process.env.DB_ENCRYPTION_KEY = crypto.randomBytes(32).toString("base64url");
+    fake = new FakePytr();
+    storage = makeMemStorage();
+    app = await buildApp({ authKey: kp.publicKey, pytr: asRunner(fake), storage });
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await closeDb();
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+    delete process.env.DB_ENCRYPTION_KEY;
+  });
+
+  // Connect a user (pair → verify) and return their token + portfolioId.
+  async function connect(sub: string, retention = true): Promise<{ t: string; portfolioId: string }> {
+    const t = await token(sub);
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+4915112345678", pin: "1234", portfolioId },
+    });
+    await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
+    if (retention) {
+      await getDb()
+        .update(portfolios)
+        .set({ documentRetention: true })
+        .where(eq(portfolios.id, portfolioId));
+    }
+    return { t, portfolioId };
+  }
+
+  async function seedPytrTx(portfolioId: string, eventId: string, docId: string): Promise<string> {
+    const [tx] = await getDb()
+      .insert(transactions)
+      .values({
+        portfolioId,
+        type: "buy",
+        source: "pytr",
+        externalId: eventId,
+        documentRefs: [{ id: docId, type: "SECURITIES_SETTLEMENT", date: "2024-05-30" }],
+        quantity: "1",
+        price: "100.00",
+        currency: "EUR",
+        executedAt: new Date("2024-05-30"),
+      })
+      .returning();
+    return tx.id;
+  }
+
+  it("409s diagnose when the user has no connection", async () => {
+    const t = await token("doc-noconn");
+    await portfolioFor(app, t);
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/diagnose-documents",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "not_connected" });
+  });
+
+  it("diagnoses a healthy path: storage round-trip + python download both OK", async () => {
+    const { t, portfolioId } = await connect("doc-diag");
+    await seedPytrTx(portfolioId, "evt-1", "doc-1");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/diagnose-documents",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.storage).toMatchObject({ ok: true, signedUrlOk: true, roundTripOk: true });
+    expect(body.python.status).toBe("ok");
+    expect(body.python.downloaded).toBe(1);
+    expect(body.counts.withDocumentRefs).toBeGreaterThanOrEqual(1);
+    // The healthcheck object is cleaned up after the probe.
+    expect([...storage.data.keys()].some((k) => k.startsWith("__healthcheck/"))).toBe(false);
+  });
+
+  it("reports python.status=no_candidate when no tx has a documentRef", async () => {
+    const { t } = await connect("doc-nocand");
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/diagnose-documents",
+      headers: auth(t),
+    });
+    expect(res.json().python.status).toBe("no_candidate");
+  });
+
+  it("surfaces a python process failure in the diagnose report", async () => {
+    const { t, portfolioId } = await connect("doc-pyfail");
+    await seedPytrTx(portfolioId, "evt-x", "doc-x");
+    fake.downloadResult = new PytrError("boom");
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/diagnose-documents",
+      headers: auth(t),
+    });
+    expect(res.json().python.status).toBe("process_failed");
+    fake.downloadResult = null;
+  });
+
+  it("backfills documents: downloads, stores, links, and is idempotent", async () => {
+    const { t, portfolioId } = await connect("doc-backfill");
+    const txId = await seedPytrTx(portfolioId, "evt-b", "doc-b");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/backfill-documents",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.eligible).toBe(1);
+    expect(body.downloaded).toBe(1);
+    expect(body.stored).toBe(1);
+    expect(body.linked).toBe(1);
+
+    // A retained document now exists, linked to the transaction.
+    const docRows = await getDb()
+      .select()
+      .from(documents)
+      .where(eq(documents.transactionId, txId));
+    expect(docRows).toHaveLength(1);
+    expect(docRows[0].status).toBe("retained");
+
+    // Re-running is a no-op (the tx is already covered).
+    const again = await app.inject({
+      method: "POST",
+      url: "/tr/connection/backfill-documents",
+      headers: auth(t),
+    });
+    expect(again.json()).toMatchObject({ downloaded: 0, stored: 0, linked: 0 });
+  });
+
+  it("409s backfill when documentRetention is disabled", async () => {
+    const { t, portfolioId } = await connect("doc-noretain", false);
+    await seedPytrTx(portfolioId, "evt-r", "doc-r");
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/backfill-documents",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "document_retention_disabled" });
   });
 });

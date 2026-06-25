@@ -28,6 +28,9 @@ apps/web/public/swe-worker-*.js
 # OpenCode local plans
 .opencode/plans/
 
+# Rolling log files (enabled via LOG_DIR in .env; see services/api/src/plugins/env.ts)
+logs/
+
 # Python (vendored pytr entrypoints)
 __pycache__/
 *.pyc

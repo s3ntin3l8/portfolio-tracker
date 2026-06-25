@@ -60,6 +60,10 @@ export function detectTrPdf(text: string): boolean {
   if (/WERTPAPIERABRECHNUNG/.test(text) && /\bAUSFÜHRUNG\b/.test(text)) return true;
   // Dividend income confirmation.
   if (/\bDIVIDENDE\b/.test(text) && /Stücke/.test(text)) return true;
+  // Interest payout (Cash Zinsen) — "ABRECHNUNG ZINSEN" / "EINKOMMENSART ... ZINSEN".
+  if (/ABRECHNUNG\s+ZINSEN/.test(text)) return true;
+  // Tax-optimisation true-up (Steuerliche Optimierung — KapSt/Soli refund or charge).
+  if (/STEUERLICHE OPTIMIERUNG/i.test(text)) return true;
   return false;
 }
 
@@ -120,6 +124,23 @@ function pushDraft(
   const parsed = parsedTransactionSchema.safeParse(draft);
   if (parsed.success) drafts.push(parsed.data);
   else errors.push({ line: 1, message: parsed.error.issues[0]?.message ?? "invalid TR PDF" });
+}
+
+/**
+ * Extract the BUCHUNG / payment line as a raw `{ date, amountRaw }`.
+ *
+ * The label varies across doc types (`WERTSTELLUNG`, `DATUM DER ZAHLUNG`,
+ * `BUCHUNGSDATUM GUTSCHRIFT NACH STEUERN`) and an IBAN sits between the label and the
+ * date, so we anchor on the layout-invariant `<IBAN> <date> <amount> EUR` tail. The date
+ * is German `DD.MM.YYYY` (trade/dividend/interest/tax-opt) or ISO `YYYY-MM-DD` (some
+ * round-up legs). The amount's locale differs per doc, so callers parse `amountRaw` with
+ * the branch's own `parseGerman`/`parseUs`.
+ */
+const TR_BUCHUNG_RE =
+  /(?:WERTSTELLUNG|DATUM DER ZAHLUNG|BUCHUNGSDATUM)[^]*?(\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2})\s+(-?[\d.,]+)\s+EUR/;
+function extractBuchung(text: string): { date: Date | null; amountRaw: string | null } {
+  const m = text.match(TR_BUCHUNG_RE);
+  return { date: m ? parseTrDate(m[1]) : null, amountRaw: m?.[2] ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +210,13 @@ function parseTrTrade(text: string): TrPdfResult {
   // Format: "<name> ISIN: <isin> <qty> Stk. <price> EUR <total_gross> EUR"
   // DURCHSCHNITTSKURS (sparplan/saveback/roundup) and PREIS are the same column position.
   const isin = text.match(TR_ISIN_LABELED_RE)?.[1];
-  // Name: everything before "ISIN:" on the same POSITION line.
+  // Name: the security name immediately precedes the labelled ISIN on the POSITION detail
+  // row. Anchor on the LAST "BETRAG " before "ISIN:" (greedy prefix) so we land on the
+  // position row, not the earlier "ABRECHNUNG POSITION BETRAG" column header that sell /
+  // settlement docs print first (the old non-greedy match swallowed the whole block).
   let name: string | undefined;
   if (isin) {
-    const m = text.match(new RegExp(`BETRAG\\s+(.*?)ISIN:\\s+${isin}`));
+    const m = text.match(new RegExp(`.*BETRAG\\s+([^:]{1,120}?)\\s*ISIN:\\s+${isin}`));
     name = m ? collapse(m[1]) : undefined;
   }
 
@@ -200,56 +224,70 @@ function parseTrTrade(text: string): TrPdfResult {
   const qtyM = text.match(/([0-9][0-9.,]*)\s+Stk\./);
   const quantity = parseGerman(qtyM?.[1]);
 
-  // Per-share price (German decimal) — the value in the PREIS/DURCHSCHNITTSKURS column.
-  // Pattern: "QTY Stk. PRICE EUR GROSS EUR" — price is the first EUR amount after qty+Stk.
+  // Per-share price + gross position total — the two EUR amounts after "<qty> Stk.":
+  // "<qty> Stk. <price> EUR <gross> EUR". price = PREIS/DURCHSCHNITTSKURS, gross = BETRAG.
   let price: string | null = null;
+  let gross: string | null = null;
   if (qtyM) {
-    // Take the suffix after "<qty> Stk." and grab the first EUR-denoted amount.
-    const afterQty = text.slice((text.indexOf(qtyM[0]) ?? 0) + qtyM[0].length);
-    price = parseGerman(afterQty.match(/([0-9][0-9.,]*)\s+EUR/)?.[1]);
+    const afterQty = text.slice(text.indexOf(qtyM[0]) + qtyM[0].length);
+    const euros = [...afterQty.matchAll(/([0-9][0-9.,]*)\s+EUR/g)].map((m) => m[1]);
+    price = parseGerman(euros[0]);
+    gross = parseGerman(euros[1]);
   }
 
   // --- ABRECHNUNG ---
-  // Fremdkostenzuschlag: "-1,00 EUR" (leading minus = fee charged)
-  const fremdkostenM = text.match(/Fremdkostenzuschlag\s+(-[\d.,]+)\s+EUR/);
-  const fees = fremdkostenM
-    ? (parseGerman(fremdkostenM[1].replace("-", "")) ?? "0")
-    : "0";
+  // Fremdkostenzuschlag: "-1,00 EUR" (leading minus = fee charged).
+  const fremdkostenM = text.match(/Fremdkostenzuschlag\s+(-?[\d.,]+)\s+EUR/);
+  const fees = fremdkostenM ? (parseGerman(fremdkostenM[1].replace("-", "")) ?? "0") : "0";
 
-  // Tax components (German decimal, trailing "EUR"):
-  const kapstM = text.match(/Kapitalertragsteuer\s+([\d.,]+)\s+EUR/);
-  const kapst = parseGerman(kapstM?.[1]);
-  const solzM = text.match(/Solidaritätszuschlag\s+([\d.,]+)\s+EUR/);
-  const solz = parseGerman(solzM?.[1]);
-  const kircheM = text.match(/Kirchensteuer\s+([\d.,]+)\s+EUR/);
-  const kirche = parseGerman(kircheM?.[1]);
+  // Tax component magnitudes (German decimal). The label may carry an "Optimierung"
+  // qualifier (TR Steueroptimierung) and appears single- or double-s spelled.
+  const taxLine = (label: string): string | null =>
+    parseGerman(
+      text
+        .match(new RegExp(`${label}(?:\\s+Optimierung)?\\s+(-?[\\d.,]+)\\s+EUR`))?.[1]
+        ?.replace("-", ""),
+    );
+  const kapst = taxLine("Kapitalertrags?steuer");
+  const solz = taxLine("Solidaritätszuschlag");
+  const kirche = taxLine("Kirchensteuer");
 
-  // Tax rollup (only positive/non-zero values).
-  const kapstNum = kapst ? Number(kapst) : 0;
-  const solzNum = solz ? Number(solz) : 0;
-  const kircheNum = kirche ? Number(kirche) : 0;
-  const taxNum = kapstNum + solzNum + kircheNum;
-  const tax = taxNum > 0 ? taxNum.toFixed(2) : undefined;
+  // --- BUCHUNG (net credited / debited) ---
+  const buchung = extractBuchung(text);
+  const net = buchung.amountRaw ? parseGerman(buchung.amountRaw.replace(/^-/, "")) : undefined;
+  const settlementDate = buchung.date ?? headerDate;
 
+  // Tax. Normal sells itemise withholding (KapSt/Soli/Kirche) which is *subtracted* from the
+  // proceeds, so the realised tax is their sum. A Steueroptimierung true-up instead *adds* a
+  // refund (or adds a charge) — the components are signed the other way — so there the
+  // realised tax follows from the cash identity gross − fees − net (signed), and we sign the
+  // component breakdown to match. Buys carry no tax. (Dividends/interest: own branches.)
+  const isOptimierung = /(?:Kapitalertrags?steuer|Solidaritätszuschlag)\s+Optimierung/.test(text);
+  const compSum =
+    (kapst ? Number(kapst) : 0) + (solz ? Number(solz) : 0) + (kirche ? Number(kirche) : 0);
+  let tax: string | undefined;
   const taxComponents: TaxComponents = {};
-  if (kapst && kapstNum > 0) taxComponents.kapitalertragsteuer = kapst;
-  if (solz && solzNum > 0) taxComponents.solidaritaetszuschlag = solz;
-  if (kirche && kircheNum > 0) taxComponents.kirchensteuer = kirche;
-
-  // --- BUCHUNG ---
-  // Settlement date (ISO): "WERTSTELLUNG YYYY-MM-DD" or from DATUM in header.
-  const wertstellungM = text.match(
-    /(?:WERTSTELLUNG|DATUM DER ZAHLUNG)\s+(\d{4}-\d{2}-\d{2})/,
-  );
-  const settlementDate = parseTrDate(wertstellungM?.[1]) ?? headerDate;
-
-  // Net settlement amount from BUCHUNG BETRAG (abs value, German decimal).
-  // Format: "<IBAN> YYYY-MM-DD <signed_amount> EUR" or "<IBAN> YYYY-MM-DD -<amount> EUR"
-  const buchungM = text.match(
-    /(?:WERTSTELLUNG|DATUM DER ZAHLUNG)\s+\d{4}-\d{2}-\d{2}\s+(-?[\d.,]+)\s+EUR/,
-  );
-  const netRaw = buchungM?.[1];
-  const net = netRaw ? parseGerman(netRaw.replace(/^-/, "")) : undefined;
+  if (action === "sell" && isOptimierung) {
+    const signed =
+      gross != null && net != null ? Number(gross) - Number(fees) - Number(net) : -compSum;
+    if (Math.abs(signed) >= 0.005) {
+      tax = signed.toFixed(2);
+      const sgn = signed < 0 ? -1 : 1;
+      const sign = (v: string | null): string | null =>
+        v && Number(v) > 0 ? (sgn * Number(v)).toFixed(2) : null;
+      const k = sign(kapst);
+      const s = sign(solz);
+      const ki = sign(kirche);
+      if (k) taxComponents.kapitalertragsteuer = k;
+      if (s) taxComponents.solidaritaetszuschlag = s;
+      if (ki) taxComponents.kirchensteuer = ki;
+    }
+  } else if (compSum > 0) {
+    tax = compSum.toFixed(2);
+    if (kapst && Number(kapst) > 0) taxComponents.kapitalertragsteuer = kapst;
+    if (solz && Number(solz) > 0) taxComponents.solidaritaetszuschlag = solz;
+    if (kirche && Number(kirche) > 0) taxComponents.kirchensteuer = kirche;
+  }
 
   // externalId: keyed by AUSFÜHRUNG (per-leg idempotency).
   const externalId = ausfuehrung ? `tr:exec:${ausfuehrung}` : undefined;
@@ -263,9 +301,12 @@ function parseTrTrade(text: string): TrPdfResult {
       quantity: quantity ?? "",
       unit: "shares" as const,
       price: price ?? "",
+      // Per-share execution price — distinct from `price` so enrichment's
+      // executedPrice column is populated (the rollup reads draft.executedPrice).
+      executedPrice: price ?? undefined,
       fees,
       total: net ?? undefined,
-      tax: tax ?? undefined,
+      tax,
       taxComponents: Object.keys(taxComponents).length > 0 ? taxComponents : undefined,
       venue: venue ?? undefined,
       currency: "EUR",
@@ -336,19 +377,20 @@ function parseTrDividend(text: string): TrPdfResult {
   if (quellenEur && Number(quellenEur) > 0) taxComponents.quellensteuer = quellenEur;
   if (kapst && Number(kapst) > 0) taxComponents.kapitalertragsteuer = kapst;
 
-  // Net EUR payout from BUCHUNG: "DATUM DER ZAHLUNG YYYY-MM-DD X.XX EUR"
-  const buchungM = text.match(
-    /(?:DATUM DER ZAHLUNG)\s+(\d{4}-\d{2}-\d{2})\s+([\d.]+)\s+EUR/,
-  );
-  const payDate = parseTrDate(buchungM?.[1]) ?? headerDate;
-  const netEur = parseUs(buchungM?.[2]);
+  // Net EUR payout from the BUCHUNG line: "<IBAN> <DD.MM.YYYY|YYYY-MM-DD> <amount> EUR".
+  // Real docs put `DATUM DER ZAHLUNG BETRAG <IBAN> <German-date> <amount>` — the old regex
+  // expected an ISO date immediately after the label, so netEur was always null → the
+  // dividend draft failed validation (price="") and was dropped. The amount is US-locale.
+  const buchung = extractBuchung(text);
+  const payDate = buchung.date ?? headerDate;
+  const netEur = parseUs(buchung.amountRaw?.replace(/^-/, ""));
 
   // Gross = net + tax (same pattern as DKB dividend).
   const total = netEur && tax ? addMoney(netEur, tax) : (netEur ?? undefined);
 
   // For dividends we derive an idempotency key from available identifiers (no AUSFÜHRUNG).
   // "tr:div:<depot>:<isin>:<paydate>" — stable for same payer, instrument, and payment date.
-  const payDateStr = buchungM?.[1];
+  const payDateStr = payDate ? payDate.toISOString().slice(0, 10) : undefined;
   const externalId =
     depot && isin && payDateStr ? `tr:div:${depot}:${isin}:${payDateStr}` : undefined;
 
@@ -377,17 +419,125 @@ function parseTrDividend(text: string): TrPdfResult {
 }
 
 // ---------------------------------------------------------------------------
+// Interest payout parser (ABRECHNUNG ZINSEN — Cash Zinsen)
+// ---------------------------------------------------------------------------
+
+function parseTrInterest(text: string): TrPdfResult {
+  const drafts: ParsedTransaction[] = [];
+  const errors: { line: number; message: string }[] = [];
+
+  const account = text.match(/VERRECHNUNGSKONTO\s+(\d+)/)?.[1] ?? null;
+  const headerDate = parseTrDate(text.match(/\bDATUM\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]);
+
+  // Tax (German decimal, double-s spelling on interest docs).
+  const kapst = parseGerman(text.match(/Kapitalertrags?steuer\s+([\d.,]+)\s+EUR/)?.[1]);
+  const solz = parseGerman(text.match(/Solidaritätszuschlag\s+([\d.,]+)\s+EUR/)?.[1]);
+  const kapstNum = kapst ? Number(kapst) : 0;
+  const solzNum = solz ? Number(solz) : 0;
+  const taxNum = kapstNum + solzNum;
+  const tax = taxNum > 0 ? taxNum.toFixed(2) : undefined;
+  const taxComponents: TaxComponents = {};
+  if (kapstNum > 0) taxComponents.kapitalertragsteuer = kapst!;
+  if (solzNum > 0) taxComponents.solidaritaetszuschlag = solz!;
+
+  // Net credited from BUCHUNG ("… GUTSCHRIFT NACH STEUERN <IBAN> <date> <amount> EUR").
+  const buchung = extractBuchung(text);
+  const payDate = buchung.date ?? headerDate;
+  const net = parseGerman(buchung.amountRaw?.replace(/^-/, ""));
+  // Gross interest (Besteuerungsgrundlage) → total; falls back to net + tax.
+  const besteuerung = parseGerman(text.match(/Besteuerungsgrundlage\s+([\d.,]+)\s+EUR/)?.[1]);
+  const total = besteuerung ?? (net && tax ? addMoney(net, tax) : (net ?? undefined));
+
+  const payDateStr = payDate ? payDate.toISOString().slice(0, 10) : undefined;
+  const externalId =
+    account && payDateStr ? `tr:int:${account}:${payDateStr}` : undefined;
+
+  pushDraft(
+    {
+      action: "interest",
+      name: "Zinsen",
+      quantity: "0",
+      // price = net EUR credited (cashFlow convention, like dividends).
+      price: net ?? "",
+      total: total ?? undefined,
+      tax: tax ?? undefined,
+      taxComponents: Object.keys(taxComponents).length > 0 ? taxComponents : undefined,
+      currency: "EUR",
+      executedAt: payDate ?? undefined,
+      externalId,
+      confidence: 1,
+    },
+    drafts,
+    errors,
+  );
+
+  return { drafts, errors, accountNumber: account };
+}
+
+// ---------------------------------------------------------------------------
+// Tax-optimisation true-up parser (STEUERLICHE OPTIMIERUNG — KapSt/Soli refund or charge)
+// ---------------------------------------------------------------------------
+
+function parseTrTaxOptimization(text: string): TrPdfResult {
+  const drafts: ParsedTransaction[] = [];
+  const errors: { line: number; message: string }[] = [];
+
+  const depot = text.match(/\bDEPOT\s+(\d+)/)?.[1] ?? null;
+  const headerDate = parseTrDate(text.match(/\bDATUM\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]);
+
+  // Components are US-locale, signed: positive = refund (credit), negative = charge (debit).
+  const kapstPdf = parseUs(text.match(/Kapitalertrags?steuer\s+(-?[\d.]+)\s+EUR/)?.[1]);
+  const solzPdf = parseUs(text.match(/Solidaritätszuschlag\s+(-?[\d.]+)\s+EUR/)?.[1]);
+
+  // BUCHUNG cashflow (signed): + = credited (refund), − = debited (charge).
+  const buchung = extractBuchung(text);
+  const cashflow = parseUs(buchung.amountRaw);
+  const date = buchung.date ?? headerDate;
+
+  // `tax` is the amount PAID (positive when money leaves you), i.e. the negated cashflow:
+  // a refund (cash in) reduces the year's paid tax (negative); a charge (cash out) adds.
+  const tax = cashflow != null ? (-Number(cashflow)).toFixed(2) : undefined;
+  const taxComponents: TaxComponents = {};
+  if (kapstPdf != null) taxComponents.kapitalertragsteuer = (-Number(kapstPdf)).toFixed(2);
+  if (solzPdf != null) taxComponents.solidaritaetszuschlag = (-Number(solzPdf)).toFixed(2);
+
+  // Refund (cash in) → deposit; charge (cash out) → withdrawal.
+  const action = cashflow != null && Number(cashflow) < 0 ? "withdrawal" : "deposit";
+  const dateStr = date ? date.toISOString().slice(0, 10) : undefined;
+  const externalId = depot && dateStr ? `tr:taxopt:${depot}:${dateStr}` : undefined;
+
+  pushDraft(
+    {
+      action,
+      name: "Steuerliche Optimierung",
+      quantity: "0",
+      price: cashflow != null ? Math.abs(Number(cashflow)).toFixed(2) : "",
+      tax: tax ?? undefined,
+      taxComponents: Object.keys(taxComponents).length > 0 ? taxComponents : undefined,
+      currency: "EUR",
+      executedAt: date ?? undefined,
+      externalId,
+      confidence: 1,
+    },
+    drafts,
+    errors,
+  );
+
+  return { drafts, errors, accountNumber: depot };
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
 /**
- * Parse a TR settlement confirmation PDF (trade or dividend).
+ * Parse a TR settlement confirmation PDF (trade, dividend, interest, or tax optimisation).
  * The caller has already called `detectTrPdf(text)` which guarantees we are in scope.
  */
 export function parseTrPdf(rawText: string): TrPdfResult {
   const text = collapse(rawText);
-  if (/\bDIVIDENDE\b/.test(text)) {
-    return parseTrDividend(text);
-  }
+  if (/STEUERLICHE OPTIMIERUNG/i.test(text)) return parseTrTaxOptimization(text);
+  if (/\bDIVIDENDE\b/.test(text)) return parseTrDividend(text);
+  if (/ABRECHNUNG ZINSEN/.test(text)) return parseTrInterest(text);
   return parseTrTrade(text);
 }

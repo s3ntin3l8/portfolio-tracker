@@ -110,11 +110,24 @@ function db(app: AppLikeDb): PostgresJsDatabase<typeof schema> {
   return app.db as PostgresJsDatabase<typeof schema>;
 }
 
+/** Result type for `storeReceipt` — callers that don't need it can ignore the return value. */
+export type StoreReceiptResult =
+  | { ok: true; documentId: string }
+  | { ok: false; error: string };
+
 /**
  * Stage a document at upload time. Best-effort: errors are logged and swallowed
  * so a storage misconfiguration never breaks the import flow.
+ *
+ * The put and the DB insert are in separate try blocks so we can distinguish a
+ * storage-credential failure from a DB failure (the former logs at `error` level
+ * and is the more actionable signal during diagnosis).
+ *
+ * Returns `{ok:true, documentId}` on full success, `{ok:false, error}` on any
+ * failure. Upload callers may ignore the return; sync and backfill callers use it
+ * to count stored vs. failed documents.
  */
-export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Promise<void> {
+export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Promise<StoreReceiptResult> {
   const {
     userId,
     importId,
@@ -126,12 +139,24 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
     status = "staged",
   } = opts;
   const key = buildReceiptKey(userId, importId, originalFilename, mimeType);
+
+  // Phase 1: storage put. Log at `error` (not `warn`) — a put failure is a hard
+  // signal that the storage credentials or bucket are misconfigured.
   try {
     await app.storage.put(key, buf, {
       mimeType,
       originalFilename: originalFilename ?? undefined,
     });
-    await db(app).insert(documents).values({
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    app.log.error({ err, importId, key }, "storeReceipt: storage put failed");
+    return { ok: false, error: `storage put failed: ${error}` };
+  }
+
+  // Phase 2: DB insert. A put-success + insert-failure is a consistency bug —
+  // log at `error` and return failure so the caller can surface it.
+  try {
+    const [row] = await db(app).insert(documents).values({
       userId,
       importId,
       storageKey: key,
@@ -141,10 +166,13 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
       status,
       source: source ?? null,
       sourceEventId: sourceEventId ?? null,
-    });
+    }).returning({ id: documents.id });
     app.log.debug({ importId, key, bytes: buf.byteLength, status }, "receipt staged");
+    return { ok: true, documentId: row.id };
   } catch (err) {
-    app.log.warn({ err, importId, key }, "storeReceipt failed (non-fatal)");
+    const error = err instanceof Error ? err.message : String(err);
+    app.log.error({ err, importId, key }, "storeReceipt: db insert failed after successful put");
+    return { ok: false, error: `db insert failed: ${error}` };
   }
 }
 

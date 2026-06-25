@@ -206,14 +206,6 @@ export async function enrichTransactionsFromStoredDocuments(
 ): Promise<void> {
   if (txIds.length === 0) return;
 
-  // Known settlement postboxTypes (cheap pre-filter — the structure check is authoritative).
-  const SETTLEMENT_TYPES = new Set([
-    "SECURITIES_SETTLEMENT",
-    "SECURITIES_SETTLEMENT_SAVINGS_PLAN",
-    "SECURITIES_SETTLEMENT_SAVEBACK",
-    "SECURITIES_SETTLEMENT_ROUND_UP",
-  ]);
-
   // Fetch the transactions with their documentRefs.
   const txRows = await db(app)
     .select({
@@ -228,9 +220,12 @@ export async function enrichTransactionsFromStoredDocuments(
     const refs = (tx.documentRefs as { id?: string; type?: string; date?: string }[] | null) ?? [];
     if (refs.length === 0) continue;
 
-    // Pre-filter by postboxType.
-    const candidateRefs = refs.filter((r) => !r.type || SETTLEMENT_TYPES.has(r.type));
-    if (candidateRefs.length === 0) continue;
+    // No postboxType allowlist: the TR doc `type` label is unreliable (interest docs
+    // appear both as INTEREST_PAYOUT_INVOICE and empty-type; one SECURITIES_SETTLEMENT
+    // type spans buy + sell), and `detectTrPdf` is the authoritative gate — it accepts
+    // settlement / dividend / interest / tax-optimisation abrechnungen and rejects KID,
+    // cost-info, order-confirmation and transfer-confirmation pages. So feed every linked
+    // doc to detect/parse below and let it decide.
 
     // Fetch the documents linked to this transaction.
     // Match both "staged" (at confirm time, before finalizeReceipts) and "retained"

@@ -14,7 +14,7 @@ import {
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { EncryptionService } from "../../src/services/encryption.js";
 import { syncTrConnection } from "../../src/services/pytr/sync.js";
-import { PytrAuthError, type PytrRunner, type DocDownloadResult } from "../../src/services/pytr/runner.js";
+import { PytrAuthError, type PytrRunner, type DocDownloadResult, type DownloadDocumentsResult } from "../../src/services/pytr/runner.js";
 import type { StorageProvider } from "../../src/storage/types.js";
 
 const enc = new EncryptionService({ key: crypto.randomBytes(32).toString("base64url") });
@@ -26,7 +26,7 @@ function runnerWith(
 ): PytrRunner {
   return {
     export: exportImpl,
-    downloadDocuments: downloadImpl ?? (async () => new Map()),
+    downloadDocuments: downloadImpl ?? (async () => ({ docs: new Map(), failures: [] })),
   } as unknown as PytrRunner;
 }
 
@@ -534,11 +534,11 @@ describe("syncTrConnection", () => {
       async (_session, pairs) => {
         downloadCalled = true;
         downloadPairs = pairs;
-        const result = new Map<string, DocDownloadResult>();
+        const docs = new Map<string, DocDownloadResult>();
         for (const { docId } of pairs) {
-          result.set(docId, { buf: PDF, mimeType: "application/pdf" });
+          docs.set(docId, { buf: PDF, mimeType: "application/pdf" });
         }
-        return result;
+        return { docs, failures: [] };
       },
     );
 
@@ -592,7 +592,7 @@ describe("syncTrConnection", () => {
       }),
       async () => {
         downloadCalled = true;
-        return new Map();
+        return { docs: new Map(), failures: [] } as DownloadDocumentsResult;
       },
     );
 
@@ -640,5 +640,101 @@ describe("syncTrConnection", () => {
     expect(result.drafts).toBe(1);
     // No document stored.
     expect(storage.puts).toHaveLength(0);
+  });
+
+  it("surfaces documentsRequested/documentsStored in SyncResult when retention=true", async () => {
+    const conn = await makeConnection("docs-counts");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const PDF = Buffer.from("%PDF-1.4 count-test");
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-count-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "ORDER_EXECUTED",
+            amount: -100,
+            shares: 1,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-count-1", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async (_session, pairs) => {
+        const docs = new Map<string, DocDownloadResult>();
+        for (const { docId } of pairs) docs.set(docId, { buf: PDF, mimeType: "application/pdf" });
+        return { docs, failures: [] };
+      },
+    );
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    expect(result.documentsRequested).toBe(1);
+    expect(result.documentsStored).toBe(1);
+    // Counts are also folded into lastReconciliation for UI visibility.
+    expect((result.reconciliation as unknown as Record<string, unknown>)?.documents).toMatchObject({
+      requested: 1,
+      stored: 1,
+    });
+  });
+
+  it("sets documentsStored=0 and surfaces failure when storage put throws", async () => {
+    const conn = await makeConnection("docs-put-fail");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-putfail-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "ORDER_EXECUTED",
+            amount: -100,
+            shares: 1,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-putfail", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async (_session, pairs) => {
+        const docs = new Map<string, DocDownloadResult>();
+        for (const { docId } of pairs) docs.set(docId, { buf: Buffer.from("bytes"), mimeType: "application/pdf" });
+        return { docs, failures: [] };
+      },
+    );
+
+    // Storage that always throws on put — simulates bad S3 credentials / 403.
+    const failStorage: typeof makeTrackingStorage extends () => infer R ? R : never =
+      makeTrackingStorage();
+    (failStorage as unknown as { put: unknown }).put = async () => {
+      throw Object.assign(new Error("SignatureDoesNotMatch"), {
+        name: "SignatureDoesNotMatch",
+        $metadata: { httpStatusCode: 403 },
+      });
+    };
+
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, failStorage);
+
+    // Sync still completes (best-effort).
+    expect(result.status).toBe("connected");
+    expect(result.documentsRequested).toBe(1);
+    expect(result.documentsStored).toBe(0);
+    // No DB document row inserted.
+    const docs = await db.select().from(documents).where(eq(documents.source, "pytr"));
+    const importDoc = docs.find((d) => d.importId === result.importId);
+    expect(importDoc).toBeUndefined();
   });
 });

@@ -166,12 +166,12 @@ class TestDownloadOne:
         """Happy path: fresh detail → URL → bytes written to out_dir."""
         pdf_bytes = b"%PDF-1.4 fake"
 
+        # pytr's _websession is a synchronous requests.Session: .get() returns a
+        # requests.Response directly (no async ctx mgr), with .status_code/.content.
         fake_resp = MagicMock()
-        fake_resp.status = 200
+        fake_resp.status_code = 200
         fake_resp.headers = {"Content-Type": "application/pdf"}
-        fake_resp.read = AsyncMock(return_value=pdf_bytes)
-        fake_resp.__aenter__ = AsyncMock(return_value=fake_resp)
-        fake_resp.__aexit__ = AsyncMock(return_value=False)
+        fake_resp.content = pdf_bytes
 
         fake_session = MagicMock()
         fake_session.get = MagicMock(return_value=fake_resp)
@@ -199,11 +199,9 @@ class TestDownloadOne:
     def test_raises_on_http_error(self, tmp_path):
         """A non-200 status must raise (caller catches → ok:false)."""
         fake_resp = MagicMock()
-        fake_resp.status = 403
+        fake_resp.status_code = 403
         fake_resp.headers = {}
-        fake_resp.read = AsyncMock(return_value=b"")
-        fake_resp.__aenter__ = AsyncMock(return_value=fake_resp)
-        fake_resp.__aexit__ = AsyncMock(return_value=False)
+        fake_resp.content = b""
 
         fake_session = MagicMock()
         fake_session.get = MagicMock(return_value=fake_resp)
@@ -249,11 +247,9 @@ class TestRun:
         tr._get_ws = AsyncMock()
 
         fake_resp = MagicMock()
-        fake_resp.status = 200
+        fake_resp.status_code = 200
         fake_resp.headers = {"Content-Type": "application/pdf"}
-        fake_resp.read = AsyncMock(return_value=pdf_bytes)
-        fake_resp.__aenter__ = AsyncMock(return_value=fake_resp)
-        fake_resp.__aexit__ = AsyncMock(return_value=False)
+        fake_resp.content = pdf_bytes
 
         fake_session = MagicMock()
         fake_session.get = MagicMock(return_value=fake_resp)
