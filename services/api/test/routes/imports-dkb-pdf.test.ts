@@ -110,6 +110,39 @@ describe("DKB PDF deterministic import path", () => {
     });
   });
 
+  it("materializes the dividend straight into the table when the Depotnummer matches a portfolio (Phase 2)", async () => {
+    const t = await token("dkb-pdf-materialize");
+    // Portfolio carries the PDF's Depotnummer (999999001), so the upload auto-routes to it.
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB matched", baseCurrency: "EUR", accountNumber: "999999001" },
+      })
+    ).json().id;
+
+    const form = pdfPart(Buffer.from("%PDF-1.4 materialize"), "mat.pdf");
+    const res = await app.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.materialized).toBe(true);
+    expect(body.portfolioId).toBe(portfolioId);
+    expect(body.materializedCount).toBe(1);
+
+    // The dividend row is in the table as status='draft', source='pdf' — excluded until confirmed.
+    const list = (
+      await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) })
+    ).json() as Array<{ id: string; status: string; source: string; type: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ status: "draft", source: "pdf", type: "dividend" });
+  });
+
   it("confirms the dividend draft into a transaction carrying tax + fxRate", async () => {
     const t = await token("dkb-pdf-confirm");
     const portfolioId = (

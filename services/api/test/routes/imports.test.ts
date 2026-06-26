@@ -165,6 +165,56 @@ describe("CSV import → confirm flow", () => {
     expect(again.statusCode).toBe(409);
   });
 
+  it("materializes drafts directly when a deterministic import's account matches a portfolio (Phase 2)", async () => {
+    const t = await token("mat-user");
+    // Portfolio carries the DKB Girokonto IBAN, so the upload auto-routes to it.
+    const pid = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB matched", baseCurrency: "EUR", accountNumber: "DE78120300001066505387" },
+      })
+    ).json().id;
+
+    const imp = await app.inject({
+      method: "POST",
+      url: `/imports/csv`,
+      headers: auth(t),
+      payload: { content: DKB_GIRO_CSV, format: "dkb" },
+    });
+    expect(imp.statusCode).toBe(201);
+    const body = imp.json();
+    // Direct-materialize response (no drafts to review).
+    expect(body.materialized).toBe(true);
+    expect(body.portfolioId).toBe(pid);
+    expect(body.materializedCount).toBe(4);
+    expect(body.drafts).toBeUndefined();
+
+    // The rows live in the transactions table as status='draft'.
+    const list = await app.inject({ method: "GET", url: `/portfolios/${pid}/transactions`, headers: auth(t) });
+    const rows = list.json() as Array<{ status: string; source: string }>;
+    expect(rows).toHaveLength(4);
+    expect(rows.every((r) => r.status === "draft")).toBe(true);
+    expect(rows.every((r) => r.source === "csv")).toBe(true);
+
+    // Excluded from derivations until confirmed — the savings-plan buy is not yet a holding.
+    const holdings = await app.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    expect(holdings.json().holdings).toHaveLength(0);
+
+    // Confirming them (bulk) flips to normal and they start counting.
+    const ids = rows.length ? (list.json() as Array<{ id: string }>).map((r) => r.id) : [];
+    const resolve = await app.inject({
+      method: "POST",
+      url: `/portfolios/${pid}/transactions/resolve-drafts`,
+      headers: auth(t),
+      payload: { ids, action: "confirm" },
+    });
+    expect(resolve.json().updated).toBe(4);
+    const holdings2 = await app.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    expect(holdings2.json().holdings.length).toBeGreaterThan(0);
+  });
+
   it("imports a DKB Girokonto export: securities + cash, idempotent on re-import", async () => {
     const t = await token("dkb-user");
     const portfolioId = (

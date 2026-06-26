@@ -1148,6 +1148,13 @@ export interface CsvImportResult {
   matchedPortfolioId?: string | null;
   /** Set when the file's account looks like it belongs to a different portfolio. */
   accountMismatch?: AccountMismatch | null;
+  /** Phase 2: a deterministic import whose account matched a portfolio was written straight
+   *  into the transactions table as draft rows (no review step). `drafts` is then absent. */
+  materialized?: boolean;
+  /** Target portfolio for a materialized import. */
+  portfolioId?: string;
+  /** Number of draft transactions materialized. */
+  materializedCount?: number;
 }
 
 export interface ScreenshotImportResult {
@@ -1164,6 +1171,13 @@ export interface ScreenshotImportResult {
   matchedPortfolioId?: string | null;
   /** Set when the file's account looks like it belongs to a different portfolio. */
   accountMismatch?: AccountMismatch | null;
+  /** Phase 2: a deterministic PDF whose account matched a portfolio was written straight
+   *  into the transactions table as draft rows (no review step). `drafts` is then absent. */
+  materialized?: boolean;
+  /** Target portfolio for a materialized import. */
+  portfolioId?: string;
+  /** Number of draft transactions materialized. */
+  materializedCount?: number;
 }
 
 /** Brief summary of a retained source document, embedded on ImportRecord (#231). */

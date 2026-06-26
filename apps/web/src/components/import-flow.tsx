@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { Label } from "@/components/ui/label";
 import { PortfolioPicker } from "@/components/portfolio-picker";
 import type {
@@ -101,6 +101,11 @@ export interface ImportResult {
   matchedPortfolioId?: string | null;
   /** Set when the file's account looks like it belongs to a different portfolio (#197). */
   accountMismatch?: AccountMismatch | null;
+  /** Phase 2: deterministic import with a matched portfolio was written straight into the
+   *  transactions table as draft rows (no review step). `drafts` is then empty/absent. */
+  materialized?: boolean;
+  /** Number of draft transactions materialized (Phase 2). */
+  materializedCount?: number;
 }
 
 /**
@@ -267,6 +272,7 @@ export function ImportFlow({
   initialFile?: File | null;
 } = {}) {
   const t = useTranslations("Import");
+  const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
   // Tracks in-flight confirm calls so ImportReview can disable buttons without unmounting
   // (unmounting would clear the row selection, forcing the user to re-select on 409 errors).
@@ -374,6 +380,12 @@ export function ImportFlow({
           setStep("upload");
           return;
         }
+        // Phase 2: a deterministic import with a matched portfolio was written straight into
+        // the transactions table as draft rows — skip review, go see them.
+        if (result.materialized) {
+          router.push("/transactions");
+          return;
+        }
         const resultContracts = result.contracts ?? [];
         if (result.drafts.length === 0 && resultContracts.length === 0) {
           setError(t("errors.noDrafts"));
@@ -402,6 +414,7 @@ export function ImportFlow({
     const newIssueMap: IssueMap = new Map();
     const newSkipped: SkippedFile[] = [];
     const newPortfolioByImport: PortfolioByImportMap = new Map();
+    let materializedTotal = 0;
 
     setFileStatuses(files.map((f) => ({ filename: f.name, status: "pending" })));
 
@@ -420,6 +433,14 @@ export function ImportFlow({
           newSkipped.push({ file: file.name, reason: "alreadyConfirmed", originalFile: file });
           setFileStatuses((prev) =>
             prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
+          );
+          continue;
+        }
+        // Phase 2: this file's drafts went straight into the table (no review needed).
+        if (result.materialized) {
+          materializedTotal += result.materializedCount ?? 0;
+          setFileStatuses((prev) =>
+            prev.map((s, idx) => (idx === i ? { ...s, status: "done" } : s)),
           );
           continue;
         }
@@ -456,6 +477,14 @@ export function ImportFlow({
     }
 
     setSkipped(newSkipped);
+
+    // If some files materialized straight into the table and nothing remains to review,
+    // go to the transactions table (Phase 2). If there are also drafts to review, fall
+    // through to the review screen for those — the materialized rows already landed.
+    if (mergedDrafts.length === 0 && contracts.length === 0 && materializedTotal > 0) {
+      router.push("/transactions");
+      return;
+    }
 
     if (mergedDrafts.length === 0 && contracts.length === 0) {
       // Everything failed / was skipped — show a combined notice and stay on upload.

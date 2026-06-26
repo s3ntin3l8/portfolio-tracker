@@ -16,10 +16,17 @@ import { parseFlexXml } from "../../services/ibkr/flex-parse.js";
 import { mapFlexToDrafts } from "../../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../../services/parsers/hash.js";
-import { classifyMatch, parserToTxSource } from "../../services/parsers/dedup.js";
+import {
+  classifyMatch,
+  parserToTxSource,
+  isEuParser,
+  isDeterministicParser,
+} from "../../services/parsers/dedup.js";
 import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
-import { storeReceipt } from "../../storage/receipts.js";
+import { storeReceipt, finalizeReceipts } from "../../storage/receipts.js";
+import { materializeDrafts } from "../../services/materialize-drafts.js";
+import { isCashMovementAction } from "../../services/pytr/mapper.js";
 import {
   accountMismatchVerdict,
   accountsMatch,
@@ -257,6 +264,65 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     }
   }
 
+  /**
+   * Phase 2 unification: when a *deterministic* parser (CSV/DKB-PDF/TR-PDF/IBKR) resolves an
+   * unambiguous target portfolio at upload, write the drafts straight into the transactions
+   * table as `status='draft'` rows (the same pipeline sync uses) instead of staging them for
+   * the review screen. The import row becomes a provenance/document anchor (status confirmed).
+   * Mirrors the confirm route's source/isEu/cash-boundary handling so behavior is identical
+   * to "upload → confirm", minus the review click. Returns the materialized count.
+   */
+  async function materializeResolvedDrafts(opts: {
+    imp: { id: string };
+    drafts: ParsedTransaction[];
+    parserTag: string;
+    targetPortfolioId: string;
+  }): Promise<{ materialized: number; excludedCashMovements: number }> {
+    const { imp, drafts, parserTag, targetPortfolioId } = opts;
+    const [pf] = await app.db
+      .select({
+        cashCounted: portfolios.cashCounted,
+        documentRetention: portfolios.documentRetention,
+      })
+      .from(portfolios)
+      .where(eq(portfolios.id, targetPortfolioId))
+      .limit(1);
+
+    // Cash-boundary filter (#326), same as confirm: a cash-outside portfolio drops genuine
+    // cash movements from a TR settlement PDF so they don't manufacture phantom flows.
+    let toWrite = drafts;
+    let excludedCashMovements = 0;
+    if (parserTag === "tr-pdf" && pf && !pf.cashCounted) {
+      const before = toWrite.length;
+      toWrite = toWrite.filter((d) => !isCashMovementAction(d.action));
+      excludedCashMovements = before - toWrite.length;
+    }
+
+    const res = await materializeDrafts(app, {
+      drafts: toWrite,
+      targetPortfolioId,
+      source: parserToTxSource(parserTag) as "csv" | "pdf" | "ibkr",
+      importId: imp.id,
+      status: "draft",
+      isEu: isEuParser(parserTag),
+    });
+
+    // Finalize the staged receipt now (retain per portfolio setting) — the old confirm-time
+    // finalization no longer runs for this path.
+    await finalizeReceipts(app, {
+      importId: imp.id,
+      portfolioId: targetPortfolioId,
+      retain: pf?.documentRetention ?? false,
+    });
+    // The import has produced its transactions — close it (anchor, not a review item).
+    await app.db
+      .update(screenshotImports)
+      .set({ portfolioId: targetPortfolioId, status: "confirmed" })
+      .where(eq(screenshotImports.id, imp.id));
+
+    return { materialized: res.written.length, excludedCashMovements };
+  }
+
   // Parse a CSV into draft transactions and store them as a draft import.
   // Portfolio is NOT required at upload time — it is supplied at confirm time.
   app.post(
@@ -377,6 +443,31 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         originalFilename: null,
         source: PARSER_TAG[resolved] ?? "csv",
       });
+
+      // Direct-materialize (Phase 2): a deterministic parser whose detected account number
+      // unambiguously matches a portfolio → write drafts into the table now, skip the review
+      // screen. We require an explicit *account match* (not merely a sole portfolio) so a
+      // generic/accountless CSV still goes through review where the user picks the portfolio.
+      if (matchedPortfolioId && result.drafts.length > 0 && !accountMismatch) {
+        const mat = await materializeResolvedDrafts({
+          imp,
+          drafts: result.drafts,
+          parserTag: PARSER_TAG[resolved] ?? "csv",
+          targetPortfolioId: matchedPortfolioId,
+        });
+        request.log.info(
+          { importId: imp.id, materialized: mat.materialized, portfolioId: matchedPortfolioId },
+          "csv import materialized as drafts",
+        );
+        reply.code(201);
+        return {
+          importId: imp.id,
+          materialized: true,
+          portfolioId: matchedPortfolioId,
+          materializedCount: mat.materialized,
+          excludedCashMovements: mat.excludedCashMovements,
+        };
+      }
 
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length, matchedPortfolioId },
@@ -641,6 +732,36 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         originalFilename: part.filename ?? null,
         source: parserTag,
       });
+
+      // Direct-materialize (Phase 2): deterministic PDF parsers (DKB/TR) with an unambiguous
+      // target portfolio and no gold contracts → write drafts into the table now. The vision
+      // (LLM) parser is NOT deterministic, so it stays in the review flow (Phase 3).
+      if (
+        isDeterministicParser(parserTag) &&
+        matchedPortfolioId &&
+        result.drafts.length > 0 &&
+        result.contracts.length === 0 &&
+        !accountMismatch
+      ) {
+        const mat = await materializeResolvedDrafts({
+          imp,
+          drafts: result.drafts,
+          parserTag,
+          targetPortfolioId: matchedPortfolioId,
+        });
+        request.log.info(
+          { importId: imp.id, materialized: mat.materialized, portfolioId: matchedPortfolioId, parser: parserTag },
+          "pdf import materialized as drafts",
+        );
+        reply.code(201);
+        return {
+          importId: imp.id,
+          materialized: true,
+          portfolioId: matchedPortfolioId,
+          materializedCount: mat.materialized,
+          excludedCashMovements: mat.excludedCashMovements,
+        };
+      }
 
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence, matchedPortfolioId },

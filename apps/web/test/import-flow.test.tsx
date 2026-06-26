@@ -9,6 +9,13 @@ import {
 import { ApiError } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
+// Spy on the router so the Phase-2 materialize redirect can be asserted.
+const pushMock = vi.fn();
+vi.mock("@/i18n/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/i18n/navigation")>();
+  return { ...actual, useRouter: () => ({ push: pushMock, replace: vi.fn(), back: vi.fn() }) };
+});
+
 const DRAFT: ImportDraft = {
   assetClass: "gold",
   action: "buy",
@@ -68,6 +75,29 @@ function fileInput(container: HTMLElement) {
 }
 
 describe("ImportFlow", () => {
+  it("redirects to the transactions table when a CSV import materializes drafts (Phase 2)", async () => {
+    pushMock.mockClear();
+    const client = {
+      importScreenshot: vi.fn(),
+      importCsv: vi.fn(async () => ({
+        importId: "imp-mat",
+        materialized: true,
+        portfolioId: "p1",
+        materializedCount: 4,
+      })),
+      confirmImport: vi.fn(),
+      enrichImport: vi.fn(),
+      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
+    } as unknown as ImportClient;
+    const { container } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("dkb.csv")] } });
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
+    // No review screen — the rows went straight into the table.
+    expect(screen.queryByRole("button", { name: messages.Import.confirm })).toBeNull();
+  });
+
   it("uploads a screenshot, reviews the draft, and confirms it", async () => {
     const client: ImportClient = {
       importScreenshot: vi.fn(async () => ({
