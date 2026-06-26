@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { instruments, loans, portfolios, screenshotImports, transactions } from "@portfolio/db";
+import { loans, portfolios, screenshotImports, transactions } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
 import { parseCsv } from "../../services/parsers/csv.js";
@@ -16,14 +16,14 @@ import { parseFlexXml } from "../../services/ibkr/flex-parse.js";
 import { mapFlexToDrafts } from "../../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../../services/parsers/hash.js";
-import { findCrossSourceDuplicates, classifyMatch } from "../../services/parsers/dedup.js";
+import { classifyMatch } from "../../services/parsers/dedup.js";
+import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
 import { storeReceipt } from "../../storage/receipts.js";
 import {
   accountMismatchVerdict,
   accountsMatch,
   normalizeAccountNumber,
-  uploadIdentity,
 } from "./helpers.js";
 
 const csvBodySchema = z.object({
@@ -229,44 +229,16 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     importParser: string,
   ): Promise<void> {
     if (!portfolioId || drafts.length === 0) return;
-    const rows = await app.db
-      .select({
-        id: transactions.id,
-        type: transactions.type,
-        executedAt: transactions.executedAt,
-        quantity: transactions.quantity,
-        price: transactions.price,
-        source: transactions.source,
-        isin: instruments.isin,
-        wkn: instruments.wkn,
-        name: instruments.name,
-      })
-      .from(transactions)
-      .leftJoin(instruments, eq(instruments.id, transactions.instrumentId))
-      .where(eq(transactions.portfolioId, portfolioId));
-
-    const committed = rows.map((r) => ({
-      id: r.id,
-      key: uploadIdentity(r.isin, r.wkn, r.name),
-      action: r.type,
-      quantity: r.quantity,
-      price: r.price,
-      executedAt: r.executedAt,
-      source: r.source,
-    }));
-    const draftCandidates = drafts.map((d) => ({
-      key: uploadIdentity(d.isin, d.wkn, d.name),
-      action: d.action,
-      quantity: d.quantity,
-      price: d.price,
-      executedAt: d.executedAt,
-    }));
 
     // A screenshot/PDF upload carries a document; a CSV upload doesn't (even if it's
     // technically stored as a receipt, it brings no visual document or tax detail).
     const importIsFileUpload = importParser === "screenshot";
 
-    for (const { draftIndex, matched } of findCrossSourceDuplicates(draftCandidates, committed)) {
+    for (const { draftIndex, matched } of await findCommittedDuplicates(
+      app.db,
+      portfolioId,
+      drafts,
+    )) {
       const draft = drafts[draftIndex];
       const hasTaxComponents =
         draft.taxComponents && Object.keys(draft.taxComponents).length > 0;

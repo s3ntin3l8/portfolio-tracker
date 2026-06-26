@@ -6,22 +6,6 @@ import { portfolios } from "@portfolio/db";
 // (confirm.ts) — account-number matching and the owned-portfolio lookup — extracted so both
 // can reuse them without one route module importing the other.
 
-/** Best-effort instrument identity for upload-time dedup, before instruments are resolved:
- *  prefer ISIN, then WKN, then a normalised name. Returns null when nothing is available.
- *  Shared by the parse routes' `annotateLikelyDuplicates` (imports/parse.ts) and the
- *  `/duplicates` preview route (imports.ts) — kept here so neither route module imports the
- *  other (which would cycle). */
-export function uploadIdentity(
-  isin: string | null | undefined,
-  wkn: string | null | undefined,
-  name: string | null | undefined,
-): string | null {
-  if (isin) return `isin:${isin.trim().toUpperCase()}`;
-  if (wkn) return `wkn:${wkn.trim().toUpperCase()}`;
-  const n = (name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return n ? `name:${n}` : null;
-}
-
 /** Fetch a portfolio by id, scoped to its owner; null when not found or not owned. */
 export async function ownedPortfolio(
   app: FastifyInstance,
