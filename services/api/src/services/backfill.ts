@@ -28,10 +28,10 @@ import {
   netWorth,
   splitAdjustmentFactor,
   type PriceSeriesKind,
-  type TransactionType,
 } from "@portfolio/core";
 import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
 import type { DB } from "../db/client.js";
+import { toCoreTxns } from "./tx-core.js";
 import { getFxRatesForDates, makeFxRateFn } from "./fx.js";
 
 export interface BackfillOptions {
@@ -376,17 +376,9 @@ export async function backfillPortfolioHistory(
   }
 
   // ── Build CoreTransactions for core ───────────────────────────────────────
-  const coreTxns = txRows.map((r) => ({
-    instrumentId: r.instrumentId,
-    type: r.type as TransactionType,
-    quantity: r.quantity,
-    price: r.price,
-    fees: r.fees,
-    tax: r.tax,
-    currency: r.currency,
-    executedAt: r.executedAt,
-    loanId: r.loanId,
-  }));
+  // Route through the chokepoint so archived AND draft rows are excluded from every
+  // historical snapshot (an unconfirmed draft must not appear in the net-worth line).
+  const coreTxns = toCoreTxns(txRows);
 
   // ── Compute per-day value flows ────────────────────────────────────────────
   const dailyFlows = buildDailyValueFlows({

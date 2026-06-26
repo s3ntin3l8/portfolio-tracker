@@ -23,16 +23,22 @@ export function txRowToCore(r: TxRow): CoreTransaction {
 }
 
 /**
- * Map DB transaction rows to {@link CoreTransaction}, **excluding archived rows by
- * default** — archived transactions are ignored in every derivation (cash, holdings,
- * P&L, trades, contributions, net worth, income, tax). This is the single chokepoint
- * every derivation path loads through, so an archived row never reaches the engine.
- * Pass `includeArchived` for the raw transactions list (the UI shows + un-archives them).
+ * Map DB transaction rows to {@link CoreTransaction}, **excluding archived and draft rows
+ * by default** — both are ignored in every derivation (cash, holdings, P&L, trades,
+ * contributions, net worth, income, tax). This is the single chokepoint every derivation
+ * path loads through, so such a row never reaches the engine.
+ *
+ * `draft` rows are unconfirmed imports/sync rows; they are **always** excluded (even with
+ * `includeArchived`) — an unconfirmed row must never feed a derivation until the user
+ * confirms it (→ "normal"). `includeArchived` only re-includes archived rows, and is used
+ * by the raw transactions list (the UI shows + un-archives them).
  */
 export function toCoreTxns(
   rows: TxRow[],
   opts?: { includeArchived?: boolean },
 ): CoreTransaction[] {
-  const src = opts?.includeArchived ? rows : rows.filter((r) => r.status !== "archived");
+  const src = rows.filter(
+    (r) => r.status !== "draft" && (opts?.includeArchived || r.status !== "archived"),
+  );
   return src.map(txRowToCore);
 }

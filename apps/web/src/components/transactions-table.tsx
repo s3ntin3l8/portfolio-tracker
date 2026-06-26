@@ -16,6 +16,7 @@ import {
   X,
   AlertTriangle,
   AlertCircle,
+  Check,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -48,6 +49,7 @@ export const SOURCE_ICON: Record<string, LucideIcon> = {
   manual: PencilLine,
   pytr: Landmark,
   pdf: FileSpreadsheet,
+  ibkr: Landmark,
 };
 
 const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
@@ -200,9 +202,14 @@ export function TransactionsTable({
   const [typeFilter, setTypeFilter] = useState("all");
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
+  const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
   const [query, setQuery] = useState("");
   const [showFlagged, setShowFlagged] = useState(false);
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
+  // Id of a single row currently being confirmed/discarded (shows a spinner on that row).
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  const draftCount = useMemo(() => rows.filter((r) => r.status === "draft").length, [rows]);
 
   // Derive distinct options from `rows` so selects only show values present in the data.
   const typeOptions = useMemo(
@@ -232,6 +239,7 @@ export function TransactionsTable({
     return rows.filter(
       (r) =>
         (!showFlagged || anomalyByTxId.has(r.id)) &&
+        (draftFilter === "all" || r.status === "draft") &&
         (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
         (typeFilter === "all" || r.type === typeFilter) &&
         (instrumentFilter === "all" ||
@@ -248,7 +256,7 @@ export function TransactionsTable({
           (r.portfolioName ?? "").toLowerCase().includes(q) ||
           r.source.toLowerCase().includes(q)),
     );
-  }, [rows, showFlagged, anomalyByTxId, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
+  }, [rows, showFlagged, anomalyByTxId, draftFilter, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
 
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
@@ -293,6 +301,45 @@ export function TransactionsTable({
     } finally {
       setBusy(false);
       setConfirming(false);
+    }
+  }
+
+  // Ids of the currently-selected DRAFT rows (the only ones confirm/discard act on).
+  const selectedDraftIds = useMemo(
+    () => rows.filter((r) => selected.has(r.id) && r.status === "draft").map((r) => r.id),
+    [rows, selected],
+  );
+
+  async function onBatchResolve(action: "confirm" | "discard") {
+    setBusy(true);
+    try {
+      // Group by portfolio — the resolve endpoint is scoped to one portfolio.
+      const byPortfolio = new Map<string, string[]>();
+      for (const r of rows) {
+        if (!selected.has(r.id) || r.status !== "draft") continue;
+        const ids = byPortfolio.get(r.portfolioId) ?? [];
+        ids.push(r.id);
+        byPortfolio.set(r.portfolioId, ids);
+      }
+      await Promise.all(
+        [...byPortfolio.entries()].map(([portfolioId, ids]) =>
+          api.resolveDraftTransactions(portfolioId, ids, action),
+        ),
+      );
+      setSelected(new Set());
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onResolveOne(tx: TxRow, action: "confirm" | "discard") {
+    setResolvingId(tx.id);
+    try {
+      await api.resolveDraftTransactions(tx.portfolioId, [tx.id], action);
+      router.refresh();
+    } finally {
+      setResolvingId(null);
     }
   }
 
@@ -397,6 +444,17 @@ export function TransactionsTable({
             ))}
           </select>
         )}
+        {draftCount > 0 && (
+          <select
+            aria-label={t("filterDraftLabel")}
+            value={draftFilter}
+            onChange={(e) => setDraftFilter(e.target.value as "all" | "drafts")}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="all">{t("draftShowAll")}</option>
+            <option value="drafts">{t("draftOnly", { count: draftCount })}</option>
+          </select>
+        )}
         <div className="relative ml-auto flex items-center">
           <Search className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
           <Input
@@ -446,14 +504,39 @@ export function TransactionsTable({
               </Button>
             </span>
           ) : (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setConfirming(true)}
-            >
-              <Trash2 className="size-3.5" />
-              {tb("delete")}
-            </Button>
+            <span className="flex items-center gap-2">
+              {selectedDraftIds.length > 0 && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => onBatchResolve("confirm")}
+                    disabled={busy}
+                  >
+                    {busy && <Loader2 className="size-3.5 animate-spin" />}
+                    <Check className="size-3.5" />
+                    {tb("confirmDrafts")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onBatchResolve("discard")}
+                    disabled={busy}
+                  >
+                    {tb("discardDrafts")}
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setConfirming(true)}
+                disabled={busy}
+              >
+                <Trash2 className="size-3.5" />
+                {tb("delete")}
+              </Button>
+            </span>
           )}
         </div>
       )}
@@ -499,7 +582,9 @@ export function TransactionsTable({
                 <TableRow
                   key={tx.id}
                   data-state={isSelected ? "selected" : undefined}
-                  className={`cursor-pointer ${status === "archived" ? "opacity-50" : ""}`}
+                  className={`cursor-pointer ${status === "archived" ? "opacity-50" : ""} ${
+                    status === "draft" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
+                  }`}
                   onClick={() => setDetailTx(tx)}
                 >
                   <TableCell>
@@ -521,6 +606,14 @@ export function TransactionsTable({
                       <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
                         {tt(tx.type)}
                       </Badge>
+                      {status === "draft" && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-400/50 text-amber-600 dark:text-amber-400"
+                        >
+                          {tm("status.badgeDraft")}
+                        </Badge>
+                      )}
                       {status === "archived" && (
                         <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
                       )}
@@ -607,6 +700,35 @@ export function TransactionsTable({
                           <Download className="size-4" />
                         </Button>
                       )}
+                      {status === "draft" && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={tm("status.confirmDraft")}
+                            title={tm("status.confirmDraft")}
+                            disabled={resolvingId === tx.id}
+                            onClick={() => onResolveOne(tx, "confirm")}
+                            className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                          >
+                            {resolvingId === tx.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Check className="size-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={tm("status.discardDraft")}
+                            title={tm("status.discardDraft")}
+                            disabled={resolvingId === tx.id}
+                            onClick={() => onResolveOne(tx, "discard")}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -617,11 +739,13 @@ export function TransactionsTable({
                           <Pencil className="size-4" />
                         </Link>
                       </Button>
-                      <TransactionStatusButton
-                        portfolioId={tx.portfolioId}
-                        txId={tx.id}
-                        status={status}
-                      />
+                      {status !== "draft" && (
+                        <TransactionStatusButton
+                          portfolioId={tx.portfolioId}
+                          txId={tx.id}
+                          status={status}
+                        />
+                      )}
                       <DeleteTransactionButton
                         portfolioId={tx.portfolioId}
                         txId={tx.id}

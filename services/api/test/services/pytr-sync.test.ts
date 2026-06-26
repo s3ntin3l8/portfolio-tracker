@@ -67,6 +67,15 @@ const EVENTS = [
   { id: "tr-3", timestamp: "2026-03-03T10:00:00.000Z", eventType: "MYSTERY", amount: 1, currency: "EUR" },
 ];
 
+/** Read the externalIds of the draft transactions materialized for a portfolio (sorted). */
+async function draftTxIds(portfolioId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ ext: transactions.externalId })
+    .from(transactions)
+    .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.status, "draft")));
+  return rows.map((r) => r.ext).filter((x): x is string => Boolean(x)).sort();
+}
+
 async function makeConnection(suffix: string, cashCounted = true) {
   const db = getDb();
   const [user] = await db
@@ -102,7 +111,7 @@ describe("syncTrConnection", () => {
     await closeDb();
   });
 
-  it("stages a pytr draft import and rolls the session forward", async () => {
+  it("materializes pytr draft transactions and rolls the session forward", async () => {
     const conn = await makeConnection("ok");
     let exportInput: unknown;
     const runner = runnerWith(async (input) => {
@@ -123,15 +132,18 @@ describe("syncTrConnection", () => {
     expect(result.drafts).toBe(2); // two mapped, the MYSTERY event is an error
     expect(result.errors).toBe(1);
 
-    // A draft import was staged (parser='pytr'), NOT auto-committed to transactions.
+    // The two mapped events are now real transactions with status='draft' (not staged in
+    // the collector). The MYSTERY event remains an attention error on the anchor import.
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["tr-1", "tr-2"]);
     const [imp] = await getDb()
       .select()
       .from(screenshotImports)
       .where(eq(screenshotImports.id, result.importId!));
     expect(imp.parser).toBe("pytr");
-    expect(imp.status).toBe("draft");
-    const parsed = imp.parsedJson as { drafts: { externalId: string }[] };
-    expect(parsed.drafts.map((d) => d.externalId)).toEqual(["tr-1", "tr-2"]);
+    expect(imp.status).toBe("draft"); // an unresolved attention error keeps it open
+    const parsed = imp.parsedJson as { drafts: unknown[]; errors: { eventId?: string }[] };
+    expect(parsed.drafts).toEqual([]); // drafts live in the transactions table now
+    expect(parsed.errors.some((e) => e.eventId === "tr-3")).toBe(true);
 
     // The rolling cookie jar is re-encrypted (extends session life) and timestamped.
     const [updated] = await getDb()
@@ -143,20 +155,20 @@ describe("syncTrConnection", () => {
     expect(enc.decryptString(updated.sessionEnc!)).toBe("NEW_JAR");
   });
 
-  it("accumulates only new events across syncs (one collector draft)", async () => {
+  it("materializes only new events across syncs (idempotent, one stable anchor)", async () => {
     const conn = await makeConnection("collector");
     const db = getDb();
 
-    // First sync stages the two mappable events.
+    // First sync materializes the two mappable events as draft transactions.
     const first = await syncTrConnection(db, enc, runnerWith(async () => ({ events: EVENTS, sessionData: "J1" })), conn);
     expect(first.drafts).toBe(2);
 
-    // Re-sync with the identical timeline → nothing new, the same single draft persists.
+    // Re-sync with the identical timeline → nothing new (already materialized), same anchor.
     const again = await syncTrConnection(db, enc, runnerWith(async () => ({ events: EVENTS, sessionData: "J2" })), conn);
     expect(again.drafts).toBe(0);
     expect(again.importId).toBe(first.importId);
 
-    // A genuinely new event is appended to the existing collector.
+    // A genuinely new event materializes against the same anchor.
     const withNew = [
       ...EVENTS,
       { id: "tr-4", timestamp: "2026-03-04T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 250, currency: "EUR" },
@@ -165,14 +177,8 @@ describe("syncTrConnection", () => {
     expect(third.drafts).toBe(1);
     expect(third.importId).toBe(first.importId);
 
-    // Exactly one open pytr draft for the portfolio, holding the accumulated set.
-    const drafts = await db
-      .select()
-      .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    expect(drafts).toHaveLength(1);
-    const parsed = drafts[0].parsedJson as { drafts: { externalId: string }[] };
-    expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["tr-1", "tr-2", "tr-4"]);
+    // The accumulated set lives in the transactions table as draft rows (no duplicates).
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["tr-1", "tr-2", "tr-4"]);
   });
 
   it("self-heals a staged error once a transiently-failed detail recovers", async () => {
@@ -191,15 +197,69 @@ describe("syncTrConnection", () => {
     const full = [{ ...thin[0], shares: 10 }];
     const second = await syncTrConnection(db, enc, runnerWith(async () => ({ events: full, sessionData: "J2" })), conn);
 
-    // The staged error was re-derived into a proper draft — not kept as a stale error.
+    // The staged error was re-derived into a proper draft transaction — not kept as an error.
     expect(second.drafts).toBe(1);
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["heal-1"]);
+    // The error cleared, so the anchor import no longer holds heal-1 (and, with no remaining
+    // attention errors, is closed to status='confirmed').
     const [imp] = await db
       .select()
       .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    const parsed = imp.parsedJson as { drafts: { externalId: string }[]; errors: { eventId?: string }[] };
-    expect(parsed.drafts.map((d) => d.externalId)).toEqual(["heal-1"]);
+      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.parser, "pytr")));
+    const parsed = imp.parsedJson as { drafts: unknown[]; errors: { eventId?: string }[] };
     expect(parsed.errors.some((e) => e.eventId === "heal-1")).toBe(false);
+  });
+
+  it("collapses a synced trade into an existing cross-source (PDF) row — one row, not two", async () => {
+    const conn = await makeConnection("cross-source");
+    const db = getDb();
+    const runner = runnerWith(async () => ({ events: EVENTS, sessionData: "J1" }));
+
+    // First sync materializes tr-1 (a buy) as a draft transaction — capture its real
+    // instrument/qty/price so the simulated PDF row matches it exactly.
+    await syncTrConnection(db, enc, runner, conn);
+    const [draftBuy] = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+    expect(draftBuy).toBeDefined();
+
+    // Simulate the same trade having been imported earlier via a TR settlement PDF:
+    // delete the pytr draft and re-insert the identical trade as a confirmed source='pdf' row.
+    await db.delete(transactions).where(eq(transactions.id, draftBuy.id));
+    await db.insert(transactions).values({
+      portfolioId: conn.portfolioId!,
+      instrumentId: draftBuy.instrumentId,
+      type: draftBuy.type,
+      quantity: draftBuy.quantity,
+      price: draftBuy.price,
+      fees: draftBuy.fees,
+      currency: draftBuy.currency,
+      executedAt: draftBuy.executedAt,
+      source: "pdf",
+      externalId: "pdf-tr-1",
+      status: "normal",
+    });
+
+    // Re-sync: tr-1 must collapse into the PDF row (cross-source match), NOT create a 2nd row.
+    await syncTrConnection(db, enc, runner, conn);
+    const buys = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.portfolioId, conn.portfolioId!),
+          eq(transactions.instrumentId, draftBuy.instrumentId!),
+        ),
+      );
+    expect(buys).toHaveLength(1);
+    expect(buys[0].source).toBe("pdf");
+    // And the synced event is recorded resolved so it won't be re-processed next sync.
+    const ledger = await db
+      .select()
+      .from(trResolvedEvents)
+      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, "tr-1")));
+    expect(ledger).toHaveLength(1);
   });
 
   it("un-imports a confirmed transaction whose source event was cancelled", async () => {
@@ -293,16 +353,11 @@ describe("syncTrConnection", () => {
     const runner = runnerWith(async () => ({ events: BOUNDARY_EVENTS, sessionData: "J" }));
 
     const r = await syncTrConnection(db, enc, runner, conn);
-    // trade + deposit + card all staged; the unknown MYSTERY surfaces as an error.
+    // trade + deposit + card all materialized; the unknown MYSTERY surfaces as an error.
     expect(r.drafts).toBe(3);
     expect(r.errors).toBe(1);
 
-    const [draft] = await db
-      .select()
-      .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    const parsed = draft.parsedJson as { drafts: { externalId: string }[] };
-    expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["b-card", "b-dep", "b-trade"]);
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["b-card", "b-dep", "b-trade"]);
   });
 
   it("cash-outside portfolio excludes deposits & card, keeps trades, surfaces unknowns (#326)", async () => {
@@ -311,22 +366,19 @@ describe("syncTrConnection", () => {
     const runner = runnerWith(async () => ({ events: BOUNDARY_EVENTS, sessionData: "J" }));
 
     const r = await syncTrConnection(db, enc, runner, conn);
-    // Only the trade is staged; deposit + card are excluded (not even errors). The unknown
-    // MYSTERY event is NOT a known cash movement, so it still flows through and surfaces.
+    // Only the trade is materialized; deposit + card are excluded (not even errors). The
+    // unknown MYSTERY event is NOT a known cash movement, so it still flows through and surfaces.
     expect(r.drafts).toBe(1);
     expect(r.errors).toBe(1);
 
-    const [draft] = await db
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["b-trade"]);
+    // The unknown event surfaced as an attention error on the anchor; the cash movements did
+    // not (silently excluded from materializing, but never surfaced as gaps either).
+    const [anchor] = await db
       .select()
       .from(screenshotImports)
       .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    const parsed = draft.parsedJson as {
-      drafts: { externalId: string }[];
-      errors: { eventId?: string }[];
-    };
-    expect(parsed.drafts.map((d) => d.externalId)).toEqual(["b-trade"]);
-    // The unknown event surfaced as an error; the cash movements did not (silently excluded
-    // from staging, but never surfaced as gaps either).
+    const parsed = anchor.parsedJson as { errors: { eventId?: string }[] };
     expect(parsed.errors.some((e) => e.eventId === "b-unknown")).toBe(true);
     expect(parsed.errors.some((e) => e.eventId === "b-dep" || e.eventId === "b-card")).toBe(false);
   });
@@ -343,14 +395,9 @@ describe("syncTrConnection", () => {
     // Flip the boundary to cash-inside; the previously-excluded movements now stage.
     await db.update(portfolios).set({ cashCounted: true }).where(eq(portfolios.id, conn.portfolioId!));
     const r2 = await syncTrConnection(db, enc, runner, conn);
-    expect(r2.drafts).toBe(2); // the deposit + card; the trade was already staged
+    expect(r2.drafts).toBe(2); // the deposit + card; the trade was already materialized
 
-    const [draft] = await db
-      .select()
-      .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    const parsed = draft.parsedJson as { drafts: { externalId: string }[] };
-    expect(parsed.drafts.map((d) => d.externalId).sort()).toEqual(["b-card", "b-dep", "b-trade"]);
+    expect(await draftTxIds(conn.portfolioId!)).toEqual(["b-card", "b-dep", "b-trade"]);
   });
 
   it("heals a previously-discarded event when the mapper now maps it to a draft", async () => {
@@ -625,14 +672,10 @@ describe("syncTrConnection", () => {
     // User deletes the tr-1 transaction on purpose.
     await db.delete(transactions).where(eq(transactions.externalId, "tr-1"));
 
-    // Re-sync: tr-1 must NOT reappear (the ledger remembers it); tr-2 already staged.
+    // Re-sync: tr-1 must NOT reappear (the ledger remembers it); tr-2 already materialized.
     const r2 = await syncTrConnection(db, enc, runner, conn);
     expect(r2.drafts).toBe(0);
-    const [draft] = await db
-      .select()
-      .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
-    const ids = (draft.parsedJson as { drafts: { externalId: string }[] }).drafts.map((d) => d.externalId);
+    const ids = await draftTxIds(conn.portfolioId!);
     expect(ids).toContain("tr-2");
     expect(ids).not.toContain("tr-1");
   });
@@ -714,8 +757,11 @@ describe("syncTrConnection", () => {
       .where(eq(documents.importId, imp.id));
     expect(docs).toHaveLength(1);
     expect(docs[0].sourceEventId).toBe("tr-doc-1");
-    expect(docs[0].status).toBe("staged");
+    // Drafts are real transactions now, so the doc is linked + retained immediately (the
+    // old confirm-time linkage no longer runs for sync).
+    expect(docs[0].status).toBe("retained");
     expect(docs[0].source).toBe("pytr");
+    expect(docs[0].transactionId).not.toBeNull();
     // Storage received a put call.
     expect(storage.puts).toHaveLength(1);
     expect(storage.puts[0]).toContain("receipts/");

@@ -5,6 +5,7 @@ import {
   ibkrConnections,
   portfolios,
   screenshotImports,
+  transactions,
   trResolvedEvents,
   users,
 } from "@portfolio/db";
@@ -85,30 +86,15 @@ describe("syncIbkrConnection", () => {
     expect(result.importId).toBeDefined();
   });
 
-  it("does not re-stage events already in the resolved ledger", async () => {
-    const { conn, portfolio } = await makeConnection("t2");
+  it("does not re-materialize events already in the table", async () => {
+    const { conn } = await makeConnection("t2");
 
-    // First sync.
+    // First sync materializes 8 draft transactions.
     const r1 = await syncIbkrConnection(getDb(), enc, mockFlex(), conn);
     expect(r1.drafts).toBe(8);
 
-    // Resolve all staged drafts.
-    const [imp] = await getDb()
-      .select()
-      .from(screenshotImports)
-      .where(eq(screenshotImports.id, r1.importId!));
-    const parsed = imp!.parsedJson as { drafts: { externalId?: string | null }[] };
-    const ids = parsed.drafts.map((d) => d.externalId).filter(Boolean) as string[];
-    await getDb().insert(trResolvedEvents).values(
-      ids.map((eventId) => ({
-        portfolioId: portfolio.id,
-        source: "ibkr",
-        eventId,
-        resolution: "confirmed",
-      })),
-    ).onConflictDoNothing();
-
-    // Second sync — nothing new.
+    // Second sync — every event already has a transaction row, so nothing new is created
+    // (the externalId set absorbs them; no dependence on the resolved ledger).
     const r2 = await syncIbkrConnection(getDb(), enc, mockFlex(), conn);
     expect(r2.drafts).toBe(0);
   });
@@ -158,17 +144,16 @@ describe("syncIbkrConnection", () => {
     const { conn } = await makeConnection("t9", { baseCurrency: "EUR", cashCounted: true });
     const result = await syncIbkrConnection(getDb(), enc, mockFlex(OPENING_EMPTY_XML), conn);
 
-    // Exactly one opening-balance deposit draft, no errors.
+    // Exactly one opening-balance deposit draft transaction, no errors.
     expect(result.drafts).toBe(1);
     expect(result.errors).toBe(0);
-    const [imp] = await getDb()
-      .select()
-      .from(screenshotImports)
-      .where(eq(screenshotImports.id, result.importId!));
-    const parsed = imp!.parsedJson as { drafts: { externalId?: string; action?: string }[] };
-    expect(parsed.drafts).toHaveLength(1);
-    expect(parsed.drafts[0]!.externalId).toBe("ibkr:opening:U6794520:EUR");
-    expect(parsed.drafts[0]!.action).toBe("deposit");
+    const draftRows = await getDb()
+      .select({ externalId: transactions.externalId, type: transactions.type })
+      .from(transactions)
+      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")));
+    expect(draftRows).toHaveLength(1);
+    expect(draftRows[0]!.externalId).toBe("ibkr:opening:U6794520:EUR");
+    expect(draftRows[0]!.type).toBe("deposit");
 
     // Reconciliation reports the real currency and matches (diff 0.00), never BASE_SUMMARY.
     expect(result.reconciliation!.cash).toHaveLength(1);

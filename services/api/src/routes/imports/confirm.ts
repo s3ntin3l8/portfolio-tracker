@@ -11,7 +11,6 @@ import {
 import {
   parsedGoldContractSchema,
   parsedTransactionSchema,
-  type AssetClass,
 } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
 import { accountMismatchVerdict, ownedPortfolio } from "./helpers.js";
@@ -24,19 +23,16 @@ import {
   enrichTransactionFromDrafts,
   enrichTransactionsFromStoredDocuments,
 } from "../../services/enrichment.js";
-import { findCrossSourceDuplicates, classifyMatch } from "../../services/parsers/dedup.js";
 import {
-  findOrCreateInstrument,
-  marketForAssetClass,
-  marketForEuInstrument,
-} from "../../services/instruments.js";
-import { getMarketData } from "../../services/market-data.js";
-import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS, isIdxEtfSymbol } from "@portfolio/market-data";
+  resolveDraftInstruments,
+  classifyDraftDuplicates,
+  writeResolvedDrafts,
+} from "../../services/materialize-drafts.js";
+import { findOrCreateInstrument } from "../../services/instruments.js";
 import {
   finalizeReceipts,
   linkTrReceiptsToTransactions,
   retainDocumentForTransaction,
-  getStagedDocumentId,
   getDocumentForImport,
 } from "../../storage/receipts.js";
 
@@ -173,140 +169,9 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         "confirm started",
       );
 
-      // Resolve EU broker (DKB/Trade Republic) ISINs to a ticker/market/currency once
-      // each (best-effort, cached). OpenFIGI is keyless; failures and unknown ISINs fall
-      // back to Xetra/ISIN/EUR.
-      const isinCache = new Map<
-        string,
-        { symbol: string; market: string; currency: string; assetClass: AssetClass } | null
-      >();
-      async function resolveEuIsin(isin: string) {
-        if (isinCache.has(isin)) {
-          request.log.debug({ isin }, "isin cache hit");
-          return isinCache.get(isin)!;
-        }
-        let resolved: {
-          symbol: string;
-          market: string;
-          currency: string;
-          assetClass: AssetClass;
-        } | null = null;
-        // Trade Republic books crypto under synthetic `XF…` ISINs that OpenFIGI can't resolve;
-        // recognise those first and route them to CoinGecko (priced in the broker's EUR).
-        const crypto = resolveCryptoIsin(isin);
-        if (crypto) {
-          resolved = { ...crypto, currency: "EUR" };
-        } else {
-          request.log.debug({ isin, via: "openfigi" }, "isin lookup");
-          try {
-            const md = await getMarketData();
-            const [hit] = await md.search(isin);
-            if (hit) {
-              resolved = {
-                symbol: hit.symbol,
-                market: hit.market,
-                currency: hit.currency,
-                assetClass: hit.assetClass,
-              };
-            }
-          } catch (err) {
-            // best-effort; never block a confirm on discovery
-            request.log.warn({ isin, err }, "isin resolve failed");
-          }
-        }
-        if (resolved) {
-          request.log.debug(
-            { isin, symbol: resolved.symbol, market: resolved.market, assetClass: resolved.assetClass },
-            "isin resolved",
-          );
-        }
-        isinCache.set(isin, resolved);
-        return resolved;
-      }
-
       // Pass 1 — resolve each draft's instrument (best-effort, may hit the network). Done
       // OUTSIDE the transaction so a slow OpenFIGI/provider lookup never holds a DB tx open.
-      const resolved: { draft: (typeof drafts)[number]; instrumentId: string | null }[] = [];
-      for (const d of drafts) {
-        // Cash movements (deposit/withdrawal/interest/bonus_cash) have no instrument.
-        const isCash =
-          d.action === "deposit" ||
-          d.action === "withdrawal" ||
-          d.action === "interest" ||
-          d.action === "bonus_cash";
-        let instrumentId: string | null = null;
-
-        if (!isCash) {
-          let symbol = d.ticker ?? d.isin ?? d.name ?? "UNKNOWN";
-          let market = isEu
-            ? marketForEuInstrument(d.assetClass)
-            : marketForAssetClass(d.assetClass ?? "equity");
-          let instrumentCurrency = d.currency;
-          let assetClass = d.assetClass ?? "equity";
-
-          // IDX KIK ETFs read "Reksa Dana" in screenshots so the parser tags them
-          // mutual_fund. Their ticker reveals the truth — reclassify so they group under
-          // ETFs, not reksa dana. Gated on !isEu + market === "IDX" so EU mutual funds
-          // whose symbols might match the pattern are never touched. (#120)
-          if (!isEu && assetClass === "mutual_fund" && market === "IDX" && isIdxEtfSymbol(symbol))
-            assetClass = "etf";
-
-          if (isEu && d.isin) {
-            const r = await resolveEuIsin(d.isin);
-            if (r) {
-              // Always adopt the resolved ticker and asset class. Adopt the venue + currency
-              // only when resolution lands on a market our providers price directly that
-              // differs from the broker's Xetra/EUR default — US stocks (USD via Twelve Data)
-              // and crypto (EUR via CoinGecko). Otherwise keep the Xetra/EUR pin: DKB/Trade
-              // Republic execute on Xetra, and OpenFIGI's first listing for a EUR fund is
-              // often another venue that no provider covers / defaults to USD (PR #130).
-              symbol = r.symbol;
-              assetClass = r.assetClass;
-              // Adopt the resolved venue/currency only for markets that differ from the
-              // broker's Xetra/EUR default AND make sense for the ISIN's domicile country.
-              // For US listings: only allow the US market when the ISIN is itself
-              // US-domiciled — a non-US ISIN (IE…, DE…, GB…) that resolves to a US ticker
-              // is a cross-listing collision (e.g. CSSPX = iShares on Xetra vs Cohen &
-              // Steers on NYSE). Crypto (CRYPTO_MARKET) is unaffected by the ISIN check.
-              if (
-                PRICEABLE_FOREIGN_MARKETS.has(r.market) &&
-                (r.market !== "US" || (d.isin ?? "").toUpperCase().startsWith("US"))
-              ) {
-                market = r.market;
-                instrumentCurrency = r.currency;
-              }
-            }
-          }
-
-          const instrument = await findOrCreateInstrument(
-            app.db,
-            {
-              symbol,
-              market,
-              assetClass,
-              unit: d.unit ?? "shares",
-              currency: instrumentCurrency,
-              name: d.name ?? symbol,
-              isin: d.isin ?? null,
-              wkn: d.wkn ?? null,
-            },
-            // Delegate to the cached resolveEuIsin so any future path that produces an
-            // unknown market benefits from the same OpenFIGI correction without a second
-            // round-trip. On the current EU/IDX/gold paths market is always known at this
-            // point, so the guard inside findOrCreateInstrument never fires — this is
-            // defensive / future-proofing only.
-            {
-              resolveMarket: async (isin) => {
-                const r = await resolveEuIsin(isin);
-                return r ? { market: r.market, currency: r.currency } : null;
-              },
-            },
-          );
-          instrumentId = instrument.id;
-          request.log.debug({ symbol, market, instrumentId }, "instrument resolved");
-        }
-        resolved.push({ draft: d, instrumentId });
-      }
+      const resolved = await resolveDraftInstruments(app, drafts, { isEu });
 
       // Cross-source duplicate check (#196, hardened to a real backstop in #217, enrichment
       // classification added in #259): now that instruments are resolved, find drafts that
@@ -318,92 +183,23 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       //
       // Invariant: confirm owns routing. The advisory upload-time badges are best-effort
       // (keyed on ISIN/WKN rather than resolved instrumentId); this pass re-classifies
-      // independently and is authoritative.
+      // independently and is authoritative. The classifier itself lives in
+      // services/materialize-drafts.ts so the sync path reuses it.
       //
       // KNOWN RACE (4.3): this SELECT runs outside the write transaction below. Two concurrent
       // confirms of overlapping sources can both clear the 409 and both write. The practical
       // risk is low (same user, two concurrent confirms in sub-second window), and the fallback
       // is the same-source `(portfolioId, source, externalId)` unique index which absorbs true
       // re-imports silently. A future hardening pass can re-run this check inside the transaction.
-      let likelyDuplicates = 0;
-      // Enrichment matches resolved here, applied in pass 2 BEFORE finalizeReceipts.
-      const enrichmentMatches: Array<{ draftIndex: number; matchedTransactionId: string }> = [];
-      const enrichmentDraftIndices = new Set<number>();
-      duplicateCheck: {
-        const committed = await app.db
-          .select({
-            id: transactions.id,
-            instrumentId: transactions.instrumentId,
-            type: transactions.type,
-            executedAt: transactions.executedAt,
-            quantity: transactions.quantity,
-            price: transactions.price,
-            source: transactions.source,
-            externalId: transactions.externalId,
-          })
-          .from(transactions)
-          .where(eq(transactions.portfolioId, targetPortfolioId));
-
-        // Same-source re-imports (e.g. overlapping monthly CSV exports) are already absorbed
-        // silently by the `(portfolioId, source, externalId)` unique index + onConflictDoNothing
-        // on insert. Excluding those from the 409 set keeps that flow quiet and reserves the
-        // block for genuine *cross-source* / divergent duplicates — the bug this targets.
-        const committedExtKeys = new Set(
-          committed
-            .filter((r) => r.externalId)
-            .map((r) => `${r.source}|${r.externalId}`),
-        );
-
-        const committedCandidates = committed.map((r) => ({
-          id: r.id,
-          key: r.instrumentId,
-          action: r.type,
-          quantity: r.quantity,
-          price: r.price,
-          executedAt: r.executedAt,
-          source: r.source,
-        }));
-        const draftCandidates = resolved.map(({ draft: d, instrumentId }) => ({
-          key: instrumentId,
-          action: d.action,
-          quantity: d.quantity,
-          price: d.price,
-          executedAt: d.executedAt,
-        }));
-
-        const allMatches = findCrossSourceDuplicates(draftCandidates, committedCandidates).filter(
-          ({ draftIndex }) => {
-            // Skip economic matches that are also a guaranteed no-op write (same source +
-            // same content externalId already present) — those need no surfacing.
-            const d = resolved[draftIndex].draft;
-            const prospectiveExtId = d.externalId ?? `import:${imp.id}:${draftIndex}`;
-            return !committedExtKeys.has(`${source}|${prospectiveExtId}`);
-          },
-        );
-        if (allMatches.length === 0) break duplicateCheck;
-
-        // Check whether this import has a staged document (signals enrichment value).
-        const hasStagedDoc = !!(await getStagedDocumentId(app, imp.id));
-
-        // Classify each match. Enrichments are removed from the insert set and applied in
-        // pass 2; plain duplicates block with a 409 (unless already acknowledged).
-        const plainDuplicates: typeof allMatches = [];
-        for (const match of allMatches) {
-          const d = resolved[match.draftIndex].draft;
-          const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
-          const draftHasEnrichment = hasStagedDoc || !!hasTaxComponents;
-          const kind = classifyMatch(source, match.matched.source ?? "csv", draftHasEnrichment);
-          if (kind === "enrichment") {
-            enrichmentMatches.push({ draftIndex: match.draftIndex, matchedTransactionId: match.matched.id });
-            enrichmentDraftIndices.add(match.draftIndex);
-          } else {
-            plainDuplicates.push(match);
-          }
-        }
-
-        likelyDuplicates = plainDuplicates.length;
-        if (likelyDuplicates === 0) break duplicateCheck;
-
+      const { enrichmentMatches, enrichmentDraftIndices, plainDuplicates } =
+        await classifyDraftDuplicates(app, {
+          resolved,
+          targetPortfolioId,
+          source,
+          importId: imp.id,
+        });
+      const likelyDuplicates = plainDuplicates.length;
+      if (likelyDuplicates > 0) {
         request.log.info(
           { importId: imp.id, likelyDuplicates, enrichments: enrichmentMatches.length, acknowledged: acknowledgeDuplicates },
           "confirm: cross-source duplicates among selected drafts",
@@ -441,75 +237,22 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       let skipped = 0;
       let finalStatus: "draft" | "confirmed" = "draft";
       const created = await app.db.transaction(async (tx) => {
-        const written: (typeof transactions.$inferSelect)[] = [];
-        for (let i = 0; i < resolved.length; i++) {
-          // Skip drafts that matched an existing transaction as enrichments — they are applied
-          // below (after the transaction) rather than inserted as new rows.
-          if (enrichmentDraftIndices.has(i)) continue;
-
-          const { draft: d, instrumentId } = resolved[i];
-          attempted++;
-          const externalId = d.externalId ?? `import:${imp.id}:${i}`;
-          const [row] = await tx
-            .insert(transactions)
-            .values({
-              portfolioId: targetPortfolioId,
-              instrumentId,
-              type: d.action,
-              quantity: d.quantity,
-              price: d.price,
-              fees: d.fees,
-              tax: d.tax ?? null,
-              executedPrice: d.executedPrice ?? null,
-              fxRate: d.fxRate ?? null,
-              venue: d.venue ?? null,
-              documentRefs: d.documentRefs ?? null,
-              kind: d.kind ?? null,
-              description: d.description ?? null,
-              // The cash leg is always in the transaction's own currency (EUR for DKB),
-              // independent of where the instrument is listed/priced.
-              currency: d.currency,
-              executedAt: d.executedAt,
-              source,
-              importId: imp.id,
-              externalId,
-              savingsPlanId: d.savingsPlanId ?? null,
-            })
-            .onConflictDoNothing()
-            .returning();
-          if (row) {
-            written.push(row);
-            // Write the first-import source row for provenance + enrichment rollup.
-            // sourceType: draft with taxComponents = pdf (e.g. TR/DKB PDF); else mapped from source.
-            const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
-            const srcType = (
-              hasTaxComponents ? "pdf"
-              : source === "pytr" ? "pytr"
-              : source === "screenshot" ? "screenshot"
-              : source === "pdf" ? "pdf"
-              : "csv"
-            ) as "pdf" | "pytr" | "screenshot" | "csv" | "manual";
-            await tx
-              .insert(transactionSources)
-              .values({
-                transactionId: row.id,
-                sourceType: srcType,
-                importId: imp.id,
-                externalId: d.externalId ?? null,
-                orderRef: d.orderRef ?? null,
-                tax: d.tax ?? null,
-                fees: d.fees ?? null,
-                executedPrice: d.executedPrice ?? null,
-                fxRate: d.fxRate ?? null,
-                venue: d.venue ?? null,
-                taxComponents: hasTaxComponents ? (d.taxComponents as Record<string, unknown>) : null,
-              })
-              .onConflictDoNothing();
-          } else {
-            skipped++;
-            request.log.debug({ externalId }, "duplicate skipped");
-          }
-        }
+        // Pass 2 — write the (non-enrichment) drafts as new transactions + source rows.
+        // Confirm writes status="normal"; the shared writer is also used by sync with "draft".
+        const { written: draftRows, attempted: draftAttempted, skipped: draftSkipped } =
+          await writeResolvedDrafts(tx, {
+            resolved,
+            // Confirm skips only enrichment matches; acknowledged plain duplicates are still
+            // inserted (the user opted in via acknowledgeDuplicates → 409 cleared).
+            skipDraftIndices: enrichmentDraftIndices,
+            targetPortfolioId,
+            source,
+            importId: imp.id,
+            status: "normal",
+          });
+        attempted += draftAttempted;
+        skipped += draftSkipped;
+        const written: (typeof transactions.$inferSelect)[] = [...draftRows];
 
         // Financed gold contracts: create the gold instrument + loan, then insert
         // the derived legs (buy, drawdown, admin/discount fees, due installments),

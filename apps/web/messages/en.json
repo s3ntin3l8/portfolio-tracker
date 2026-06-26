@@ -731,7 +731,8 @@
       "csv": "CSV",
       "manual": "Manual",
       "pytr": "Trade Republic",
-      "pdf": "PDF"
+      "pdf": "PDF",
+      "ibkr": "Interactive Brokers"
     },
     "sourcesSection": {
       "title": "Data sources",
@@ -746,8 +747,13 @@
       "confirm": "Delete",
       "cancel": "Cancel",
       "selectAll": "Select all transactions",
-      "selectRow": "Select transaction"
-    }
+      "selectRow": "Select transaction",
+      "confirmDrafts": "Confirm selected",
+      "discardDrafts": "Discard selected"
+    },
+    "filterDraftLabel": "Draft filter",
+    "draftShowAll": "All",
+    "draftOnly": "Drafts only ({count})"
   },
   "Manage": {
     "addTransaction": "Add transaction",
@@ -768,7 +774,10 @@
       "archived": "Archive (ignore everywhere)",
       "cashNeutral": "Cash-neutral (keep shares, no cash)",
       "badgeArchived": "Archived",
-      "badgeCashNeutral": "Cash-neutral"
+      "badgeCashNeutral": "Cash-neutral",
+      "badgeDraft": "Draft",
+      "confirmDraft": "Confirm",
+      "discardDraft": "Discard"
     },
     "portfolio": {
       "title": "Create a portfolio",

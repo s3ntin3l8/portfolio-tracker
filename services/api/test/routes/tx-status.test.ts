@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { instruments } from "@portfolio/db";
+import { instruments, transactions, trResolvedEvents } from "@portfolio/db";
 import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
@@ -159,5 +160,96 @@ describe("transaction status (archived / cash_neutral)", () => {
       payload: { status: "bogus" },
     });
     expect(bad.statusCode).toBe(400);
+  });
+
+  // Insert a sync-style draft transaction directly (sync is what creates these).
+  async function addDraftBuy(portfolioId: string, externalId: string, qty: string) {
+    const [row] = await app.db
+      .insert(transactions)
+      .values({
+        portfolioId,
+        instrumentId: acmeId,
+        type: "buy",
+        quantity: qty,
+        price: "10",
+        currency: "EUR",
+        executedAt: new Date("2026-02-01T00:00:00.000Z"),
+        source: "pytr",
+        externalId,
+        status: "draft",
+      })
+      .returning({ id: transactions.id });
+    return row.id;
+  }
+
+  it("draft transactions are excluded from holdings until confirmed", async () => {
+    const { t, portfolioId } = await setup();
+    const draftId = await addDraftBuy(portfolioId, "ev-confirm-1", "7");
+
+    // Draft is listed (so the table can show it) but excluded from derived holdings.
+    const list = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) });
+    expect(list.json().find((r: { id: string }) => r.id === draftId).status).toBe("draft");
+    const before = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    expect(before.json().holdings).toHaveLength(0);
+
+    // Confirm → normal; now it counts, and the durable ledger records it.
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+      headers: auth(t),
+      payload: { ids: [draftId], action: "confirm" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updated).toBe(1);
+
+    const after = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    expect(after.json().holdings).toHaveLength(1);
+    expect(after.json().holdings[0].quantity).toBe("7");
+
+    const ledger = await app.db
+      .select()
+      .from(trResolvedEvents)
+      .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.eventId, "ev-confirm-1")));
+    expect(ledger[0]?.resolution).toBe("confirmed");
+  });
+
+  it("discarding a draft archives it (stays excluded) and records the ledger", async () => {
+    const { t, portfolioId } = await setup();
+    const draftId = await addDraftBuy(portfolioId, "ev-discard-1", "3");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+      headers: auth(t),
+      payload: { ids: [draftId], action: "discard" },
+    });
+    expect(res.json().updated).toBe(1);
+
+    // Row is archived (kept + visible), still excluded from holdings.
+    const list = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) });
+    expect(list.json().find((r: { id: string }) => r.id === draftId).status).toBe("archived");
+    const holdings = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    expect(holdings.json().holdings).toHaveLength(0);
+
+    const ledger = await app.db
+      .select()
+      .from(trResolvedEvents)
+      .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.eventId, "ev-discard-1")));
+    expect(ledger[0]?.resolution).toBe("discarded");
+  });
+
+  it("resolve-drafts only touches draft rows and ignores non-draft ids", async () => {
+    const { t, portfolioId, addBuy } = await setup();
+    const normalId = await addBuy("1", "10"); // status 'normal'
+    const draftId = await addDraftBuy(portfolioId, "ev-mixed-1", "2");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+      headers: auth(t),
+      payload: { ids: [normalId, draftId], action: "confirm" },
+    });
+    // Only the draft row was updated; the already-normal row is untouched.
+    expect(res.json().updated).toBe(1);
   });
 });
