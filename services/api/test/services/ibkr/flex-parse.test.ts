@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseFlexXml, parseIbkrDate } from "../../../src/services/ibkr/flex-parse.js";
+import {
+  parseFlexXml,
+  parseIbkrDate,
+  isRealCurrencyRow,
+  resolveRowCurrency,
+  selectCashRows,
+} from "../../../src/services/ibkr/flex-parse.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, "../../fixtures/ibkr");
@@ -35,6 +41,69 @@ describe("parseIbkrDate", () => {
 
   it("returns null for garbage", () => {
     expect(parseIbkrDate("NOT_A_DATE")).toBeNull();
+  });
+});
+
+describe("base currency parsing", () => {
+  it("parses baseCurrency from <AccountInformation>", () => {
+    const s = parseFlexXml(loadFixture("activity-opening-empty.xml"))[0]!;
+    expect(s.baseCurrency).toBe("EUR");
+  });
+
+  it("surfaces startingCash on the CashReport row", () => {
+    const s = parseFlexXml(loadFixture("activity-opening-empty.xml"))[0]!;
+    expect(s.cashReport[0]!.startingCash).toBe("9.9981");
+    expect(s.cashReport[0]!.currency).toBe("BASE_SUMMARY");
+  });
+
+  it("defaults baseCurrency to '' when AccountInformation is absent", () => {
+    const s = parseFlexXml(loadFixture("activity.xml"))[0]!;
+    expect(s.baseCurrency).toBe("");
+  });
+});
+
+describe("CashReport currency helpers", () => {
+  it("isRealCurrencyRow: true for ISO codes, false for BASE_SUMMARY", () => {
+    expect(isRealCurrencyRow({ currency: "EUR", endingCash: "1" })).toBe(true);
+    expect(isRealCurrencyRow({ currency: "usd", endingCash: "1" })).toBe(true);
+    expect(isRealCurrencyRow({ currency: "BASE_SUMMARY", endingCash: "1" })).toBe(false);
+    expect(isRealCurrencyRow({ currency: "", endingCash: "1" })).toBe(false);
+  });
+
+  it("resolveRowCurrency: real row → own code; BASE_SUMMARY → base; else null", () => {
+    expect(resolveRowCurrency({ currency: "EUR", endingCash: "1" }, "USD")).toBe("EUR");
+    expect(resolveRowCurrency({ currency: "BASE_SUMMARY", endingCash: "1" }, "eur")).toBe("EUR");
+    expect(resolveRowCurrency({ currency: "BASE_SUMMARY", endingCash: "1" }, "")).toBeNull();
+    expect(resolveRowCurrency({ currency: "BASE_SUMMARY", endingCash: "1" }, undefined)).toBeNull();
+  });
+
+  it("selectCashRows: prefers real rows and ignores BASE_SUMMARY when real rows exist", () => {
+    const rows = selectCashRows(
+      [
+        { currency: "EUR", endingCash: "1000.00", startingCash: "1000.00" },
+        { currency: "USD", endingCash: "500.00", startingCash: "500.00" },
+        { currency: "BASE_SUMMARY", endingCash: "1462.00", startingCash: "1462.00" },
+      ],
+      "EUR",
+    );
+    expect(rows.map((r) => r.currency)).toEqual(["EUR", "USD"]);
+  });
+
+  it("selectCashRows: falls back to BASE_SUMMARY (mapped to base) when no real rows", () => {
+    const rows = selectCashRows(
+      [{ currency: "BASE_SUMMARY", endingCash: "9.9981", startingCash: "9.9981" }],
+      "EUR",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.currency).toBe("EUR");
+  });
+
+  it("selectCashRows: drops unresolvable rows", () => {
+    const rows = selectCashRows(
+      [{ currency: "BASE_SUMMARY", endingCash: "9.9981", startingCash: "9.9981" }],
+      "",
+    );
+    expect(rows).toHaveLength(0);
   });
 });
 

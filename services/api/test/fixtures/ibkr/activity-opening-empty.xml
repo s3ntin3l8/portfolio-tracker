@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Near-empty account: ~EUR 9.998 standing cash, no trades/cash/transfers in the window.
+     The funding deposit predates this rolling window, so it only survives as CashReport
+     startingCash. The CashReport exposes ONLY the BASE_SUMMARY aggregate row. -->
+<FlexQueryResponse queryName="Portfolio Tracker Activity" type="AF">
+  <FlexStatements count="1">
+    <FlexStatement accountId="U6794520" fromDate="2025-06-26" toDate="2026-06-26" period="LastNDays" whenGenerated="2026-06-26;23:59:59">
+      <AccountInformation accountId="U6794520" currency="EUR" />
+      <Trades>
+      </Trades>
+      <CashTransactions>
+      </CashTransactions>
+      <Transfers>
+      </Transfers>
+      <OpenPositions>
+      </OpenPositions>
+      <CorporateActions>
+      </CorporateActions>
+      <CashReport>
+        <CashReportCurrency currency="BASE_SUMMARY" startingCash="9.9981" endingCash="9.9981" />
+      </CashReport>
+    </FlexStatement>
+  </FlexStatements>
+</FlexQueryResponse>

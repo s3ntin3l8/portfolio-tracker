@@ -9,6 +9,7 @@ import { shortHash } from "../parsers/hash.js";
 import {
   CASH_TX_TYPES,
   parseIbkrDate,
+  selectCashRows,
   type FlexStatement,
 } from "./flex-parse.js";
 
@@ -77,8 +78,12 @@ export interface MapFlexResult {
  * 2. Cash transactions — group dividend + withholding tax pairs first
  * 3. Transfers (depot-level position transfers: transfer_in / transfer_out)
  * 4. Corporate actions (splits only; others are skipped as low-confidence)
+ * 5. Opening cash balance (CashReport startingCash → one anchored deposit per currency)
  */
-export function mapFlexToDrafts(statement: FlexStatement): MapFlexResult {
+export function mapFlexToDrafts(
+  statement: FlexStatement,
+  opts: { baseCurrency?: string } = {},
+): MapFlexResult {
   const drafts: ParsedTransaction[] = [];
   const errors: MapFlexResult["errors"] = [];
 
@@ -403,6 +408,82 @@ export function mapFlexToDrafts(statement: FlexStatement): MapFlexResult {
       },
       ca,
     );
+  }
+
+  // ── 5. Opening cash balance ──────────────────────────────────────────────
+  //
+  // IBKR's CashReport carries the account's standing cash via startingCash/endingCash,
+  // but the *funding* deposit may be years old and permanently outside a rolling Flex
+  // window — so it never appears as a CashTransaction row. Without it, cash-inside
+  // portfolios show €0 and the cash reconciliation reports the whole balance as a diff.
+  //
+  // Book the window's startingCash as a single anchored `deposit` per currency. The
+  // externalId is intentionally DATE-LESS (`ibkr:opening:<account>:<ccy>`) so a rolling
+  // window can't change it: the dedup ledger anchors the first-seen opening balance and
+  // every later sync re-emits then dedupes it (which also keeps the per-window cash
+  // reconciliation self-consistent: startingCash + in-window flows = endingCash).
+  const baseCcy = statement.baseCurrency || opts.baseCurrency;
+  const openingRows = selectCashRows(statement.cashReport, baseCcy);
+  const openingFromDate = parseIbkrDate(statement.fromDate);
+  for (const { row, currency } of openingRows) {
+    // strNum maps an absent/empty startingCash to "0", so this also skips the
+    // no-Starting-Cash-column case (surfaced as a diagnostic issue below instead).
+    const startNum = Number(strNum(row.startingCash));
+    if (startNum === 0) continue; // nothing to book for a flat opening balance
+    if (!openingFromDate) continue; // can't date the opening balance
+
+    // A negative standing balance is a margin/debit balance — sign-split into a
+    // withdrawal (mirroring the in-window Deposits/Withdrawals handler) so it never
+    // lands as a negative-amount "deposit" (which would corrupt the contribution total).
+    push(
+      {
+        assetClass: null,
+        action: (startNum >= 0 ? "deposit" : "withdrawal") as ParsedAction,
+        ticker: undefined,
+        isin: undefined,
+        name: "IBKR opening balance",
+        quantity: "0",
+        unit: "shares",
+        price: absStr(row.startingCash),
+        fees: "0",
+        currency,
+        executedAt: openingFromDate,
+        externalId: `ibkr:opening:${statement.accountId}:${currency}`,
+        confidence: 1,
+      },
+      row,
+    );
+  }
+
+  // Diagnostic for the "standing cash only" account (nothing else mapped) where we still
+  // could not book an opening balance — so the cash would silently vanish. Scoped to the
+  // empty-account signature (drafts.length === 0) so it never fires for normal statements
+  // (e.g. the activity fixture, whose CashReport rows also lack startingCash). Two causes:
+  //   A. resolvable currency but the Flex query omits the Starting Cash column;
+  //   B. a startingCash value exists but the currency can't be resolved (BASE_SUMMARY + unknown base).
+  if (drafts.length === 0) {
+    const resolvableNoStart = openingRows.find(
+      ({ row }) => !row.startingCash && Number(strNum(row.endingCash)) !== 0,
+    );
+    const unresolvableWithStart = statement.cashReport.find(
+      (r) => r.startingCash && Number(strNum(r.startingCash)) !== 0,
+    );
+    if (resolvableNoStart) {
+      errors.push({
+        message:
+          "IBKR reports a standing cash balance but the Flex query has no Starting Cash " +
+          "column; enable 'Starting Cash' in the query's Cash Report section so the " +
+          "opening balance can be booked",
+        raw: resolvableNoStart.row,
+      });
+    } else if (unresolvableWithStart) {
+      errors.push({
+        message:
+          "IBKR cash report only exposes a BASE_SUMMARY row and the account base " +
+          "currency is unknown; opening balance not booked",
+        raw: unresolvableWithStart,
+      });
+    }
   }
 
   return { drafts, errors };

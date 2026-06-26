@@ -132,6 +132,8 @@ export interface FlexCorporateAction {
 /** The fully-parsed Activity Flex Statement for a single account period. */
 export interface FlexStatement {
   accountId: string;
+  /** Account base currency, from `<AccountInformation currency="…">`. "" when absent. */
+  baseCurrency: string;
   fromDate: string;
   toDate: string;
   trades: FlexTrade[];
@@ -213,8 +215,19 @@ function parseStatement(raw: Record<string, unknown>): FlexStatement {
   const fromDate = String(raw["fromDate"] ?? "");
   const toDate = String(raw["toDate"] ?? "");
 
+  // Base currency lives on the (optional) AccountInformation element. Used to label the
+  // base-currency-summary cash row and as a fallback for opening-balance currency.
+  const acctInfo = raw["AccountInformation"] as
+    | Record<string, unknown>
+    | undefined;
+  const baseCurrency =
+    acctInfo && typeof acctInfo === "object"
+      ? String(acctInfo["currency"] ?? "")
+      : "";
+
   return {
     accountId,
+    baseCurrency,
     fromDate,
     toDate,
     trades: extractRows<FlexTrade>(raw, "Trades", "Trade"),
@@ -287,4 +300,64 @@ export function parseIbkrDate(raw: string): string | null {
   if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// CashReport currency helpers
+// ---------------------------------------------------------------------------
+//
+// IBKR's CashReport emits one `<CashReportCurrency>` per held currency plus a synthetic
+// aggregate row whose `currency` is the literal "BASE_SUMMARY" (values already in the
+// account's base currency). A 3-letter ISO code identifies a real per-currency row.
+
+/** True when the row carries a real 3-letter ISO currency (not BASE_SUMMARY). */
+export function isRealCurrencyRow(row: FlexCashReportCurrency): boolean {
+  return /^[A-Z]{3}$/.test((row.currency ?? "").trim().toUpperCase());
+}
+
+/**
+ * Resolve a CashReport row to a real ISO currency code:
+ * - real per-currency row → its own code;
+ * - BASE_SUMMARY (or any non-ISO label) → the supplied base currency, if it is a valid
+ *   3-letter ISO code (the row's values are already in base currency);
+ * - otherwise `null` (cannot resolve — caller skips it).
+ */
+export function resolveRowCurrency(
+  row: FlexCashReportCurrency,
+  baseCurrency: string | undefined,
+): string | null {
+  if (isRealCurrencyRow(row)) return (row.currency ?? "").trim().toUpperCase();
+  const base = (baseCurrency ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(base) ? base : null;
+}
+
+/** A CashReport row paired with its resolved ISO currency. */
+export interface ResolvedCashRow {
+  row: FlexCashReportCurrency;
+  currency: string;
+}
+
+/**
+ * Pick the effective per-currency cash rows from a CashReport:
+ * - prefer real ISO-currency rows (one entry per currency);
+ * - fall back to the BASE_SUMMARY aggregate (mapped to the base currency) ONLY when no
+ *   real per-currency rows are present — avoids double-counting the same currency.
+ * Rows that can't be resolved to a 3-letter ISO currency are dropped; the result is
+ * deduped by currency.
+ */
+export function selectCashRows(
+  cashReport: FlexCashReportCurrency[],
+  baseCurrency: string | undefined,
+): ResolvedCashRow[] {
+  const real = cashReport.filter(isRealCurrencyRow);
+  const rows = real.length > 0 ? real : cashReport;
+  const out: ResolvedCashRow[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const currency = resolveRowCurrency(row, baseCurrency);
+    if (!currency || seen.has(currency)) continue;
+    seen.add(currency);
+    out.push({ row, currency });
+  }
+  return out;
 }

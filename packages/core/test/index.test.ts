@@ -313,6 +313,22 @@ describe("summarizePortfolio", () => {
     expect(tracked.netWorth).toBe("2150000"); // 1,100,000 + 1,050,000
   });
 
+  it("surfaces cash for a cash-inside portfolio whose only tx is an opening deposit", () => {
+    // Mirrors the IBKR standing-cash case: an otherwise-empty account where the only
+    // booked event is the opening-balance deposit. Cash must be tracked and counted.
+    const summary = summarizePortfolio({
+      transactions: [
+        mk({ type: "deposit", instrumentId: null, price: "9.9981", currency: "EUR" }),
+      ],
+      prices: {},
+      displayCurrency: "EUR",
+      cashCounted: true,
+    });
+    expect(summary.cashTracked).toBe(true);
+    expect(summary.cash.EUR).toBe("9.9981");
+    expect(summary.netWorth).toBe("9.9981");
+  });
+
   it("sums dividend and coupon cash as total income", () => {
     const summary = summarizePortfolio({
       transactions: [
