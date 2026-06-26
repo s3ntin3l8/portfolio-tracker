@@ -68,10 +68,14 @@ export const txTypeEnum = pgEnum("transaction_type", [
 //  - "cash_neutral" : keeps shares/cost-basis, but contributes 0 cash (only fees) and
 //    is not a contribution. For reward-funded acquisitions whose funding leg the feed
 //    omits (e.g. a crypto promo bonus that pays for the buy).
+//  - "draft"        : an unconfirmed import/sync row awaiting user review. Shown in the
+//    transactions table (with a marker) but excluded from every derivation — exactly like
+//    "archived" — until the user confirms it (→ "normal") or discards it (→ "archived").
 export const txStatusEnum = pgEnum("transaction_status", [
   "normal",
   "archived",
   "cash_neutral",
+  "draft",
 ]);
 
 export const txSourceEnum = pgEnum("transaction_source", [
@@ -671,6 +675,10 @@ export const transactionSources = pgTable(
     venue: text("venue"),
     // Per-component tax breakdown (display + provenance; summed into transactions.tax).
     taxComponents: jsonb("tax_components"),
+    // Parse confidence for THIS source (0–1). Set by the LLM-vision parser; deterministic
+    // parsers (CSV/PDF/sync) emit 1. Null when unknown. The transaction's "needs review"
+    // marker is derived as min(confidence) across its source rows.
+    confidence: numeric("confidence"),
     // Raw extraction payload for debugging/audit. Not queried.
     rawData: jsonb("raw_data"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

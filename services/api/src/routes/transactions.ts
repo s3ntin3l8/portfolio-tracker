@@ -13,6 +13,7 @@ import {
   transactions,
   transactionSources,
   trConnections,
+  trResolvedEvents,
   users,
 } from "@portfolio/db";
 import {
@@ -999,6 +1000,67 @@ export async function transactionsRoute(app: FastifyInstance) {
       }
       await enqueueRecompute(portfolioId, updated.executedAt.toISOString().slice(0, 10));
       return updated;
+    },
+  );
+
+  // Resolve draft transactions (from a sync/import) in bulk: confirm (draft → normal, now
+  // counts everywhere) or discard (draft → archived, kept + visible but excluded from every
+  // derivation). One request, N ids — never fan out N PATCHes (rate-limit, #227). For
+  // sync-sourced rows (pytr/ibkr) it also writes the durable resolved-events ledger so a
+  // later sync can't re-create the row even if it's hard-deleted. Only rows currently in
+  // `draft` status are touched; ids that aren't draft / don't belong are ignored.
+  const resolveDraftsSchema = z.object({
+    ids: z.array(z.string().uuid()).min(1),
+    action: z.enum(["confirm", "discard"]),
+  });
+  app.post<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/transactions/resolve-drafts",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { ids, action } = resolveDraftsSchema.parse(request.body);
+      const nextStatus = action === "confirm" ? "normal" : "archived";
+      const resolution = action === "confirm" ? "confirmed" : "discarded";
+
+      const updated = await app.db
+        .update(transactions)
+        .set({ status: nextStatus })
+        .where(
+          and(
+            eq(transactions.portfolioId, portfolioId),
+            eq(transactions.status, "draft"),
+            inArray(transactions.id, ids),
+          ),
+        )
+        .returning({
+          id: transactions.id,
+          source: transactions.source,
+          externalId: transactions.externalId,
+          executedAt: transactions.executedAt,
+        });
+
+      // Durable ledger for sync sources so the resolution survives a later hard-delete.
+      const ledgerRows = updated
+        .filter((r) => (r.source === "pytr" || r.source === "ibkr") && r.externalId)
+        .map((r) => ({
+          portfolioId,
+          source: r.source as "pytr" | "ibkr",
+          eventId: r.externalId as string,
+          resolution,
+        }));
+      if (ledgerRows.length > 0) {
+        await app.db.insert(trResolvedEvents).values(ledgerRows).onConflictDoNothing();
+      }
+
+      // Recompute each affected day (drafts didn't count before; now they do / stay out).
+      const days = new Set(updated.map((r) => r.executedAt.toISOString().slice(0, 10)));
+      for (const day of days) await enqueueRecompute(portfolioId, day);
+
+      return { updated: updated.length };
     },
   );
 

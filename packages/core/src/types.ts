@@ -38,8 +38,11 @@ export type TransactionType =
  * - "cash_neutral" : keeps shares/cost-basis, but its `cashFlow` is only `-fees` and it
  *   is not counted as a contribution. For reward-funded acquisitions whose funding leg
  *   the broker feed omits (e.g. a crypto promo bonus that pays for the buy).
+ * - "draft"        : an unconfirmed import/sync row. Excluded from every derivation
+ *   (like "archived") until the user confirms it. The API filters these out before the
+ *   engine; the calc functions also skip them defensively if one slips through.
  */
-export type TransactionStatus = "normal" | "archived" | "cash_neutral";
+export type TransactionStatus = "normal" | "archived" | "cash_neutral" | "draft";
 
 /** Minimal transaction shape the engine needs. Money/qty are decimal strings. */
 export interface CoreTransaction {

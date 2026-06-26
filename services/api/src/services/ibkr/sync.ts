@@ -15,6 +15,7 @@ import type { IbkrFlexClient } from "./flex-client.js";
 import { IbkrFlexError } from "./flex-client.js";
 import { parseFlexXml, selectCashRows } from "./flex-parse.js";
 import { mapFlexToDrafts } from "./mapper.js";
+import { materializeDrafts } from "../materialize-drafts.js";
 import type { CashReconciliation } from "../pytr/sync.js";
 
 export type { CashReconciliation };
@@ -158,12 +159,18 @@ export async function syncIbkrConnection(
     );
   const resolved = new Set(resolvedRows.map((r) => r.eventId));
 
-  // Seed the ledger from any pre-existing confirmed ibkr transactions (idempotent).
-  const confirmedRows = await db
-    .select({ ext: transactions.externalId })
+  // Every ibkr transaction already materialized (ANY status) — its event must not be
+  // re-created this sync. Only seed the durable "confirmed" ledger from genuinely-confirmed
+  // rows (normal/cash_neutral), never from drafts/archived.
+  const ibkrRows = await db
+    .select({ ext: transactions.externalId, status: transactions.status })
     .from(transactions)
     .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "ibkr")));
-  const confirmedIds = confirmedRows
+  const existingTxIds = new Set(
+    ibkrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)),
+  );
+  const confirmedIds = ibkrRows
+    .filter((r) => r.status === "normal" || r.status === "cash_neutral")
     .map((r) => r.ext)
     .filter((x): x is string => Boolean(x));
   if (confirmedIds.length) {
@@ -193,11 +200,11 @@ export async function syncIbkrConnection(
     (existing?.drafts ?? []).map((d) => d.externalId).filter((x): x is string => Boolean(x)),
   );
 
-  // 3. New = not resolved, not staged.
+  // 3. New = not resolved, not already a transaction row, not staged in a legacy collector.
   const newDrafts = allDrafts.filter((d) => {
     const id = d.externalId;
     if (!id) return true; // always include drafts without stable IDs
-    return !resolved.has(id) && !stagedIds.has(id);
+    return !resolved.has(id) && !existingTxIds.has(id) && !stagedIds.has(id);
   });
   const newErrors = allErrors;
 
@@ -206,44 +213,59 @@ export async function syncIbkrConnection(
     "ibkr events mapped",
   );
 
-  // 4. Keep already-staged drafts that haven't been resolved.
+  // 4. Carry forward any legacy staged drafts (pre-migration collectors) not yet resolved,
+  //    then materialize the lot as status='draft' transactions.
   const keptDrafts = (existing?.drafts ?? []).filter(
     (d) => !d.externalId || !resolved.has(d.externalId),
   );
-  const mergedDrafts = [...keptDrafts, ...newDrafts];
+  const draftsToMaterialize = [...keptDrafts, ...newDrafts];
   const mergedErrors = newErrors;
-  const parsedJson: CollectorJson = { drafts: mergedDrafts, errors: mergedErrors };
 
-  // 5. Persist collector.
+  // 5. Maintain a single stable anchor import (provenance for transactions.importId + holder
+  //    of residual attention errors). Reuse the open ibkr import if present; create when
+  //    there is anything to anchor. Never discarded once created (keeps the importId FK valid).
   let importId: string | undefined = collector?.id;
-  const hasContent = mergedDrafts.length > 0 || mergedErrors.length > 0;
-  let collectorAction: "updated" | "created" | "discarded" | "unchanged" = "unchanged";
-  if (collector) {
-    if (!hasContent) {
-      await db
-        .update(screenshotImports)
-        .set({ status: "discarded" })
-        .where(eq(screenshotImports.id, collector.id));
-      importId = undefined;
-      collectorAction = "discarded";
-    } else {
-      await db
-        .update(screenshotImports)
-        .set({ parsedJson })
-        .where(eq(screenshotImports.id, collector.id));
-      collectorAction = "updated";
-    }
-  } else if (hasContent) {
+  const anchorStatus = mergedErrors.length > 0 ? "draft" : "confirmed";
+  const anchorJson: CollectorJson = { drafts: [], errors: mergedErrors };
+  if (!importId && (draftsToMaterialize.length > 0 || mergedErrors.length > 0)) {
     const [imp] = await db
       .insert(screenshotImports)
-      .values({ userId: connection.userId, portfolioId, parser: "ibkr", parsedJson, status: "draft" })
+      .values({ userId: connection.userId, portfolioId, parser: "ibkr", parsedJson: anchorJson, status: anchorStatus })
       .returning();
     importId = imp.id;
-    collectorAction = "created";
+  }
+
+  let materializedDrafts = 0;
+  if (importId && draftsToMaterialize.length > 0) {
+    const res = await materializeDrafts(
+      { db, log },
+      {
+        drafts: draftsToMaterialize,
+        targetPortfolioId: portfolioId,
+        source: "ibkr",
+        importId,
+        status: "draft",
+        isEu: true,
+      },
+    );
+    materializedDrafts = res.written.length;
+    if (res.collapsed.length > 0) {
+      await db
+        .insert(trResolvedEvents)
+        .values(res.collapsed.map((eventId) => ({ portfolioId, source: "ibkr", eventId, resolution: "confirmed" })))
+        .onConflictDoNothing();
+    }
+  }
+
+  if (collector) {
+    await db
+      .update(screenshotImports)
+      .set({ parsedJson: anchorJson, status: anchorStatus })
+      .where(eq(screenshotImports.id, collector.id));
   }
   log?.info(
-    { connectionId, importId, action: collectorAction, drafts: mergedDrafts.length, errors: mergedErrors.length },
-    "ibkr collector updated",
+    { connectionId, importId, materialized: materializedDrafts, errors: mergedErrors.length },
+    "ibkr drafts materialized",
   );
 
   // 6. Cash reconciliation from Flex CashReport. Resolve to real ISO currencies (mapping
@@ -274,7 +296,7 @@ export async function syncIbkrConnection(
   return {
     status: "connected",
     importId,
-    drafts: newDrafts.length,
+    drafts: materializedDrafts,
     errors: newErrors.length,
     reconciliation,
   };

@@ -7,13 +7,19 @@ const refresh = vi.fn();
 const bulkDeleteTransactions = vi.fn(async () => ({ deleted: 1 }));
 const deleteTransaction = vi.fn(async () => undefined);
 const setTransactionStatus = vi.fn(async () => ({}));
+const resolveDraftTransactions = vi.fn(async () => ({ updated: 1 }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ bulkDeleteTransactions, deleteTransaction, setTransactionStatus }),
+  useApiClient: () => ({
+    bulkDeleteTransactions,
+    deleteTransaction,
+    setTransactionStatus,
+    resolveDraftTransactions,
+  }),
 }));
 
 import {
@@ -333,6 +339,65 @@ describe("TransactionsTable", () => {
       expect(
         screen.getByRole("button", { name: messages.Manage.status.label }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("draft transactions", () => {
+    const md = messages.Manage.status;
+
+    it("renders a Draft badge for draft rows", () => {
+      renderSingleRow({ ...ROWS[0], status: "draft" });
+      expect(screen.getByText(md.badgeDraft)).toBeInTheDocument();
+    });
+
+    it("confirming a draft row calls resolveDraftTransactions with action=confirm", async () => {
+      resolveDraftTransactions.mockClear();
+      renderSingleRow({ ...ROWS[0], status: "draft" });
+      fireEvent.click(screen.getByRole("button", { name: md.confirmDraft }));
+      await waitFor(() =>
+        expect(resolveDraftTransactions).toHaveBeenCalledWith("p1", ["t1"], "confirm"),
+      );
+    });
+
+    it("discarding a draft row calls resolveDraftTransactions with action=discard", async () => {
+      resolveDraftTransactions.mockClear();
+      renderSingleRow({ ...ROWS[0], status: "draft" });
+      fireEvent.click(screen.getByRole("button", { name: md.discardDraft }));
+      await waitFor(() =>
+        expect(resolveDraftTransactions).toHaveBeenCalledWith("p1", ["t1"], "discard"),
+      );
+    });
+
+    it("filters to drafts only via the draft filter", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[ROWS[0], { ...ROWS[1], status: "draft" }]} />
+        </NextIntlClientProvider>,
+      );
+      const draftSelect = screen.getByRole("combobox", {
+        name: messages.Transactions.filterDraftLabel,
+      });
+      fireEvent.change(draftSelect, { target: { value: "drafts" } });
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows.length).toBe(1);
+      expect(rows[0]).toHaveTextContent("AAPL"); // t2 is the draft
+    });
+
+    it("batch-confirms only the selected draft rows", async () => {
+      resolveDraftTransactions.mockClear();
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[ROWS[0], { ...ROWS[1], status: "draft" }]} />
+        </NextIntlClientProvider>,
+      );
+      // Select all (one normal, one draft), then confirm — only the draft is resolved.
+      fireEvent.click(screen.getByLabelText(tb.selectAll));
+      fireEvent.click(
+        screen.getByRole("button", { name: new RegExp(tb.confirmDrafts) }),
+      );
+      await waitFor(() =>
+        expect(resolveDraftTransactions).toHaveBeenCalledWith("p2", ["t2"], "confirm"),
+      );
     });
   });
 

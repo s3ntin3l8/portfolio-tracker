@@ -222,8 +222,8 @@ export function contributionStats(input: ContributionInput): ContributionStats {
   const display = input.displayCurrency;
   const boundary = input.boundary ?? "inside";
 
-  // Archived rows are excluded from every derivation.
-  const txns = input.txns.filter((t) => t.status !== "archived");
+  // Archived + draft rows are excluded from every derivation.
+  const txns = input.txns.filter((t) => t.status !== "archived" && t.status !== "draft");
   const months =
     boundary === "outside"
       ? outsideMonths(txns, fx, display)

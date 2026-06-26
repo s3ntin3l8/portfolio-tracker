@@ -20,6 +20,8 @@ import {
 } from "./reconcile.js";
 import { applyCancellations, isCancelled } from "./cancellation.js";
 import { downloadNewDraftDocuments } from "./documents.js";
+import { materializeDrafts } from "../materialize-drafts.js";
+import { finalizeReceipts, linkTrReceiptsToTransactions } from "../../storage/receipts.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 import type { StorageProvider } from "../../storage/types.js";
@@ -175,11 +177,20 @@ export async function syncTrConnection(
   //    or discarded, immune to manual transaction deletion. Seed it once from any pre-existing
   //    confirmed pytr transactions (rows imported before the ledger existed), so deletions are
   //    durable from the first sync after deploy without a re-stage regression.
-  const confirmedRows = await db
-    .select({ ext: transactions.externalId })
+  const pytrRows = await db
+    .select({ ext: transactions.externalId, status: transactions.status })
     .from(transactions)
     .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr")));
-  const confirmedIds = confirmedRows
+  // Every pytr transaction already materialized (ANY status) — its event must not be
+  // re-created this sync (the unique index would block it anyway, but skipping avoids the
+  // per-event instrument resolution work). `draft`/`archived` rows are unconfirmed/discarded
+  // and are tracked separately (the table row itself + the ledger), so only seed the durable
+  // "confirmed" ledger from genuinely-confirmed rows (normal/cash_neutral) — never drafts.
+  const existingTxIds = new Set(
+    pytrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)),
+  );
+  const confirmedIds = pytrRows
+    .filter((r) => r.status === "normal" || r.status === "cash_neutral")
     .map((r) => r.ext)
     .filter((x): x is string => Boolean(x));
   if (confirmedIds.length) {
@@ -259,11 +270,13 @@ export async function syncTrConnection(
     (existing?.drafts ?? []).map((d) => d.externalId).filter((x): x is string => Boolean(x)),
   );
 
-  // 4. New events = present, executed, in an enabled category, neither resolved nor staged.
+  // 4. New events = present, executed, in an enabled category, not resolved, not already a
+  //    transaction row, and not still pending in the legacy collector (pre-migration drafts).
   const newRaw = events.filter((e) => {
     const o = e as Record<string, unknown>;
     const id = typeof o.id === "string" ? o.id : "";
-    if (!id || resolved.has(id) || stagedIds.has(id) || !allowed(id)) return false;
+    if (!id || resolved.has(id) || existingTxIds.has(id) || stagedIds.has(id) || !allowed(id))
+      return false;
     if (typeof o.status === "string" && o.status.toUpperCase() !== "EXECUTED") return false;
     return true;
   });
@@ -273,7 +286,11 @@ export async function syncTrConnection(
     "tr events mapped",
   );
 
-  // 5. Keep staged items still pending (not resolved/cancelled/vanished/excluded), then append.
+  // 5. Drafts now become real `transactions` rows with status='draft' (visible in the main
+  //    table, awaiting per-row/batch confirm) instead of being staged in the collector. Carry
+  //    forward any *legacy* staged drafts (pre-migration collectors) so they migrate into the
+  //    new model, plus this sync's new drafts. The cash-boundary `allowed()` filter has already
+  //    gated both sets, so no cash-movement row reaches a cash-outside portfolio.
   const keptDrafts = (existing?.drafts ?? []).filter(
     (d) =>
       d.externalId &&
@@ -291,40 +308,64 @@ export async function syncTrConnection(
       !e.eventId ||
       (!resolved.has(e.eventId) && !cancelledIds.has(e.eventId) && !exportIds.has(e.eventId)),
   );
-  const mergedDrafts = [...keptDrafts, ...newDrafts];
+  const draftsToMaterialize = [...keptDrafts, ...newDrafts];
   const mergedErrors = [...keptErrors, ...newErrors];
-  const parsedJson: CollectorJson = { drafts: mergedDrafts, errors: mergedErrors };
 
-  // 6. Persist: update / create / close the collector.
+  // 6. Maintain a single stable "anchor" import per connection: it owns the provenance/
+  //    document linkage (transactions.importId) and holds the residual unmapped "attention"
+  //    errors. Reuse the open pytr import if present; create one when there is anything to
+  //    anchor. It is never discarded once created, so transactions keep a valid importId FK.
+  //    Status reflects pending work: `draft` while attention errors remain (the existing
+  //    mapping UI can still resolve them), else `confirmed`.
   let importId: string | undefined = collector?.id;
-  const hasContent = mergedDrafts.length > 0 || mergedErrors.length > 0;
-  let collectorAction: "updated" | "created" | "discarded" | "unchanged" = "unchanged";
-  if (collector) {
-    if (!hasContent) {
-      await db
-        .update(screenshotImports)
-        .set({ status: "discarded" })
-        .where(eq(screenshotImports.id, collector.id));
-      importId = undefined;
-      collectorAction = "discarded";
-    } else {
-      await db
-        .update(screenshotImports)
-        .set({ parsedJson })
-        .where(eq(screenshotImports.id, collector.id));
-      collectorAction = "updated";
-    }
-  } else if (hasContent) {
+  const anchorStatus = mergedErrors.length > 0 ? "draft" : "confirmed";
+  const anchorJson: CollectorJson = { drafts: [], errors: mergedErrors };
+  if (!importId && (draftsToMaterialize.length > 0 || mergedErrors.length > 0)) {
     const [imp] = await db
       .insert(screenshotImports)
-      .values({ userId: connection.userId, portfolioId, parser: "pytr", parsedJson, status: "draft" })
+      .values({ userId: connection.userId, portfolioId, parser: "pytr", parsedJson: anchorJson, status: anchorStatus })
       .returning();
     importId = imp.id;
-    collectorAction = "created";
+  }
+
+  // Materialize the drafts as status='draft' transactions (idempotent via the externalId
+  // unique index). Same-source dups are absorbed; cross-source matches enrich the existing row.
+  let materializedDrafts = 0;
+  let materializedWritten: { id: string; externalId: string | null }[] = [];
+  if (importId && draftsToMaterialize.length > 0) {
+    const res = await materializeDrafts(
+      { db, log },
+      {
+        drafts: draftsToMaterialize,
+        targetPortfolioId: portfolioId,
+        source: "pytr",
+        importId,
+        status: "draft",
+        isEu: true,
+      },
+    );
+    materializedDrafts = res.written.length;
+    materializedWritten = res.written.map((r) => ({ id: r.id, externalId: r.externalId }));
+    // Events that collapsed into an existing (cross-source) row are represented already —
+    // record them resolved so the next sync doesn't re-process them.
+    if (res.collapsed.length > 0) {
+      await db
+        .insert(trResolvedEvents)
+        .values(res.collapsed.map((eventId) => ({ portfolioId, source: "pytr", eventId, resolution: "confirmed" })))
+        .onConflictDoNothing();
+    }
+  }
+
+  // Update the anchor's residual errors + status (drafts no longer live here).
+  if (collector) {
+    await db
+      .update(screenshotImports)
+      .set({ parsedJson: anchorJson, status: anchorStatus })
+      .where(eq(screenshotImports.id, collector.id));
   }
   log?.info(
-    { connectionId, importId, action: collectorAction, drafts: mergedDrafts.length, errors: mergedErrors.length },
-    "tr collector updated",
+    { connectionId, importId, materialized: materializedDrafts, errors: mergedErrors.length },
+    "tr drafts materialized",
   );
 
   // 6b. Download postbox document bytes for newly-staged drafts (best-effort, never fatal).
@@ -340,6 +381,19 @@ export async function syncTrConnection(
     log,
   });
   const { requested: documentsRequested, stored: documentsStored, error: documentsError } = docResult;
+
+  // 6c. Drafts are real transactions now, so link the just-downloaded postbox PDFs to them
+  //     directly (by sourceEventId = tx.externalId) and retain them — the old confirm-time
+  //     linkage no longer runs for sync. Only relevant when storage is present and the
+  //     portfolio retains documents (downloadNewDraftDocuments only stored bytes then anyway).
+  if (storage && importId && (documentsStored ?? 0) > 0 && portfolio?.documentRetention) {
+    const appLike = { db, storage, log: log ?? console } as Parameters<typeof finalizeReceipts>[0];
+    const links = materializedWritten
+      .filter((r): r is { id: string; externalId: string } => Boolean(r.externalId))
+      .map((r) => ({ sourceEventId: r.externalId, transactionId: r.id }));
+    await linkTrReceiptsToTransactions(appLike, { importId, links });
+    await finalizeReceipts(appLike, { importId, portfolioId, retain: true });
+  }
 
   // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
   // Pass the previous reconciliation (loaded with the connection, before this sync overwrites
@@ -387,7 +441,7 @@ export async function syncTrConnection(
   return {
     status: "connected",
     importId,
-    drafts: newDrafts.length,
+    drafts: materializedDrafts,
     errors: newErrors.length,
     cancelled,
     reconciliation,

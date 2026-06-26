@@ -351,6 +351,13 @@
       "when": 1782483948322,
       "tag": "0049_superb_shooting_star",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1782508073680,
+      "tag": "0050_lame_shiver_man",
+      "breakpoints": true
     }
   ]
 }

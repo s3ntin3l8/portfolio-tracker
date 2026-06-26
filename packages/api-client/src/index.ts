@@ -566,7 +566,7 @@ export interface SourceSummary {
 }
 
 /** Visibility status of a transaction (see the API's transaction_status enum). */
-export type TransactionStatus = "normal" | "archived" | "cash_neutral";
+export type TransactionStatus = "normal" | "archived" | "cash_neutral" | "draft";
 
 export interface Transaction {
   id: string;
@@ -1619,6 +1619,33 @@ export function createApiClient(config: ApiClientConfig) {
       request<{ deleted: number }>("POST", `/portfolios/${portfolioId}/transactions/bulk-delete`, {
         ids,
       }),
+    /** Resolve draft transactions (from a sync/import) in bulk: "confirm" (→ normal, starts
+     * counting) or "discard" (→ archived, kept but excluded from every derivation). One
+     * request for N ids — used for both single-row and batch actions. */
+    resolveDraftTransactions: (
+      portfolioId: string,
+      ids: string[],
+      action: "confirm" | "discard",
+    ) =>
+      request<{ updated: number }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+        { ids, action },
+      ),
+    /** Confirm a single draft transaction (→ normal). */
+    confirmDraftTransaction: (portfolioId: string, txId: string) =>
+      request<{ updated: number }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+        { ids: [txId], action: "confirm" },
+      ),
+    /** Discard a single draft transaction (→ archived). */
+    discardDraftTransaction: (portfolioId: string, txId: string) =>
+      request<{ updated: number }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/resolve-drafts`,
+        { ids: [txId], action: "discard" },
+      ),
     /** Record a fund merger (Fondsverschmelzung) as an atomic sell+buy pair. */
     createMerger: (portfolioId: string, input: Omit<MergerInput, "portfolioId">) =>
       request<Transaction[]>("POST", `/portfolios/${portfolioId}/mergers`, input),
