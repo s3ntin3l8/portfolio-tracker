@@ -189,6 +189,15 @@ describe("cashFlow", () => {
     // A negative price (dividend reversal stored as net) correctly reduces cash
     expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "-0.07" }).toString()).toBe("-0.07");
   });
+
+  it("treats a saveback purchase as cash-neutral (TR's reward funds it), round-up as a real cash-out", () => {
+    // Saveback: TR cashback reward (= the invested amount, not on the timeline feed) funds the
+    // buy → net 0 cash, shares still acquired at basis. Only fees (≈0) touch cash.
+    expect(cashFlow({ ...base, type: "savings_plan", quantity: "0.013699", price: "702.24", kind: "saveback" }).toString()).toBe("0");
+    expect(cashFlow({ ...base, type: "savings_plan", quantity: "1", price: "9.62", fees: "0.5", kind: "saveback" }).toString()).toBe("-0.5");
+    // Round-up is the user's OWN spare change → a genuine cash-out, unaffected.
+    expect(cashFlow({ ...base, type: "buy", quantity: "1", price: "2", kind: "roundup" }).toString()).toBe("-2");
+  });
 });
 
 describe("xirr (extreme / fallback)", () => {

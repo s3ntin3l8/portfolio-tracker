@@ -17,6 +17,12 @@ export function cashFlow(tx: CoreTransaction): Decimal {
       return p.neg().sub(f);
     case "buy":
     case "savings_plan":
+      // A saveback purchase is funded by TR's cashback reward, which exactly equals the
+      // invested amount and is NOT emitted as a separate cash-credit on the timeline feed (so
+      // we can't book the credit leg). The net cash effect is therefore zero — the reward
+      // covers the principal; only fees (≈0) touch cash. The shares still build cost basis.
+      // Round-ups (`kind:"roundup"`) are the user's OWN spare change → a real cash-out, unchanged.
+      if (tx.kind === "saveback") return f.neg();
       return notional.neg().sub(f);
     case "sell":
       // Gross sell proceeds minus fees and capital-gains tax withheld. `price` must be
