@@ -682,3 +682,82 @@ class TestProbeEvents:
         overlap = out["idOverlap"]["timelineTransactions ∩ timelineActivityLog"]
         assert overlap["shared"] == 1
         assert overlap["only_timelineActivityLog"] == 1
+
+
+class TestTransfers:
+    def test_transfer_event_type_recognition(self):
+        assert tx._transfer_event_type({"eventType": "TRANSFER_OUT"}) == "TRANSFER_OUT"
+        # #359's incoming-transfer type normalises to TRANSFER_IN.
+        assert tx._transfer_event_type({"eventType": "SSP_SECURITIES_TRANSFER_INCOMING"}) == "TRANSFER_IN"
+        # eventType-less subtitle form (the shape TR actually serves on the activity log).
+        assert tx._transfer_event_type({"eventType": None, "subtitle": "Aktien erhalten"}) == "TRANSFER_IN"
+        assert tx._transfer_event_type({"eventType": None, "subtitle": "Aktien übertragen"}) == "TRANSFER_OUT"
+        # Non-transfers are not matched.
+        assert tx._transfer_event_type({"eventType": None, "subtitle": "Zinsen"}) is None
+        assert tx._transfer_event_type({"eventType": "ORDER_EXECUTED"}) is None
+
+    def test_extract_status_from_detail_header(self):
+        executed = {"sections": [{"type": "header", "data": {"status": "executed"}}]}
+        canceled = {"sections": [{"type": "header", "data": {"status": "canceled"}}]}
+        assert tx._extract_status(executed) == "EXECUTED"
+        assert tx._extract_status(canceled) == "CANCELED"
+        assert tx._extract_status({"sections": []}) is None
+        assert tx._extract_status(None) is None
+
+    def test_collect_transactions_merges_only_transfers_from_activity_log(self):
+        feeds = {
+            "timelineTransactions": [{"items": [{"id": "t1", "eventType": "ORDER_EXECUTED"}]}],
+            "timelineActivityLog": [
+                {"items": [
+                    {"id": "tr1", "eventType": None, "subtitle": "Aktien erhalten", "title": "BAT"},
+                    {"id": "tr2", "eventType": "SSP_SECURITIES_TRANSFER_INCOMING"},
+                    {"id": "noise", "eventType": None, "subtitle": "Some notification"},
+                    {"id": "t1", "eventType": None, "subtitle": "Aktien erhalten"},  # dup id
+                ]},
+            ],
+        }
+        tr = FakeFeedTr(feeds=feeds)
+        out = asyncio.run(tx._collect_transactions(tr))
+        by_id = {e["id"]: e for e in out}
+        # Transfers merged with a synthesised eventType the mapper understands.
+        assert by_id["tr1"]["eventType"] == "TRANSFER_IN"
+        assert by_id["tr2"]["eventType"] == "TRANSFER_IN"
+        # Non-transfer activity-log noise is NOT merged (cash stays untouched).
+        assert "noise" not in by_id
+        # A dup id keeps the richer transactions-feed copy (activity-log copy ignored).
+        assert by_id["t1"]["eventType"] == "ORDER_EXECUTED"
+
+    def test_normalize_transfer_extracts_isin_shares_status_and_is_cash_neutral(self):
+        # Shaped to the real transfer_in payload: ISIN in `icon`, shares in the "Aktien" row,
+        # status in the header; no top-level amount → cash-neutral.
+        event = {
+            "id": "c511",
+            "timestamp": "2024-06-14T16:40:07.424+0000",
+            "eventType": "TRANSFER_IN",  # synthesised by _collect_transactions
+            "title": "British American Tobacco",
+            "icon": "logos/GB0002875804/v2",
+            "details": {
+                "sections": [
+                    {"type": "header", "title": "Du hast Aktien erhalten", "data": {"status": "executed"}},
+                    {"type": "table", "title": "Übersicht", "data": [
+                        {"title": "Aktien", "detail": {"text": "1.0"}},
+                    ]},
+                ],
+            },
+        }
+        out = tx._normalize(event, {})
+        assert out["eventType"] == "TRANSFER_IN"
+        assert out["isin"] == "GB0002875804"
+        assert out["shares"] == 1.0
+        assert out["status"] == "EXECUTED"
+        assert out["amount"] == 0  # cash-neutral
+
+    def test_normalize_reads_cancelled_status_from_header(self):
+        event = {
+            "id": "x",
+            "eventType": "TRANSFER_OUT",
+            "details": {"sections": [{"type": "header", "data": {"status": "canceled"}}]},
+        }
+        # A cancelled transfer carries no top-level status — must come from the header so the
+        # Node mapper skips it (and un-imports it if a prior sync confirmed it).
+        assert tx._normalize(event, {})["status"] == "CANCELED"

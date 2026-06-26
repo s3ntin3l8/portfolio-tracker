@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapTrEventToDraft, mapTrEvents } from "../../src/services/pytr/mapper.js";
+import { mapTrEventToDraft, mapTrEvents, categoryForEventType } from "../../src/services/pytr/mapper.js";
 
 const base = {
   id: "evt-1",
@@ -320,6 +320,45 @@ describe("mapTrEventToDraft", () => {
         externalId: base.id,
       },
     });
+  });
+
+  it("maps securities transfers (Depotübertrag) to cash-neutral transfer_in/out at carried cost", () => {
+    // tr_export normalises the activity-log transfer forms to TRANSFER_IN / TRANSFER_OUT.
+    const tin = draftOf({
+      ...base,
+      eventType: "TRANSFER_IN",
+      amount: 0,
+      isin: "GB0002875804",
+      shares: 1,
+      title: "British American Tobacco",
+    });
+    expect(tin).toMatchObject({
+      action: "transfer_in",
+      quantity: "1",
+      price: "0", // carried cost unknown at import → surfaces missing_transfer_basis anomaly
+      isin: "GB0002875804",
+    });
+    const tout = draftOf({ ...base, eventType: "TRANSFER_OUT", amount: 0, isin: "GB0002875804", shares: 14 });
+    expect(tout).toMatchObject({ action: "transfer_out", quantity: "14", price: "0" });
+    // #359's incoming-transfer event type normalises to transfer_in.
+    expect(
+      draftOf({ ...base, eventType: "SSP_SECURITIES_TRANSFER_INCOMING", amount: 0, isin: "X", shares: 2 }).action,
+    ).toBe("transfer_in");
+  });
+
+  it("rejects a transfer missing its share count or ISIN", () => {
+    expect(
+      mapTrEventToDraft({ ...base, eventType: "TRANSFER_IN", amount: 0, isin: "X" }),
+    ).toMatchObject({ skip: true, reason: expect.stringContaining("share count") });
+    expect(
+      mapTrEventToDraft({ ...base, eventType: "TRANSFER_IN", amount: 0, shares: 1 }),
+    ).toMatchObject({ skip: true, reason: expect.stringContaining("ISIN") });
+  });
+
+  it("classifies transfers under the 'trade' import category", () => {
+    expect(categoryForEventType("TRANSFER_IN")).toBe("trade");
+    expect(categoryForEventType("TRANSFER_OUT")).toBe("trade");
+    expect(categoryForEventType("SSP_SECURITIES_TRANSFER_INCOMING")).toBe("trade");
   });
 
   it("surfaces SSP_CORPORATE_ACTION_INSTRUMENT as attention when share count is missing", () => {

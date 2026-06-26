@@ -66,7 +66,14 @@ export function categoryForEventType(eventType: string): ImportCategory {
   if (eventType === CASH_CORPORATE_ACTION) return "income"; // Bardividende
   if (eventType === SHARE_CORPORATE_ACTION) return "income"; // stock dividend / bonus issue
   const action = FIXED_ACTIONS[eventType];
-  if (action === "buy" || action === "sell" || action === "savings_plan") return "trade";
+  if (
+    action === "buy" ||
+    action === "sell" ||
+    action === "savings_plan" ||
+    action === "transfer_in" ||
+    action === "transfer_out"
+  )
+    return "trade"; // securities transfers move positions — group with trades, not cashflow
   if (action === "dividend" || action === "coupon" || action === "interest") return "income";
   return "cashflow"; // deposits/withdrawals/transfers and anything unmapped
 }
@@ -112,6 +119,12 @@ const FIXED_ACTIONS: Record<string, ParsedAction> = {
   TRADING_SAVINGSPLAN_EXECUTED: "savings_plan",
   SAVEBACK_AGGREGATE: "savings_plan", // cashback reinvested into the saveback asset
   SPARE_CHANGE_AGGREGATE: "buy", // round-up purchases
+  // --- securities transfers (Depotübertrag): shares move, cash-neutral, no P&L ---
+  // tr_export normalises the activity-log transfer forms (explicit type + the eventType-less
+  // "Aktien erhalten/übertragen" subtitle) to TRANSFER_IN / TRANSFER_OUT.
+  TRANSFER_IN: "transfer_in",
+  TRANSFER_OUT: "transfer_out",
+  SSP_SECURITIES_TRANSFER_INCOMING: "transfer_in",
 };
 const TRADE_EVENTS = new Set(["ORDER_EXECUTED", "TRADE_INVOICE", "TRADING_TRADE_EXECUTED"]);
 
@@ -194,6 +207,8 @@ const SECURITY_ACTIONS = new Set<ParsedAction>([
   "dividend",
   "coupon",
   "bonus",
+  "transfer_in",
+  "transfer_out",
 ]);
 
 export type MapResult =
@@ -328,6 +343,19 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
         confidence = 0.5;
       }
     }
+  }
+
+  if (action === "transfer_in" || action === "transfer_out") {
+    // Depot-to-depot securities transfer (Depotübertrag): shares move, cash-neutral, no P&L.
+    // The transfer event carries no price, so the per-share cost basis is unknown at import —
+    // leave it 0 (carried cost). For transfer_in this surfaces a `missing_transfer_basis`
+    // anomaly prompting the user to set the carried cost; transfer_out is not a disposal.
+    const shares = Math.abs(ev.shares ?? 0);
+    if (shares === 0) {
+      return skip(`${ev.eventType} without a share count`, "attention", ev);
+    }
+    quantity = dstr(shares);
+    price = "0";
   }
 
   if (action === "bonus") {
