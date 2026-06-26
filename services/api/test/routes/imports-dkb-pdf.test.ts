@@ -231,6 +231,66 @@ describe("DKB PDF deterministic import path", () => {
     expect(list.json()).toHaveLength(1);
   });
 
+  it("/duplicates classifies a dkb-pdf re-import vs a committed pdf tx as duplicate", async () => {
+    // Regression for the /duplicates double-conversion bug: the route used to pre-convert
+    // imp.parser to a tx source ("dkb-pdf" → "pdf") and pass that to classifyMatch, which
+    // converts AGAIN — and "pdf" isn't round-trip-stable ("pdf" → "screenshot"). So a PDF
+    // re-import matching an existing pdf-sourced tx (same source → should be "duplicate") was
+    // mis-badged "enrichment". Passing the raw parser tag fixes it.
+    const t = await token("dkb-pdf-duplicates");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB-dup", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    // 1) Import + confirm the DKB dividend PDF → a committed transaction with source="pdf".
+    const form1 = pdfPart(Buffer.from("%PDF-1.4 dup-first"), "dup1.pdf");
+    const imp1 = (
+      await app.inject({
+        method: "POST",
+        url: "/imports/screenshot",
+        headers: { ...auth(t), ...form1.headers },
+        payload: form1.payload,
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp1.importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: imp1.drafts },
+    });
+
+    // 2) Re-import the same statement (force past file-level dedup) → a fresh dkb-pdf draft.
+    const form2 = pdfPart(Buffer.from("%PDF-1.4 dup-second"), "dup2.pdf");
+    const imp2 = (
+      await app.inject({
+        method: "POST",
+        url: "/imports/screenshot?force=true",
+        headers: { ...auth(t), ...form2.headers },
+        payload: form2.payload,
+      })
+    ).json();
+    expect(imp2.drafts).toHaveLength(1);
+
+    // 3) Preview: the draft matches the committed pdf tx; same source (pdf) → duplicate.
+    const preview = await app.inject({
+      method: "POST",
+      url: `/imports/${imp2.importId}/duplicates`,
+      headers: auth(t),
+      payload: { portfolioId },
+    });
+    expect(preview.statusCode).toBe(200);
+    const { annotations } = preview.json() as {
+      annotations: Array<{ draftIndex: number; kind: string }>;
+    };
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0].kind).toBe("duplicate");
+  });
+
   it("skips the deterministic parser when the strategy is vision_only", async () => {
     // Flip the global strategy: the same recognised DKB PDF must now go to vision,
     // which (the exploding parser) throws → 502, proving the deterministic path is bypassed.

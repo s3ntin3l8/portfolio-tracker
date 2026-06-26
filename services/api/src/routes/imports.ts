@@ -308,8 +308,14 @@ export async function importsRoute(app: FastifyInstance) {
 
       const matches = await findCommittedDuplicates(app.db, portfolioId, drafts);
 
-      const incomingSource = parserToTxSource(imp.parser ?? "csv");
-      const importIsFileUpload = incomingSource === "screenshot";
+      // Classify against the import's *raw* parser tag — classifyMatch converts it to a tx
+      // source internally, so passing an already-converted source here would double-convert
+      // ("dkb-pdf" → "pdf" → "screenshot") and mis-badge PDF re-imports. A PDF upload carries
+      // a document, so it counts as a file upload (enrichment-capable) just like a screenshot.
+      const incomingParser = imp.parser ?? "csv";
+      const incomingTxSource = parserToTxSource(incomingParser);
+      const importIsFileUpload =
+        incomingTxSource === "screenshot" || incomingTxSource === "pdf";
       const isoDay = (v: Date | string) =>
         (v instanceof Date ? v.toISOString() : new Date(v).toISOString()).slice(0, 10);
 
@@ -318,7 +324,7 @@ export async function importsRoute(app: FastifyInstance) {
           const d = drafts[draftIndex];
           const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
           const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
-          const kind = classifyMatch(incomingSource, matched.source ?? "csv", draftHasEnrichment);
+          const kind = classifyMatch(incomingParser, matched.source ?? "csv", draftHasEnrichment);
           return {
             draftIndex,
             kind,

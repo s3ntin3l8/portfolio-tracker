@@ -56,4 +56,21 @@ describe("classifyMatch", () => {
   it("unknown parser vs csv tx with enrichment → enrichment (unknown maps to screenshot)", () => {
     expect(classifyMatch("vision-fallback", "csv", true)).toBe("enrichment");
   });
+
+  // Contract guard: classifyMatch takes a *raw parser tag* and converts it internally.
+  // Passing an already-converted tx source double-converts ("pdf" → "screenshot"), which is
+  // the bug fixed in the /duplicates route — pin both behaviours so it can't silently return.
+  it("dkb-pdf import (raw tag) vs csv tx → enrichment (pdf ≠ csv)", () => {
+    expect(classifyMatch("dkb-pdf", "csv", true)).toBe("enrichment");
+  });
+
+  it("dkb-pdf import vs pdf tx (same source) → duplicate", () => {
+    expect(classifyMatch("dkb-pdf", "pdf", true)).toBe("duplicate");
+  });
+
+  it("WRONG usage: pre-converted 'pdf' source double-converts to screenshot", () => {
+    // Demonstrates why callers must pass the raw tag, not parserToTxSource(parser).
+    expect(parserToTxSource("dkb-pdf")).toBe("pdf");
+    expect(classifyMatch(parserToTxSource("dkb-pdf"), "pdf", true)).toBe("enrichment");
+  });
 });
