@@ -425,14 +425,22 @@ def _extract_isin(event):
 
 
 def _is_crypto_bonus(event):
-    """True for a crypto "1% bonus" trade — a crypto buy funded by a TR reward (the reward
-    leg is not on the timeline feed, so the buy must be booked cash-neutral). Identified by a
-    synthetic crypto ISIN (XF000…) plus a "Bonus" marker in the detail (a row titled "1% Bonus"
-    on these events; ordinary crypto trades carry "1%" but never "bonus")."""
+    """True for a crypto "1% bonus" trade — a crypto buy funded by a TR reward, so the buy
+    must be booked cash-neutral (the reward leg never appears on the timeline feed; only the
+    transactions-export CSV books an offsetting credit).
+
+    Identified by a synthetic crypto ISIN (XF000…) plus the bonus markers TR puts on the
+    detail of these events (verified live, 2026-06): a bronze one-percent-bonus badge
+    (`logos/timeline_one_percent_bronze/…` — locale-independent, matched first), a row titled
+    "1% Bonus", and a "Du hast … € … erhalten" header (which pytr itself books as a
+    cash-neutral deposit). We match those explicit markers rather than a loose "bonus"
+    substring so an ordinary crypto trade (which carries "1%" for the spread, never "bonus")
+    is never mis-tagged."""
     isin = _extract_isin(event)
     if not (isin and isin.startswith("XF000")):
         return False
-    return "bonus" in json.dumps(event.get("details") or {}, ensure_ascii=False).lower()
+    blob = json.dumps(event.get("details") or {}, ensure_ascii=False).lower()
+    return "one_percent" in blob or "1% bonus" in blob or "1 % bonus" in blob
 
 
 def _extract_savings_plan_id(details):

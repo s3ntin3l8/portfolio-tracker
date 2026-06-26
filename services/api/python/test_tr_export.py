@@ -792,6 +792,77 @@ class TestTransfers:
         assert tx._normalize(bonus, {})["kind"] == "crypto_bonus"
         assert tx._normalize(normal, {})["kind"] is None
 
+    def test_is_crypto_bonus_real_nested_structure(self):
+        # Faithful to the LIVE event (verified 2026-06): the ISIN is only in a NESTED detail
+        # icon asset (no top-level `icon`), the bonus is flagged by a bronze one-percent badge
+        # plus a "1% Bonus" row and a "Du hast … € … erhalten" header. A naive fixture that
+        # puts the ISIN elsewhere silently fails — so pin the real shape here.
+        real_bonus = {
+            "id": "x",
+            "eventType": "TRADING_TRADE_EXECUTED",
+            "title": "Bitcoin",
+            "amount": {"value": -20.11},
+            "details": {
+                "sections": [
+                    {
+                        "type": "header",
+                        "title": "Du hast 20,11 € erhalten",
+                        "data": {
+                            "icon": {
+                                "asset": "logos/XF000BTC0017/v2",
+                                "badge": {"asset": "logos/timeline_one_percent_bronze/v2"},
+                            }
+                        },
+                    },
+                    {
+                        "type": "table",
+                        "title": "Übersicht",
+                        "data": [
+                            {"title": "1% Bonus", "detail": {"text": "Ausgeführt"}},
+                            {"title": "Gebühr", "detail": {"text": "Kostenlos"}},
+                        ],
+                    },
+                ]
+            },
+        }
+        assert tx._extract_isin(real_bonus) == "XF000BTC0017"
+        assert tx._is_crypto_bonus(real_bonus) is True
+        assert tx._normalize(real_bonus, {})["kind"] == "crypto_bonus"
+
+        # Locale-independence: even with English text, the bronze one-percent badge alone
+        # is enough to recognise the reward buy.
+        english = {
+            "details": {
+                "sections": [
+                    {
+                        "type": "header",
+                        "title": "You received €20.11",
+                        "data": {
+                            "icon": {
+                                "asset": "logos/XF000ETH0019/v2",
+                                "badge": {"asset": "logos/timeline_one_percent_bronze/v2"},
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+        assert tx._is_crypto_bonus(english) is True
+
+        # An ordinary crypto buy (no badge, no bonus row) stays a normal buy.
+        ordinary = {
+            "details": {
+                "sections": [
+                    {
+                        "type": "header",
+                        "data": {"icon": {"asset": "logos/XF000ETH0019/v2"}},
+                    },
+                    {"type": "table", "data": [{"title": "Gebühr", "detail": {"text": "1,00 €"}}]},
+                ]
+            }
+        }
+        assert tx._is_crypto_bonus(ordinary) is False
+
     def test_normalize_reads_cancelled_status_from_header(self):
         event = {
             "id": "x",
