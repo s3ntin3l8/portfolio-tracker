@@ -1,6 +1,7 @@
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
+import { formatDecimal } from "./numeric.js";
 
 // Trade Republic "Transaction export" CSV — the offline fallback to the pytr WebSocket
 // sync (services/pytr). TR lets you export the full account history as a CSV with a fixed,
@@ -72,13 +73,6 @@ function toNum(raw: string): number | null {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
-}
-
-// Format a number as a decimalString (no exponent, trailing zeros trimmed, no "-0").
-function dec(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  const s = n.toFixed(10).replace(/\.?0+$/, "");
-  return s === "" || s === "-" || s === "-0" ? "0" : s;
 }
 
 function assetClassOf(raw: string): "equity" | "crypto" | undefined {
@@ -179,17 +173,17 @@ export function parseTrCsv(content: string): CsvParseResult {
       // CSV sell `tax` column: negative = capital-gains tax withheld. Captured so
       // cashFlow (sell) = qty·price − fees − tax matches the invariant Σ(amount+fee+tax).
       // Buy rows don't carry tax (German KapSt only applies to proceeds, not purchases).
-      const sellTax = type === "SELL" && tax != null && tax !== 0 ? dec(Math.abs(tax)) : undefined;
+      const sellTax = type === "SELL" && tax != null && tax !== 0 ? formatDecimal(Math.abs(tax)) : undefined;
       candidate = {
         ...base,
         ...instrument,
         action: type === "BUY" ? "buy" : "sell",
-        quantity: dec(Math.abs(shares)),
+        quantity: formatDecimal(Math.abs(shares)),
         unit: assetClass === "crypto" ? "units" : "shares",
-        price: dec(Math.abs(priceCol)), // gross per-share price (amount / shares)
-        fees: fee != null ? dec(Math.abs(fee)) : "0",
+        price: formatDecimal(Math.abs(priceCol)), // gross per-share price (amount / shares)
+        fees: fee != null ? formatDecimal(Math.abs(fee)) : "0",
         tax: sellTax,
-        total: dec(Math.abs(amount) + Math.abs(fee ?? 0)), // gross consideration incl. fee
+        total: formatDecimal(Math.abs(amount) + Math.abs(fee ?? 0)), // gross consideration incl. fee
       };
     } else if (DIVIDEND_TYPES.has(type)) {
       if (amount == null) {
@@ -209,9 +203,9 @@ export function parseTrCsv(content: string): CsvParseResult {
         action: "dividend",
         quantity: "0", // the CSV `shares` here is the holding/rate, not a traded quantity
         unit: assetClass ? "shares" : undefined,
-        price: dec(net), // signed NET drives cashFlow/XIRR; negative for reversals
-        total: dec(amount), // signed gross (display only; not persisted)
-        tax: taxSigned !== 0 ? dec(-taxSigned) : undefined, // +withheld / −refund
+        price: formatDecimal(net), // signed NET drives cashFlow/XIRR; negative for reversals
+        total: formatDecimal(amount), // signed gross (display only; not persisted)
+        tax: taxSigned !== 0 ? formatDecimal(-taxSigned) : undefined, // +withheld / −refund
         fees: "0",
       };
     } else if (type === "INTEREST_PAYMENT") {
@@ -227,8 +221,8 @@ export function parseTrCsv(content: string): CsvParseResult {
         ...base,
         action: "interest",
         quantity: "0",
-        price: dec(Math.abs(net)),
-        tax: taxSigned !== 0 ? dec(-taxSigned) : undefined, // +withheld / −refund
+        price: formatDecimal(Math.abs(net)),
+        tax: taxSigned !== 0 ? formatDecimal(-taxSigned) : undefined, // +withheld / −refund
         fees: "0",
       };
     } else if (type === "EARNINGS") {
@@ -248,8 +242,8 @@ export function parseTrCsv(content: string): CsvParseResult {
         name: decodeName(get(cols.description)) || name || "Vorabpauschale",
         action: "interest",
         quantity: "0",
-        price: dec(net),
-        tax: dec(Math.abs(tax)),
+        price: formatDecimal(net),
+        tax: formatDecimal(Math.abs(tax)),
         fees: "0",
       };
     } else if (DEPOSIT_TYPES.has(type)) {
@@ -257,16 +251,16 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail(`${type} row missing amount`);
         continue;
       }
-      candidate = { ...base, action: "deposit", quantity: "0", price: dec(Math.abs(amount)), fees: "0" };
+      candidate = { ...base, action: "deposit", quantity: "0", price: formatDecimal(Math.abs(amount)), fees: "0" };
     } else if (WITHDRAWAL_TYPES.has(type) || CARD_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
         continue;
       }
-      candidate = { ...base, action: "withdrawal", quantity: "0", price: dec(Math.abs(amount)), fees: "0" };
+      candidate = { ...base, action: "withdrawal", quantity: "0", price: formatDecimal(Math.abs(amount)), fees: "0" };
     } else if (type === "CARD_ORDERING_FEE") {
       const charge = fee ?? amount ?? 0;
-      candidate = { ...base, action: "withdrawal", quantity: "0", price: dec(Math.abs(charge)), fees: "0" };
+      candidate = { ...base, action: "withdrawal", quantity: "0", price: formatDecimal(Math.abs(charge)), fees: "0" };
     } else if (CASH_SAVEBACK_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
@@ -279,7 +273,7 @@ export function parseTrCsv(content: string): CsvParseResult {
         name,
         action: "interest",
         quantity: "0",
-        price: dec(Math.abs(amount)),
+        price: formatDecimal(Math.abs(amount)),
         fees: "0",
         kind: "saveback",
       };
@@ -296,7 +290,7 @@ export function parseTrCsv(content: string): CsvParseResult {
         name,
         action: "bonus_cash",
         quantity: "0",
-        price: dec(Math.abs(amount)),
+        price: formatDecimal(Math.abs(amount)),
         fees: "0",
         kind: "bonus",
       };
@@ -314,9 +308,9 @@ export function parseTrCsv(content: string): CsvParseResult {
             ...base,
             ...instrument,
             action: "bonus",
-            quantity: dec(Math.abs(shares)),
+            quantity: formatDecimal(Math.abs(shares)),
             unit: assetClass === "crypto" ? "units" : "shares",
-            price: dec(Math.abs(priceCol)),
+            price: formatDecimal(Math.abs(priceCol)),
             fees: "0",
           };
         } else {
@@ -327,7 +321,7 @@ export function parseTrCsv(content: string): CsvParseResult {
             ...base,
             ...instrument,
             action: "transfer_in",
-            quantity: dec(Math.abs(shares)),
+            quantity: formatDecimal(Math.abs(shares)),
             unit: "shares",
             price: "0", // user must set the carried cost basis at confirm
             fees: "0",
@@ -340,7 +334,7 @@ export function parseTrCsv(content: string): CsvParseResult {
           ...base,
           ...instrument,
           action: "bonus",
-          quantity: dec(Math.abs(shares)),
+          quantity: formatDecimal(Math.abs(shares)),
           unit: "shares",
           price: "0",
           fees: "0",

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ImportIssue, ParsedAction, ParsedTransaction } from "@portfolio/schema";
+import { formatDecimal } from "../parsers/numeric.js";
 
 // The normalized event shape tr_export.py emits (one JSON object per line). The Python
 // side extracts isin/shares/fees from the timeline detail; any may be absent.
@@ -253,13 +254,6 @@ export type MapResult =
       raw?: ImportIssue["raw"];
     };
 
-// Format a JS number as a decimalString (no exponent, trailing zeros trimmed).
-function dstr(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  const s = n.toFixed(10).replace(/\.?0+$/, "");
-  return s === "" || s === "-" ? "0" : s;
-}
-
 // Build a skip outcome, carrying the source event so the UI can offer to map it.
 function skip(
   reason: string,
@@ -350,7 +344,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   }
 
   let quantity = "0";
-  let price = dstr(amount); // cash lump sum by default (deposit/withdrawal/dividend/...)
+  let price = formatDecimal(amount); // cash lump sum by default (deposit/withdrawal/dividend/...)
   let confidence = 1;
 
   if (action === "buy" || action === "sell" || action === "savings_plan") {
@@ -358,15 +352,15 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     if (shares === 0) {
       return skip(`${ev.eventType} without a share count`, "attention", ev);
     }
-    quantity = dstr(shares);
+    quantity = formatDecimal(shares);
     if (action === "sell") {
       // pytr `amount` = net cash credited (gross proceeds − fees − tax).
       // Reconstruct gross price so cashFlow = qty·grossPrice − fees − tax = amount.
       const sellTax = Math.abs(ev.tax ?? 0);
-      price = dstr((amount + fees + sellTax) / shares);
+      price = formatDecimal((amount + fees + sellTax) / shares);
     } else {
       // buy / savings_plan: amount = gross debit (before fees); reconstruct net per-share.
-      price = dstr((amount - fees) / shares);
+      price = formatDecimal((amount - fees) / shares);
     }
 
     // Reconciliation: the executed price × shares should land near the booked total (fees +
@@ -389,7 +383,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     if (shares === 0) {
       return skip(`${ev.eventType} without a share count`, "attention", ev);
     }
-    quantity = dstr(shares);
+    quantity = formatDecimal(shares);
     price = "0";
   }
 
@@ -405,7 +399,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
         ev,
       );
     }
-    quantity = dstr(shares);
+    quantity = formatDecimal(shares);
     price = "0"; // no cash consideration for a bonus share issue
   }
 
@@ -423,8 +417,8 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     quantity,
     unit: "shares",
     price,
-    fees: dstr(fees),
-    total: dstr(amount),
+    fees: formatDecimal(fees),
+    total: formatDecimal(amount),
     currency: ev.currency.toUpperCase(),
     executedAt: new Date(ev.timestamp),
     confidence,
@@ -440,9 +434,9 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
       (ev.eventType === SHARE_CORPORATE_ACTION && action === "buy"
         ? "reinvestment"
         : (EVENT_KIND[ev.eventType] ?? null)),
-    tax: ev.tax != null ? dstr(Math.abs(ev.tax)) : null,
-    executedPrice: ev.executedPrice != null ? dstr(ev.executedPrice) : null,
-    fxRate: ev.fxRate != null ? dstr(ev.fxRate) : null,
+    tax: ev.tax != null ? formatDecimal(Math.abs(ev.tax)) : null,
+    executedPrice: ev.executedPrice != null ? formatDecimal(ev.executedPrice) : null,
+    fxRate: ev.fxRate != null ? formatDecimal(ev.fxRate) : null,
     venue: ev.venue ?? null,
     description: ev.description ?? null,
     documentRefs: ev.documentRefs ?? null,
