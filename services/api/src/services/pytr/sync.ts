@@ -33,6 +33,15 @@ export interface CashReconciliation {
   }[];
   /** Per-ISIN position snapshot diff (null/absent until first position-enabled sync). */
   positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
+  /** Postbox-PDF download outcome for this sync (only set when a download was attempted). */
+  documents?: {
+    requested: number;
+    stored: number;
+    checkedAt: string;
+    /** Set when the whole download failed (e.g. session expired) so the UI can distinguish
+     * "0 of 20 saved" (partial) from "download failed: …" (total). */
+    error?: string;
+  };
 }
 
 export interface SyncResult {
@@ -65,6 +74,30 @@ interface CollectorJson {
 function isCancelled(status: unknown): boolean {
   const s = typeof status === "string" ? status.toUpperCase() : "";
   return s === "CANCELED" || s === "CANCELLED";
+}
+
+// Cash-reconciliation diff jump (in the reported currency's units) above which we emit a
+// warn. The @portfolio/core guard treats sub-€1 movement as reconstruction noise; a jump
+// past it between syncs is worth flagging in the logs so a real cash regression is greppable.
+const DRIFT_WARN_THRESHOLD = new Decimal(1);
+
+// These two casts read the app's OWN round-tripped JSONB columns, so corruption is unlikely —
+// but a malformed row (failed write, a future shape change, a manual DB edit) shouldn't throw
+// mid-sync. Validate the shape just enough to use it safely and fall back otherwise, so the
+// next sync self-heals: a dropped collector simply re-stages unresolved events from the
+// durable ledger; a dropped reconciliation just omits the incremental drift on this run.
+function asCollectorJson(v: unknown, log?: FastifyBaseLogger): CollectorJson | null {
+  const o = v as Record<string, unknown> | null;
+  if (o && Array.isArray(o.drafts) && Array.isArray(o.errors)) return o as unknown as CollectorJson;
+  if (v != null) log?.warn({ parsedJson: v }, "tr collector json malformed — ignoring (will re-stage)");
+  return null;
+}
+
+function asReconciliation(v: unknown, log?: FastifyBaseLogger): CashReconciliation | null {
+  const o = v as Record<string, unknown> | null;
+  if (o && Array.isArray(o.cash)) return o as unknown as CashReconciliation;
+  if (v != null) log?.warn({ lastReconciliation: v }, "tr lastReconciliation malformed — ignoring");
+  return null;
 }
 
 // Compare TR's reported cash balance against the cash we derive from the full event
@@ -390,7 +423,7 @@ export async function syncTrConnection(
     )
     .orderBy(desc(screenshotImports.createdAt))
     .limit(1);
-  const existing = collector ? (collector.parsedJson as CollectorJson) : null;
+  const existing = collector ? asCollectorJson(collector.parsedJson, log) : null;
   // Only staged *drafts* block re-import. Staged *errors* (attention issues, e.g. a trade
   // whose detail fetch transiently failed so its share count is missing) are intentionally
   // left re-mappable: re-deriving them from a fresh export self-heals once the detail
@@ -481,6 +514,7 @@ export async function syncTrConnection(
   // intentional (no backfill), since we are pre-release with no live users.
   let documentsRequested: number | undefined;
   let documentsStored: number | undefined;
+  let documentsError: string | undefined;
 
   if (storage && importId && newDrafts.length > 0) {
     if (portfolio?.documentRetention) {
@@ -534,6 +568,7 @@ export async function syncTrConnection(
           // effort, must never abort the sync. Reached before any doc is stored, so count
           // every requested pair as failed (add rather than overwrite, defensively).
           failed += pairs.length - stored - failed;
+          documentsError = err instanceof Error ? err.message : "document download failed";
           log?.warn({ connectionId, importId, err }, "tr document download failed (non-fatal)");
         }
 
@@ -550,14 +585,31 @@ export async function syncTrConnection(
   // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
   // Pass the previous reconciliation (loaded with the connection, before this sync overwrites
   // it) so reconcileCash can report how much the diff moved — the incremental drift guard.
-  const prevReconciliation = connection.lastReconciliation as CashReconciliation | null;
+  const prevReconciliation = asReconciliation(connection.lastReconciliation, log);
   const cashRec = reconcileCash(events, result.summary, prevReconciliation);
   const posRec = reconcilePositions(events, result.summary);
+  // Flag a cash-diff jump since the previous sync — the incremental drift guard. Logged (not
+  // fatal): a real regression is then greppable without a separate alerting path.
+  for (const c of cashRec?.cash ?? []) {
+    if (c.driftSincePrev != null && new Decimal(c.driftSincePrev).abs().gt(DRIFT_WARN_THRESHOLD)) {
+      log?.warn(
+        { connectionId, currency: c.currency, diff: c.diff, driftSincePrev: c.driftSincePrev },
+        "tr cash reconciliation drift jumped",
+      );
+    }
+  }
   // Build the reconciliation object; fold in document counts when we attempted a download
   // so the UI can show "0 of 20 PDFs saved" without needing a separate column/migration.
   const docsSummary =
     documentsRequested !== undefined
-      ? { documents: { requested: documentsRequested, stored: documentsStored ?? 0, checkedAt: new Date().toISOString() } }
+      ? {
+          documents: {
+            requested: documentsRequested,
+            stored: documentsStored ?? 0,
+            checkedAt: new Date().toISOString(),
+            ...(documentsError ? { error: documentsError } : {}),
+          },
+        }
       : {};
   const reconciliation: CashReconciliation | undefined =
     cashRec || posRec || documentsRequested !== undefined
