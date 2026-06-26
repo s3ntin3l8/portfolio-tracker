@@ -929,5 +929,92 @@ describe("syncTrConnection", () => {
     expect(result.documentsRequested).toBe(1);
     expect(result.documentsStored).toBe(0);
     expect(storage.puts).toHaveLength(0);
+    // The total-failure reason is surfaced so the UI can distinguish it from a partial save.
+    expect(result.reconciliation?.documents).toMatchObject({
+      requested: 1,
+      stored: 0,
+      error: "session expired during document download",
+    });
+  });
+
+  it("ignores a malformed collector parsedJson and re-stages from the timeline (self-heal)", async () => {
+    const conn = await makeConnection("collector-malformed");
+    const db = getDb();
+
+    // A corrupt open collector draft (e.g. a bad write / shape change) must not throw the sync.
+    await db.insert(screenshotImports).values({
+      userId: conn.userId,
+      portfolioId: conn.portfolioId!,
+      parser: "pytr",
+      status: "draft",
+      parsedJson: { drafts: "not-an-array", oops: true } as unknown as object,
+    });
+
+    const runner = runnerWith(async () => ({
+      events: [
+        { id: "tr-heal-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101", currency: "EUR" },
+      ],
+      sessionData: "JAR",
+    }));
+    const result = await syncTrConnection(db, enc, runner, conn);
+
+    expect(result.status).toBe("connected");
+    // The event is re-staged fresh rather than throwing on the malformed prior draft.
+    expect(result.drafts).toBe(1);
+  });
+
+  it("ignores a malformed lastReconciliation without throwing", async () => {
+    const conn = await makeConnection("recon-malformed");
+    const db = getDb();
+    await db
+      .update(trConnections)
+      .set({ lastReconciliation: { not: "a reconciliation" } as unknown as object })
+      .where(eq(trConnections.id, conn.id));
+
+    const fresh = (await db.select().from(trConnections).where(eq(trConnections.id, conn.id)))[0];
+    const runner = runnerWith(async () => ({
+      events: [
+        { id: "tr-recon-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101", currency: "EUR" },
+      ],
+      sessionData: "JAR",
+    }));
+    const result = await syncTrConnection(db, enc, runner, fresh);
+    expect(result.status).toBe("connected");
+  });
+
+  it("warns when cash-reconciliation drift jumps past the threshold between syncs", async () => {
+    const conn = await makeConnection("drift-warn");
+    const db = getDb();
+    const warns: { ctx: unknown; msg: string }[] = [];
+    const log = {
+      warn: (ctx: unknown, msg: string) => warns.push({ ctx, msg }),
+      info: () => {},
+      debug: () => {},
+      error: () => {},
+    } as unknown as Parameters<typeof syncTrConnection>[4];
+
+    // Sync 1: a single deposit; TR reports a balance €100 higher than derived → diff 100.
+    const runner1 = runnerWith(async () => ({
+      events: [
+        { id: "d1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
+      ],
+      sessionData: "J",
+      summary: { cash: [{ currency: "EUR", amount: "150" }] },
+    }));
+    await syncTrConnection(db, enc, runner1, conn, log);
+
+    // Sync 2: TR now reports €150 higher than the new derived → diff jumps by 100 (> €1).
+    const fresh = (await db.select().from(trConnections).where(eq(trConnections.id, conn.id)))[0];
+    const runner2 = runnerWith(async () => ({
+      events: [
+        { id: "d1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
+        { id: "d2", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
+      ],
+      sessionData: "J",
+      summary: { cash: [{ currency: "EUR", amount: "300" }] },
+    }));
+    await syncTrConnection(db, enc, runner2, fresh, log);
+
+    expect(warns.some((w) => w.msg === "tr cash reconciliation drift jumped")).toBe(true);
   });
 });
