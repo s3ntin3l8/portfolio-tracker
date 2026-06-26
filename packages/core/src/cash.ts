@@ -10,6 +10,14 @@ export function cashFlow(tx: CoreTransaction): Decimal {
   const f = D(tx.fees);
   const notional = q.mul(p);
 
+  // Archived rows should be filtered out upstream; if one reaches here, treat it as
+  // having no cash effect at all (belt-and-suspenders so it can never inflate cash).
+  if (tx.status === "archived") return new Decimal(0);
+  // Reward-funded acquisitions whose funding leg the feed omits: the reward covers the
+  // principal, so only fees (≈0) touch cash. Shares still build cost basis (holdings is
+  // unaffected). Same effect as the kind-based saveback/crypto_bonus shortcut below.
+  if (tx.status === "cash_neutral") return f.neg();
+
   switch (tx.type) {
     case "deposit":
       return p.sub(f);

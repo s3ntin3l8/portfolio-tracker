@@ -562,6 +562,9 @@ export interface SourceSummary {
   createdAt: string;
 }
 
+/** Visibility status of a transaction (see the API's transaction_status enum). */
+export type TransactionStatus = "normal" | "archived" | "cash_neutral";
+
 export interface Transaction {
   id: string;
   portfolioId: string;
@@ -583,6 +586,9 @@ export interface Transaction {
   source: string;
   /** Sub-type within an action (saveback/roundup/transfer_in/merger); null for most rows. */
   kind: string | null;
+  /** Visibility status: "normal" (default), "archived" (ignored in all derivations),
+   * or "cash_neutral" (keeps shares but contributes no cash). */
+  status: TransactionStatus;
   importId: string | null;
   /** Import dedup key; null for manually-entered transactions. */
   externalId: string | null;
@@ -1602,6 +1608,14 @@ export function createApiClient(config: ApiClientConfig) {
     ) => request<Transaction>("PATCH", `/portfolios/${portfolioId}/transactions/${txId}`, input),
     deleteTransaction: (portfolioId: string, txId: string) =>
       request<void>("DELETE", `/portfolios/${portfolioId}/transactions/${txId}`),
+    /** Set a transaction's visibility status (archive a phantom, mark a reward-funded
+     * buy cash_neutral, or restore to normal) without re-sending the whole row. */
+    setTransactionStatus: (portfolioId: string, txId: string, status: TransactionStatus) =>
+      request<Transaction>(
+        "PATCH",
+        `/portfolios/${portfolioId}/transactions/${txId}/status`,
+        { status },
+      ),
     bulkDeleteTransactions: (portfolioId: string, ids: string[]) =>
       request<{ deleted: number }>("POST", `/portfolios/${portfolioId}/transactions/bulk-delete`, {
         ids,

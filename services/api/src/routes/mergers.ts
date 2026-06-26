@@ -6,6 +6,7 @@ import { mergerInputSchema } from "@portfolio/schema";
 import { computeHoldings, type CoreTransaction, type CorporateAction } from "@portfolio/core";
 import { requireUser } from "../plugins/auth.js";
 import { enqueueRecompute } from "../services/scheduler.js";
+import { toCoreTxns } from "../services/tx-core.js";
 
 export async function mergersRoute(app: FastifyInstance) {
   // Record a fund merger (Fondsverschmelzung / ISIN change) as a paired sell+buy, both
@@ -58,18 +59,7 @@ export async function mergersRoute(app: FastifyInstance) {
         .select()
         .from(transactions)
         .where(eq(transactions.portfolioId, portfolioId));
-      const coreTxns: CoreTransaction[] = rows.map((r) => ({
-        instrumentId: r.instrumentId,
-        type: r.type,
-        quantity: r.quantity,
-        price: r.price,
-        fees: r.fees,
-        currency: r.currency,
-        executedAt: r.executedAt,
-        loanId: r.loanId,
-        kind: r.kind,
-        tax: r.tax,
-      }));
+      const coreTxns: CoreTransaction[] = toCoreTxns(rows);
       const caRows = await app.db
         .select()
         .from(corporateActions)

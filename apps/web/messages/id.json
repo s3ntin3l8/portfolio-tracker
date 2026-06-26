@@ -756,6 +756,14 @@
       "confirm": "Hapus",
       "cancel": "Batal"
     },
+    "status": {
+      "label": "Status transaksi",
+      "normal": "Aktif",
+      "archived": "Arsipkan (abaikan di mana-mana)",
+      "cashNeutral": "Netral kas (simpan lembar, tanpa kas)",
+      "badgeArchived": "Diarsipkan",
+      "badgeCashNeutral": "Netral kas"
+    },
     "portfolio": {
       "title": "Buat portofolio",
       "subtitle": "Beri nama dan mata uang dasar untuk menilainya.",

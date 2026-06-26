@@ -98,6 +98,9 @@ function acquisitionCost(tx: CoreTransaction, fx: FxRateFn, display: string): De
 
 /** Whether an acquisition is the user's own external capital (outside boundary). */
 function isExternalAcquisition(tx: CoreTransaction): boolean {
+  // Reward-funded (cash_neutral) acquisitions still build the cost-basis pool but are
+  // not the user's own capital — never a contribution.
+  if (tx.status === "cash_neutral") return false;
   if (tx.kind && EXCLUDED_ACQUISITION_KINDS.has(tx.kind)) return false;
   if (tx.type === "buy" || tx.type === "savings_plan") return true;
   // First-class transfer_in: shares owned elsewhere arrive at carried cost.
@@ -219,10 +222,12 @@ export function contributionStats(input: ContributionInput): ContributionStats {
   const display = input.displayCurrency;
   const boundary = input.boundary ?? "inside";
 
+  // Archived rows are excluded from every derivation.
+  const txns = input.txns.filter((t) => t.status !== "archived");
   const months =
     boundary === "outside"
-      ? outsideMonths(input.txns, fx, display)
-      : insideMonths(input.txns, fx, display);
+      ? outsideMonths(txns, fx, display)
+      : insideMonths(txns, fx, display);
 
   let totalContributed = D(0);
   let totalWithdrawn = D(0);

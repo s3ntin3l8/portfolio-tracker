@@ -29,6 +29,18 @@ export type TransactionType =
   | "transfer_in"
   | "transfer_out";
 
+/**
+ * Visibility/lifecycle status of a transaction.
+ * - "normal"       : counts everywhere (default when undefined).
+ * - "archived"     : ignored in every derivation. The API filters these out before
+ *   they reach the engine, so the calc functions should never see one — but they are
+ *   treated as cash-/holding-neutral defensively if one slips through.
+ * - "cash_neutral" : keeps shares/cost-basis, but its `cashFlow` is only `-fees` and it
+ *   is not counted as a contribution. For reward-funded acquisitions whose funding leg
+ *   the broker feed omits (e.g. a crypto promo bonus that pays for the buy).
+ */
+export type TransactionStatus = "normal" | "archived" | "cash_neutral";
+
 /** Minimal transaction shape the engine needs. Money/qty are decimal strings. */
 export interface CoreTransaction {
   /** DB primary key; optional so in-memory/test fixtures can omit it. */
@@ -53,6 +65,8 @@ export interface CoreTransaction {
   // Groups executions of the same broker savings plan (Sparplan). Written by the TR
   // importer; used only by sparplan detection. null/undefined for non-plan rows.
   savingsPlanId?: string | null;
+  // Visibility/lifecycle status (see {@link TransactionStatus}). undefined ⇒ "normal".
+  status?: TransactionStatus | null;
 }
 
 export interface CorporateAction {

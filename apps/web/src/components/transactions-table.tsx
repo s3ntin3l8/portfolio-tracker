@@ -39,7 +39,8 @@ import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
-import type { SourceSummary, Anomaly } from "@portfolio/api-client";
+import type { SourceSummary, Anomaly, TransactionStatus } from "@portfolio/api-client";
+import { TransactionStatusButton } from "@/components/transaction-status-button";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
@@ -76,9 +77,12 @@ export interface TxRow {
   hasFullTaxDetail?: boolean;
   /** Source-provenance rows — empty for manual transactions. */
   sources?: SourceSummary[];
+  /** Visibility status; undefined ⇒ "normal". archived = ignored everywhere. */
+  status?: TransactionStatus;
 }
 
-/** Compute the signed cash-flow (actual cash movement) for a TxRow via core. */
+/** Compute the signed cash-flow (actual cash movement) for a TxRow via core. The status
+ * is passed through so archived rows show 0 and cash_neutral rows show only fees. */
 export function txNetAmount(tx: TxRow): number {
   return cashFlow({
     instrumentId: null,
@@ -88,6 +92,7 @@ export function txNetAmount(tx: TxRow): number {
     fees: tx.fees,
     currency: tx.currency,
     executedAt: new Date(tx.executedAt),
+    status: tx.status,
   }).toNumber();
 }
 
@@ -489,11 +494,12 @@ export function TransactionsTable({
               const netAmount = txNetAmount(tx);
               const isSelected = selected.has(tx.id);
               const anomaly = anomalyByTxId.get(tx.id);
+              const status = tx.status ?? "normal";
               return (
                 <TableRow
                   key={tx.id}
                   data-state={isSelected ? "selected" : undefined}
-                  className="cursor-pointer"
+                  className={`cursor-pointer ${status === "archived" ? "opacity-50" : ""}`}
                   onClick={() => setDetailTx(tx)}
                 >
                   <TableCell>
@@ -511,9 +517,17 @@ export function TransactionsTable({
                     {df.format(new Date(tx.executedAt))}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
-                      {tt(tx.type)}
-                    </Badge>
+                    <span className="flex flex-wrap items-center gap-1">
+                      <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
+                        {tt(tx.type)}
+                      </Badge>
+                      {status === "archived" && (
+                        <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
+                      )}
+                      {status === "cash_neutral" && (
+                        <Badge variant="outline">{tm("status.badgeCashNeutral")}</Badge>
+                      )}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
@@ -603,6 +617,11 @@ export function TransactionsTable({
                           <Pencil className="size-4" />
                         </Link>
                       </Button>
+                      <TransactionStatusButton
+                        portfolioId={tx.portfolioId}
+                        txId={tx.id}
+                        status={status}
+                      />
                       <DeleteTransactionButton
                         portfolioId={tx.portfolioId}
                         txId={tx.id}

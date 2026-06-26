@@ -60,6 +60,20 @@ export const txTypeEnum = pgEnum("transaction_type", [
   "transfer_out",
 ]);
 
+// Lifecycle/visibility status of a transaction. Lets the user correct imports the
+// broker feed can't represent without deleting source rows:
+//  - "normal"       : counts everywhere (default).
+//  - "archived"     : ignored everywhere (cash, holdings, P&L, trades, contributions).
+//    For genuinely-bogus/phantom rows a feed produced that should not exist at all.
+//  - "cash_neutral" : keeps shares/cost-basis, but contributes 0 cash (only fees) and
+//    is not a contribution. For reward-funded acquisitions whose funding leg the feed
+//    omits (e.g. a crypto promo bonus that pays for the buy).
+export const txStatusEnum = pgEnum("transaction_status", [
+  "normal",
+  "archived",
+  "cash_neutral",
+]);
+
 export const txSourceEnum = pgEnum("transaction_source", [
   "screenshot",
   "csv",
@@ -574,6 +588,9 @@ export const transactions = pgTable(
     documentRefs: jsonb("document_refs"),
     // Sub-type within an action — e.g. saveback / roundup for TR savings-plan-funded buys.
     kind: text("kind"),
+    // Visibility/lifecycle status (see txStatusEnum): archived rows are ignored in all
+    // derivations; cash_neutral rows keep their shares but contribute no cash.
+    status: txStatusEnum("status").notNull().default("normal"),
     description: text("description"), // memo: transfer counterparty (+ IBAN), card merchant
     // User-defined labels (e.g. ["tax-loss", "rebalance"]) for filtering and reporting.
     tags: text("tags").array(),

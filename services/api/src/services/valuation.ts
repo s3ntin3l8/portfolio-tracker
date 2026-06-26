@@ -11,6 +11,7 @@ import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
 import type { DB } from "../db/client.js";
 import { getCachedQuotes } from "./price-cache.js";
 import { getFxRates, makeFxRateFn } from "./fx.js";
+import { toCoreTxns } from "./tx-core.js";
 
 /** Presentation metadata so the web app renders names without a second round-trip. */
 export interface InstrumentMeta {
@@ -113,19 +114,8 @@ export async function valuePortfolio(
     }
   }
 
-  const coreTxns: CoreTransaction[] = rows.map((r) => ({
-    instrumentId: r.instrumentId,
-    type: r.type,
-    quantity: r.quantity,
-    price: r.price,
-    fees: r.fees,
-    currency: r.currency,
-    executedAt: r.executedAt,
-    loanId: r.loanId,
-    kind: r.kind,
-    tax: r.tax,
-    savingsPlanId: r.savingsPlanId,
-  }));
+  // Archived rows are excluded here so they never reach any core derivation.
+  const coreTxns: CoreTransaction[] = toCoreTxns(rows);
 
   // Resolve FX so holdings/cash in other currencies convert to the display currency
   // (no-op when everything is already in displayCurrency).

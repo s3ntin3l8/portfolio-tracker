@@ -70,6 +70,7 @@ import {
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
+import { toCoreTxns } from "../services/tx-core.js";
 import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
 import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
@@ -971,6 +972,35 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Set a transaction's visibility status (normal / archived / cash_neutral) without
+  // re-sending the whole row. Lets the UI correct imports the broker feed can't represent
+  // (phantom rows → archived; reward-funded buys → cash_neutral) and recomputes the rollup.
+  const statusBodySchema = z.object({
+    status: z.enum(["normal", "archived", "cash_neutral"]),
+  });
+  app.patch<{ Params: PortfolioParams & { txId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId/status",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { status } = statusBodySchema.parse(request.body);
+      const [updated] = await app.db
+        .update(transactions)
+        .set({ status })
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
+        .returning();
+      if (!updated) {
+        return reply.code(404).send({ error: "transaction_not_found" });
+      }
+      await enqueueRecompute(portfolioId, updated.executedAt.toISOString().slice(0, 10));
+      return updated;
+    },
+  );
+
   // Derived holdings + data-integrity anomalies for a portfolio.
   app.get<{ Params: PortfolioParams }>(
     "/portfolios/:portfolioId/holdings",
@@ -994,18 +1024,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           .limit(1)
           .then((r) => r[0] ?? null),
       ]);
-      const coreTxns: CoreTransaction[] = rows.map((r) => ({
-        id: r.id,
-        instrumentId: r.instrumentId,
-        type: r.type,
-        quantity: r.quantity,
-        price: r.price,
-        fees: r.fees,
-        currency: r.currency,
-        executedAt: r.executedAt,
-        kind: r.kind,
-        tax: r.tax,
-      }));
+      const coreTxns: CoreTransaction[] = toCoreTxns(rows);
       const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
       const holdings = computeHoldings(coreTxns, cas);
       const reconciliation = trConn?.lastReconciliation as
