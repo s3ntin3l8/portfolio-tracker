@@ -16,7 +16,7 @@ import { parseFlexXml } from "../../services/ibkr/flex-parse.js";
 import { mapFlexToDrafts } from "../../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../../services/parsers/hash.js";
-import { classifyMatch } from "../../services/parsers/dedup.js";
+import { classifyMatch, parserToTxSource } from "../../services/parsers/dedup.js";
 import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
 import { storeReceipt } from "../../storage/receipts.js";
@@ -230,9 +230,13 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   ): Promise<void> {
     if (!portfolioId || drafts.length === 0) return;
 
-    // A screenshot/PDF upload carries a document; a CSV upload doesn't (even if it's
-    // technically stored as a receipt, it brings no visual document or tax detail).
-    const importIsFileUpload = importParser === "screenshot";
+    // A screenshot/PDF upload carries a document; a CSV/XML upload doesn't (even if it's
+    // technically stored as a receipt, it brings no visual document or tax detail). Keyed
+    // off the *tx source* so deterministic-PDF parsers (dkb-pdf/tr-pdf → "pdf") count too,
+    // matching the /duplicates preview route — see classifyMatch's single-conversion contract.
+    const incomingTxSource = parserToTxSource(importParser);
+    const importIsFileUpload =
+      incomingTxSource === "screenshot" || incomingTxSource === "pdf";
 
     for (const { draftIndex, matched } of await findCommittedDuplicates(
       app.db,
@@ -587,7 +591,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
       // Candidate portfolio for duplicate flagging: account-matched, else the sole portfolio.
       const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
-      await annotateLikelyDuplicates(result.drafts, candidate, "screenshot");
+      await annotateLikelyDuplicates(result.drafts, candidate, parserTag);
       const accountMismatch = candidate
         ? await accountMismatchVerdict(app, id, detectedAccountNumber, candidate)
         : null;

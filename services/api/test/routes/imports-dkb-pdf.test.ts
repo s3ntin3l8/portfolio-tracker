@@ -291,6 +291,52 @@ describe("DKB PDF deterministic import path", () => {
     expect(annotations[0].kind).toBe("duplicate");
   });
 
+  it("upload-time annotate flags a dkb-pdf re-import vs a committed pdf tx as duplicate", async () => {
+    // Issue #351: the screenshot route used to pass the literal "screenshot" to
+    // annotateLikelyDuplicates instead of the resolved parser tag, so a dkb-pdf re-import
+    // matching an existing pdf-sourced tx was flagged "enrichment" at upload time — disagreeing
+    // with the /duplicates review route (which says "duplicate"). Passing the real tag aligns them.
+    const t = await token("dkb-pdf-upload-dup");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB-upload-dup", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    // 1) Import + confirm the DKB dividend PDF → a committed transaction with source="pdf".
+    const form1 = pdfPart(Buffer.from("%PDF-1.4 upload-dup-first"), "ud1.pdf");
+    const imp1 = (
+      await app.inject({
+        method: "POST",
+        url: "/imports/screenshot",
+        headers: { ...auth(t), ...form1.headers },
+        payload: form1.payload,
+      })
+    ).json();
+    await app.inject({
+      method: "POST",
+      url: `/imports/${imp1.importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: imp1.drafts },
+    });
+
+    // 2) Re-import the same statement (force past file-level dedup). The upload response's
+    // drafts carry the upload-time likelyDuplicate annotation against the sole portfolio.
+    const form2 = pdfPart(Buffer.from("%PDF-1.4 upload-dup-second"), "ud2.pdf");
+    const res = await app.inject({
+      method: "POST",
+      url: "/imports/screenshot?force=true",
+      headers: { ...auth(t), ...form2.headers },
+      payload: form2.payload,
+    });
+    expect(res.statusCode).toBe(201);
+    const draft = res.json().drafts[0] as { likelyDuplicate?: { kind: string } };
+    expect(draft.likelyDuplicate?.kind).toBe("duplicate");
+  });
+
   it("skips the deterministic parser when the strategy is vision_only", async () => {
     // Flip the global strategy: the same recognised DKB PDF must now go to vision,
     // which (the exploding parser) throws → 502, proving the deterministic path is bypassed.
