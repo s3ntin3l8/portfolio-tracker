@@ -22,6 +22,9 @@ const trEventSchema = z.object({
   // Absent on older fixtures — treated as EXECUTED for backward compatibility.
   status: z.string().nullish(),
   // Detail enrichment extracted by tr_export.py (all best-effort / nullable).
+  // Acquisition kind hint tr_export derives from the detail when eventType isn't enough
+  // (e.g. "crypto_bonus" — a reward-funded crypto buy that must be booked cash-neutral).
+  kind: z.string().nullish(),
   executedPrice: z.number().nullish(),
   tax: z.number().nullish(),
   fxRate: z.number().nullish(),
@@ -409,10 +412,12 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     // Enrichment (informational; persisted on the transaction at confirm).
     // A reinvestment buy is funded by the dividend (return), not external capital — tag it so
     // `contributions` excludes it (EXCLUDED_ACQUISITION_KINDS) while it still builds cost basis.
+    // A tr_export-supplied kind (e.g. "crypto_bonus") takes precedence over the eventType map.
     kind:
-      ev.eventType === SHARE_CORPORATE_ACTION && action === "buy"
+      ev.kind ??
+      (ev.eventType === SHARE_CORPORATE_ACTION && action === "buy"
         ? "reinvestment"
-        : (EVENT_KIND[ev.eventType] ?? null),
+        : (EVENT_KIND[ev.eventType] ?? null)),
     tax: ev.tax != null ? dstr(Math.abs(ev.tax)) : null,
     executedPrice: ev.executedPrice != null ? dstr(ev.executedPrice) : null,
     fxRate: ev.fxRate != null ? dstr(ev.fxRate) : null,

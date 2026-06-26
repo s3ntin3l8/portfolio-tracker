@@ -197,6 +197,8 @@ describe("cashFlow", () => {
     expect(cashFlow({ ...base, type: "savings_plan", quantity: "1", price: "9.62", fees: "0.5", kind: "saveback" }).toString()).toBe("-0.5");
     // Round-up is the user's OWN spare change → a genuine cash-out, unaffected.
     expect(cashFlow({ ...base, type: "buy", quantity: "1", price: "2", kind: "roundup" }).toString()).toBe("-2");
+    // Crypto "1% bonus" is reward-funded like saveback → cash-neutral.
+    expect(cashFlow({ ...base, type: "buy", quantity: "0.0002", price: "100550", kind: "crypto_bonus" }).toString()).toBe("0");
   });
 });
 

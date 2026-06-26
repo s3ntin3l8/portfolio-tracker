@@ -353,6 +353,20 @@ describe("mapTrEventToDraft", () => {
     expect(Number(reinv.quantity) * Number(reinv.price)).toBeCloseTo(54.5, 2);
   });
 
+  it("carries a tr_export-supplied kind (crypto_bonus) onto the draft", () => {
+    // A crypto "1% bonus" buy: tr_export tags it kind:"crypto_bonus" (the timeline gives no
+    // distinguishing eventType); the mapper carries it through so cash.ts books it cash-neutral.
+    const cb = draftOf({
+      ...base,
+      eventType: "TRADING_TRADE_EXECUTED",
+      amount: -20.11,
+      shares: 0.0002,
+      isin: "XF000BTC0017",
+      kind: "crypto_bonus",
+    });
+    expect(cb).toMatchObject({ action: "buy", kind: "crypto_bonus", assetClass: "crypto" });
+  });
+
   it("maps securities transfers (Depotübertrag) to cash-neutral transfer_in/out at carried cost", () => {
     // tr_export normalises the activity-log transfer forms to TRANSFER_IN / TRANSFER_OUT.
     const tin = draftOf({

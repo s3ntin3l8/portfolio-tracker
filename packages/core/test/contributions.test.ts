@@ -110,6 +110,15 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     expect(s.netContributed).toBe("500"); // only the real buy; the reinvestment excluded
   });
 
+  it("excludes a crypto 1%-bonus buy (reward-funded, not external capital)", () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-10") }),
+      tx({ type: "buy", quantity: "0.0002", price: "100550", kind: "crypto_bonus", executedAt: new Date("2026-01-11") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    expect(s.netContributed).toBe("500"); // crypto bonus excluded
+  });
+
   it("subtracts sells at running average cost", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-15") }),

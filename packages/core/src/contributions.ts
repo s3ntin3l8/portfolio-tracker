@@ -15,7 +15,7 @@ const D = (v: string | number) => new Decimal(v);
  * replace old ones rather than being newly-funded, so they are not contributed
  * capital (its sell leg is likewise kept out of `outflow` — see {@link outsideMonths}).
  */
-const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger", "reinvestment"]);
+const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger", "reinvestment", "crypto_bonus"]);
 
 export interface ContributionInput {
   txns: CoreTransaction[];

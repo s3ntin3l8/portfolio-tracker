@@ -424,6 +424,17 @@ def _extract_isin(event):
     return match.group(1) if match else None
 
 
+def _is_crypto_bonus(event):
+    """True for a crypto "1% bonus" trade — a crypto buy funded by a TR reward (the reward
+    leg is not on the timeline feed, so the buy must be booked cash-neutral). Identified by a
+    synthetic crypto ISIN (XF000…) plus a "Bonus" marker in the detail (a row titled "1% Bonus"
+    on these events; ordinary crypto trades carry "1%" but never "bonus")."""
+    isin = _extract_isin(event)
+    if not (isin and isin.startswith("XF000")):
+        return False
+    return "bonus" in json.dumps(event.get("details") or {}, ensure_ascii=False).lower()
+
+
 def _extract_savings_plan_id(details):
     """The savings-plan id is carried only in the detail payload (a nested
     `openSavingsPlanOverview` action under the Sparplan section), NOT on the top-level
@@ -484,6 +495,10 @@ def _normalize(event, wkn_by_isin=None):
         # level (e.g. securities transfers, whose cancellation only shows in the header). Lets
         # the Node side skip non-executed events and un-import ones cancelled after a sync.
         "status": event.get("status") or _extract_status(details),
+        # Acquisition kind hint the Node mapper can't infer from eventType alone. A crypto
+        # "1% bonus" trade is a reward-funded purchase (cash-neutral) — flagged here from the
+        # detail since the timeline gives no distinguishing event type.
+        "kind": "crypto_bonus" if _is_crypto_bonus(event) else None,
     }
 
 

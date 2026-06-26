@@ -769,6 +769,29 @@ class TestTransfers:
         assert out["status"] == "EXECUTED"
         assert out["amount"] == 0  # cash-neutral
 
+    def test_is_crypto_bonus_detection(self):
+        # A crypto "1% bonus" buy: synthetic crypto ISIN + a "1% Bonus" marker in the detail.
+        bonus = {
+            "icon": "logos/XF000BTC0017/v2",
+            "details": {"sections": [{"type": "table", "data": [{"title": "1% Bonus"}]}]},
+        }
+        # An ordinary crypto trade carries "1%" (e.g. a fee/quote) but never "Bonus".
+        normal = {
+            "icon": "logos/XF000BTC0017/v2",
+            "details": {"sections": [{"type": "table", "data": [{"title": "1%"}]}]},
+        }
+        # A non-crypto (stock) trade is never a crypto bonus, even if "Bonus" appears.
+        stock = {
+            "icon": "logos/DE0007236101/v2",
+            "details": {"sections": [{"data": [{"title": "1% Bonus"}]}]},
+        }
+        assert tx._is_crypto_bonus(bonus) is True
+        assert tx._is_crypto_bonus(normal) is False
+        assert tx._is_crypto_bonus(stock) is False
+        # And it surfaces as kind on the normalized event.
+        assert tx._normalize(bonus, {})["kind"] == "crypto_bonus"
+        assert tx._normalize(normal, {})["kind"] is None
+
     def test_normalize_reads_cancelled_status_from_header(self):
         event = {
             "id": "x",
