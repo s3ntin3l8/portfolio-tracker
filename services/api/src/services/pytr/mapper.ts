@@ -305,7 +305,12 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     action = ev.isin ? "dividend" : "deposit";
   }
   if (!action && ev.eventType === SHARE_CORPORATE_ACTION) {
-    action = "bonus";
+    // A dividend reinvestment ("Reinvestition der Dividende") carries a real cash-out amount:
+    // the dividend is paid (a paired SSP_CORPORATE_ACTION_CASH credit, booked separately as
+    // income) and immediately spent buying shares. Book it as a buy so cash nets to 0 against
+    // the dividend and the reinvested shares get a real cost basis. A zero-amount event is a
+    // genuine free stock-dividend / bonus issue.
+    action = ev.amount !== 0 ? "buy" : "bonus";
   }
   if (!action) {
     return skip(`unmapped event type: ${ev.eventType}`, "attention", ev, "unmapped_event_type");
@@ -402,7 +407,12 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     savingsPlanId: ev.savingsPlanId ?? null,
     exchangeCode: null,
     // Enrichment (informational; persisted on the transaction at confirm).
-    kind: EVENT_KIND[ev.eventType] ?? null,
+    // A reinvestment buy is funded by the dividend (return), not external capital — tag it so
+    // `contributions` excludes it (EXCLUDED_ACQUISITION_KINDS) while it still builds cost basis.
+    kind:
+      ev.eventType === SHARE_CORPORATE_ACTION && action === "buy"
+        ? "reinvestment"
+        : (EVENT_KIND[ev.eventType] ?? null),
     tax: ev.tax != null ? dstr(Math.abs(ev.tax)) : null,
     executedPrice: ev.executedPrice != null ? dstr(ev.executedPrice) : null,
     fxRate: ev.fxRate != null ? dstr(ev.fxRate) : null,

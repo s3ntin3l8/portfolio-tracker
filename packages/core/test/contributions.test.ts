@@ -100,6 +100,16 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     expect(s.netContributed).toBe("530"); // 500 + 30; the 50 saveback excluded
   });
 
+  it("excludes a dividend-reinvestment buy (funded by the dividend, not external capital)", () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-10") }),
+      // Dividend reinvestment booked as a buy — return reinvested, not a contribution.
+      tx({ type: "buy", quantity: "1.01327", price: "53.79", kind: "reinvestment", executedAt: new Date("2026-05-02") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    expect(s.netContributed).toBe("500"); // only the real buy; the reinvestment excluded
+  });
+
   it("subtracts sells at running average cost", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-15") }),

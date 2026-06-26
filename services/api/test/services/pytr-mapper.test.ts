@@ -330,6 +330,29 @@ describe("mapTrEventToDraft", () => {
     });
   });
 
+  it("maps a dividend reinvestment (non-zero SSP_CORPORATE_ACTION_INSTRUMENT) to a cash-out buy", () => {
+    // "Reinvestition der Dividende": the dividend is spent buying shares → a real cash-out at a
+    // real cost basis (not a €0 bonus). The paired SSP_CORPORATE_ACTION_CASH dividend is booked
+    // separately, so dividend + reinvestment net to 0 cash, +shares at basis.
+    const reinv = draftOf({
+      ...base,
+      eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
+      isin: "GB0007188757",
+      shares: 1.01327,
+      amount: -54.5,
+      title: "Rio Tinto",
+    });
+    expect(reinv).toMatchObject({
+      action: "buy",
+      kind: "reinvestment",
+      isin: "GB0007188757",
+      quantity: "1.01327",
+    });
+    // price = |amount| / shares ≈ 53.79 → cashFlow = -(qty×price) = -54.5
+    expect(Number(reinv.price)).toBeCloseTo(54.5 / 1.01327, 4);
+    expect(Number(reinv.quantity) * Number(reinv.price)).toBeCloseTo(54.5, 2);
+  });
+
   it("maps securities transfers (Depotübertrag) to cash-neutral transfer_in/out at carried cost", () => {
     // tr_export normalises the activity-log transfer forms to TRANSFER_IN / TRANSFER_OUT.
     const tin = draftOf({
