@@ -1,10 +1,21 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyBaseLogger } from "fastify";
+import { runProcess, readLines, safeRm, type SpawnFn } from "./process.js";
+import {
+  PytrApprovalError,
+  PytrAuthError,
+  PytrError,
+  PytrUnavailableError,
+} from "./errors.js";
+
+// Re-exported so existing `from "./runner.js"` imports keep working after the split.
+export { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError };
+export type { SpawnFn };
 
 export interface DocDownloadResult {
   buf: Buffer;
@@ -17,9 +28,6 @@ export interface DownloadDocumentsResult {
   /** Per-doc failures (parse errors, 4xx from TR, file-read failures, etc.). */
   failures: { docId: string | null; error: string }[];
 }
-
-// The injectable spawn seam — tests pass a fake so CI never launches real Python.
-export type SpawnFn = typeof nodeSpawn;
 
 export interface PytrRunnerOptions {
   pythonBin: string;
@@ -36,36 +44,6 @@ export interface PytrRunnerOptions {
   // Injectable logger — pass app.log so subprocess lifecycle events are observable.
   // Optional: if absent (e.g. in tests that inject a mock runner), logs are suppressed.
   log?: FastifyBaseLogger;
-}
-
-export class PytrUnavailableError extends Error {
-  constructor(message = "pytr is not available") {
-    super(message);
-    this.name = "PytrUnavailableError";
-  }
-}
-
-// Thrown when the saved session can no longer be resumed (re-pairing required).
-export class PytrAuthError extends Error {
-  constructor(message = "trade republic session expired") {
-    super(message);
-    this.name = "PytrAuthError";
-  }
-}
-
-// Thrown when the v2 app-push login is rejected or expires unapproved (exit code 3).
-export class PytrApprovalError extends Error {
-  constructor(message = "login was not approved") {
-    super(message);
-    this.name = "PytrApprovalError";
-  }
-}
-
-export class PytrError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PytrError";
-  }
 }
 
 // A raw timeline event as emitted by tr_export.py (NDJSON). Shape is validated
@@ -172,7 +150,7 @@ export class PytrRunner {
       );
     } catch (err) {
       this.log?.error({ err }, "pytr spawn failed");
-      await rm(tmpDir, { recursive: true, force: true });
+      await safeRm(tmpDir, this.log);
       throw new PytrUnavailableError(
         err instanceof Error ? err.message : "failed to spawn python",
       );
@@ -266,7 +244,7 @@ export class PytrRunner {
           entry.settled = { error: e };
         }
       } finally {
-        await this.safeRm(entry.tmpDir, userId);
+        await safeRm(entry.tmpDir, this.log, { userId });
       }
     };
     finalize().catch((err) => this.log?.warn({ userId, err }, "pytr pairing finalize failed"));
@@ -286,7 +264,7 @@ export class PytrRunner {
       this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
-    void this.safeRm(entry.tmpDir, userId);
+    void safeRm(entry.tmpDir, this.log, { userId });
   }
 
   /** True if a pairing is waiting for (or has just received) its app-push approval. */
@@ -327,18 +305,7 @@ export class PytrRunner {
       this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
-    void this.safeRm(entry.tmpDir, userId);
-  }
-
-  /**
-   * Remove a temp dir, logging (never throwing) on failure. Used for best-effort cleanup so
-   * a cleanup error neither leaks silently (the old bare `void rm(...)`) nor masks the real
-   * result of the surrounding operation when awaited in a `finally`.
-   */
-  private safeRm(dir: string, userId?: string): Promise<void> {
-    return rm(dir, { recursive: true, force: true }).catch((err) => {
-      this.log?.warn({ userId, dir, err }, "pytr temp cleanup failed");
-    });
+    void safeRm(entry.tmpDir, this.log, { userId });
   }
 
   /**
@@ -395,7 +362,7 @@ export class PytrRunner {
       );
       return { events, sessionData, summary };
     } finally {
-      await this.safeRm(tmpDir);
+      await safeRm(tmpDir, this.log);
     }
   }
 
@@ -484,7 +451,7 @@ export class PytrRunner {
       this.log?.debug({ requested: pairs.length, downloaded: docs.size, failed: failures.length }, "pytr documents fetched");
       return { docs, failures };
     } finally {
-      await this.safeRm(tmpDir);
+      await safeRm(tmpDir, this.log);
     }
   }
 
@@ -500,19 +467,20 @@ export class PytrRunner {
     }
   }
 
+  // The spawn config the low-level process helpers need, captured from this runner's opts.
+  private get procCfg() {
+    return { spawn: this.opts.spawn, pythonBin: this.opts.pythonBin, log: this.log };
+  }
+
   private run(
     first: string,
     args: string[],
     timeoutMs: number,
     extraEnv: Record<string, string> = {},
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-    return this.runWithStdin(first, args, timeoutMs, extraEnv, null);
+    return runProcess(this.procCfg, first, args, timeoutMs, extraEnv, null);
   }
 
-  /**
-   * Spawn a Python process, optionally writing `stdinData` to its stdin, then collecting
-   * all stdout/stderr. stdin is closed (end) after writing so the child sees EOF.
-   */
   private runWithStdin(
     first: string,
     args: string[],
@@ -520,51 +488,7 @@ export class PytrRunner {
     extraEnv: Record<string, string> = {},
     stdinData: string | null = null,
   ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-    return new Promise((resolve, reject) => {
-      let child: ChildProcess;
-      try {
-        child = this.opts.spawn(this.opts.pythonBin, [first, ...args], {
-          env: { ...process.env, ...extraEnv },
-          // Use "pipe" for stdin so we can write to it; keep stdout/stderr piped.
-          stdio: [stdinData !== null ? "pipe" : "ignore", "pipe", "pipe"],
-        });
-      } catch (err) {
-        reject(
-          new PytrUnavailableError(
-            err instanceof Error ? err.message : "failed to spawn python",
-          ),
-        );
-        return;
-      }
-      let stdout = "";
-      let stderr = "";
-      const timer = setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch (killErr) {
-          this.log?.debug({ first, err: killErr }, "pytr timeout kill failed");
-        }
-        this.log?.warn({ first, timeoutMs }, "pytr process timed out");
-        reject(new PytrError("pytr process timed out"));
-      }, timeoutMs);
-      child.stdout?.on("data", (d: Buffer) => (stdout += d.toString()));
-      child.stderr?.on("data", (d: Buffer) => (stderr += d.toString()));
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        this.log?.error({ first, err }, "pytr process error");
-        reject(new PytrUnavailableError(err.message));
-      });
-      child.on("exit", (code, signal) => {
-        clearTimeout(timer);
-        this.log?.debug({ first, code, signal }, "pytr subprocess exited");
-        resolve({ code, stdout, stderr });
-      });
-      // Write stdin data and close the pipe so the child sees EOF.
-      if (stdinData !== null && child.stdin) {
-        child.stdin.write(stdinData);
-        child.stdin.end();
-      }
-    });
+    return runProcess(this.procCfg, first, args, timeoutMs, extraEnv, stdinData);
   }
 }
 
@@ -597,18 +521,4 @@ export function getPytrRunner(
     });
   }
   return runner;
-}
-
-// Read a child's stdout line-by-line, invoking `onLine` for each complete line.
-function readLines(child: ChildProcess, onLine: (line: string) => void): void {
-  let buffer = "";
-  child.stdout?.on("data", (chunk: Buffer) => {
-    buffer += chunk.toString();
-    let idx = buffer.indexOf("\n");
-    while (idx !== -1) {
-      onLine(buffer.slice(0, idx));
-      buffer = buffer.slice(idx + 1);
-      idx = buffer.indexOf("\n");
-    }
-  });
 }
