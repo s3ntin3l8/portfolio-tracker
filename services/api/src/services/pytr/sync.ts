@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { Decimal } from "decimal.js";
 import type { FastifyBaseLogger } from "fastify";
 import {
   portfolios,
@@ -9,40 +8,25 @@ import {
   trResolvedEvents,
 } from "@portfolio/db";
 import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
-import { cashBalances, type CoreTransaction } from "@portfolio/core";
 import { mapTrEvents, mapTrEventToDraft, isCashMovementEvent } from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
-import type { PytrRunner, TrExportSummary, DownloadDocumentsResult } from "./runner.js";
+import type { PytrRunner } from "./runner.js";
+import {
+  asReconciliation,
+  logCashDrift,
+  reconcileCash,
+  reconcilePositions,
+  type CashReconciliation,
+} from "./reconcile.js";
+import { applyCancellations, isCancelled } from "./cancellation.js";
+import { downloadNewDraftDocuments } from "./documents.js";
 import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 import type { StorageProvider } from "../../storage/types.js";
-import { deleteReceiptsForTransactions, storeReceipt } from "../../storage/receipts.js";
 
 type TrConnectionRow = typeof trConnections.$inferSelect;
 
-export interface CashReconciliation {
-  checkedAt: string;
-  cash: {
-    currency: string;
-    reported: string;
-    derived: string;
-    diff: string;
-    /** Change in `diff` vs the previous sync's reconciliation (incremental drift guard).
-     * Absent on the first sync for a connection. */
-    driftSincePrev?: string;
-  }[];
-  /** Per-ISIN position snapshot diff (null/absent until first position-enabled sync). */
-  positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
-  /** Postbox-PDF download outcome for this sync (only set when a download was attempted). */
-  documents?: {
-    requested: number;
-    stored: number;
-    checkedAt: string;
-    /** Set when the whole download failed (e.g. session expired) so the UI can distinguish
-     * "0 of 20 saved" (partial) from "download failed: …" (total). */
-    error?: string;
-  };
-}
+export type { CashReconciliation };
 
 export interface SyncResult {
   status: "connected" | "expired" | "error";
@@ -70,138 +54,15 @@ interface CollectorJson {
   seenEventIds?: string[];
 }
 
-// A cancelled event keeps its id but flips status — these are removed, not re-imported.
-function isCancelled(status: unknown): boolean {
-  const s = typeof status === "string" ? status.toUpperCase() : "";
-  return s === "CANCELED" || s === "CANCELLED";
-}
-
-// Cash-reconciliation diff jump (in the reported currency's units) above which we emit a
-// warn. The @portfolio/core guard treats sub-€1 movement as reconstruction noise; a jump
-// past it between syncs is worth flagging in the logs so a real cash regression is greppable.
-const DRIFT_WARN_THRESHOLD = new Decimal(1);
-
-// These two casts read the app's OWN round-tripped JSONB columns, so corruption is unlikely —
-// but a malformed row (failed write, a future shape change, a manual DB edit) shouldn't throw
-// mid-sync. Validate the shape just enough to use it safely and fall back otherwise, so the
-// next sync self-heals: a dropped collector simply re-stages unresolved events from the
-// durable ledger; a dropped reconciliation just omits the incremental drift on this run.
+// Reads the app's OWN round-tripped JSONB column, so corruption is unlikely — but a malformed
+// row (failed write, a future shape change, a manual DB edit) shouldn't throw mid-sync.
+// Validate the shape just enough to use it safely and fall back otherwise, so the next sync
+// self-heals: a dropped collector simply re-stages unresolved events from the durable ledger.
 function asCollectorJson(v: unknown, log?: FastifyBaseLogger): CollectorJson | null {
   const o = v as Record<string, unknown> | null;
   if (o && Array.isArray(o.drafts) && Array.isArray(o.errors)) return o as unknown as CollectorJson;
   if (v != null) log?.warn({ parsedJson: v }, "tr collector json malformed — ignoring (will re-stage)");
   return null;
-}
-
-function asReconciliation(v: unknown, log?: FastifyBaseLogger): CashReconciliation | null {
-  const o = v as Record<string, unknown> | null;
-  if (o && Array.isArray(o.cash)) return o as unknown as CashReconciliation;
-  if (v != null) log?.warn({ lastReconciliation: v }, "tr lastReconciliation malformed — ignoring");
-  return null;
-}
-
-// Compare TR's reported cash balance against the cash we derive from the full event
-// timeline. By deriving from the mapped events (not from confirmed transactions), this
-// answers "did our mapper account for every cash movement TR knows about?" regardless of
-// how many events have been confirmed by the user. This is deliberately boundary-AGNOSTIC:
-// it maps the full timeline regardless of the cash-outside staging filter (issue #326), so
-// deposits/withdrawals/card spending are always counted here even when a cash-outside
-// portfolio doesn't stage them. Do NOT apply the staging filter to this — reconciliation must
-// see every cash movement TR knows about, or its derived balance would diverge from reported.
-// A near-zero diff means all events are mapped; a non-zero diff typically indicates
-// events with unknown types or amounts the mapper can't yet handle. Returns undefined
-// when TR didn't report a balance.
-function reconcileCash(
-  allEvents: unknown[],
-  summary: TrExportSummary | undefined,
-  prev?: CashReconciliation | null,
-): CashReconciliation | undefined {
-  const reported = summary?.cash;
-  if (!reported || reported.length === 0) return undefined;
-  // The previous sync's diff per currency, so we can report how much it moved (the
-  // incremental drift the @portfolio/core guard alarms on).
-  const prevDiff = new Map<string, string>(
-    (prev?.cash ?? []).map((c) => [c.currency, c.diff]),
-  );
-
-  // Map the full timeline (all categories, all event states — the mapper itself skips
-  // non-EXECUTED events). Convert the resulting drafts to CoreTransaction for cashBalances.
-  const { drafts } = mapTrEvents(allEvents);
-  const coreTxns: CoreTransaction[] = drafts.map((d) => ({
-    instrumentId: null,
-    type: d.action as CoreTransaction["type"],
-    quantity: d.quantity,
-    price: d.price,
-    fees: d.fees,
-    // tax must be carried through: cashFlow() for sells subtracts tax from gross proceeds.
-    // Omitting it would over-credit derived cash by the full capital-gains tax on each sell.
-    tax: d.tax,
-    currency: d.currency,
-    executedAt: d.executedAt,
-  }));
-
-  const derived = cashBalances(coreTxns);
-  const currencies = new Set([...reported.map((c) => c.currency), ...Object.keys(derived)]);
-  const cash = [...currencies].map((currency) => {
-    const reportedStr = String(reported.find((c) => c.currency === currency)?.amount ?? "0");
-    const derivedStr = derived[currency] ?? "0";
-    // Use Decimal arithmetic (not JS float) to avoid floating-point drift.
-    const diff = new Decimal(reportedStr).sub(new Decimal(derivedStr)).toFixed(2);
-    const prior = prevDiff.get(currency);
-    return {
-      currency,
-      reported: reportedStr,
-      derived: derivedStr,
-      diff,
-      ...(prior != null
-        ? { driftSincePrev: new Decimal(diff).sub(new Decimal(prior)).toFixed(2) }
-        : {}),
-    };
-  });
-  return { checkedAt: new Date().toISOString(), cash };
-}
-
-// Derive per-ISIN held quantities from the full event timeline. Maps all TR timeline
-// events (same input as reconcileCash) so the derived side answers "what does the full
-// event record say we hold?" regardless of what the user has confirmed. Excludes events
-// whose status is not EXECUTED (same filter as the mapper).
-function reconcilePositions(
-  allEvents: unknown[],
-  summary: TrExportSummary | undefined,
-): { isin: string; reported: string; derived: string; diff: string }[] | undefined {
-  const reported = summary?.positions;
-  if (!reported || reported.length === 0) return undefined;
-
-  const { drafts } = mapTrEvents(allEvents);
-  const derived = new Map<string, Decimal>();
-  for (const d of drafts) {
-    if (!d.isin || !d.quantity) continue;
-    const isin = d.isin;
-    const prev = derived.get(isin) ?? new Decimal(0);
-    const qty = new Decimal(d.quantity);
-    const action = d.action as string;
-    if (action === "buy" || action === "savings_plan" || action === "transfer_in") {
-      derived.set(isin, prev.add(qty));
-    } else if (action === "sell" || action === "transfer_out") {
-      derived.set(isin, prev.sub(qty));
-    }
-  }
-
-  const reportedMap = new Map(
-    reported.map((p) => [p.isin, new Decimal(String(p.qty))]),
-  );
-  const allIsins = new Set([...reportedMap.keys(), ...derived.keys()]);
-  return [...allIsins]
-    .map((isin) => {
-      const rep = reportedMap.get(isin) ?? new Decimal(0);
-      const der = derived.get(isin) ?? new Decimal(0);
-      return {
-        isin,
-        reported: rep.toFixed(6),
-        derived: der.toFixed(6),
-        diff: rep.sub(der).toFixed(6),
-      };
-    });
 }
 
 /**
@@ -215,6 +76,8 @@ function reconcilePositions(
  *   - the rolling cookie session is re-saved to extend its life; a session that can't be
  *     resumed flips the connection to `expired`.
  *
+ * This file is the orchestrator; the concern-specific steps live in siblings —
+ * reconcile.ts (cash/positions), cancellation.ts (un-import), documents.ts (postbox PDFs).
  * Pure of HTTP/pg-boss: callable from both the manual endpoint and the cron worker, and
  * unit-testable with a mock runner (no Python, no network).
  */
@@ -299,51 +162,14 @@ export async function syncTrConnection(
 
   // 1. Un-import any confirmed transactions whose source event is now cancelled, and forget
   //    them in the ledger so a later re-execution can re-stage.
-  let cancelled = 0;
-  if (cancelledIds.size) {
-    const removed = await db
-      .delete(transactions)
-      .where(
-        and(
-          eq(transactions.portfolioId, portfolioId),
-          eq(transactions.source, "pytr"),
-          inArray(transactions.externalId, [...cancelledIds]),
-        ),
-      )
-      .returning({ id: transactions.id, importId: transactions.importId });
-    cancelled = removed.length;
-    // Clean up any linked documents (#231). Best-effort — no-op in phase 1 since
-    // TR per-tx docs aren't stored yet; forward-compatible for phase 2.
-    if (storage && removed.length > 0) {
-      const storageApp = { storage, db, log: log ?? console } as Parameters<typeof deleteReceiptsForTransactions>[0];
-      // Best-effort, like the rest of the cancellation domain: a storage error here must not
-      // abort the whole sync (which would also skip reconciliation and the session roll).
-      try {
-        await deleteReceiptsForTransactions(
-          storageApp,
-          removed.map((r) => r.id),
-          removed.map((r) => r.importId).filter((x): x is string => x !== null),
-        );
-      } catch (err) {
-        log?.error(
-          { connectionId, err, txIds: removed.map((r) => r.id) },
-          "tr cancelled-document cleanup failed (non-fatal)",
-        );
-      }
-    }
-    await db
-      .delete(trResolvedEvents)
-      .where(
-        and(
-          eq(trResolvedEvents.portfolioId, portfolioId),
-          eq(trResolvedEvents.source, "pytr"),
-          inArray(trResolvedEvents.eventId, [...cancelledIds]),
-        ),
-      );
-    if (cancelled > 0) {
-      log?.info({ connectionId, cancelled }, "tr cancelled events removed");
-    }
-  }
+  const cancelled = await applyCancellations({
+    db,
+    portfolioId,
+    cancelledIds,
+    connectionId,
+    storage,
+    log,
+  });
 
   // 2. The durable "resolved" ledger — the authoritative record of events already confirmed
   //    or discarded, immune to manual transaction deletion. Seed it once from any pre-existing
@@ -501,86 +327,19 @@ export async function syncTrConnection(
     "tr collector updated",
   );
 
-  // 6b. Download postbox document bytes for newly-staged drafts (best-effort).
-  //
-  // Only fires when:
-  //   • storage is injected (skipped in tests / callers without storage),
-  //   • there is an open collector with an importId,
-  //   • the portfolio has documentRetention=true (never download bytes to discard them),
-  //   • at least one new draft has a documentRefs entry.
-  //
-  // Future-only by design: incremental sync skips already-ledger'd events, so events
-  // confirmed before retention was enabled won't get their PDFs retroactively. This is
-  // intentional (no backfill), since we are pre-release with no live users.
-  let documentsRequested: number | undefined;
-  let documentsStored: number | undefined;
-  let documentsError: string | undefined;
-
-  if (storage && importId && newDrafts.length > 0) {
-    if (portfolio?.documentRetention) {
-      // Collect (eventId, docId) pairs from new drafts' documentRefs.
-      const pairs: { eventId: string; docId: string }[] = [];
-      for (const draft of newDrafts) {
-        if (!draft.externalId || !draft.documentRefs) continue;
-        for (const ref of draft.documentRefs) {
-          if (ref?.id) pairs.push({ eventId: draft.externalId, docId: ref.id });
-        }
-      }
-
-      if (pairs.length > 0) {
-        const appLike = { storage, db, log: log ?? console } as Parameters<typeof storeReceipt>[0];
-        const userId = connection.userId;
-
-        documentsRequested = pairs.length;
-        let stored = 0;
-        let failed = 0;
-
-        try {
-          const downloaded: DownloadDocumentsResult = await runner.downloadDocuments(
-            { phone, pin, sessionData: result.sessionData },
-            pairs,
-          );
-          // Count per-doc download failures from Python (surfaced in result.failures).
-          failed += downloaded.failures.length;
-          for (const [docId, { buf, mimeType }] of downloaded.docs) {
-            // sourceEventId links this doc to its transaction at confirm time
-            // (via tx.externalId ↔ document.sourceEventId matching). storeReceipt is
-            // contractually non-throwing — it returns { ok: false } on storage/DB errors —
-            // so a single bad doc never aborts the batch nor reaches the outer catch.
-            const sourceEventId = pairs.find((p) => p.docId === docId)?.eventId ?? null;
-            const receipt = await storeReceipt(appLike, {
-              userId,
-              importId,
-              buf,
-              mimeType,
-              originalFilename: `${docId}.pdf`,
-              source: "pytr",
-              sourceEventId,
-            });
-            if (receipt.ok) {
-              stored++;
-            } else {
-              failed++;
-            }
-          }
-        } catch (err) {
-          // Process-level failure (PytrAuthError / PytrError) from downloadDocuments — best-
-          // effort, must never abort the sync. Reached before any doc is stored, so count
-          // every requested pair as failed (add rather than overwrite, defensively).
-          failed += pairs.length - stored - failed;
-          documentsError = err instanceof Error ? err.message : "document download failed";
-          log?.warn({ connectionId, importId, err }, "tr document download failed (non-fatal)");
-        }
-
-        documentsStored = stored;
-        // Always emit so partial failures are visible in logs even when stored=0.
-        log?.info(
-          { connectionId, importId, requested: pairs.length, stored, failed },
-          "tr postbox documents staged",
-        );
-      }
-    }
-  }
+  // 6b. Download postbox document bytes for newly-staged drafts (best-effort, never fatal).
+  const docResult = await downloadNewDraftDocuments({
+    db,
+    runner,
+    storage,
+    connection,
+    importId,
+    newDrafts,
+    retention: Boolean(portfolio?.documentRetention),
+    session: { phone, pin, sessionData: result.sessionData },
+    log,
+  });
+  const { requested: documentsRequested, stored: documentsStored, error: documentsError } = docResult;
 
   // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
   // Pass the previous reconciliation (loaded with the connection, before this sync overwrites
@@ -588,16 +347,7 @@ export async function syncTrConnection(
   const prevReconciliation = asReconciliation(connection.lastReconciliation, log);
   const cashRec = reconcileCash(events, result.summary, prevReconciliation);
   const posRec = reconcilePositions(events, result.summary);
-  // Flag a cash-diff jump since the previous sync — the incremental drift guard. Logged (not
-  // fatal): a real regression is then greppable without a separate alerting path.
-  for (const c of cashRec?.cash ?? []) {
-    if (c.driftSincePrev != null && new Decimal(c.driftSincePrev).abs().gt(DRIFT_WARN_THRESHOLD)) {
-      log?.warn(
-        { connectionId, currency: c.currency, diff: c.diff, driftSincePrev: c.driftSincePrev },
-        "tr cash reconciliation drift jumped",
-      );
-    }
-  }
+  logCashDrift(cashRec, connectionId, log);
   // Build the reconciliation object; fold in document counts when we attempted a download
   // so the UI can show "0 of 20 PDFs saved" without needing a separate column/migration.
   const docsSummary =
