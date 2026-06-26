@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
-  instruments,
   loans,
   screenshotImports,
   transactions,
@@ -16,7 +15,8 @@ import {
 } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { enrichTransactionFromDrafts } from "../services/enrichment.js";
-import { findCrossSourceDuplicates, classifyMatch, parserToTxSource } from "../services/parsers/dedup.js";
+import { classifyMatch, parserToTxSource } from "../services/parsers/dedup.js";
+import { findCommittedDuplicates } from "../services/parsers/likely-duplicates.js";
 import {
   finalizeReceipts,
   deleteReceiptsForImport,
@@ -25,7 +25,7 @@ import {
   retainDocumentForTransaction,
 } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
-import { ownedPortfolio, uploadIdentity } from "./imports/helpers.js";
+import { ownedPortfolio } from "./imports/helpers.js";
 import { registerConfirmImportRoute } from "./imports/confirm.js";
 import { registerParseImportRoutes } from "./imports/parse.js";
 
@@ -306,50 +306,25 @@ export async function importsRoute(app: FastifyInstance) {
       const drafts: ParsedTransaction[] = Array.isArray(parsed.drafts) ? parsed.drafts : [];
       if (drafts.length === 0) return { annotations: [] };
 
-      const rows = await app.db
-        .select({
-          id: transactions.id,
-          type: transactions.type,
-          executedAt: transactions.executedAt,
-          quantity: transactions.quantity,
-          price: transactions.price,
-          source: transactions.source,
-          isin: instruments.isin,
-          wkn: instruments.wkn,
-          name: instruments.name,
-        })
-        .from(transactions)
-        .leftJoin(instruments, eq(instruments.id, transactions.instrumentId))
-        .where(eq(transactions.portfolioId, portfolioId));
+      const matches = await findCommittedDuplicates(app.db, portfolioId, drafts);
 
-      const committed = rows.map((r) => ({
-        id: r.id,
-        key: uploadIdentity(r.isin, r.wkn, r.name),
-        action: r.type,
-        quantity: r.quantity,
-        price: r.price,
-        executedAt: r.executedAt,
-        source: r.source,
-      }));
-      const draftCandidates = drafts.map((d) => ({
-        key: uploadIdentity(d.isin, d.wkn, d.name),
-        action: d.action,
-        quantity: d.quantity,
-        price: d.price,
-        executedAt: d.executedAt,
-      }));
-
-      const incomingSource = parserToTxSource(imp.parser ?? "csv");
-      const importIsFileUpload = incomingSource === "screenshot";
+      // Classify against the import's *raw* parser tag — classifyMatch converts it to a tx
+      // source internally, so passing an already-converted source here would double-convert
+      // ("dkb-pdf" → "pdf" → "screenshot") and mis-badge PDF re-imports. A PDF upload carries
+      // a document, so it counts as a file upload (enrichment-capable) just like a screenshot.
+      const incomingParser = imp.parser ?? "csv";
+      const incomingTxSource = parserToTxSource(incomingParser);
+      const importIsFileUpload =
+        incomingTxSource === "screenshot" || incomingTxSource === "pdf";
       const isoDay = (v: Date | string) =>
         (v instanceof Date ? v.toISOString() : new Date(v).toISOString()).slice(0, 10);
 
-      const annotations = findCrossSourceDuplicates(draftCandidates, committed).map(
+      const annotations = matches.map(
         ({ draftIndex, matched }) => {
           const d = drafts[draftIndex];
           const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
           const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
-          const kind = classifyMatch(incomingSource, matched.source ?? "csv", draftHasEnrichment);
+          const kind = classifyMatch(incomingParser, matched.source ?? "csv", draftHasEnrichment);
           return {
             draftIndex,
             kind,
