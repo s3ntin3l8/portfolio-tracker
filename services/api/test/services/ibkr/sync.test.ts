@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_DIR = join(__dirname, "../../fixtures/ibkr");
 const ACTIVITY_XML = readFileSync(join(FIXTURE_DIR, "activity.xml"), "utf8");
+const OPENING_EMPTY_XML = readFileSync(join(FIXTURE_DIR, "activity-opening-empty.xml"), "utf8");
 
 const enc = new EncryptionService({ key: crypto.randomBytes(32).toString("base64url") });
 
@@ -35,7 +36,10 @@ function failingFlex(code: "expired" | "error" = "error"): IbkrFlexClient {
   };
 }
 
-async function makeConnection(suffix: string) {
+async function makeConnection(
+  suffix: string,
+  opts: { baseCurrency?: string; cashCounted?: boolean } = {},
+) {
   const db = getDb();
   const [user] = await db
     .insert(users)
@@ -43,7 +47,12 @@ async function makeConnection(suffix: string) {
     .returning();
   const [portfolio] = await db
     .insert(portfolios)
-    .values({ userId: user.id, name: "IBKR", baseCurrency: "USD", cashCounted: false })
+    .values({
+      userId: user.id,
+      name: "IBKR",
+      baseCurrency: opts.baseCurrency ?? "USD",
+      cashCounted: opts.cashCounted ?? false,
+    })
     .returning();
   const [conn] = await db
     .insert(ibkrConnections)
@@ -143,6 +152,54 @@ describe("syncIbkrConnection", () => {
       .from(ibkrConnections)
       .where(eq(ibkrConnections.id, conn.id));
     expect(updated!.flexAccountId).toBe("U1234567");
+  });
+
+  it("books a standing/opening cash balance from a BASE_SUMMARY-only CashReport", async () => {
+    const { conn } = await makeConnection("t9", { baseCurrency: "EUR", cashCounted: true });
+    const result = await syncIbkrConnection(getDb(), enc, mockFlex(OPENING_EMPTY_XML), conn);
+
+    // Exactly one opening-balance deposit draft, no errors.
+    expect(result.drafts).toBe(1);
+    expect(result.errors).toBe(0);
+    const [imp] = await getDb()
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, result.importId!));
+    const parsed = imp!.parsedJson as { drafts: { externalId?: string; action?: string }[] };
+    expect(parsed.drafts).toHaveLength(1);
+    expect(parsed.drafts[0]!.externalId).toBe("ibkr:opening:U6794520:EUR");
+    expect(parsed.drafts[0]!.action).toBe("deposit");
+
+    // Reconciliation reports the real currency and matches (diff 0.00), never BASE_SUMMARY.
+    expect(result.reconciliation!.cash).toHaveLength(1);
+    const row = result.reconciliation!.cash[0]!;
+    expect(row.currency).toBe("EUR");
+    expect(row.diff).toBe("0.00");
+  });
+
+  it("books the opening balance only once across repeated syncs", async () => {
+    const { conn, portfolio } = await makeConnection("t10", {
+      baseCurrency: "EUR",
+      cashCounted: true,
+    });
+    const r1 = await syncIbkrConnection(getDb(), enc, mockFlex(OPENING_EMPTY_XML), conn);
+    expect(r1.drafts).toBe(1);
+
+    // Resolve the opening draft (simulating the user confirming it).
+    await getDb()
+      .insert(trResolvedEvents)
+      .values({
+        portfolioId: portfolio.id,
+        source: "ibkr",
+        eventId: "ibkr:opening:U6794520:EUR",
+        resolution: "confirmed",
+      })
+      .onConflictDoNothing();
+
+    // Second sync — opening already resolved, nothing new staged, recon still matches.
+    const r2 = await syncIbkrConnection(getDb(), enc, mockFlex(OPENING_EMPTY_XML), conn);
+    expect(r2.drafts).toBe(0);
+    expect(r2.reconciliation!.cash[0]!.diff).toBe("0.00");
   });
 
   it("uses source='ibkr' in resolved-events ledger (not pytr)", async () => {

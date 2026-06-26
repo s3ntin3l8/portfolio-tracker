@@ -3,6 +3,7 @@ import { Decimal } from "decimal.js";
 import type { FastifyBaseLogger } from "fastify";
 import {
   ibkrConnections,
+  portfolios,
   screenshotImports,
   transactions,
   trResolvedEvents,
@@ -12,7 +13,7 @@ import type { DB } from "../../db/client.js";
 import type { EncryptionService } from "../encryption.js";
 import type { IbkrFlexClient } from "./flex-client.js";
 import { IbkrFlexError } from "./flex-client.js";
-import { parseFlexXml } from "./flex-parse.js";
+import { parseFlexXml, selectCashRows } from "./flex-parse.js";
 import { mapFlexToDrafts } from "./mapper.js";
 import type { CashReconciliation } from "../pytr/sync.js";
 
@@ -40,6 +41,10 @@ function reconcileCash(
 ): CashReconciliation | undefined {
   if (cashReport.length === 0) return undefined;
 
+  // NOTE: this runs over `allDrafts` (every event mapped this sync), not `newDrafts`.
+  // The mapper re-emits the opening-balance deposit every sync, so it is always counted
+  // here even after it has been deduped out of `newDrafts`. Do not switch to `newDrafts`
+  // — that would drop the opening balance and resurrect a phantom diff.
   const derived = new Map<string, Decimal>();
   for (const d of drafts) {
     const action = d.action as string;
@@ -59,12 +64,17 @@ function reconcileCash(
   }
 
   const cash = cashReport.map(({ currency, endingCash }) => {
+    // Render reported and derived at the same (cent) precision so a sub-cent broker
+    // figure (e.g. 9.9981) doesn't read as a mismatch against a rounded derived total.
+    const reportedStr = new Decimal(endingCash).toFixed(2);
     const derivedStr = (derived.get(currency) ?? new Decimal(0)).toFixed(2);
+    const diff = new Decimal(reportedStr).sub(new Decimal(derivedStr)).toFixed(2);
     return {
       currency,
-      reported: endingCash,
+      reported: reportedStr,
       derived: derivedStr,
-      diff: new Decimal(endingCash).sub(new Decimal(derivedStr)).toFixed(2),
+      // Normalize "-0.00" to a clean "0.00" so the UI shows "match".
+      diff: diff === "-0.00" ? "0.00" : diff,
     };
   });
   return { checkedAt: new Date().toISOString(), cash };
@@ -108,12 +118,21 @@ export async function syncIbkrConnection(
     return { status };
   }
 
+  // Portfolio base currency — fallback when the statement lacks AccountInformation, and
+  // the label for IBKR's BASE_SUMMARY cash row.
+  const [portfolio] = await db
+    .select({ baseCurrency: portfolios.baseCurrency })
+    .from(portfolios)
+    .where(eq(portfolios.id, portfolioId))
+    .limit(1);
+  const baseCurrency = portfolio?.baseCurrency ?? "";
+
   // Parse statements — a Flex export can contain multiple accounts; take all.
   const statements = parseFlexXml(xml);
   const allDrafts: ParsedTransaction[] = [];
   const allErrors: ImportIssue[] = [];
   for (const stmt of statements) {
-    const { drafts, errors } = mapFlexToDrafts(stmt);
+    const { drafts, errors } = mapFlexToDrafts(stmt, { baseCurrency });
     allDrafts.push(...drafts);
     allErrors.push(
       ...errors.map((e) => ({
@@ -227,9 +246,13 @@ export async function syncIbkrConnection(
     "ibkr collector updated",
   );
 
-  // 6. Cash reconciliation from Flex CashReport.
-  const cashReport =
-    statements[0]?.cashReport.map((c) => ({ currency: c.currency ?? "USD", endingCash: c.endingCash ?? "0" })) ?? [];
+  // 6. Cash reconciliation from Flex CashReport. Resolve to real ISO currencies (mapping
+  //    IBKR's BASE_SUMMARY aggregate to the base currency, but only when no real
+  //    per-currency rows exist) so "BASE_SUMMARY" never leaks into the reconciliation UI.
+  const stmtBaseCcy = statements[0]?.baseCurrency || baseCurrency;
+  const cashReport = selectCashRows(statements[0]?.cashReport ?? [], stmtBaseCcy).map(
+    ({ row, currency }) => ({ currency, endingCash: row.endingCash ?? "0" }),
+  );
   const reconciliation = reconcileCash(allDrafts, cashReport);
 
   // 7. Update connection.

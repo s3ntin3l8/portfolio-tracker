@@ -186,4 +186,96 @@ describe("mapFlexToDrafts — full fixture totals", () => {
     const ids = drafts.map((d) => d.externalId);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it("does NOT emit an opening balance when CashReport rows have no startingCash", () => {
+    // activity.xml CashReport rows carry only endingCash → nothing to book.
+    const { drafts } = mapFlexToDrafts(stmt());
+    expect(drafts.some((d) => d.externalId?.startsWith("ibkr:opening:"))).toBe(false);
+  });
+});
+
+const emptyXml = readFileSync(join(FIXTURE_DIR, "activity-opening-empty.xml"), "utf8");
+const percurXml = readFileSync(join(FIXTURE_DIR, "activity-opening-percur.xml"), "utf8");
+
+describe("mapFlexToDrafts — opening cash balance", () => {
+  it("books a BASE_SUMMARY-only standing balance as one deposit in the base currency", () => {
+    const { drafts, errors } = mapFlexToDrafts(parseFlexXml(emptyXml)[0]!);
+    expect(errors).toHaveLength(0);
+    const opening = drafts.filter((d) => d.externalId?.startsWith("ibkr:opening:"));
+    expect(opening).toHaveLength(1);
+    const o = opening[0]!;
+    expect(o.action).toBe("deposit");
+    expect(o.assetClass).toBeNull();
+    expect(o.currency).toBe("EUR"); // BASE_SUMMARY → AccountInformation base currency
+    expect(o.price).toBe("9.9981");
+    expect(o.quantity).toBe("0");
+    expect(o.name).toBe("IBKR opening balance");
+    expect(o.externalId).toBe("ibkr:opening:U6794520:EUR");
+    expect(o.executedAt).toEqual(new Date("2025-06-26")); // statement fromDate
+  });
+
+  it("uses the portfolio baseCurrency fallback when the statement lacks AccountInformation", () => {
+    const s = parseFlexXml(emptyXml)[0]!;
+    s.baseCurrency = ""; // simulate missing <AccountInformation>
+    const { drafts } = mapFlexToDrafts(s, { baseCurrency: "EUR" });
+    const opening = drafts.find((d) => d.externalId === "ibkr:opening:U6794520:EUR")!;
+    expect(opening).toBeDefined();
+    expect(opening.currency).toBe("EUR");
+  });
+
+  it("flags an issue (no draft) when BASE_SUMMARY can't be resolved to a base currency", () => {
+    const s = parseFlexXml(emptyXml)[0]!;
+    s.baseCurrency = "";
+    const { drafts, errors } = mapFlexToDrafts(s); // no fallback base currency
+    expect(drafts.some((d) => d.externalId?.startsWith("ibkr:opening:"))).toBe(false);
+    expect(errors.some((e) => e.message.includes("opening balance not booked"))).toBe(true);
+  });
+
+  it("flags 'no Starting Cash column' when an empty account has only endingCash", () => {
+    // Resolvable currency (BASE_SUMMARY → EUR) but the Flex query omitted Starting Cash:
+    // the standing balance would silently vanish, so surface an actionable issue.
+    const s = parseFlexXml(emptyXml)[0]!;
+    s.cashReport = s.cashReport.map(({ startingCash: _omit, ...r }) => r);
+    const { drafts, errors } = mapFlexToDrafts(s);
+    expect(drafts).toHaveLength(0);
+    expect(errors.some((e) => e.message.includes("Starting Cash"))).toBe(true);
+  });
+
+  it("does not nag about Starting Cash on a normal statement with activity", () => {
+    // activity.xml CashReport rows also lack startingCash, but it has trades/cash flows,
+    // so the empty-account diagnostic must not fire (errors stay 0).
+    const { errors } = mapFlexToDrafts(stmt());
+    expect(errors).toHaveLength(0);
+  });
+
+  it("books one opening deposit per real currency and ignores BASE_SUMMARY", () => {
+    const { drafts, errors } = mapFlexToDrafts(parseFlexXml(percurXml)[0]!);
+    expect(errors).toHaveLength(0);
+    const opening = drafts.filter((d) => d.externalId?.startsWith("ibkr:opening:"));
+    // EUR + USD real rows → 2 openings; the BASE_SUMMARY aggregate is NOT double-counted.
+    expect(opening).toHaveLength(2);
+    const eur = opening.find((d) => d.currency === "EUR")!;
+    const usd = opening.find((d) => d.currency === "USD")!;
+    expect(eur.price).toBe("1000.00");
+    expect(eur.externalId).toBe("ibkr:opening:U7777777:EUR");
+    expect(usd.price).toBe("500.00");
+    expect(usd.externalId).toBe("ibkr:opening:U7777777:USD");
+  });
+
+  it("skips a zero startingCash row", () => {
+    const s = parseFlexXml(percurXml)[0]!;
+    s.cashReport = s.cashReport.map((r) => ({ ...r, startingCash: "0" }));
+    const { drafts } = mapFlexToDrafts(s);
+    expect(drafts.some((d) => d.externalId?.startsWith("ibkr:opening:"))).toBe(false);
+  });
+
+  it("books a negative standing balance (margin/debit) as a withdrawal, not a deposit", () => {
+    const s = parseFlexXml(emptyXml)[0]!;
+    s.cashReport = s.cashReport.map((r) => ({ ...r, startingCash: "-250.00" }));
+    const { drafts } = mapFlexToDrafts(s);
+    const opening = drafts.find((d) => d.externalId === "ibkr:opening:U6794520:EUR")!;
+    expect(opening).toBeDefined();
+    expect(opening.action).toBe("withdrawal");
+    expect(opening.price).toBe("250.00"); // absolute amount
+  });
 });
