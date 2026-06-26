@@ -250,9 +250,9 @@ describe("reconciliation_gap", () => {
     });
   });
 
-  it("tolerates the sub-euro reconstruction residual (the ~0.83 TR drift)", () => {
-    // A live TR audit showed ~0.83 of accumulated per-event reconstruction drift (not a
-    // missing transaction) — a sub-euro gap must not raise a false warning.
+  it("tolerates a sub-euro standing gap under the absolute threshold", () => {
+    // A small standing gap (below €1, no fresh drift since the previous sync) must not raise
+    // the absolute-gap warning. The incremental drift guard handles new divergence separately.
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
         cash: [{ currency: "EUR", reported: "1000.00", derived: "999.17", diff: "0.83" }],
@@ -274,6 +274,74 @@ describe("reconciliation_gap", () => {
   it("ignores null reconciliationGap", () => {
     const anomalies = detectAnomalies([], [], { reconciliationGap: null });
     expect(anomalies).toHaveLength(0);
+  });
+});
+
+describe("reconciliation_drift (incremental guard)", () => {
+  it("flags a fresh drift since the previous sync even when the absolute gap is tiny", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        // Absolute gap (0.60) is below the €1 gap threshold, so no reconciliation_gap — but it
+        // moved 0.60 since last sync, above the €0.50 drift bound → a drift warning.
+        cash: [
+          { currency: "EUR", reported: "100.00", derived: "99.40", diff: "0.60", driftSincePrev: "0.60" },
+        ],
+      },
+    });
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0]).toMatchObject({
+      code: "reconciliation_drift",
+      severity: "warning",
+      scope: "portfolio",
+      meta: { currency: "EUR", diff: "0.60", driftSincePrev: "0.60" },
+    });
+  });
+
+  it("does NOT flag a large but STABLE gap (big diff, no movement since last sync)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        // A €26.70 standing gap that did not move this sync: the absolute-gap warning fires,
+        // but the incremental drift guard stays quiet (driftSincePrev within the bound).
+        cash: [
+          { currency: "EUR", reported: "100.00", derived: "73.30", diff: "26.70", driftSincePrev: "0.00" },
+        ],
+      },
+    });
+    expect(anomalies.map((a) => a.code)).toEqual(["reconciliation_gap"]);
+  });
+
+  it("does not flag when drift is below the bound", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [
+          { currency: "EUR", reported: "100.00", derived: "99.70", diff: "0.30", driftSincePrev: "0.30" },
+        ],
+      },
+    });
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it("does not flag on the first sync (no prior baseline → driftSincePrev absent)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [{ currency: "EUR", reported: "100.00", derived: "99.40", diff: "0.60" }],
+      },
+    });
+    expect(anomalies).toHaveLength(0); // 0.60 < €1 gap, and no drift baseline to compare
+  });
+
+  it("flags both a standing gap and fresh drift independently", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [
+          { currency: "EUR", reported: "100.00", derived: "97.50", diff: "2.50", driftSincePrev: "1.00" },
+        ],
+      },
+    });
+    expect(anomalies.map((a) => a.code).sort()).toEqual([
+      "reconciliation_drift",
+      "reconciliation_gap",
+    ]);
   });
 });
 

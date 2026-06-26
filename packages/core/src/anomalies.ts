@@ -13,6 +13,7 @@ export type AnomalyCode =
   | "missing_transfer_basis"
   | "zero_price"
   | "reconciliation_gap"
+  | "reconciliation_drift"
   | "position_gap";
 
 export interface Anomaly {
@@ -25,7 +26,16 @@ export interface Anomaly {
 }
 
 export interface ReconciliationGap {
-  cash: { currency: string; reported: string; derived: string; diff: string }[];
+  cash: {
+    currency: string;
+    reported: string;
+    derived: string;
+    diff: string;
+    /** Change in `diff` since the previous sync (this sync's diff − the last one's). The
+     * incremental guard: a stable standing gap never alarms, only a fresh divergence does.
+     * Absent on the first sync (no prior baseline) and on older stored reconciliations. */
+    driftSincePrev?: string;
+  }[];
   /** Per-ISIN position diff from TR's compactPortfolio snapshot (absent on older syncs). */
   positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
 }
@@ -36,15 +46,19 @@ type Event =
   | { kind: "tx"; at: Date; tx: TxWithId }
   | { kind: "ca"; at: Date; ca: CorporateAction };
 
-// Cash reconciliation tolerance. We derive cash by reconstructing each event
-// (qty×price ± fees ± tax); a live audit against a real Trade Republic account showed our
-// derived balance matched TR's reported balance to within ~€0.83 — accumulated sub-euro
-// per-event reconstruction drift (TR's internal balance vs our reconstruction across hundreds
-// of trades/dividends/card-FX entries), NOT a single missing transaction. The DRIP-reinvestment
-// and saveback events were verified cash-correct (modelling them differently moved the balance
-// the wrong way by tens of euros). €1 tolerates that drift while still catching a genuinely
-// missed/extra transaction, which is materially larger.
+// Absolute cash-reconciliation tolerance. We derive cash by reconstructing each event
+// (qty×price ± fees ± tax) and compare to the broker's reported balance. A standing gap can
+// persist for instruments the feed represents in a way the timeline can't fully reconstruct
+// (e.g. a dividend reconciliation booked only in the transactions-export); €1 tolerates that
+// while still catching a materially-sized missed/extra transaction. The incremental
+// {@link DRIFT_THRESHOLD} below is the sharper guard — it ignores the standing baseline and
+// flags only a *new* divergence introduced by the latest sync.
 const GAP_THRESHOLD = new Decimal("1.00");
+// Incremental drift tolerance: how much the cash diff may move between two consecutive syncs
+// before it is flagged. Tight (well under the absolute gap) so a single newly-mismapped event
+// surfaces immediately and is attributable to the sync that introduced it — even when the
+// absolute gap stays small. No hard-coded balance target, so it rides the growing account.
+const DRIFT_THRESHOLD = new Decimal("0.50");
 // Position qty tolerance: TR savings-plan fractions go to ~6 dp. 1e-4 ignores floating-
 // point noise while still catching meaningful discrepancies (e.g. a missed buy event).
 const POSITION_GAP_THRESHOLD = new Decimal("0.0001");
@@ -192,13 +206,24 @@ export function detectAnomalies(
 
   // ── 3. Reconciliation gaps ─────────────────────────────────────────────────
   if (opts?.reconciliationGap) {
-    for (const { currency, reported, derived, diff } of opts.reconciliationGap.cash) {
+    for (const { currency, reported, derived, diff, driftSincePrev } of opts.reconciliationGap.cash) {
       if (new Decimal(diff).abs().gte(GAP_THRESHOLD)) {
         anomalies.push({
           code: "reconciliation_gap",
           severity: "warning",
           scope: "portfolio",
           meta: { currency, reported, derived, diff },
+        });
+      }
+      // Incremental guard: a NEW divergence since the previous sync, regardless of how small
+      // (or large and stable) the absolute gap is. This is what catches a freshly-mismapped
+      // event the moment it appears, attributable to this sync.
+      if (driftSincePrev != null && new Decimal(driftSincePrev).abs().gte(DRIFT_THRESHOLD)) {
+        anomalies.push({
+          code: "reconciliation_drift",
+          severity: "warning",
+          scope: "portfolio",
+          meta: { currency, reported, derived, diff, driftSincePrev },
         });
       }
     }

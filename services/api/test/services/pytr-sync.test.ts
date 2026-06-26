@@ -333,6 +333,37 @@ describe("syncTrConnection", () => {
 
     const [updated] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
     expect((updated.lastReconciliation as { cash: unknown[] }).cash).toHaveLength(1);
+    // First sync has no prior baseline, so no incremental drift is reported yet.
+    expect(result.reconciliation?.cash[0]).not.toHaveProperty("driftSincePrev");
+  });
+
+  it("reports incremental drift vs the previous sync's reconciliation", async () => {
+    const conn = await makeConnection("reconcile-drift");
+    const db = getDb();
+    const evs = [{ id: "d-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" }];
+
+    // Sync 1: TR reports 480 → diff -20.00 (no baseline yet → no drift).
+    const r1 = await syncTrConnection(
+      db, enc,
+      runnerWith(async () => ({ events: evs, sessionData: "J", summary: { cash: [{ currency: "EUR", amount: 480 }] } })),
+      conn,
+    );
+    expect(r1.reconciliation?.cash[0]).toMatchObject({ diff: "-20.00" });
+
+    // Reload the connection so it carries the stored lastReconciliation, then sync again with
+    // a slightly different reported balance (478 → diff -22.00). The diff moved by -2.00.
+    const [reloaded] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
+    const r2 = await syncTrConnection(
+      db, enc,
+      runnerWith(async () => ({ events: evs, sessionData: "J", summary: { cash: [{ currency: "EUR", amount: 478 }] } })),
+      reloaded,
+    );
+    expect(r2.reconciliation?.cash[0]).toMatchObject({
+      reported: "478",
+      derived: "500",
+      diff: "-22.00",
+      driftSincePrev: "-2.00",
+    });
   });
 
   it("reconciles positions against TR's compactPortfolio snapshot", async () => {

@@ -67,6 +67,7 @@ import {
   type DriftRow,
   type TradeAction,
   type IncomeEntry,
+  type ReconciliationGap,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
 import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
@@ -1028,7 +1029,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
       const holdings = computeHoldings(coreTxns, cas);
       const reconciliation = trConn?.lastReconciliation as
-        | { cash: { currency: string; reported: string; derived: string; diff: string }[] }
+        | ReconciliationGap
         | null
         | undefined;
       const anomalies = detectAnomalies(coreTxns, cas, {

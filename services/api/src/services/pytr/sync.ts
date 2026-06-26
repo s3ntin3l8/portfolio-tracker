@@ -22,7 +22,15 @@ type TrConnectionRow = typeof trConnections.$inferSelect;
 
 export interface CashReconciliation {
   checkedAt: string;
-  cash: { currency: string; reported: string; derived: string; diff: string }[];
+  cash: {
+    currency: string;
+    reported: string;
+    derived: string;
+    diff: string;
+    /** Change in `diff` vs the previous sync's reconciliation (incremental drift guard).
+     * Absent on the first sync for a connection. */
+    driftSincePrev?: string;
+  }[];
   /** Per-ISIN position snapshot diff (null/absent until first position-enabled sync). */
   positions?: { isin: string; reported: string; derived: string; diff: string }[] | null;
 }
@@ -73,9 +81,15 @@ const DEFAULT_CATEGORIES = ["trade", "income", "cashflow"];
 function reconcileCash(
   allEvents: unknown[],
   summary: TrExportSummary | undefined,
+  prev?: CashReconciliation | null,
 ): CashReconciliation | undefined {
   const reported = summary?.cash;
   if (!reported || reported.length === 0) return undefined;
+  // The previous sync's diff per currency, so we can report how much it moved (the
+  // incremental drift the @portfolio/core guard alarms on).
+  const prevDiff = new Map<string, string>(
+    (prev?.cash ?? []).map((c) => [c.currency, c.diff]),
+  );
 
   // Map the full timeline (all categories, all event states — the mapper itself skips
   // non-EXECUTED events). Convert the resulting drafts to CoreTransaction for cashBalances.
@@ -98,12 +112,17 @@ function reconcileCash(
   const cash = [...currencies].map((currency) => {
     const reportedStr = String(reported.find((c) => c.currency === currency)?.amount ?? "0");
     const derivedStr = derived[currency] ?? "0";
+    // Use Decimal arithmetic (not JS float) to avoid floating-point drift.
+    const diff = new Decimal(reportedStr).sub(new Decimal(derivedStr)).toFixed(2);
+    const prior = prevDiff.get(currency);
     return {
       currency,
       reported: reportedStr,
       derived: derivedStr,
-      // Use Decimal arithmetic (not JS float) to avoid floating-point drift.
-      diff: new Decimal(reportedStr).sub(new Decimal(derivedStr)).toFixed(2),
+      diff,
+      ...(prior != null
+        ? { driftSincePrev: new Decimal(diff).sub(new Decimal(prior)).toFixed(2) }
+        : {}),
     };
   });
   return { checkedAt: new Date().toISOString(), cash };
@@ -508,7 +527,10 @@ export async function syncTrConnection(
   }
 
   // 7. Reconcile cash + positions against TR's reported balances, then roll the session.
-  const cashRec = reconcileCash(events, result.summary);
+  // Pass the previous reconciliation (loaded with the connection, before this sync overwrites
+  // it) so reconcileCash can report how much the diff moved — the incremental drift guard.
+  const prevReconciliation = connection.lastReconciliation as CashReconciliation | null;
+  const cashRec = reconcileCash(events, result.summary, prevReconciliation);
   const posRec = reconcilePositions(events, result.summary);
   // Build the reconciliation object; fold in document counts when we attempted a download
   // so the UI can show "0 of 20 PDFs saved" without needing a separate column/migration.
