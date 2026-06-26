@@ -69,10 +69,56 @@ async def _collect_feed(tr, feed_method, sub_type):
     return events
 
 
+# Securities transfers (Depotübertrag) are cash-neutral and live on the activity-log feed,
+# NOT timelineTransactions. They are identified either by an explicit event type or — in the
+# (older) form that carries no eventType — by their subtitle. We normalise both to a stable
+# synthetic eventType the Node mapper understands.
+_TRANSFER_SUBTITLES = {
+    "aktien erhalten": "TRANSFER_IN",
+    "aktien übertragen": "TRANSFER_OUT",
+}
+_TRANSFER_EVENT_TYPES = {
+    "TRANSFER_IN": "TRANSFER_IN",
+    "TRANSFER_OUT": "TRANSFER_OUT",
+    "SSP_SECURITIES_TRANSFER_INCOMING": "TRANSFER_IN",
+}
+
+
+def _transfer_event_type(event):
+    """Return the synthetic TRANSFER_IN/TRANSFER_OUT type for a securities-transfer event,
+    or None if the event is not a transfer. Matches the explicit event type first, then the
+    eventType-less subtitle form."""
+    et = event.get("eventType")
+    if et in _TRANSFER_EVENT_TYPES:
+        return _TRANSFER_EVENT_TYPES[et]
+    if not et:
+        sub = (event.get("subtitle") or "").strip().lower()
+        return _TRANSFER_SUBTITLES.get(sub)
+    return None
+
+
 async def _collect_transactions(tr):
     events = await _collect_feed(
         tr, lambda after=None: tr.timeline_transactions(after), "timelineTransactions"
     )
+    # Merge ONLY securities-transfer events from the activity-log feed (deduped by id). They
+    # are cash-neutral, so restricting the merge to them keeps cash derivation untouched —
+    # even a dedup miss cannot double-count cash (and the DB's (portfolio, source, externalId)
+    # unique index is a second guard). This is what makes transferred-in positions appear in
+    # holdings at all; everything else on the activity log stays out until classified.
+    try:
+        activity = await _collect_feed(
+            tr, lambda after=None: tr.timeline_activity_log(after), "timelineActivityLog"
+        )
+    except Exception as exc:  # noqa: BLE001 - best effort; transfers are additive
+        print(f"activity-log fetch failed: {exc}", file=sys.stderr)
+        activity = {}
+    for event_id, event in activity.items():
+        if event_id in events:
+            continue
+        transfer_type = _transfer_event_type(event)
+        if transfer_type:
+            events[event_id] = {**event, "eventType": transfer_type}
     return list(events.values())
 
 
@@ -421,11 +467,28 @@ def _normalize(event, wkn_by_isin=None):
         "venue": _extract_venue(details),
         "documentRefs": _extract_documents(details),
         "description": _extract_description(event, details),
-        # Booking status (EXECUTED / CANCELED / PENDING). Read from the timeline list item
-        # itself — no extra detail fetch — so the Node side can skip non-executed events and
-        # un-import ones that were cancelled after a prior sync confirmed them.
-        "status": event.get("status"),
+        # Booking status (EXECUTED / CANCELED / PENDING). Prefer the timeline list item's own
+        # field; fall back to the detail header's status for events that carry none at the top
+        # level (e.g. securities transfers, whose cancellation only shows in the header). Lets
+        # the Node side skip non-executed events and un-import ones cancelled after a sync.
+        "status": event.get("status") or _extract_status(details),
     }
+
+
+def _extract_status(details):
+    """Pull a booking status from the detail header section (`type == "header"`, `data.status`),
+    upper-cased to match TR's top-level convention. Used for events (e.g. securities transfers)
+    that carry no top-level status; a cancelled transfer only signals it here."""
+    if not isinstance(details, dict):
+        return None
+    for section in details.get("sections", []):
+        if isinstance(section, dict) and section.get("type") == "header":
+            data = section.get("data")
+            if isinstance(data, dict):
+                status = data.get("status")
+                if isinstance(status, str) and status:
+                    return status.upper()
+    return None
 
 
 async def _collect_wkns(tr, isins):
