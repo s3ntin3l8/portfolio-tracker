@@ -207,6 +207,13 @@ export async function trRoute(app: FastifyInstance) {
       if (!conn || conn.status !== "connected") {
         return reply.code(409).send({ error: "not_connected" });
       }
+      // Refuse to start a second sync while one is already in flight. The single open
+      // "collector" draft is read-modify-written by syncTrConnection, so two overlapping
+      // syncs would race and the earlier one's new drafts would be lost. The `syncing`
+      // flag is cleared at the end of every sync (success or failure), so this never wedges.
+      if (conn.syncing) {
+        return reply.code(409).send({ error: "sync_in_progress" });
+      }
       const { queued } = await enqueueTrSync(conn.id);
       if (queued) {
         // Mark syncing immediately so the poller sees it without waiting for the worker to pick up.
