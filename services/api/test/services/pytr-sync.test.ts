@@ -228,6 +228,56 @@ describe("syncTrConnection", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("cancellation completes even when linked-document cleanup throws (best-effort)", async () => {
+    const conn = await makeConnection("cancel-cleanup-throws");
+    const db = getDb();
+
+    // Prior confirm: tr-1 written, with a postbox PDF linked to the transaction.
+    const [tx] = await db
+      .insert(transactions)
+      .values({
+        portfolioId: conn.portfolioId!,
+        type: "deposit",
+        currency: "EUR",
+        executedAt: new Date("2026-03-01T10:00:00.000Z"),
+        source: "pytr",
+        externalId: "tr-1",
+      })
+      .returning({ id: transactions.id });
+    await db.insert(documents).values({
+      userId: conn.userId,
+      transactionId: tx.id,
+      storageKey: "receipts/cancel-cleanup-throws.pdf",
+      mimeType: "application/pdf",
+      source: "pytr",
+    });
+
+    // Storage whose delete always throws — cleanup must be isolated so the sync still finishes.
+    const storage = makeTrackingStorage();
+    (storage as unknown as { delete: unknown }).delete = async () => {
+      throw new Error("storage delete failed");
+    };
+
+    const cancelledEvents = EVENTS.map((e) => (e.id === "tr-1" ? { ...e, status: "CANCELED" } : e));
+    const result = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: cancelledEvents, sessionData: "JX" })),
+      conn,
+      undefined,
+      storage,
+    );
+
+    // The cancelled transaction is still removed and the sync reaches a terminal state.
+    expect(result.status).toBe("connected");
+    expect(result.cancelled).toBe(1);
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+    expect(rows).toHaveLength(0);
+  });
+
   // Boundary events shared by the two cash-boundary tests (#326): a trade, a deposit, card
   // spending, and an unknown event type.
   const BOUNDARY_EVENTS = [
@@ -840,5 +890,44 @@ describe("syncTrConnection", () => {
     const docs = await db.select().from(documents).where(eq(documents.source, "pytr"));
     const importDoc = docs.find((d) => d.importId === result.importId);
     expect(importDoc).toBeUndefined();
+  });
+
+  it("completes (best-effort) and stores 0 docs when downloadDocuments throws a process error", async () => {
+    const conn = await makeConnection("docs-download-throws");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-dl-throw-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "ORDER_EXECUTED",
+            amount: -100,
+            shares: 1,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-dl-throw", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      // Process-level failure (e.g. session expired mid-download) — must not abort the sync.
+      async () => {
+        throw new PytrAuthError("session expired during document download");
+      },
+    );
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    // Sync still finishes and the connection stays connected; the download is best-effort.
+    expect(result.status).toBe("connected");
+    expect(result.documentsRequested).toBe(1);
+    expect(result.documentsStored).toBe(0);
+    expect(storage.puts).toHaveLength(0);
   });
 });

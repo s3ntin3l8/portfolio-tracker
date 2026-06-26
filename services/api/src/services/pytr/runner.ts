@@ -38,12 +38,6 @@ export interface PytrRunnerOptions {
   log?: FastifyBaseLogger;
 }
 
-/** Return the first non-empty line of a multi-line string, trimmed. */
-function firstLine(s: string): string {
-  const idx = s.indexOf("\n");
-  return (idx === -1 ? s : s.slice(0, idx)).trim();
-}
-
 export class PytrUnavailableError extends Error {
   constructor(message = "pytr is not available") {
     super(message);
@@ -248,7 +242,7 @@ export class PytrRunner {
             entry.settled = { sessionData };
           }
         } else {
-          this.log?.warn({ userId, code, stderr: firstLine(entry.stderr) }, "pytr pairing exited nonzero");
+          this.log?.warn({ userId, code, stderr: entry.stderr.trim() }, "pytr pairing exited nonzero");
           const msg = entry.stderr.trim() || `pytr login exited with code ${code}`;
           const err = code === 3 ? new PytrApprovalError(msg) : new PytrError(msg);
           // A failure before the init line means startPairing() is still pending.
@@ -272,10 +266,10 @@ export class PytrRunner {
           entry.settled = { error: e };
         }
       } finally {
-        await rm(entry.tmpDir, { recursive: true, force: true });
+        await this.safeRm(entry.tmpDir, userId);
       }
     };
-    void finalize();
+    finalize().catch((err) => this.log?.warn({ userId, err }, "pytr pairing finalize failed"));
   }
 
   private failPairing(userId: string, err: Error): void {
@@ -292,7 +286,7 @@ export class PytrRunner {
       this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
-    void rm(entry.tmpDir, { recursive: true, force: true });
+    void this.safeRm(entry.tmpDir, userId);
   }
 
   /** True if a pairing is waiting for (or has just received) its app-push approval. */
@@ -333,7 +327,18 @@ export class PytrRunner {
       this.log?.warn({ userId, err: killErr }, "pytr kill failed");
     }
     this.pending.delete(userId);
-    void rm(entry.tmpDir, { recursive: true, force: true });
+    void this.safeRm(entry.tmpDir, userId);
+  }
+
+  /**
+   * Remove a temp dir, logging (never throwing) on failure. Used for best-effort cleanup so
+   * a cleanup error neither leaks silently (the old bare `void rm(...)`) nor masks the real
+   * result of the surrounding operation when awaited in a `finally`.
+   */
+  private safeRm(dir: string, userId?: string): Promise<void> {
+    return rm(dir, { recursive: true, force: true }).catch((err) => {
+      this.log?.warn({ userId, dir, err }, "pytr temp cleanup failed");
+    });
   }
 
   /**
@@ -364,7 +369,7 @@ export class PytrRunner {
         throw new PytrAuthError(stderr.trim() || undefined);
       }
       if (code !== 0) {
-        this.log?.error({ code, stderr: firstLine(stderr) }, "pytr export failed");
+        this.log?.error({ code, stderr: stderr.trim() }, "pytr export failed");
         throw new PytrError(stderr.trim() || `pytr export exited with code ${code}`);
       }
       const lines = stdout
@@ -390,7 +395,7 @@ export class PytrRunner {
       );
       return { events, sessionData, summary };
     } finally {
-      await rm(tmpDir, { recursive: true, force: true });
+      await this.safeRm(tmpDir);
     }
   }
 
@@ -435,7 +440,7 @@ export class PytrRunner {
         throw new PytrAuthError(stderr.trim() || undefined);
       }
       if (code !== 0) {
-        this.log?.error({ code, stderr: firstLine(stderr) }, "pytr documents download failed");
+        this.log?.error({ code, stderr: stderr.trim() }, "pytr documents download failed");
         throw new PytrError(stderr.trim() || `tr_documents.py exited with code ${code}`);
       }
 
@@ -479,7 +484,7 @@ export class PytrRunner {
       this.log?.debug({ requested: pairs.length, downloaded: docs.size, failed: failures.length }, "pytr documents fetched");
       return { docs, failures };
     } finally {
-      await rm(tmpDir, { recursive: true, force: true });
+      await this.safeRm(tmpDir);
     }
   }
 

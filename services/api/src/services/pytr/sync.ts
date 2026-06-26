@@ -283,11 +283,20 @@ export async function syncTrConnection(
     // TR per-tx docs aren't stored yet; forward-compatible for phase 2.
     if (storage && removed.length > 0) {
       const storageApp = { storage, db, log: log ?? console } as Parameters<typeof deleteReceiptsForTransactions>[0];
-      await deleteReceiptsForTransactions(
-        storageApp,
-        removed.map((r) => r.id),
-        removed.map((r) => r.importId).filter((x): x is string => x !== null),
-      );
+      // Best-effort, like the rest of the cancellation domain: a storage error here must not
+      // abort the whole sync (which would also skip reconciliation and the session roll).
+      try {
+        await deleteReceiptsForTransactions(
+          storageApp,
+          removed.map((r) => r.id),
+          removed.map((r) => r.importId).filter((x): x is string => x !== null),
+        );
+      } catch (err) {
+        log?.error(
+          { connectionId, err, txIds: removed.map((r) => r.id) },
+          "tr cancelled-document cleanup failed (non-fatal)",
+        );
+      }
     }
     await db
       .delete(trResolvedEvents)
@@ -501,7 +510,9 @@ export async function syncTrConnection(
           failed += downloaded.failures.length;
           for (const [docId, { buf, mimeType }] of downloaded.docs) {
             // sourceEventId links this doc to its transaction at confirm time
-            // (via tx.externalId ↔ document.sourceEventId matching).
+            // (via tx.externalId ↔ document.sourceEventId matching). storeReceipt is
+            // contractually non-throwing — it returns { ok: false } on storage/DB errors —
+            // so a single bad doc never aborts the batch nor reaches the outer catch.
             const sourceEventId = pairs.find((p) => p.docId === docId)?.eventId ?? null;
             const receipt = await storeReceipt(appLike, {
               userId,
@@ -519,9 +530,10 @@ export async function syncTrConnection(
             }
           }
         } catch (err) {
-          // Process-level failure (PytrAuthError / PytrError) — best-effort, must never
-          // abort the sync. All remaining pairs count as failed.
-          failed = pairs.length - stored;
+          // Process-level failure (PytrAuthError / PytrError) from downloadDocuments — best-
+          // effort, must never abort the sync. Reached before any doc is stored, so count
+          // every requested pair as failed (add rather than overwrite, defensively).
+          failed += pairs.length - stored - failed;
           log?.warn({ connectionId, importId, err }, "tr document download failed (non-fatal)");
         }
 

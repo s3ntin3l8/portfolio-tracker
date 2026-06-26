@@ -297,7 +297,11 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         .where(
           targetId
             ? and(eq(trConnections.id, targetId), eq(trConnections.status, "connected"))
-            : eq(trConnections.status, "connected"),
+            : // Cron sweep: skip connections with a manual sync already in flight so the
+              // hourly job can't race the collector read-modify-write against a user-
+              // triggered sync. The targeted (manual) path is exempt — the route already
+              // set `syncing` true for the very job we're now running.
+              and(eq(trConnections.status, "connected"), eq(trConnections.syncing, false)),
         );
       for (const conn of conns) {
         const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log, app.storage);

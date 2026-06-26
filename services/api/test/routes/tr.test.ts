@@ -439,6 +439,32 @@ describe("Trade Republic connection (encryption enabled)", () => {
     expect(res.json()).toEqual({ error: "not_connected" });
   });
 
+  it("POST /tr/connection/sync 409s sync_in_progress when a sync is already running", async () => {
+    const t = await token("tr-sync-inflight");
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+4915199990000", pin: "1234", portfolioId },
+    });
+    await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
+
+    // Simulate a sync already in flight (the flag the route guards on).
+    await getDb()
+      .update(trConnections)
+      .set({ syncing: true })
+      .where(eq(trConnections.portfolioId, portfolioId));
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/sync",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toEqual({ error: "sync_in_progress" });
+  });
+
   it("disconnects: DELETE wipes the connection", async () => {
     const t = await token("tr-disc");
     const portfolioId = await portfolioFor(app, t);
