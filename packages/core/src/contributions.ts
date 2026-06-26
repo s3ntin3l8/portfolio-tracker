@@ -8,13 +8,14 @@ const D = (v: string | number) => new Decimal(v);
  * Acquisition `kind`s that are NOT the user's own external money and therefore
  * never count as a contribution, even though they buy shares (broker-credited
  * reinvestment). `roundup` is deliberately NOT here — round-ups are the user's
- * own spare change. Reinvested dividends arrive as zero-cash `bonus` rows
- * (notional 0) and are excluded by the type rules below. `merger` is the buy leg
- * of a fund merger (Fondsverschmelzung): the new shares replace old ones rather
- * than being newly-funded, so they are not contributed capital (its sell leg is
- * likewise kept out of `outflow` — see {@link outsideMonths}).
+ * own spare change. `reinvestment` is a dividend reinvestment (TR "Reinvestition
+ * der Dividende") booked as a `buy` funded by the dividend (return), not external
+ * capital — so it's excluded here while still building the average-cost pool.
+ * `merger` is the buy leg of a fund merger (Fondsverschmelzung): the new shares
+ * replace old ones rather than being newly-funded, so they are not contributed
+ * capital (its sell leg is likewise kept out of `outflow` — see {@link outsideMonths}).
  */
-const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger"]);
+const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger", "reinvestment"]);
 
 export interface ContributionInput {
   txns: CoreTransaction[];
