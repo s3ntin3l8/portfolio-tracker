@@ -1,0 +1,2 @@
+CREATE TYPE "public"."transaction_status" AS ENUM('normal', 'archived', 'cash_neutral');--> statement-breakpoint
+ALTER TABLE "transactions" ADD COLUMN "status" "transaction_status" DEFAULT 'normal' NOT NULL;

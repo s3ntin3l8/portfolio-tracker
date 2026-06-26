@@ -6,13 +6,14 @@ import messages from "../messages/en.json";
 const refresh = vi.fn();
 const bulkDeleteTransactions = vi.fn(async () => ({ deleted: 1 }));
 const deleteTransaction = vi.fn(async () => undefined);
+const setTransactionStatus = vi.fn(async () => ({}));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ bulkDeleteTransactions, deleteTransaction }),
+  useApiClient: () => ({ bulkDeleteTransactions, deleteTransaction, setTransactionStatus }),
 }));
 
 import {
@@ -311,6 +312,28 @@ describe("TransactionsTable", () => {
     renderSingleRow(bonusRow);
     // The TxType.bonus_cash label ("Bonus") should appear in the badge.
     expect(screen.getByText(messages.TxType.bonus_cash)).toBeInTheDocument();
+  });
+
+  describe("transaction status", () => {
+    it("renders an Archived badge and dims the row for archived transactions", () => {
+      renderSingleRow({ ...ROWS[0], status: "archived" });
+      expect(screen.getByText(messages.Manage.status.badgeArchived)).toBeInTheDocument();
+      // The row is visually de-emphasised.
+      const row = screen.getAllByRole("row").slice(1)[0];
+      expect(row.className).toContain("opacity-50");
+    });
+
+    it("renders a Cash-neutral badge for cash_neutral transactions", () => {
+      renderSingleRow({ ...ROWS[0], status: "cash_neutral" });
+      expect(screen.getByText(messages.Manage.status.badgeCashNeutral)).toBeInTheDocument();
+    });
+
+    it("exposes a per-row status control", () => {
+      renderSingleRow({ ...ROWS[0], status: "normal" });
+      expect(
+        screen.getByRole("button", { name: messages.Manage.status.label }),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("list filters", () => {

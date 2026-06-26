@@ -758,6 +758,14 @@
       "confirm": "Delete",
       "cancel": "Cancel"
     },
+    "status": {
+      "label": "Transaction status",
+      "normal": "Active",
+      "archived": "Archive (ignore everywhere)",
+      "cashNeutral": "Cash-neutral (keep shares, no cash)",
+      "badgeArchived": "Archived",
+      "badgeCashNeutral": "Cash-neutral"
+    },
     "portfolio": {
       "title": "Create a portfolio",
       "subtitle": "Give it a name and a base currency to value it in.",

@@ -27,6 +27,9 @@ export function computeHoldings(
 
   for (const tx of transactions) {
     if (!tx.instrumentId) continue;
+    // Archived rows are excluded from every derivation (cash_neutral rows still count
+    // here — their shares are real; only their cash effect is suppressed in cash.ts).
+    if (tx.status === "archived") continue;
     if (asOf !== undefined && tx.executedAt > asOf) continue;
     const list = byInstrument.get(tx.instrumentId) ?? [];
     list.push({ kind: "tx", at: tx.executedAt, tx });

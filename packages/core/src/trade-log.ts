@@ -208,6 +208,8 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
   const byInstrument = new Map<string, Event[]>();
   for (const tx of input.transactions) {
     if (!tx.instrumentId) continue;
+    if (tx.status === "archived") continue; // excluded from every derivation
+
     const list = byInstrument.get(tx.instrumentId) ?? [];
     list.push({ kind: "tx", at: tx.executedAt, tx });
     byInstrument.set(tx.instrumentId, list);
