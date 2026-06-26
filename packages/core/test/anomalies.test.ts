@@ -250,13 +250,25 @@ describe("reconciliation_gap", () => {
     });
   });
 
-  it("does NOT flag a gap within the threshold (< 0.01)", () => {
+  it("tolerates the sub-euro reconstruction residual (the real 0.83 TR drift)", () => {
+    // Live audit: derived 2808.29 vs TR-reported 2809.12 = 0.83 of accumulated per-event
+    // reconstruction drift, not a missing transaction — must not raise a false warning.
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
-        cash: [{ currency: "EUR", reported: "100.00", derived: "100.005", diff: "0.005" }],
+        cash: [{ currency: "EUR", reported: "2809.12", derived: "2808.29", diff: "0.83" }],
       },
     });
     expect(anomalies).toHaveLength(0);
+  });
+
+  it("still flags a gap above €1 (a genuinely missed/extra transaction)", () => {
+    const anomalies = detectAnomalies([], [], {
+      reconciliationGap: {
+        cash: [{ currency: "EUR", reported: "100.00", derived: "98.50", diff: "1.50" }],
+      },
+    });
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0]).toMatchObject({ code: "reconciliation_gap", meta: { diff: "1.50" } });
   });
 
   it("ignores null reconciliationGap", () => {
