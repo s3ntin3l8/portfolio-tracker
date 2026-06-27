@@ -217,6 +217,41 @@ export async function enrichTransactionsFromStoredDocuments(
     .from(transactions)
     .where(inArray(transactions.id, txIds));
 
+  // Batch-fetch every linked document for these transactions in one query (vs. one query
+  // per transaction), grouped by transactionId. Match both "staged" (at confirm time, before
+  // finalizeReceipts) and "retained" (backfill over already-confirmed transactions) so
+  // enrichment works in both paths.
+  const enrichTxIds = txRows
+    .filter((tx) => ((tx.documentRefs as unknown[] | null) ?? []).length > 0)
+    .map((tx) => tx.id);
+  const docsByTxId = new Map<
+    string,
+    { id: string; storageKey: string; sourceEventId: string | null }[]
+  >();
+  if (enrichTxIds.length > 0) {
+    const allDocRows = await db(app)
+      .select({
+        transactionId: documents.transactionId,
+        id: documents.id,
+        storageKey: documents.storageKey,
+        sourceEventId: documents.sourceEventId,
+      })
+      .from(documents)
+      .where(
+        and(
+          inArray(documents.transactionId, enrichTxIds),
+          inArray(documents.status, ["staged", "retained"]),
+        ),
+      );
+    for (const d of allDocRows) {
+      if (!d.transactionId) continue;
+      const entry = { id: d.id, storageKey: d.storageKey, sourceEventId: d.sourceEventId };
+      const bucket = docsByTxId.get(d.transactionId);
+      if (bucket) bucket.push(entry);
+      else docsByTxId.set(d.transactionId, [entry]);
+    }
+  }
+
   for (const tx of txRows) {
     const refs = (tx.documentRefs as { id?: string; type?: string; date?: string }[] | null) ?? [];
     if (refs.length === 0) continue;
@@ -227,24 +262,7 @@ export async function enrichTransactionsFromStoredDocuments(
     // settlement / dividend / interest / tax-optimisation abrechnungen and rejects KID,
     // cost-info, order-confirmation and transfer-confirmation pages. So feed every linked
     // doc to detect/parse below and let it decide.
-
-    // Fetch the documents linked to this transaction.
-    // Match both "staged" (at confirm time, before finalizeReceipts) and "retained"
-    // (backfill over already-confirmed transactions) so enrichment works in both paths.
-    const docRows = await db(app)
-      .select({
-        id: documents.id,
-        storageKey: documents.storageKey,
-        sourceEventId: documents.sourceEventId,
-      })
-      .from(documents)
-      .where(
-        and(
-          eq(documents.transactionId, tx.id),
-          inArray(documents.status, ["staged", "retained"]),
-        ),
-      );
-
+    const docRows = docsByTxId.get(tx.id) ?? [];
     if (docRows.length === 0) continue;
 
     const drafts: ParsedTransaction[] = [];

@@ -27,6 +27,10 @@ import {
   extFromMime as _extFromMime,
   buildStructuredKey,
   gatherDocumentNaming,
+  gatherDocumentMetadata,
+  computeNamingParts,
+  namingContextFor,
+  type NamingRequest,
 } from "./naming.js";
 
 // ---- Key building ----------------------------------------------------------
@@ -210,15 +214,17 @@ export async function finalizeReceipts(
       .set({ status: "retained", portfolioId })
       .where(and(eq(documents.importId, importId), eq(documents.status, "staged")));
 
-    // Re-key each object to a structured path. Best-effort: a failure logs and leaves
-    // the old key in place (the row still has status="retained"; download still works).
+    // Resolve naming metadata for every staged doc in a fixed number of queries (vs. a
+    // per-doc waterfall), then re-key each object to a structured path. Best-effort: a
+    // failure logs and leaves the old key in place (the row still has status="retained";
+    // download still works). txId is implicit via row.transactionId (set on TR docs by
+    // linkTrReceiptsToTransactions).
+    const namingRequests: NamingRequest[] = rows.map((row) => ({ doc: { ...row, importId } }));
+    const namingMeta = await gatherDocumentMetadata(app, namingRequests, portfolioId);
     for (const row of rows) {
       try {
-        const parts = await gatherDocumentNaming(app, {
-          doc: { ...row, importId },
-          portfolioId,
-          // txId: row.transactionId already set on TR docs by linkTrReceiptsToTransactions
-        });
+        const req: NamingRequest = { doc: { ...row, importId } };
+        const parts = computeNamingParts(req.doc, namingContextFor(req, namingMeta));
         const newKey = buildStructuredKey(row.userId, parts);
         if (newKey === row.storageKey) continue; // already structured (idempotent)
 
@@ -490,6 +496,41 @@ export async function getDocumentSummaryForImport(
     .where(and(eq(documents.importId, importId), eq(documents.status, "retained")))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Batched form of {@link getDocumentSummaryForImport}: one query for many imports, keyed by
+ * importId (first retained doc per import, mirroring the single-import `.limit(1)`). Lets the
+ * imports-list endpoint avoid a per-row query.
+ */
+export async function getDocumentSummariesForImports(
+  app: AppLikeDb,
+  importIds: string[],
+): Promise<Map<string, DocumentSummary>> {
+  if (importIds.length === 0) return new Map();
+  const rows = await db(app)
+    .select({
+      importId: documents.importId,
+      id: documents.id,
+      originalFilename: documents.originalFilename,
+      mimeType: documents.mimeType,
+      sizeBytes: documents.sizeBytes,
+      storedAt: documents.storedAt,
+    })
+    .from(documents)
+    .where(and(inArray(documents.importId, importIds), eq(documents.status, "retained")));
+  const out = new Map<string, DocumentSummary>();
+  for (const r of rows) {
+    if (!r.importId || out.has(r.importId)) continue; // first per import
+    out.set(r.importId, {
+      id: r.id,
+      originalFilename: r.originalFilename,
+      mimeType: r.mimeType,
+      sizeBytes: r.sizeBytes,
+      storedAt: r.storedAt,
+    });
+  }
+  return out;
 }
 
 /**

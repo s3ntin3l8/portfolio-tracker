@@ -21,7 +21,7 @@ import {
   finalizeReceipts,
   deleteReceiptsForImport,
   getDocumentForImport,
-  getDocumentSummaryForImport,
+  getDocumentSummariesForImports,
   retainDocumentForTransaction,
 } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
@@ -65,24 +65,23 @@ export async function importsRoute(app: FastifyInstance) {
       .from(screenshotImports)
       .where(eq(screenshotImports.userId, id))
       .orderBy(desc(screenshotImports.createdAt));
-    return Promise.all(
-      rows.map(async (r) => {
-        const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
-        const document = r.status === "confirmed"
-          ? await getDocumentSummaryForImport(app, r.id)
-          : null;
-        return {
-          id: r.id,
-          portfolioId: r.portfolioId,
-          parser: r.parser,
-          status: r.status,
-          confidence: r.confidence,
-          count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
-          createdAt: r.createdAt,
-          document,
-        };
-      }),
-    );
+    // Batch the per-import document summary into one query (vs. one per confirmed row).
+    const confirmedIds = rows.filter((r) => r.status === "confirmed").map((r) => r.id);
+    const docByImport = await getDocumentSummariesForImports(app, confirmedIds);
+    return rows.map((r) => {
+      const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
+      const document = r.status === "confirmed" ? (docByImport.get(r.id) ?? null) : null;
+      return {
+        id: r.id,
+        portfolioId: r.portfolioId,
+        parser: r.parser,
+        status: r.status,
+        confidence: r.confidence,
+        count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
+        createdAt: r.createdAt,
+        document,
+      };
+    });
   });
 
   // Safety net: aggregate event types that reached the importer but have no mapping yet

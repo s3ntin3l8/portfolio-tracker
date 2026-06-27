@@ -17,11 +17,10 @@
  * `shortId` = first 8 chars of the document UUID — keeps keys unique without being opaque.
  */
 
-import { min } from "drizzle-orm";
+import { eq, inArray, min } from "drizzle-orm";
 import { transactions, portfolios, instruments } from "@portfolio/db";
 import type { FastifyInstance } from "fastify";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
 import type { schema } from "@portfolio/db";
 
 // ---- Types ------------------------------------------------------------------
@@ -155,8 +154,167 @@ export interface DocumentForNaming {
   transactionId: string | null;
 }
 
+/** A document plus an optional explicit transaction scope (per-leg download endpoints). */
+export interface NamingRequest {
+  doc: DocumentForNaming;
+  /** Force "transaction" scope for this tx even when `doc.transactionId` is null. */
+  txId?: string;
+}
+
+/** Pre-resolved inputs `computeNamingParts` needs — no DB access. */
+export interface NamingContext {
+  portfolioName: string | null;
+  /** The resolved transaction for the doc's effective tx id, or null ⇒ statement scope. */
+  tx: { type: string; executedAt: Date; instrumentId: string | null } | null;
+  /** The resolved instrument ticker for `tx.instrumentId`, if the instrument exists. */
+  instrumentSymbol: string | null;
+  /** Earliest `executedAt` across the doc's import (statement scope), if any. */
+  importMinDate: Date | null;
+}
+
 /**
- * Resolve naming parts for a document from the database.
+ * Pure naming logic — given the document and its pre-resolved context, produce the
+ * `NamingParts`. No DB access, so it's trivially testable and callable in a batch loop.
+ * Transaction scope when a linked transaction exists; statement scope otherwise.
+ */
+export function computeNamingParts(doc: DocumentForNaming, ctx: NamingContext): NamingParts {
+  const ext = extFromMime(doc.mimeType);
+  const shortId = doc.id.replace(/-/g, "").slice(0, 8);
+  const portfolioSlug = ctx.portfolioName ? slug(ctx.portfolioName) : "portfolio";
+
+  if (ctx.tx) {
+    // Transaction scope: type + executedAt + instrument symbol.
+    const symbol =
+      ctx.tx.instrumentId && ctx.instrumentSymbol ? slug(ctx.instrumentSymbol) : "unknown";
+    const dt = ctx.tx.executedAt;
+    const date = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+    return {
+      scope: "transaction",
+      portfolioSlug,
+      date,
+      year: String(dt.getUTCFullYear()),
+      type: ctx.tx.type,
+      symbol,
+      ext,
+      docId: shortId,
+    };
+  }
+
+  // Statement scope: period from the earliest transaction in this import, else storedAt.
+  const dt = (doc.importId ? ctx.importMinDate : null) ?? doc.storedAt;
+  const d = new Date(dt);
+  const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return {
+    scope: "statement",
+    portfolioSlug,
+    period,
+    source: friendlySource(doc.source),
+    ext,
+    docId: shortId,
+  };
+}
+
+/** Batch-resolved metadata for a set of naming requests sharing one portfolio. */
+export interface DocumentNamingMetadata {
+  portfolioName: string | null;
+  txById: Map<string, { type: string; executedAt: Date; instrumentId: string | null }>;
+  instrumentSymbolById: Map<string, string>;
+  importMinDateById: Map<string, Date>;
+}
+
+/**
+ * Resolve the naming metadata for many documents at once — a fixed number of queries
+ * (portfolio name, transactions, instruments, import min-dates) regardless of how many
+ * documents are passed. Replaces the per-document query waterfall when naming a batch
+ * (e.g. `finalizeReceipts` re-keying every staged doc of an import).
+ */
+export async function gatherDocumentMetadata(
+  app: AppLikeDb,
+  requests: NamingRequest[],
+  portfolioId: string,
+): Promise<DocumentNamingMetadata> {
+  const [portfolio] = await db(app)
+    .select({ name: portfolios.name })
+    .from(portfolios)
+    .where(eq(portfolios.id, portfolioId))
+    .limit(1);
+  const portfolioName = portfolio?.name ?? null;
+
+  const txById = new Map<string, { type: string; executedAt: Date; instrumentId: string | null }>();
+  const instrumentSymbolById = new Map<string, string>();
+  const importMinDateById = new Map<string, Date>();
+
+  const effectiveTxIds = [
+    ...new Set(
+      requests
+        .map((r) => r.txId ?? r.doc.transactionId)
+        .filter((x): x is string => x != null),
+    ),
+  ];
+  if (effectiveTxIds.length > 0) {
+    const txRows = await db(app)
+      .select({
+        id: transactions.id,
+        type: transactions.type,
+        executedAt: transactions.executedAt,
+        instrumentId: transactions.instrumentId,
+      })
+      .from(transactions)
+      .where(inArray(transactions.id, effectiveTxIds));
+    for (const tx of txRows) {
+      txById.set(tx.id, { type: tx.type, executedAt: tx.executedAt, instrumentId: tx.instrumentId });
+    }
+
+    const instrumentIds = [
+      ...new Set(
+        txRows.map((tx) => tx.instrumentId).filter((x): x is string => x != null),
+      ),
+    ];
+    if (instrumentIds.length > 0) {
+      const instRows = await db(app)
+        .select({ id: instruments.id, symbol: instruments.symbol })
+        .from(instruments)
+        .where(inArray(instruments.id, instrumentIds));
+      for (const inst of instRows) instrumentSymbolById.set(inst.id, inst.symbol);
+    }
+  }
+
+  const importIds = [
+    ...new Set(requests.map((r) => r.doc.importId).filter((x): x is string => x != null)),
+  ];
+  if (importIds.length > 0) {
+    const minRows = await db(app)
+      .select({ importId: transactions.importId, minDate: min(transactions.executedAt) })
+      .from(transactions)
+      .where(inArray(transactions.importId, importIds))
+      .groupBy(transactions.importId);
+    for (const r of minRows) {
+      if (r.importId && r.minDate != null) importMinDateById.set(r.importId, new Date(r.minDate));
+    }
+  }
+
+  return { portfolioName, txById, instrumentSymbolById, importMinDateById };
+}
+
+/** Build the per-document naming context from pre-fetched batch metadata. */
+export function namingContextFor(
+  req: NamingRequest,
+  meta: DocumentNamingMetadata,
+): NamingContext {
+  const effectiveTxId = req.txId ?? req.doc.transactionId ?? null;
+  const tx = effectiveTxId ? (meta.txById.get(effectiveTxId) ?? null) : null;
+  const instrumentSymbol = tx?.instrumentId
+    ? (meta.instrumentSymbolById.get(tx.instrumentId) ?? null)
+    : null;
+  const importMinDate = req.doc.importId
+    ? (meta.importMinDateById.get(req.doc.importId) ?? null)
+    : null;
+  return { portfolioName: meta.portfolioName, tx, instrumentSymbol, importMinDate };
+}
+
+/**
+ * Resolve naming parts for a single document from the database. Thin wrapper over the
+ * batch loader + pure `computeNamingParts`, kept for single-doc callers (download endpoints).
  *
  * @param portfolioId  Explicit portfolio id (may not be set on the doc row yet if called
  *                     before finalizeReceipts sets it — callers always have it in scope).
@@ -171,85 +329,7 @@ export async function gatherDocumentNaming(
     txId?: string;
   },
 ): Promise<NamingParts> {
-  const { doc, portfolioId, txId } = params;
-  const ext = extFromMime(doc.mimeType);
-  const shortId = doc.id.replace(/-/g, "").slice(0, 8);
-
-  // Portfolio slug — load the portfolio name.
-  const [portfolio] = await db(app)
-    .select({ name: portfolios.name })
-    .from(portfolios)
-    .where(eq(portfolios.id, portfolioId))
-    .limit(1);
-  const portfolioSlug = portfolio ? slug(portfolio.name) : "portfolio";
-
-  // Resolve the transaction id to use for the transaction scope.
-  const effectiveTxId = txId ?? doc.transactionId ?? null;
-
-  if (effectiveTxId) {
-    // Transaction scope: load type + executedAt + instrument symbol.
-    const [tx] = await db(app)
-      .select({
-        type: transactions.type,
-        executedAt: transactions.executedAt,
-        instrumentId: transactions.instrumentId,
-      })
-      .from(transactions)
-      .where(eq(transactions.id, effectiveTxId))
-      .limit(1);
-
-    if (tx) {
-      let symbol = "unknown";
-      if (tx.instrumentId) {
-        const [inst] = await db(app)
-          .select({ symbol: instruments.symbol })
-          .from(instruments)
-          .where(eq(instruments.id, tx.instrumentId))
-          .limit(1);
-        if (inst) symbol = slug(inst.symbol);
-      }
-
-      const dt = tx.executedAt;
-      const date = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
-      const year = String(dt.getUTCFullYear());
-
-      return {
-        scope: "transaction",
-        portfolioSlug,
-        date,
-        year,
-        type: tx.type,
-        symbol,
-        ext,
-        docId: shortId,
-      };
-    }
-  }
-
-  // Statement scope: derive period from the earliest transaction executedAt in this import,
-  // falling back to storedAt if the import has no transactions yet.
-  let period: string;
-
-  if (doc.importId) {
-    const [earliest] = await db(app)
-      .select({ minDate: min(transactions.executedAt) })
-      .from(transactions)
-      .where(eq(transactions.importId, doc.importId));
-
-    const dt = earliest?.minDate ?? doc.storedAt;
-    const d = new Date(dt);
-    period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  } else {
-    const d = doc.storedAt;
-    period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  }
-
-  return {
-    scope: "statement",
-    portfolioSlug,
-    period,
-    source: friendlySource(doc.source),
-    ext,
-    docId: shortId,
-  };
+  const req: NamingRequest = { doc: params.doc, txId: params.txId };
+  const meta = await gatherDocumentMetadata(app, [req], params.portfolioId);
+  return computeNamingParts(params.doc, namingContextFor(req, meta));
 }

@@ -11,7 +11,9 @@ import {
   extFromMime,
   buildDocumentName,
   buildStructuredKey,
+  computeNamingParts,
 } from "../../src/storage/naming.js";
+import type { DocumentForNaming } from "../../src/storage/naming.js";
 
 // ---------------------------------------------------------------------------
 // slug
@@ -187,5 +189,94 @@ describe("buildStructuredKey", () => {
       docId: "aaaabbbb",
     });
     expect(key.startsWith("receipts/")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeNamingParts (pure — the DB resolution lives in gatherDocumentMetadata)
+// ---------------------------------------------------------------------------
+
+describe("computeNamingParts", () => {
+  const baseDoc: DocumentForNaming = {
+    id: "a1b2c3d4-1111-2222-3333-444455556666",
+    mimeType: "application/pdf",
+    source: "pytr",
+    storedAt: new Date("2024-05-20T00:00:00Z"),
+    importId: null,
+    transactionId: "tx-1",
+  };
+
+  it("transaction scope: tx date/type + instrument symbol", () => {
+    expect(
+      computeNamingParts(baseDoc, {
+        portfolioName: "Mandiri Sekuritas",
+        tx: { type: "buy", executedAt: new Date("2024-03-15T10:00:00Z"), instrumentId: "inst-1" },
+        instrumentSymbol: "BBCA",
+        importMinDate: null,
+      }),
+    ).toEqual({
+      scope: "transaction",
+      portfolioSlug: "Mandiri-Sekuritas",
+      date: "2024-03-15",
+      year: "2024",
+      type: "buy",
+      symbol: "BBCA",
+      ext: ".pdf",
+      docId: "a1b2c3d4",
+    });
+  });
+
+  it("transaction scope: symbol 'unknown' when the instrument is missing", () => {
+    expect(
+      computeNamingParts(baseDoc, {
+        portfolioName: "P",
+        tx: { type: "sell", executedAt: new Date("2024-03-15T00:00:00Z"), instrumentId: null },
+        instrumentSymbol: null,
+        importMinDate: null,
+      }),
+    ).toMatchObject({ scope: "transaction", symbol: "unknown" });
+  });
+
+  it("statement scope: period from importMinDate, source label mapped", () => {
+    const doc = { ...baseDoc, transactionId: null, importId: "imp-1" };
+    expect(
+      computeNamingParts(doc, {
+        portfolioName: "DKB Depot",
+        tx: null,
+        instrumentSymbol: null,
+        importMinDate: new Date("2024-02-10T00:00:00Z"),
+      }),
+    ).toEqual({
+      scope: "statement",
+      portfolioSlug: "DKB-Depot",
+      period: "2024-02",
+      source: "tr", // pytr → tr
+      ext: ".pdf",
+      docId: "a1b2c3d4",
+    });
+  });
+
+  it("statement scope: falls back to storedAt when the import has no transactions", () => {
+    const doc = { ...baseDoc, transactionId: null, importId: "imp-1" };
+    expect(
+      computeNamingParts(doc, {
+        portfolioName: "P",
+        tx: null,
+        instrumentSymbol: null,
+        importMinDate: null,
+      }),
+    ).toMatchObject({ scope: "statement", period: "2024-05" }); // storedAt
+  });
+
+  it("portfolioSlug defaults to 'portfolio' when the name is null", () => {
+    const doc = { ...baseDoc, transactionId: null, importId: null };
+    expect(
+      computeNamingParts(doc, {
+        portfolioName: null,
+        tx: null,
+        instrumentSymbol: null,
+        importMinDate: null,
+      }),
+    ).toMatchObject({ portfolioSlug: "portfolio" });
   });
 });
