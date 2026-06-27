@@ -114,20 +114,6 @@ export function isEuParser(parser: string): boolean {
   );
 }
 
-/** Deterministic broker parsers (no LLM, high confidence) — eligible to materialize draft
- *  transactions directly at upload when the target portfolio is unambiguous. The vision
- *  screenshot parser is NOT deterministic and stays in the review flow. */
-export function isDeterministicParser(parser: string): boolean {
-  return (
-    parser === "csv" ||
-    parser === "dkb" ||
-    parser === "tr-csv" ||
-    parser === "dkb-pdf" ||
-    parser === "tr-pdf" ||
-    parser === "ibkr"
-  );
-}
-
 /**
  * Classify a cross-source economic match as **enrichment** or **duplicate**.
  *

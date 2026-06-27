@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronDown, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { LOW_CONFIDENCE_THRESHOLD } from "@portfolio/api-client";
 import {
   Table,
   TableBody,
@@ -73,9 +74,6 @@ function fmtAmt(s: string): string {
   if (!isFinite(n)) return s;
   return n.toFixed(2);
 }
-
-// Confidence below this reads as "needs review" — same threshold as the badge colour.
-const NEEDS_REVIEW_BELOW = 0.9;
 
 export interface ImportReviewGroup {
   importId: string;
@@ -288,7 +286,7 @@ export function ImportReview({
     const filtered = drafts.filter((d) => {
       if (assetClassFilter.size && !assetClassFilter.has(d.assetClass)) return false;
       if (actionFilter.size && !actionFilter.has(d.action)) return false;
-      if (needsReviewOnly && d.confidence >= NEEDS_REVIEW_BELOW) return false;
+      if (needsReviewOnly && d.confidence >= LOW_CONFIDENCE_THRESHOLD) return false;
       if (q && !(d.name ?? "").toLowerCase().includes(q)) return false;
       return true;
     });
@@ -396,7 +394,7 @@ export function ImportReview({
         </TableCell>
         <TableCell>
           <div className="flex flex-col items-start gap-1">
-            <Badge variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}>
+            <Badge variant={d.confidence >= LOW_CONFIDENCE_THRESHOLD ? "success" : "warning"}>
               {pct(d.confidence)}
             </Badge>
             {d.likelyDuplicate && (
@@ -537,7 +535,7 @@ export function ImportReview({
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-medium">{d.name ?? "—"}</span>
               <Badge
-                variant={d.confidence >= NEEDS_REVIEW_BELOW ? "success" : "warning"}
+                variant={d.confidence >= LOW_CONFIDENCE_THRESHOLD ? "success" : "warning"}
               >
                 {pct(d.confidence)}
               </Badge>

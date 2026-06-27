@@ -19,6 +19,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { transactionSources, transactions, documents } from "@portfolio/db";
 import type { TransactionSource } from "@portfolio/db";
 import type { ParsedTransaction, TaxComponents } from "@portfolio/schema";
+import { LOW_CONFIDENCE_THRESHOLD } from "@portfolio/schema";
 import type { DB } from "../db/client.js";
 import { recomputeRollup, type SourceRow } from "./parsers/dedup.js";
 import { extractPdfText } from "./parsers/pdf-text.js";
@@ -349,7 +350,7 @@ export async function sourcesForTransactions(
 export async function txIdsNeedingReview(
   app: AppLike,
   txIds: string[],
-  threshold = 0.9,
+  threshold = LOW_CONFIDENCE_THRESHOLD,
 ): Promise<Set<string>> {
   if (txIds.length === 0) return new Set();
   const rows = await db(app)

@@ -61,6 +61,11 @@ export const transactionSourceSchema = z.enum([
 ]);
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
 
+// Parse-confidence cutoff (0–1): a source row below this is "low confidence" and its draft is
+// flagged for review. Deterministic parsers emit 1; only lossy LLM-vision parses fall under it.
+// Shared so the API ("needs review" marker) and the web (import-review badge/filter) agree.
+export const LOW_CONFIDENCE_THRESHOLD = 0.9;
+
 // --- Primitives ----------------------------------------------------------
 
 // Money/quantities are decimal strings (matches Postgres `numeric`, preserves

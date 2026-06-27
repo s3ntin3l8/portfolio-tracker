@@ -17,6 +17,7 @@ import type {
   StorageSecretInput,
 } from "@portfolio/schema";
 
+export { LOW_CONFIDENCE_THRESHOLD } from "@portfolio/schema";
 export type { ImportIssue, ParsedGoldContract, ProviderCredentialInput } from "@portfolio/schema";
 export type { ImportStrategy, ImportSettingsUpdate } from "@portfolio/schema";
 export type { StorageSettingsUpdate, StorageSecretInput } from "@portfolio/schema";
