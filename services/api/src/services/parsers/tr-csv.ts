@@ -2,6 +2,7 @@ import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/sche
 import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
 import { formatDecimal } from "./numeric.js";
+import { collapsePerkFundedAcquisitions } from "./perk-pairing.js";
 
 // Trade Republic "Transaction export" CSV — the offline fallback to the pytr WebSocket
 // sync (services/pytr). TR lets you export the full account history as a CSV with a fixed,
@@ -18,8 +19,10 @@ import { formatDecimal } from "./numeric.js";
 //                refund) to match the DKB/manual convention. A reversal row has a negative
 //                `amount` and positive `tax`, yielding a negative net and negative stored tax.
 //   • Promos:    BENEFITS_SAVEBACK → income (action `interest` + kind `saveback`) — excluded
-//                from contributions. BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`
-//                (a distinct broker-cash type with its own "Bonus" label), also excluded.
+//                from contributions. BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`,
+//                then collapsePerkFundedAcquisitions folds a perk credit into the same-day
+//                buy it funds → one `bonus` free-share row (a lone, uninvested perk stays
+//                `bonus_cash`). All excluded from contributions either way.
 //   • EARNINGS:  Vorabpauschale (advance fund tax): gross 0, only `tax` withheld, so the net
 //                cash is −|tax| → a negative-cash income leg (cash & gain drop, not contribution).
 //   • Sign:      buy amount<0/shares>0, sell amount>0/shares<0, cash-in>0, cash-out<0.
@@ -373,5 +376,7 @@ export function parseTrCsv(content: string): CsvParseResult {
     else fail(parsed.error.issues[0]?.message ?? "invalid row");
   }
 
-  return { drafts, errors };
+  // Collapse perk-funded buys (STOCKPERK/KINDERGELD_BONUS/BONUS + the same-day buy they fund)
+  // into a single `bonus` free-share row. Runs over the full batch since it pairs two rows.
+  return { drafts: collapsePerkFundedAcquisitions(drafts), errors };
 }

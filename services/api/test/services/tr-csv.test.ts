@@ -320,6 +320,55 @@ describe("parseTrCsv", () => {
   });
 });
 
+describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
+  it("STOCKPERK + the same-day buy it funds → a single bonus, perk folded into extraSources", () => {
+    // The real JUNIOR-depot shape: a TRADING BUY (cash out) plus a CASH STOCKPERK credit
+    // (cash in) that reimburses it. Collapsed, the shares are received free.
+    const { drafts } = parseTrCsv(
+      csv([
+        { datetime: "2025-08-26T14:01:54.463Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "2.7104",
+          price: "37.335", amount: "-101.19", currency: "EUR", transaction_id: id(100) },
+        { datetime: "2025-08-26T14:01:55.126058Z", category: "CASH", type: "STOCKPERK", asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", amount: "101.19",
+          currency: "EUR", description: "Stockperk", transaction_id: id(101) },
+      ]),
+    );
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({
+      action: "bonus",
+      kind: "bonus",
+      isin: "IE00BMVB5R75",
+      quantity: "2.7104",
+      price: "37.335",
+      externalId: `tr-csv:${id(100)}`, // the buy stays primary
+    });
+    expect(drafts[0].extraSources).toEqual([
+      { externalId: `tr-csv:${id(101)}`, raw: { collapsedFrom: "perk_cash_credit" } },
+    ]);
+  });
+
+  it("two KINDERGELD credits + two same-day savings-plan buys → two bonus rows, no bonus_cash", () => {
+    const { drafts } = parseTrCsv(
+      csv([
+        { datetime: "2025-09-02T12:07:49.149Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "0.000269",
+          price: "37.07", amount: "-0.01", currency: "EUR", transaction_id: id(102) },
+        { datetime: "2025-09-02T14:49:49.518403Z", category: "CASH", type: "KINDERGELD_BONUS",
+          amount: "0.01", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(103) },
+        { datetime: "2025-09-02T12:08:03.554282Z", category: "CASH", type: "KINDERGELD_BONUS",
+          amount: "0.01", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(104) },
+        { datetime: "2025-09-02T15:21:47.423Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", shares: "0.000074",
+          price: "134.9", amount: "-0.01", currency: "EUR", transaction_id: id(105) },
+      ]),
+    );
+    expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
+    expect(drafts.filter((d) => d.action === "bonus_cash")).toHaveLength(0);
+    expect(drafts.map((d) => d.isin).sort()).toEqual(["IE00BK5BQT80", "IE00BMVB5R75"]);
+  });
+});
+
 describe("detectCsvFormat — Trade Republic", () => {
   it("detects the TR export by its transaction_id + mcc_code + counterparty_iban header", () => {
     expect(detectCsvFormat(TR_CSV)).toBe("tr-csv");

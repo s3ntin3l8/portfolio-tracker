@@ -371,6 +371,22 @@ export async function writeResolvedDrafts(
           confidence: String(d.confidence),
         })
         .onConflictDoNothing();
+      // Extra source events folded into this one transaction (e.g. a TR perk cash credit
+      // collapsed into the buy it funds). Each is its own provenance row — same sourceType,
+      // distinct externalId — so re-imports and the resolved-events ledger dedup correctly.
+      for (const extra of d.extraSources ?? []) {
+        await db
+          .insert(transactionSources)
+          .values({
+            transactionId: row.id,
+            sourceType: sourceTypeForDraft(d, source),
+            importId,
+            externalId: extra.externalId,
+            confidence: String(d.confidence),
+            rawData: (extra.raw ?? null) as Record<string, unknown> | null,
+          })
+          .onConflictDoNothing();
+      }
     } else {
       skipped++;
     }

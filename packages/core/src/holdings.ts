@@ -10,7 +10,8 @@ type Event =
 
 /**
  * Derive per-instrument holdings from transactions using the **average cost**
- * method. Handles buys/savings-plan, sells (realized P&L), and split/bonus
+ * method. Handles buys/savings-plan, sells (realized P&L), transfers, zero-cash
+ * `bonus` share receipts (free shares at FMV/zero basis), and split/bonus
  * corporate actions. Cash movements (null instrument) are ignored here.
  *
  * Pass `asOf` to replay only transactions up to (and including) that date.
@@ -74,7 +75,7 @@ export function computeHoldings(
       const f = D(fees);
 
       if (type === "buy" || type === "savings_plan" || type === "sell" ||
-          type === "transfer_in" || type === "transfer_out") {
+          type === "transfer_in" || type === "transfer_out" || type === "bonus") {
         if (costCurrency === null) {
           costCurrency = ev.tx.currency;
         } else if (ev.tx.currency !== costCurrency) {
@@ -85,7 +86,12 @@ export function computeHoldings(
         }
       }
 
-      if (type === "buy" || type === "savings_plan") {
+      if (type === "buy" || type === "savings_plan" || type === "bonus") {
+        // `bonus` = a zero-cash share *receipt* (free shares — TR perks, FREE_RECEIPT
+        // grants, reinvested rewards). The shares are real, so quantity rises; the
+        // recorded price is the FMV-at-grant carried as cost basis (price 0 → free shares
+        // at zero basis). Distinct from the corporate-action bonus *issue* handled above.
+        // It is never a contribution (see contributions.ts isExternalAcquisition).
         qty = qty.add(q);
         costBasis = costBasis.add(q.mul(p)).add(f);
       } else if (type === "transfer_in") {
@@ -110,7 +116,7 @@ export function computeHoldings(
         qty = qty.sub(transferQty);
         costBasis = costBasis.sub(costOfTransferred);
       }
-      // dividend/coupon/fee/deposit/withdrawal/bonus/split/rights don't change holdings.
+      // dividend/coupon/fee/deposit/withdrawal/split/rights don't change holdings.
     }
 
     const avgCost = qty.gt(0) ? costBasis.div(qty) : ZERO;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ImportIssue, ParsedAction, ParsedTransaction } from "@portfolio/schema";
 import { formatDecimal } from "../parsers/numeric.js";
+import { collapsePerkFundedAcquisitions } from "../parsers/perk-pairing.js";
 
 // The normalized event shape tr_export.py emits (one JSON object per line). The Python
 // side extracts isin/shares/fees from the timeline detail; any may be absent.
@@ -465,5 +466,12 @@ export function mapTrEvents(rawEvents: unknown[]): {
         raw: result.raw,
       });
   });
-  return { drafts, errors };
+  // Symmetric with the CSV path: fold a perk cash credit (bonus_cash) into the same-day buy
+  // it funds → one `bonus` free-share row. No-op until the TR timeline perk eventType is
+  // mapped to bonus_cash (see note below); wired here so the collapse is ready the moment it
+  // is. NOTE: the live timeline's STOCKPERK/KINDERGELD eventType strings are not yet observed
+  // — they currently surface as "unmapped → attention" (safe, never dropped). When one shows
+  // up in a live sync, add it to FIXED_ACTIONS → "bonus_cash" (kind "bonus") and this collapse
+  // handles the rest.
+  return { drafts: collapsePerkFundedAcquisitions(drafts), errors };
 }

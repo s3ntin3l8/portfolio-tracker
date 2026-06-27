@@ -17,8 +17,8 @@
  * Money fields on a Trade are in the DISPLAY currency; per-share prices (avgEntry/
  * avgExit) are in the instrument's own currency, mirroring the holdings table.
  *
- * Acquisition/disposal handling matches computeHoldings exactly (buy/savings_plan add,
- * sell removes; split/bonus corporate actions adjust open lots) so the trade log's
+ * Acquisition/disposal handling matches computeHoldings exactly (buy/savings_plan/bonus
+ * add, sell removes; split/bonus corporate actions adjust open lots) so the trade log's
  * quantities and cost reconcile with the dashboard. costBasisMode capitalizes financing
  * (gold cicilan) into the OPEN episode's cost, same as summarizePortfolio.
  */
@@ -398,7 +398,10 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const p = D(tx.price);
       const f = D(tx.fees);
 
-      if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "transfer_in") {
+      if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "transfer_in" ||
+          tx.type === "bonus") {
+        // `bonus` = free-share receipt (TR perk / FREE_RECEIPT grant): opens/extends an
+        // episode at its recorded basis (price 0 → zero-cost lot, full gain on exit).
         if (q.lte(0)) continue;
         if (!episode) episode = makeEpisode(tx.executedAt);
         const cost = q.mul(p).add(f);

@@ -77,6 +77,27 @@ describe("computeHoldings", () => {
     expect(h.costBasis).toBe("100000");
   });
 
+  it("counts a `bonus` share receipt as holdings at its FMV basis", () => {
+    // Free shares (TR perk / FREE_RECEIPT grant) carrying a price → qty rises, basis = q*p.
+    const txs: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-01") }),
+      tx({ type: "bonus", quantity: "5", price: "120", executedAt: new Date("2026-01-02") }),
+    ];
+    const [h] = computeHoldings(txs);
+    expect(h.quantity).toBe("15");
+    expect(h.costBasis).toBe("1600"); // 10*100 + 5*120
+  });
+
+  it("counts a zero-price `bonus` as free shares at zero basis", () => {
+    const txs: CoreTransaction[] = [
+      tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2026-01-02") }),
+    ];
+    const [h] = computeHoldings(txs);
+    expect(h.quantity).toBe("5");
+    expect(h.costBasis).toBe("0");
+    expect(h.avgCost).toBe("0");
+  });
+
   it("throws when one instrument has transactions in multiple currencies", () => {
     const txs: CoreTransaction[] = [
       tx({ type: "buy", quantity: "10", price: "100", currency: "USD" }),
