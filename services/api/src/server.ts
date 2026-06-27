@@ -42,4 +42,10 @@ async function start() {
   }
 }
 
-start();
+start().catch((err) => {
+  // buildApp() throwing (bad config, failed migration) rejects here before any in-function
+  // try/catch can run — surface it and exit non-zero rather than dangling as an unhandled
+  // rejection.
+  console.error(err);
+  process.exit(1);
+});

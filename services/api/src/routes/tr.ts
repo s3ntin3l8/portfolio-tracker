@@ -207,20 +207,36 @@ export async function trRoute(app: FastifyInstance) {
       if (!conn || conn.status !== "connected") {
         return reply.code(409).send({ error: "not_connected" });
       }
-      // Refuse to start a second sync while one is already in flight. The single open
-      // "collector" draft is read-modify-written by syncTrConnection, so two overlapping
-      // syncs would race and the earlier one's new drafts would be lost. The `syncing`
-      // flag is cleared at the end of every sync (success or failure), so this never wedges.
-      if (conn.syncing) {
+      // Atomically claim the sync: flip `syncing` false→true in a single statement so two
+      // concurrent requests can't both pass the check. The single open "collector" draft is
+      // read-modify-written by syncTrConnection, so two overlapping syncs would race and the
+      // earlier one's new drafts would be lost. The flag is cleared at the end of every sync
+      // (success or failure), so it never wedges.
+      const [claimed] = await app.db
+        .update(trConnections)
+        .set({ syncing: true, updatedAt: new Date() })
+        .where(and(eq(trConnections.id, conn.id), eq(trConnections.syncing, false)))
+        .returning({ id: trConnections.id });
+      if (!claimed) {
         return reply.code(409).send({ error: "sync_in_progress" });
       }
-      const { queued } = await enqueueTrSync(conn.id);
-      if (queued) {
-        // Mark syncing immediately so the poller sees it without waiting for the worker to pick up.
-        await app.db
+      // Release the claim — used on any pre-completion failure so a retry isn't blocked.
+      const releaseClaim = () =>
+        app.db
           .update(trConnections)
-          .set({ syncing: true, updatedAt: new Date() })
+          .set({ syncing: false, updatedAt: new Date() })
           .where(eq(trConnections.id, conn.id));
+
+      let queued: boolean;
+      try {
+        ({ queued } = await enqueueTrSync(conn.id));
+      } catch (err) {
+        await releaseClaim();
+        request.log.error({ err }, "tr sync enqueue failed");
+        return reply.code(502).send({ error: "tr_sync_failed" });
+      }
+      if (queued) {
+        // The worker clears `syncing` when it finishes; the poller already sees it set.
         reply.code(202);
         return { queued: true };
       }
@@ -233,6 +249,9 @@ export async function trRoute(app: FastifyInstance) {
         );
         return result;
       } catch (err) {
+        // syncTrConnection clears `syncing` on an export failure, but a later throw would
+        // leave our claim set — release it so the next sync isn't blocked.
+        await releaseClaim();
         request.log.error({ err }, "tr sync failed");
         return reply.code(502).send({ error: "tr_sync_failed" });
       }

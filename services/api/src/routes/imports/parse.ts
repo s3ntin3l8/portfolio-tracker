@@ -306,18 +306,30 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       isEu: isEuParser(parserTag),
     });
 
-    // Finalize the staged receipt now (retain per portfolio setting) — the old confirm-time
-    // finalization no longer runs for this path.
-    await finalizeReceipts(app, {
-      importId: imp.id,
-      portfolioId: targetPortfolioId,
-      retain: pf?.documentRetention ?? false,
-    });
-    // The import has produced its transactions — close it (anchor, not a review item).
+    // The import has produced its transactions — close it (anchor, not a review item)
+    // BEFORE finalizing receipts. Receipt finalization (storage re-key) is best-effort and
+    // non-transactional, so a hiccup there must not leave a completed import stuck in 'draft'
+    // while its drafts already exist in the table.
     await app.db
       .update(screenshotImports)
       .set({ portfolioId: targetPortfolioId, status: "confirmed" })
       .where(eq(screenshotImports.id, imp.id));
+
+    // Finalize the staged receipt now (retain per portfolio setting) — the old confirm-time
+    // finalization no longer runs for this path. Best-effort: per-doc failures already log
+    // inside finalizeReceipts; guard the bulk path too so it can't unwind a confirmed import.
+    try {
+      await finalizeReceipts(app, {
+        importId: imp.id,
+        portfolioId: targetPortfolioId,
+        retain: pf?.documentRetention ?? false,
+      });
+    } catch (err) {
+      app.log.warn(
+        { err, importId: imp.id },
+        "finalizeReceipts failed after materialize (non-fatal) — import stays confirmed",
+      );
+    }
 
     return { materialized: res.written.length, excludedCashMovements };
   }
