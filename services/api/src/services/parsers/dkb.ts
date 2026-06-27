@@ -1,3 +1,4 @@
+import { Decimal } from "decimal.js";
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { shortHash } from "./hash.js";
@@ -247,7 +248,9 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       // `Betrag` are printed). Back the per-share price out of the exact settlement amount;
       // `total` carries the lossless Betrag, so cost basis is unaffected and `fees` stay 0.
       if (price == null && quantity != null && Number(quantity) !== 0) {
-        price = (Math.abs(amountNum) / Number(quantity)).toFixed(8);
+        // Back the per-share price out of the lossless settlement amount with Decimal
+        // (money is never a float) — this price feeds the cross-source dedup fingerprint.
+        price = new Decimal(amount).abs().div(new Decimal(quantity)).toFixed(8);
       }
       const name = collapse(vz.match(/Gesch\.Art\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
       // DKB renamed the savings-plan label "Fondssparplan" → "Wertpapier-Sparplan"
@@ -262,10 +265,12 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       const total = amount.replace(/^-/, "");
       let fees = "0";
       if (price != null && quantity != null) {
-        const gross = Number(price) * Number(quantity);
-        const diff = amountNum > 0 ? gross - Math.abs(amountNum) : Math.abs(amountNum) - gross;
-        const rounded = Math.max(0, Math.round(diff * 100) / 100);
-        fees = rounded.toString();
+        // Decimal throughout: gross = price·qty, fee = |gross − settlement| (sign-aware),
+        // rounded to cents and clamped at 0 so fee-free Sparplan rows stay "0".
+        const gross = new Decimal(price).mul(new Decimal(quantity));
+        const absAmount = new Decimal(amount).abs();
+        const diff = amountNum > 0 ? gross.minus(absAmount) : absAmount.minus(gross);
+        fees = Decimal.max(0, diff.toDecimalPlaces(2)).toString();
       }
       draft = {
         assetClass: "equity",
