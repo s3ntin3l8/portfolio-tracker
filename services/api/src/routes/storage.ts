@@ -4,6 +4,17 @@ import { FolderProvider } from "../storage/folder-provider.js";
 import { getStorageProvider } from "../storage/index.js";
 
 /**
+ * Strip characters that could break out of the quoted `Content-Disposition` filename
+ * (a literal `"`) or inject a header line (CR/LF). The `download` query param is
+ * caller-supplied and NOT covered by the URL signature, so it must never reach the header
+ * verbatim. Node's http layer already rejects CR/LF in header values; this is the
+ * defence-in-depth that also keeps the quoted-string intact.
+ */
+export function sanitizeDispositionName(name: string): string {
+  return name.replace(/["\r\n]/g, "");
+}
+
+/**
  * Public file-serving route for the folder storage provider.
  *
  * `GET /storage/*` — authenticated by a short-lived HMAC-signed token
@@ -91,7 +102,9 @@ export const storageRoute = fp(async (app: FastifyInstance) => {
         void reply.header("Content-Length", String(data.length));
         // `download` query param takes precedence (structured name from naming.ts);
         // fall back to the stored originalFilename, then omit the header entirely.
-        const dispositionName = download || meta.originalFilename;
+        const dispositionName = sanitizeDispositionName(
+          download || meta.originalFilename || "",
+        );
         if (dispositionName) {
           void reply.header(
             "Content-Disposition",

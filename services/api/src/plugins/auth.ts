@@ -62,6 +62,7 @@ export function requireUser(request: FastifyRequest): AuthedUser {
 export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opts) => {
   // Prefer an injected key (tests); else an explicit JWKS URL; else derive the JWKS
   // from the issuer via OIDC discovery so AUTHENTIK_JWKS_URL is optional.
+  const usingInjectedKey = opts.authKey != null;
   const keyResolver: AuthKey | null =
     opts.authKey ??
     (app.config.AUTHENTIK_JWKS_URL
@@ -69,6 +70,24 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
       : app.config.AUTHENTIK_ISSUER
         ? createIssuerJwks(app.config.AUTHENTIK_ISSUER)
         : null);
+
+  // Fail closed: a real deployment (no injected test key) must bind every token to THIS
+  // service via both issuer and audience. With either unset, `verifyOpts` passes
+  // `undefined` and jose validates the signature only — so a token Authentik minted for a
+  // *different* client (different audience) would authenticate here. Refuse to boot rather
+  // than silently run signature-only. Injected-key tests are exempt (they opt in explicitly).
+  if (keyResolver && !usingInjectedKey) {
+    const missing = [
+      !app.config.AUTHENTIK_ISSUER && "AUTHENTIK_ISSUER",
+      !app.config.AUTHENTIK_AUDIENCE && "AUTHENTIK_AUDIENCE",
+    ].filter((x): x is string => Boolean(x));
+    if (missing.length > 0) {
+      throw new Error(
+        `Authentication is configured but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} not set — ` +
+          `refusing to start with signature-only token validation`,
+      );
+    }
+  }
 
   app.decorate(
     "authenticate",

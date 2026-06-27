@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { JWTVerifyGetKey } from "jose";
 import { createIssuerJwks } from "../../src/plugins/auth.js";
+import { buildApp } from "../../src/app.js";
+import { closeDb } from "../../src/db/client.js";
 
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const WELL_KNOWN = `${ISSUER}.well-known/openid-configuration`;
@@ -78,5 +80,32 @@ describe("createIssuerJwks", () => {
     await call(resolver);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(build).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("auth boot enforcement (issuer/audience)", () => {
+  afterEach(async () => {
+    delete process.env.AUTHENTIK_JWKS_URL;
+    delete process.env.AUTHENTIK_ISSUER;
+    delete process.env.AUTHENTIK_AUDIENCE;
+    await closeDb();
+  });
+
+  it("refuses to start when a real key resolver is configured without audience", async () => {
+    // Production-style config: a JWKS URL but no audience binding. Without an injected key
+    // this must fail closed rather than validate tokens by signature alone.
+    process.env.AUTHENTIK_JWKS_URL = "https://auth.test/jwks/";
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    // AUTHENTIK_AUDIENCE intentionally left unset.
+    await expect(buildApp()).rejects.toThrow(/AUTHENTIK_AUDIENCE/);
+  });
+
+  it("starts when issuer and audience are both configured", async () => {
+    process.env.AUTHENTIK_JWKS_URL = "https://auth.test/jwks/";
+    process.env.AUTHENTIK_ISSUER = ISSUER;
+    process.env.AUTHENTIK_AUDIENCE = "portfolio-tracker";
+    const app = await buildApp();
+    expect(app.authenticate).toBeTypeOf("function");
+    await app.close();
   });
 });
