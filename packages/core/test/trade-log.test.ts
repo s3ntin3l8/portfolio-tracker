@@ -200,6 +200,18 @@ describe("computeTrades — corporate actions (lot level)", () => {
     expect(trades[0].realizedPnL).toBe("100"); // 1100 − 1000
     expect(trades[0].quantity).toBe("11");
   });
+
+  it("opens an episode for a `bonus` share receipt (free shares → full gain on exit)", () => {
+    const txns = [
+      // Zero-cost free shares (TR perk): the whole exit value is realized gain.
+      tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2021-01-01") }),
+      tx({ type: "sell", quantity: "5", price: "100", executedAt: new Date("2021-06-01") }),
+    ];
+    const { trades } = run(txns);
+    expect(trades).toHaveLength(1);
+    expect(trades[0].quantity).toBe("5");
+    expect(trades[0].realizedPnL).toBe("500"); // 5*100 − 0
+  });
 });
 
 describe("computeTrades — holding period & tax flags", () => {

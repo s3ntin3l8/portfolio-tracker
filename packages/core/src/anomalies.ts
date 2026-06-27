@@ -172,7 +172,12 @@ export function detectAnomalies(
         }
         // Mirror the Decimal.min clamp so the running qty stays consistent.
         qty = qty.sub(Decimal.min(q, qty));
-      } else if (type === "buy" || type === "savings_plan" || type === "transfer_in") {
+      } else if (type === "buy" || type === "savings_plan" || type === "transfer_in" ||
+                 type === "bonus") {
+        // `bonus` free shares are real holdings (mirror holdings.ts) — counting them keeps
+        // the running qty correct so a later sell of granted shares isn't false-flagged as
+        // an oversell. A zero-price bonus is expected, so it's left out of the zero_price
+        // check above.
         qty = qty.add(q);
       }
     }

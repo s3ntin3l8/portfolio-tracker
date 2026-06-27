@@ -397,6 +397,19 @@ export const parsedTransactionSchema = z.object({
   // transaction_sources.orderRef for bookkeeping; each leg imports as a separate
   // transaction (one per settlement PDF — the intended behavior).
   orderRef: z.string().nullish(),
+  // Additional source events folded into this one transaction (e.g. a TR perk cash credit
+  // collapsed into the buy it funds — see collapsePerkFundedAcquisitions). Each is written
+  // as its own transaction_sources row (same sourceType, distinct externalId) so the audit
+  // trail and re-import / resolved-events-ledger dedup stay intact. The primary source keeps
+  // `externalId` above; these are the consumed siblings.
+  extraSources: z
+    .array(
+      z.object({
+        externalId: z.string(),
+        raw: z.unknown().nullish(),
+      }),
+    )
+    .nullish(),
 });
 export type ParsedTransaction = z.infer<typeof parsedTransactionSchema>;
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parserToTxSource, classifyMatch } from "../../../src/services/parsers/dedup.js";
+import {
+  parserToTxSource,
+  classifyMatch,
+  actionClass,
+  findCrossSourceDuplicates,
+} from "../../../src/services/parsers/dedup.js";
 
 describe("parserToTxSource", () => {
   it("maps pytr to pytr", () => {
@@ -72,5 +77,41 @@ describe("classifyMatch", () => {
     // Demonstrates why callers must pass the raw tag, not parserToTxSource(parser).
     expect(parserToTxSource("dkb-pdf")).toBe("pdf");
     expect(classifyMatch(parserToTxSource("dkb-pdf"), "pdf", true)).toBe("enrichment");
+  });
+});
+
+describe("actionClass — bonus folds into the acquire class", () => {
+  it("buy, savings_plan and bonus all share the acquire class", () => {
+    expect(actionClass("buy")).toBe("acquire");
+    expect(actionClass("savings_plan")).toBe("acquire");
+    // A perk-funded buy that one source collapses into a `bonus` must still dedup against
+    // the same trade arriving as a plain buy from another source (CSV bonus vs synced buy).
+    expect(actionClass("bonus")).toBe("acquire");
+    expect(actionClass("sell")).toBe("sell");
+  });
+
+  it("dedups a collapsed `bonus` draft against a committed `buy` of the same shares", () => {
+    const committed = [
+      {
+        key: "inst-1",
+        action: "buy",
+        quantity: "2.7104",
+        price: "37.335",
+        executedAt: new Date("2025-08-26"),
+        externalId: "tr-csv:buy",
+      },
+    ];
+    const drafts = [
+      {
+        key: "inst-1",
+        action: "bonus",
+        quantity: "2.7104",
+        price: "37.335",
+        executedAt: new Date("2025-08-26"),
+      },
+    ];
+    const matches = findCrossSourceDuplicates(drafts, committed);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].matched.externalId).toBe("tr-csv:buy");
   });
 });

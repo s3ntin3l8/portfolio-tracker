@@ -33,8 +33,11 @@ const ABS_TOL = 0.0005;
 const DAY_MS = 86_400_000;
 
 /** Acquisition actions that are the *same* economic event under different source labels.
- *  Deliberately narrow — `sell` is an acquisition's opposite, never a dedup peer. */
-const ACQUISITION_ACTIONS = new Set(["buy", "savings_plan"]);
+ *  Deliberately narrow — `sell` is an acquisition's opposite, never a dedup peer.
+ *  `bonus` is included so a perk-funded buy that one source collapses into a `bonus`
+ *  free-share row still dedups against the same trade arriving as a plain `buy` from
+ *  another source (CSV-collapsed bonus vs. live-synced buy of the same shares). */
+const ACQUISITION_ACTIONS = new Set(["buy", "savings_plan", "bonus"]);
 
 /** Collapse interchangeable action labels to a single class for matching. A DKB
  *  Umsatzliste row (`buy`) and the matching Wertpapierabrechnung PDF (`savings_plan`)

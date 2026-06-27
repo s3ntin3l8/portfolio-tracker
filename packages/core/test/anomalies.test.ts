@@ -80,6 +80,23 @@ describe("oversell", () => {
     expect(anomalies).toHaveLength(0);
   });
 
+  it("does NOT flag an oversell after a `bonus` share receipt", () => {
+    // buy 5 → bonus 5 free shares → 10 available → sell 10 is fine (bonus counts as holdings)
+    const anomalies = detectAnomalies([
+      tx({ type: "buy", quantity: "5", executedAt: new Date("2024-01-01") }),
+      tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2024-02-01") }),
+      tx({ type: "sell", quantity: "10", executedAt: new Date("2024-03-01") }),
+    ]);
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it("does NOT flag a zero-price `bonus` as a zero_price anomaly", () => {
+    const anomalies = detectAnomalies([
+      tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2024-01-01") }),
+    ]);
+    expect(anomalies).toHaveLength(0);
+  });
+
   it("flags transfer_out exceeding available quantity", () => {
     const anomalies = detectAnomalies([
       tx({ type: "buy", quantity: "3", executedAt: new Date("2024-01-01") }),
