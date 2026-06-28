@@ -65,10 +65,54 @@ describe("collapsePerkFundedAcquisitions", () => {
     expect(bonuses.map((b) => b.isin).sort()).toEqual(["IE00BK5BQT80", "IE00BMVB5R75"]);
   });
 
+  it("pairs perks credited days before the buys they fund (amount disambiguates)", () => {
+    // Real JUNIOR shape: two KINDERGELD credits on the 1st, two savings-plan buys on the 4th.
+    // The 0.02 perk must fund the 0.02 buy (Lifestrategy), the 0.01 the 0.01 buy (FTSE).
+    const out = collapsePerkFundedAcquisitions([
+      perk({ price: "0.01", externalId: "k1", executedAt: new Date("2026-05-01T00:52:14Z") }),
+      perk({ price: "0.02", externalId: "k2", executedAt: new Date("2026-05-01T00:52:32Z") }),
+      buy({ action: "savings_plan", isin: "IE00BMVB5R75", quantity: "0.00048", price: "41.625",
+        externalId: "b-ls", executedAt: new Date("2026-05-04T12:13:01Z") }), // ≈ 0.02
+      buy({ action: "savings_plan", isin: "IE00BK5BQT80", quantity: "0.000064", price: "155.46",
+        externalId: "b-fw", executedAt: new Date("2026-05-04T16:39:49Z") }), // ≈ 0.01
+    ]);
+
+    const bonuses = out.filter((d) => d.action === "bonus");
+    expect(bonuses).toHaveLength(2);
+    expect(out.filter((d) => d.action === "bonus_cash")).toHaveLength(0);
+    // The 0.02 perk folded into the 0.02 Lifestrategy buy; the 0.01 perk into the FTSE buy.
+    const ls = out.find((d) => d.externalId === "b-ls");
+    const fw = out.find((d) => d.externalId === "b-fw");
+    expect(ls?.extraSources?.[0].externalId).toBe("k2");
+    expect(fw?.extraSources?.[0].externalId).toBe("k1");
+  });
+
+  it("does NOT pair a buy outside the day window (8 days after the perk)", () => {
+    const out = collapsePerkFundedAcquisitions([
+      perk({ price: "0.02", externalId: "k1", executedAt: new Date("2026-05-01T00:52:14Z") }),
+      buy({ quantity: "0.00048", price: "41.625", externalId: "b1",
+        executedAt: new Date("2026-05-09T12:00:00Z") }), // +8 days → beyond the 7-day window
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.find((d) => d.externalId === "k1")?.action).toBe("bonus_cash");
+    expect(out.find((d) => d.externalId === "b1")?.action).toBe("buy");
+  });
+
+  it("a 0.01 perk does not grab a 0.02 buy when only that buy is in range", () => {
+    // Tightened tolerance: the 0.01 gap between funded buys exceeds the 0.005 abs tolerance.
+    const out = collapsePerkFundedAcquisitions([
+      perk({ price: "0.01", externalId: "k1", executedAt: new Date("2026-05-01T00:00:00Z") }),
+      buy({ quantity: "0.00048", price: "41.625", externalId: "b1",
+        executedAt: new Date("2026-05-02T12:00:00Z") }), // ≈ 0.02 — must NOT match a 0.01 perk
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.find((d) => d.externalId === "k1")?.action).toBe("bonus_cash");
+  });
+
   it("leaves a lone perk (no funding buy) as a bonus_cash row", () => {
     const out = collapsePerkFundedAcquisitions([
       perk({ price: "0.01", externalId: "k1", executedAt: new Date("2025-09-02T14:00:00Z") }),
-      buy({ quantity: "1", price: "50", externalId: "b1", executedAt: new Date("2025-09-05T10:00:00Z") }), // different day
+      buy({ quantity: "1", price: "50", externalId: "b1", executedAt: new Date("2025-09-05T10:00:00Z") }), // unrelated buy: notional 50 ≠ perk 0.01
     ]);
     expect(out).toHaveLength(2);
     expect(out.find((d) => d.externalId === "k1")?.action).toBe("bonus_cash");

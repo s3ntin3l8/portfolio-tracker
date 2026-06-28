@@ -16,10 +16,12 @@ import type { ParsedTransaction } from "@portfolio/schema";
  * into the merged row's `extraSources` (the buy's externalId stays primary) so the audit
  * trail and re-import / resolved-events-ledger dedup stay intact.
  *
- * Matching is greedy, one-to-one and deterministic: same calendar day, the buy's notional
- * (quantity × price) within one cent of the perk amount, and — when the perk carries an
- * instrument (STOCKPERK does; KINDERGELD does not) — the same instrument. An unmatched perk
- * keeps its original `bonus_cash` row (e.g. Kindergeld credited but not yet invested).
+ * Matching is greedy, one-to-one and deterministic: within a few days (TR credits the perk
+ * then executes the savings plan 0–3 days later), the buy's notional (quantity × price)
+ * matching the perk amount, and — when the perk carries an instrument (STOCKPERK does;
+ * KINDERGELD does not) — the same instrument; the closest-dated eligible buy wins. An
+ * unmatched perk keeps its original `bonus_cash` row (e.g. Kindergeld credited but not yet
+ * invested).
  */
 
 /** A perk cash credit emitted by the mappers: a broker bonus with no share leg. */
@@ -44,17 +46,36 @@ function identityTokens(t: ParsedTransaction): string[] {
   );
 }
 
-function dayKey(d: Date): string {
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+const DAY_MS = 86_400_000;
+function dayIndex(d: Date): number {
+  return Math.floor(d.getTime() / DAY_MS);
 }
+
+/**
+ * Calendar-day gap a perk and the buy it funds may span. TR credits the perk (e.g.
+ * KINDERGELD_BONUS at the start of the month) and the savings plan executes 0–3 days later;
+ * 7 days covers that with margin while staying far under the ~28-day savings-plan cycle, so a
+ * perk can never reach into an adjacent month's buys.
+ */
+const WINDOW_DAYS = 7;
 
 /** Gross notional the perk reimburses (fees are separate in the TR export). */
 function notional(buy: ParsedTransaction): number {
   return Number(buy.quantity) * Number(buy.price);
 }
 
-/** One cent — absorbs the perk amount being rounded to cents vs. the full-precision notional. */
-const MONEY_TOL = 0.0105;
+/**
+ * Whether a buy's notional matches the perk's cash amount. Half-a-cent absolute absorbs the
+ * cent-rounded perk amount (0.02) vs. the full-precision notional (0.0199) AND stays below the
+ * 0.01 gap between the two funded buys — so a 0.01 perk never grabs a 0.02 buy. The 0.2%
+ * relative arm keeps a large perk (e.g. a 101.19 STOCKPERK) matching. Mirrors dedup.ts.
+ */
+const MONEY_ABS_TOL = 0.005;
+const MONEY_REL_TOL = 0.002;
+function amountsMatch(buyNotional: number, perkAmount: number): boolean {
+  const diff = Math.abs(buyNotional - perkAmount);
+  return diff <= MONEY_ABS_TOL || diff <= MONEY_REL_TOL * Math.max(buyNotional, perkAmount);
+}
 
 export function collapsePerkFundedAcquisitions(
   drafts: ParsedTransaction[],
@@ -77,18 +98,27 @@ export function collapsePerkFundedAcquisitions(
   for (const { d: perk, i: perkI } of perks) {
     const perkAmount = Number(perk.price);
     const perkTokens = identityTokens(perk);
-    const perkDay = dayKey(perk.executedAt);
+    const perkDay = dayIndex(perk.executedAt);
 
-    const hit = buyIdx.find(({ d: buy, i }) => {
-      if (consumedBuy.has(i)) return false;
-      if (dayKey(buy.executedAt) !== perkDay) return false;
-      // When the perk carries an instrument identity, require it to overlap the buy's.
-      if (perkTokens.length > 0) {
-        const buyTokens = new Set(identityTokens(buy));
-        if (!perkTokens.some((tok) => buyTokens.has(tok))) return false;
-      }
-      return Math.abs(notional(buy) - perkAmount) <= MONEY_TOL;
-    });
+    // Eligible buys within the day window whose amount (and instrument, when the perk carries
+    // one) matches. Pick the closest-dated, then lowest index — deterministic and keeps a perk
+    // from reaching for a farther buy when amounts alone don't disambiguate (e.g. two equal
+    // perks + two equal buys in one month).
+    const hit = buyIdx
+      .filter(({ d: buy, i }) => {
+        if (consumedBuy.has(i)) return false;
+        if (Math.abs(dayIndex(buy.executedAt) - perkDay) > WINDOW_DAYS) return false;
+        if (perkTokens.length > 0) {
+          const buyTokens = new Set(identityTokens(buy));
+          if (!perkTokens.some((tok) => buyTokens.has(tok))) return false;
+        }
+        return amountsMatch(notional(buy), perkAmount);
+      })
+      .sort(
+        (a, b) =>
+          Math.abs(dayIndex(a.d.executedAt) - perkDay) -
+            Math.abs(dayIndex(b.d.executedAt) - perkDay) || a.i - b.i,
+      )[0];
     if (!hit) continue; // no funding buy → leave the perk as a plain bonus_cash row
 
     consumedBuy.add(hit.i);

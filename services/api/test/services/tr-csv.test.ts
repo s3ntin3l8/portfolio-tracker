@@ -348,6 +348,26 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
     ]);
   });
 
+  it("collapses KINDERGELD credits with buys that execute a day later (cross-day window)", () => {
+    // Real June shape: two KINDERGELD on 06-01, two savings-plan buys on 06-02 (both 0.02).
+    const { drafts } = parseTrCsv(
+      csv([
+        { datetime: "2026-06-01T03:39:52.425210Z", category: "CASH", type: "KINDERGELD_BONUS",
+          amount: "0.02", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(110) },
+        { datetime: "2026-06-01T03:32:21.745383Z", category: "CASH", type: "KINDERGELD_BONUS",
+          amount: "0.02", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(111) },
+        { datetime: "2026-06-02T12:43:21.171Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "0.000461",
+          price: "43.38", amount: "-0.02", currency: "EUR", transaction_id: id(112) },
+        { datetime: "2026-06-02T18:00:23.194Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", shares: "0.000121",
+          price: "164.7", amount: "-0.02", currency: "EUR", transaction_id: id(113) },
+      ]),
+    );
+    expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
+    expect(drafts.filter((d) => d.action === "bonus_cash")).toHaveLength(0);
+  });
+
   it("two KINDERGELD credits + two same-day savings-plan buys → two bonus rows, no bonus_cash", () => {
     const { drafts } = parseTrCsv(
       csv([
