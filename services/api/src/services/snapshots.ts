@@ -36,6 +36,14 @@ export async function recordDailySnapshots(
     );
 
     // Compute today's effectiveFlow: -Σ cashFlow(tx) for qualifying txns executed today.
+    // This measures flows into/out of the SECURITIES sleeve only (holdings market value),
+    // mirroring the TWR definition in packages/core/src/twr.ts — the canonical source. TWR
+    // pairs it with marketValue (not net worth), so it is robust to unrecorded cash. Only
+    // buy/savings_plan/sell and dividend/coupon (realSeries) count. deposit/withdrawal/
+    // transfer_*/fee/interest are INTENTIONALLY excluded: they land in cash and don't move
+    // market value, so effectiveFlow is 0 on a pure-deposit day BY DESIGN (not a bug). This
+    // is deliberately NOT boundary-aware — external cash is instead captured by the money-
+    // weighted XIRR lens (boundaryFlows/externalFlows in routes/transactions.ts).
     // PriceSeriesKind for each instrument: equity/etf/crypto/gold → realSeries; bond/nav → flatProxy.
     function kindOf(instrId: string): PriceSeriesKind {
       const meta = instrId ? metaById.get(instrId) : undefined;
@@ -60,6 +68,7 @@ export async function recordDailySnapshots(
           effectiveFlow = effectiveFlow.sub(cf);
         }
       }
+      // deposit/withdrawal/transfer/fee/interest: cash only, no MV change → not a flow (by design).
     }
 
     await db
