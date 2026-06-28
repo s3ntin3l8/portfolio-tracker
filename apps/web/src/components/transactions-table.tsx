@@ -11,7 +11,6 @@ import {
   Loader2,
   Trash2,
   Download,
-  ChevronRight,
   Search,
   X,
   AlertTriangle,
@@ -89,9 +88,13 @@ export interface TxRow {
   needsReview?: boolean;
 }
 
-/** Compute the signed cash-flow (actual cash movement) for a TxRow via core. The status
- * is passed through so archived rows show 0 and cash_neutral rows show only fees. */
+/** Compute the signed cash-flow (actual cash movement) for a TxRow via core, for DISPLAY.
+ * A `draft` previews the cash it will move once confirmed (drafts already carry an amber row
+ * + "Draft" badge) — real balances are derived in @portfolio/core, which excludes drafts, so
+ * showing the face value here never affects a computed total. `cash_neutral` (reward-funded,
+ * genuinely ~0 cash) and `archived` (voided → 0) keep their real net. */
 export function txNetAmount(tx: TxRow): number {
+  const status = tx.status === "draft" ? "normal" : tx.status;
   return cashFlow({
     instrumentId: null,
     type: tx.type as CoreTransaction["type"],
@@ -100,7 +103,7 @@ export function txNetAmount(tx: TxRow): number {
     fees: tx.fees,
     currency: tx.currency,
     executedAt: new Date(tx.executedAt),
-    status: tx.status,
+    status,
   }).toNumber();
 }
 
@@ -143,7 +146,6 @@ const TX_COLS: ColDef<TxRow>[] = [
   { key: "fees", get: (r) => Number(r.fees), type: "numeric" },
   { key: "tax", get: (r) => (r.tax ? Number(r.tax) : 0), type: "numeric" },
   { key: "netAmount", get: (r) => txNetAmount(r), type: "numeric" },
-  { key: "fxRate", get: (r) => (r.fxRate ? Number(r.fxRate) : 0), type: "numeric" },
   { key: "source", get: (r) => r.source, type: "text" },
 ];
 
@@ -389,8 +391,8 @@ export function TransactionsTable({
   }
 
   // checkbox + date + type + instrument + [portfolio] + qty + amount + fees(sm) +
-  // tax + netAmount + fxRate(sm) + source(sm) + actions = 12 or 13
-  const colSpan = showPortfolio ? 13 : 12;
+  // tax + netAmount + source(sm) + actions = 11 or 12
+  const colSpan = showPortfolio ? 12 : 11;
 
   // Anomaly banner — only when anomalies exist (only passed in single-portfolio view).
   const anomalyErrors = anomalies.filter((a) => a.severity === "error");
@@ -636,7 +638,6 @@ export function TransactionsTable({
               <SortableTableHead colKey="fees" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden text-right sm:table-cell">{t("fees")}</SortableTableHead>
               <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("tax")}</SortableTableHead>
               <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("netAmount")}</SortableTableHead>
-              <SortableTableHead colKey="fxRate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden text-right sm:table-cell">{t("fxRate")}</SortableTableHead>
               <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden sm:table-cell">{t("source")}</SortableTableHead>
               <TableHead className="text-right">
                 <span className="sr-only">{tm("actions")}</span>
@@ -743,9 +744,6 @@ export function TransactionsTable({
                   <TableCell className="tabular text-right">
                     {m(netAmount, tx.currency)}
                   </TableCell>
-                  <TableCell className="tabular hidden text-right sm:table-cell">
-                    {tx.fxRate ? Number(tx.fxRate).toFixed(4) : "—"}
-                  </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Icon className="size-3.5" />
@@ -754,21 +752,14 @@ export function TransactionsTable({
                   </TableCell>
                   <TableCell className="text-right">
                     <div
-                      className="flex items-center justify-end gap-1"
+                      className="flex items-center justify-end gap-0.5"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={tm("viewDetails")}
-                        onClick={() => setDetailTx(tx)}
-                      >
-                        <ChevronRight className="size-4" />
-                      </Button>
                       {tx.hasDocument && (
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="size-8"
                           aria-label={tm("downloadReceipt")}
                           onClick={async () => {
                             try {
@@ -791,7 +782,7 @@ export function TransactionsTable({
                             title={tm("status.confirmDraft")}
                             disabled={resolvingId === tx.id}
                             onClick={() => onResolveOne(tx, "confirm")}
-                            className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                            className="size-8 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
                           >
                             {resolvingId === tx.id ? (
                               <Loader2 className="size-4 animate-spin" />
@@ -802,6 +793,7 @@ export function TransactionsTable({
                           <Button
                             variant="ghost"
                             size="icon"
+                            className="size-8"
                             aria-label={tm("status.discardDraft")}
                             title={tm("status.discardDraft")}
                             disabled={resolvingId === tx.id}
@@ -814,6 +806,7 @@ export function TransactionsTable({
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="size-8"
                         asChild
                         aria-label={tm("edit")}
                       >
@@ -825,6 +818,7 @@ export function TransactionsTable({
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="size-8"
                           aria-label={tm("reassign")}
                           title={tm("reassign")}
                           onClick={() => setReassignRows([tx])}
@@ -837,11 +831,13 @@ export function TransactionsTable({
                           portfolioId={tx.portfolioId}
                           txId={tx.id}
                           status={status}
+                          className="size-8"
                         />
                       )}
                       <DeleteTransactionButton
                         portfolioId={tx.portfolioId}
                         txId={tx.id}
+                        className="size-8"
                       />
                     </div>
                   </TableCell>
