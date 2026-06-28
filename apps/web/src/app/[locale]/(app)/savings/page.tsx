@@ -90,6 +90,9 @@ export default async function SavingsPage({
         <StatCard
           label={t("xirr")}
           value={c.xirr !== null ? formatPercent(c.xirr, locale) : "—"}
+          // Under a year of data, XIRR extrapolates one-time/early gains (e.g. a starting
+          // bonus) into an apparent annual rate — flag it so it isn't read as a run-rate.
+          delta={c.xirr !== null && c.monthsElapsed < 12 ? t("xirrYoungHint") : undefined}
           deltaTone="neutral"
         />
       </div>
