@@ -206,6 +206,7 @@
     "totalReturn": "Total return",
     "totalReturnHint": "Incl. dividends, coupons & realized gains",
     "xirr": "Annualised return",
+    "xirrYoungHint": "* annualised from under a year — may overstate",
     "contributionsOverTime": "Contributions over time",
     "chartContributions": "Contributions",
     "chartValue": "Portfolio value",

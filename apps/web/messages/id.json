@@ -206,6 +206,7 @@
     "totalReturn": "Total imbal hasil",
     "totalReturnHint": "Termasuk dividen, kupon & keuntungan terealisasi",
     "xirr": "Imbal hasil tahunan",
+    "xirrYoungHint": "* disetahunkan dari data di bawah setahun — bisa berlebih",
     "contributionsOverTime": "Setoran dari waktu ke waktu",
     "chartContributions": "Setoran",
     "chartValue": "Nilai portofolio",
