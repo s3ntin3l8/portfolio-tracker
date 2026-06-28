@@ -101,6 +101,7 @@ export default async function SavingsPage({
         <CardContent>
           <ContributionsChart
             series={c.series}
+            dailySeries={c.dailySeries}
             valueHistory={result.valueHistory}
             currency={currency}
           />

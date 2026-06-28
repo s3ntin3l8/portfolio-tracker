@@ -54,6 +54,12 @@ const series = [
   { month: "2026-03", contributed: "150" },
 ];
 
+const dailySeries = [
+  { date: "2026-01-10", contributed: "100" },
+  { date: "2026-02-12", contributed: "100" },
+  { date: "2026-03-08", contributed: "150" },
+];
+
 const valueHistory: PerformancePoint[] = [
   { date: "2026-01-15", netWorth: "95", marketValue: "95" },
   { date: "2026-01-31", netWorth: "105", marketValue: "105" },
@@ -65,10 +71,16 @@ function renderChart(
   s: typeof series,
   v: PerformancePoint[],
   currency = "EUR",
+  d: typeof dailySeries = dailySeries,
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <ContributionsChart series={s} valueHistory={v} currency={currency} />
+      <ContributionsChart
+        series={s}
+        dailySeries={d}
+        valueHistory={v}
+        currency={currency}
+      />
     </NextIntlClientProvider>,
   );
 }

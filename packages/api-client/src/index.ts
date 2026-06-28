@@ -929,6 +929,10 @@ export interface ContributionStats {
   monthlyAverage: string;
   /** Net contribution per calendar month, ascending by `month` (YYYY-MM). */
   series: { month: string; contributed: string }[];
+  /** Net contribution per calendar DAY, ascending by `date` (YYYY-MM-DD). Day-resolution
+   * companion to `series`, used by the overlay chart so the contributed step lands on the
+   * actual transaction day. */
+  dailySeries: { date: string; contributed: string }[];
   currentValue: string;
   /** (currentValue − netContributed) / netContributed, or null when no basis. */
   simpleGainPct: number | null;

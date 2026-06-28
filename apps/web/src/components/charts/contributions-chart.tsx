@@ -31,10 +31,12 @@ import { formatMoney } from "@/lib/utils";
  */
 export function ContributionsChart({
   series,
+  dailySeries,
   valueHistory,
   currency,
 }: {
   series: { month: string; contributed: string }[];
+  dailySeries: { date: string; contributed: string }[];
   valueHistory: PerformancePoint[];
   currency: string;
 }) {
@@ -42,8 +44,9 @@ export function ContributionsChart({
   const te = useTranslations("Empty");
   const locale = useLocale();
 
-  // Attempt the full overlay merge.
-  const merged = mergeContributionValue(series, valueHistory);
+  // Attempt the full overlay merge. Uses the day-resolution series so the contributed
+  // step lands on the actual transaction day, aligned with the daily value line.
+  const merged = mergeContributionValue(dailySeries, valueHistory);
 
   // ── OVERLAY PATH ─────────────────────────────────────────────────────────
   if (merged.length >= 2) {
