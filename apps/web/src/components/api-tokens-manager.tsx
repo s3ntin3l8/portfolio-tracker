@@ -23,6 +23,37 @@ export type ApiTokensClient = Pick<
   "listApiTokens" | "createApiToken" | "deleteApiToken"
 >;
 
+/**
+ * Copy text to the clipboard, returning whether it succeeded. The async Clipboard
+ * API only exists in a *secure context* (https or localhost); this app is often served
+ * over plain HTTP on a LAN IP, where `navigator.clipboard` is undefined — so fall back
+ * to a hidden-textarea + `execCommand("copy")`, which still works there.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the legacy path.
+    }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 export function ApiTokensManager({
   client,
   initialTokens,
@@ -40,7 +71,7 @@ export function ApiTokensManager({
   // The plaintext secret is returned exactly once, on creation — held here until the
   // user dismisses it. It is never re-fetchable.
   const [newSecret, setNewSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"idle" | "ok" | "fail">("idle");
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +79,7 @@ export function ApiTokensManager({
     setBusy(true);
     setError(false);
     setNewSecret(null);
+    setCopied("idle");
     try {
       const days = Number.parseInt(expiresInDays, 10);
       const created = await client.createApiToken({
@@ -77,12 +109,10 @@ export function ApiTokensManager({
 
   async function copySecret() {
     if (!newSecret) return;
-    try {
-      await navigator.clipboard.writeText(newSecret);
-      setCopied(true);
-    } catch {
-      // Clipboard may be unavailable (insecure context) — the secret is still visible.
-    }
+    const ok = await copyToClipboard(newSecret);
+    setCopied(ok ? "ok" : "fail");
+    // Revert the button label after a moment so it reads as a confirmation, not a state.
+    setTimeout(() => setCopied("idle"), 2000);
   }
 
   return (
@@ -107,9 +137,19 @@ export function ApiTokensManager({
             <code className="flex-1 overflow-x-auto rounded bg-background px-2 py-1 font-mono text-xs">
               {newSecret}
             </code>
-            <Button type="button" variant="outline" size="sm" onClick={copySecret}>
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-              {copied ? t("tokensCopied") : t("tokensCopy")}
+            <Button
+              type="button"
+              variant={copied === "ok" ? "default" : "outline"}
+              size="sm"
+              onClick={copySecret}
+              aria-live="polite"
+            >
+              {copied === "ok" ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied === "ok"
+                ? t("tokensCopied")
+                : copied === "fail"
+                  ? t("tokensCopyFailed")
+                  : t("tokensCopy")}
             </Button>
           </div>
         </div>

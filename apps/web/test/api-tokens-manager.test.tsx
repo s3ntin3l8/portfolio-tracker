@@ -53,6 +53,51 @@ describe("ApiTokensManager", () => {
     expect(screen.getByText(messages.Settings.tokensCreatedWarning)).toBeInTheDocument();
   });
 
+  it("copies the secret and confirms via the Clipboard API", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const client: ApiTokensClient = {
+      listApiTokens: vi.fn(async () => []),
+      createApiToken: vi.fn(async () => ({ ...existing, token: "pt_copyme" })),
+      deleteApiToken: vi.fn(),
+    };
+    renderManager(client);
+
+    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
+      target: { value: "c" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    await screen.findByText("pt_copyme");
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCopy }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("pt_copyme"));
+    // Visual confirmation appears.
+    await screen.findByText(messages.Settings.tokensCopied);
+  });
+
+  it("falls back to execCommand when the Clipboard API is unavailable (insecure context)", async () => {
+    // Simulate http-on-LAN-IP: no navigator.clipboard.
+    Object.assign(navigator, { clipboard: undefined });
+    const exec = vi.fn(() => true);
+    document.execCommand = exec as unknown as typeof document.execCommand;
+    const client: ApiTokensClient = {
+      listApiTokens: vi.fn(async () => []),
+      createApiToken: vi.fn(async () => ({ ...existing, token: "pt_fallback" })),
+      deleteApiToken: vi.fn(),
+    };
+    renderManager(client);
+
+    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
+      target: { value: "c" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    await screen.findByText("pt_fallback");
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCopy }));
+    await waitFor(() => expect(exec).toHaveBeenCalledWith("copy"));
+    await screen.findByText(messages.Settings.tokensCopied);
+  });
+
   it("passes an expiry when provided", async () => {
     const client: ApiTokensClient = {
       listApiTokens: vi.fn(async () => []),
