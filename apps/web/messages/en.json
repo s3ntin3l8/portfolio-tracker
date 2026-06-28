@@ -335,7 +335,7 @@
     "reImportAnyway": "Re-import anyway",
     "steps": {
       "upload": "Upload",
-      "review": "Review",
+      "review": "Confirm",
       "done": "Done"
     },
     "targetPortfolio": "Import into",
@@ -476,7 +476,18 @@
       "fileRead": "Couldn't read that file. Please try again.",
       "noDrafts": "No transactions were found in that file.",
       "alreadyConfirmed": "This file was already imported and confirmed. Re-import it if you've since deleted some of those transactions.",
-      "generic": "Something went wrong. Please try again."
+      "generic": "Something went wrong. Please try again.",
+      "portfolioRequired": "Choose a portfolio to import into."
+    },
+    "confirmPortfolio": {
+      "title": "Confirm portfolio",
+      "summary": "{count, plural, one {# transaction} other {# transactions}} will be imported as drafts you can review in the table.",
+      "matched": "Pre-selected from the account number in this file.",
+      "onlyPortfolio": "Your only portfolio.",
+      "choose": "Choose where to import.",
+      "confirm": "Import as drafts",
+      "discard": "Cancel",
+      "importing": "Importing…"
     }
   },
   "ImportHistory": {

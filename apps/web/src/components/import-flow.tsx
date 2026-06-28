@@ -24,7 +24,6 @@ import type {
 import { accountMismatchFromError, duplicatesFromError } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
-import { ImportReview } from "@/components/import-review";
 import { ContractReview } from "@/components/contract-review";
 import { DuplicateConflictBanner } from "@/components/duplicate-conflict-banner";
 
@@ -99,9 +98,11 @@ export interface ImportResult {
   alreadyConfirmed?: boolean;
   /** Portfolio whose accountNumber matched the detected account number in the document, if any. */
   matchedPortfolioId?: string | null;
+  /** Portfolio to pre-select in the confirm step (account match, else the sole portfolio). */
+  suggestedPortfolioId?: string | null;
   /** Set when the file's account looks like it belongs to a different portfolio (#197). */
   accountMismatch?: AccountMismatch | null;
-  /** Phase 2: deterministic import with a matched portfolio was written straight into the
+  /** A deterministic import with a matched portfolio was written straight into the
    *  transactions table as draft rows (no review step). `drafts` is then empty/absent. */
   materialized?: boolean;
   /** Number of draft transactions materialized (Phase 2). */
@@ -156,6 +157,11 @@ export interface ImportClient {
     acknowledgeAccountMismatch?: boolean,
     acknowledgeDuplicates?: boolean,
   ): Promise<{ confirmed: number; excludedCashMovements?: number }>;
+  materializeImport(
+    importId: string,
+    portfolioId: string,
+    acknowledgeAccountMismatch?: boolean,
+  ): Promise<{ materializedCount: number; excludedCashMovements: number }>;
   enrichImport(
     importId: string,
     enrichments: Array<{ draft: ImportDraft; targetTransactionId: string }>,
@@ -209,6 +215,7 @@ const demoClient: ImportClient = {
   confirmImport: async (_id, drafts, contracts) => ({
     confirmed: drafts.length + (contracts?.length ?? 0),
   }),
+  materializeImport: async () => ({ materializedCount: 0, excludedCashMovements: 0 }),
   enrichImport: async () => ({ enriched: 0, skipped: [] }),
   checkImportDuplicates: async () => ({ annotations: [] }),
 };
@@ -280,6 +287,9 @@ export function ImportFlow({
   // Per-group portfolio selection: importId → portfolioId. Populated in handleFiles,
   // updated by the per-group pickers on the review step.
   const [portfolioByImport, setPortfolioByImport] = useState<PortfolioByImportMap>(new Map());
+  // importIds whose target was pre-selected from the file's detected account number — drives
+  // the "pre-selected from the account number" note on the confirm-portfolio step.
+  const [matchedImports, setMatchedImports] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [contracts, setContracts] = useState<ImportContract[]>([]);
   // For the single-file/screenshot path: the one import id.
@@ -398,7 +408,12 @@ export function ImportFlow({
         setContracts(resultContracts);
         setGroups(new Map([[result.importId, file.name]]));
         setIssueMap(new Map([[result.importId, result.errors]]));
-        setPortfolioByImport(new Map([[result.importId, result.matchedPortfolioId ?? defaultPid]]));
+        setPortfolioByImport(
+          new Map([[result.importId, result.suggestedPortfolioId ?? defaultPid]]),
+        );
+        setMatchedImports(
+          result.matchedPortfolioId ? new Set([result.importId]) : new Set(),
+        );
         setAccountMismatch(result.accountMismatch ?? null);
         setStep("review");
       } catch (err) {
@@ -414,6 +429,7 @@ export function ImportFlow({
     const newIssueMap: IssueMap = new Map();
     const newSkipped: SkippedFile[] = [];
     const newPortfolioByImport: PortfolioByImportMap = new Map();
+    const newMatchedImports = new Set<string>();
     let materializedTotal = 0;
 
     setFileStatuses(files.map((f) => ({ filename: f.name, status: "pending" })));
@@ -456,7 +472,8 @@ export function ImportFlow({
         );
         newGroups.set(result.importId, file.name);
         newIssueMap.set(result.importId, result.errors);
-        newPortfolioByImport.set(result.importId, result.matchedPortfolioId ?? defaultPid);
+        newPortfolioByImport.set(result.importId, result.suggestedPortfolioId ?? defaultPid);
+        if (result.matchedPortfolioId) newMatchedImports.add(result.importId);
         for (let i = 0; i < result.drafts.length; i++) {
           mergedDrafts.push(withUid(result.drafts[i]!, result.importId, i));
         }
@@ -503,6 +520,7 @@ export function ImportFlow({
     setGroups(newGroups);
     setIssueMap(newIssueMap);
     setPortfolioByImport(newPortfolioByImport);
+    setMatchedImports(newMatchedImports);
     // Use the first group's importId as the "primary" import id for back-compat.
     const firstId = newGroups.keys().next().value ?? "";
     setImportId(firstId);
@@ -525,61 +543,6 @@ export function ImportFlow({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFile]);
-
-  function updateDraft(uid: string, patch: Partial<ImportDraft>) {
-    setDrafts((ds) => ds.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
-  }
-
-  function removeDraft(uid: string) {
-    setDrafts((ds) => ds.filter((d) => d.uid !== uid));
-  }
-
-  function removeMany(uids: string[]) {
-    const set = new Set(uids);
-    setDrafts((ds) => ds.filter((d) => !set.has(d.uid)));
-  }
-
-  // Apply duplicate annotations from the preview endpoint to the draft list.
-  // `annotations` are indexed by server draftIndex (stable: position in the
-  // original parsedJson.drafts). We match via `_serverIdx` so removes don't drift.
-  function applyDuplicateAnnotations(targetImportId: string, annotations: DuplicateAnnotation[]) {
-    const byServerIdx = new Map(annotations.map((a) => [a.draftIndex, a]));
-    setDrafts((ds) =>
-      ds.map((d) => {
-        if (d.importId !== targetImportId) return d;
-        const ann = byServerIdx.get(d._serverIdx);
-        const likelyDuplicate: LikelyDuplicate | null = ann
-          ? {
-              kind: ann.kind,
-              source: ann.matchedSource,
-              executedAt: ann.matchedExecutedAt,
-              matchedTransactionId: ann.matchedTransactionId,
-            }
-          : null;
-        return { ...d, likelyDuplicate };
-      }),
-    );
-  }
-
-  // Promote an "attention" issue (e.g. an unrecognised Trade Republic CSV row) into a draft
-  // the user just completed in the map editor, then drop it from that import's issue list.
-  // The owning import is the one whose issues contain this eventId (single-group → importId).
-  function mapIssue(eventId: string, draft: ImportDraft) {
-    let owner = importId;
-    for (const [iid, list] of issueMap) {
-      if (list.some((i) => i.eventId === eventId)) {
-        owner = iid;
-        break;
-      }
-    }
-    setDrafts((ds) => [...ds, withUid(draft, owner, -1)]);
-    setIssueMap((m) => {
-      const next = new Map(m);
-      const list = next.get(owner);
-      if (list) next.set(owner, list.filter((i) => i.eventId !== eventId));
-      return next;
-    });
-  }
 
   function updateContract(index: number, patch: Partial<ImportContract>) {
     setContracts((cs) => cs.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -762,6 +725,35 @@ export function ImportFlow({
     }
   }
 
+  /**
+   * Confirm-portfolio step (drafts, non-contract): write each group's staged drafts into its
+   * chosen portfolio as `status='draft'` transactions, then go to the table. Cross-source
+   * duplicates collapse server-side (no 409 dance). On an account mismatch the server returns
+   * a 409 verdict → surface the banner; "Import anyway" replays with `acknowledgeMismatch`.
+   */
+  async function materialize(acknowledgeMismatch = false) {
+    setError(null);
+    setIsConfirming(true);
+    try {
+      for (const iid of groups.keys()) {
+        const pid = portfolioByImport.get(iid);
+        if (!pid) {
+          setError(t("errors.portfolioRequired"));
+          setIsConfirming(false);
+          return;
+        }
+        await client.materializeImport(iid, pid, acknowledgeMismatch);
+      }
+      setAccountMismatch(null);
+      router.push("/transactions");
+    } catch (err) {
+      const mismatch = accountMismatchFromError(err);
+      if (mismatch) setAccountMismatch(mismatch);
+      else setError(errorMessage(err));
+      setIsConfirming(false);
+    }
+  }
+
   function reset() {
     setDrafts([]);
     setContracts([]);
@@ -771,6 +763,7 @@ export function ImportFlow({
     setIssueMap(new Map());
     setSkipped([]);
     setPortfolioByImport(new Map());
+    setMatchedImports(new Set());
     setFileStatuses([]);
     setError(null);
     setAccountMismatch(null);
@@ -954,7 +947,11 @@ export function ImportFlow({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => void confirm(undefined, true)}
+                onClick={() =>
+                  void (drafts.length > 0 && contracts.length === 0
+                    ? materialize(true)
+                    : confirm(undefined, true))
+                }
               >
                 {t("accountMismatch.importAnyway")}
               </Button>
@@ -1023,68 +1020,73 @@ export function ImportFlow({
             />
           )}
 
-          {drafts.length > 0 && !isMultiGroup && (
-            // ── Single-group: portfolio picker above + unified ImportReview footer ──
-            <>
-              {portfolios.length > 1 && (
-                <div className="space-y-1.5">
-                  <Label>{t("targetPortfolio")}</Label>
-                  <PortfolioPicker
-                    portfolios={portfolios}
-                    value={portfolioByImport.get(importId) ?? portfolios[0]?.id ?? ""}
-                    onChange={(id) => {
-                      setPortfolioByImport(new Map([[importId, id]]));
-                      void client
-                        .checkImportDuplicates(importId, id)
-                        .then(({ annotations }) =>
-                          applyDuplicateAnnotations(importId, annotations),
-                        )
-                        .catch(() => {});
-                    }}
-                    ariaLabel={t("targetPortfolio")}
-                    triggerClassName="w-full"
-                  />
-                </div>
+          {drafts.length > 0 && contracts.length === 0 && (
+            // ── Confirm-portfolio step: pick the target portfolio (pre-selected from the
+            //    file's detected account), then materialize the staged drafts into the table.
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold">{t("confirmPortfolio.title")}</h2>
+              {(reviewGroups ?? [{ importId, filename: groups.get(importId) ?? "" }]).map(
+                ({ importId: iid, filename }) => {
+                  const count = drafts.filter((d) => d.importId === iid).length;
+                  const matched = matchedImports.has(iid);
+                  const issues = issueMap.get(iid) ?? [];
+                  return (
+                    <div
+                      key={iid}
+                      className="space-y-3 rounded-lg border border-border bg-card/40 p-4"
+                    >
+                      {isMultiGroup && filename && (
+                        <p className="text-sm font-medium">{filename}</p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {t("confirmPortfolio.summary", { count })}
+                      </p>
+                      {portfolios.length > 1 && (
+                        <div className="space-y-1.5">
+                          <Label>{t("targetPortfolio")}</Label>
+                          <PortfolioPicker
+                            portfolios={portfolios}
+                            value={portfolioByImport.get(iid) ?? portfolios[0]?.id ?? ""}
+                            onChange={(pid) =>
+                              setPortfolioByImport((m) => new Map(m).set(iid, pid))
+                            }
+                            ariaLabel={t("targetPortfolio")}
+                            triggerClassName="w-full"
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {matched
+                          ? t("confirmPortfolio.matched")
+                          : portfolios.length === 1
+                            ? t("confirmPortfolio.onlyPortfolio")
+                            : t("confirmPortfolio.choose")}
+                      </p>
+                      {issues.length > 0 && (
+                        <p className="text-xs text-warning">
+                          {t("review.issues.attention", { count: issues.length })}
+                        </p>
+                      )}
+                    </div>
+                  );
+                },
               )}
-              <ImportReview
-                drafts={drafts}
-                onUpdate={updateDraft}
-                onRemove={removeDraft}
-                onRemoveMany={removeMany}
-                onConfirm={confirm}
-                onDiscard={reset}
-                issues={issueMap.get(importId) ?? []}
-                onMapIssue={mapIssue}
-                isSubmitting={isConfirming}
-              />
-            </>
-          )}
-
-          {drafts.length > 0 && isMultiGroup && (
-            // ── Multi-group: single unified ImportReview with group-header rows ──
-            <ImportReview
-              drafts={drafts}
-              onUpdate={updateDraft}
-              onRemove={removeDraft}
-              onRemoveMany={removeMany}
-              onConfirm={confirm}
-              onDiscard={reset}
-              onMapIssue={mapIssue}
-              groups={reviewGroups}
-              portfolios={portfolios.length > 1 ? portfolios : undefined}
-              portfolioByImport={portfolioByImport}
-              onPortfolioChange={(iid, pid) => {
-                setPortfolioByImport((m) => new Map(m).set(iid, pid));
-                void client
-                  .checkImportDuplicates(iid, pid)
-                  .then(({ annotations }) =>
-                    applyDuplicateAnnotations(iid, annotations),
-                  )
-                  .catch(() => {});
-              }}
-              issuesByImport={issueMap}
-              isSubmitting={isConfirming}
-            />
+              <div className="flex items-center gap-2">
+                <Button onClick={() => void materialize()} disabled={isConfirming}>
+                  {isConfirming ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {t("confirmPortfolio.importing")}
+                    </>
+                  ) : (
+                    t("confirmPortfolio.confirm")
+                  )}
+                </Button>
+                <Button variant="ghost" onClick={reset} disabled={isConfirming}>
+                  {t("confirmPortfolio.discard")}
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       )}

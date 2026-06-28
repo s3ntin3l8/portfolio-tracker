@@ -9,7 +9,7 @@ import {
 import { ApiError } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
-// Spy on the router so the Phase-2 materialize redirect can be asserted.
+// Spy on the router so the post-materialize redirect can be asserted.
 const pushMock = vi.fn();
 vi.mock("@/i18n/navigation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/i18n/navigation")>();
@@ -41,6 +41,19 @@ const DRAFT_B: ImportDraft = {
   executedAt: "2026-03-01",
   confidence: 0.97,
 };
+
+/** Build an ImportClient with no-op defaults; override per test. */
+function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
+  return {
+    importScreenshot: vi.fn(),
+    importCsv: vi.fn(),
+    confirmImport: vi.fn(async () => ({ confirmed: 1 })),
+    materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0 })),
+    enrichImport: vi.fn(async () => ({ enriched: 0, skipped: [] })),
+    checkImportDuplicates: vi.fn(async () => ({ annotations: [] })),
+    ...overrides,
+  };
+}
 
 function renderFlow(
   client: ImportClient,
@@ -74,330 +87,149 @@ function fileInput(container: HTMLElement) {
   return container.querySelector('input[type="file"]') as HTMLInputElement;
 }
 
+const confirmBtn = () =>
+  screen.getByRole("button", { name: messages.Import.confirmPortfolio.confirm });
+
 describe("ImportFlow", () => {
-  it("redirects to the transactions table when a CSV import materializes drafts (Phase 2)", async () => {
+  it("uploads a screenshot, confirms the portfolio, and materializes drafts", async () => {
     pushMock.mockClear();
-    const client = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({
-        importId: "imp-mat",
-        materialized: true,
-        portfolioId: "p1",
-        materializedCount: 4,
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp1",
+        drafts: [DRAFT],
+        errors: [],
       })),
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    } as unknown as ImportClient;
+    });
     const { container } = renderFlow(client);
 
-    fireEvent.change(fileInput(container), { target: { files: [csvFile("dkb.csv")] } });
+    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
+
+    // The confirm-portfolio step renders (count summary + Import button), not a draft table.
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+    expect(screen.getByText(messages.Import.confirmPortfolio.title)).toBeInTheDocument();
+    expect(client.importScreenshot).toHaveBeenCalledWith(expect.any(File), false);
+
+    fireEvent.click(confirmBtn());
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    // No review screen — the rows went straight into the table.
-    expect(screen.queryByRole("button", { name: messages.Import.confirm })).toBeNull();
-  });
-
-  it("uploads a screenshot, reviews the draft, and confirms it", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({
-        importId: "imp1",
-        drafts: [DRAFT],
-        errors: [],
-      })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
-
-    // The draft name now renders as row text (desktop table + mobile card) until edited.
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
-    );
-    expect(client.importScreenshot).toHaveBeenCalledWith(
-      expect.any(File),
-      false,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp1", [DRAFT], [], "p1", false, false);
-  });
-
-  it("edits a draft in the dialog and confirms the edited value", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({
-        importId: "imp1",
-        drafts: [DRAFT],
-        errors: [],
-      })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: messages.Import.review.edit.open }),
-      ).toBeInTheDocument(),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.Import.review.edit.open }),
-    );
-
-    // The dialog seeds the name input from the draft; editing it patches the draft.
-    fireEvent.change(screen.getByDisplayValue("Antam Gold"), {
-      target: { value: "Antam Gold 2" },
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.Import.review.edit.done }),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    expect(client.confirmImport).toHaveBeenCalledWith(
-      "imp1",
-      [{ ...DRAFT, name: "Antam Gold 2" }],
-      [],
-      "p1",
-      false,
-      false,
-    );
+    // Sole portfolio is used as the target (no picker shown).
+    expect(client.materializeImport).toHaveBeenCalledWith("imp1", "p1", false);
   });
 
   it("auto-detects file type: CSV → importCsv, PNG → importScreenshot", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({ importId: "imp2s", drafts: [DRAFT], errors: [] })),
+    const client = makeClient({
       importCsv: vi.fn(async () => ({ importId: "imp2c", drafts: [DRAFT], errors: [] })),
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+    });
     const { container } = renderFlow(client);
 
-    // CSV file → importCsv with auto format, no screenshot call
     fireEvent.change(fileInput(container), { target: { files: [csvFile("t.csv")] } });
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
     expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
     expect(client.importScreenshot).not.toHaveBeenCalled();
   });
 
-  it("mixed batch: CSV and PNG each route to their own endpoint", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi
-        .fn()
-        .mockResolvedValueOnce({ importId: "imp-png", drafts: [DRAFT], errors: [] }),
-      importCsv: vi
-        .fn()
-        .mockResolvedValueOnce({ importId: "imp-csv", drafts: [DRAFT_B], errors: [] }),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    const png = pngFile();
-    const csv = csvFile("data.csv");
-    fireEvent.change(fileInput(container), { target: { files: [png, csv] } });
-
-    // Both groups should land in the review step
-    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
-
-    // Each file was routed to the correct endpoint
-    expect(client.importScreenshot).toHaveBeenCalledTimes(1);
-    expect(client.importCsv).toHaveBeenCalledTimes(1);
-    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
-  });
-
-  it("offers a force re-import when a file was already confirmed (#229)", async () => {
-    // First call → already confirmed (blocked). Second call (force) → fresh drafts.
-    const importCsv = vi
-      .fn()
-      .mockResolvedValueOnce({ importId: "imp-x", drafts: [], errors: [], alreadyConfirmed: true })
-      .mockResolvedValueOnce({ importId: "imp-x2", drafts: [DRAFT], errors: [] });
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv,
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [csvFile("dup.csv")] } });
-
-    // The already-confirmed error and the "Re-import anyway" override both appear.
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.errors.alreadyConfirmed)).toBeInTheDocument(),
-    );
-    const reImport = screen.getByRole("button", { name: messages.Import.reImportAnyway });
-    expect(importCsv).toHaveBeenLastCalledWith(expect.any(String), "auto", false);
-
-    fireEvent.click(reImport);
-
-    // Re-import replays the same file with force=true and lands on the review step.
-    await waitFor(() =>
-      expect(importCsv).toHaveBeenLastCalledWith(expect.any(String), "auto", true),
-    );
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
-    );
-  });
-
-  it("routes the import to the chosen target portfolio (selected on review step)", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+  it("pre-selects the suggested portfolio and materializes into it", async () => {
+    pushMock.mockClear();
+    const client = makeClient({
+      importCsv: vi.fn(async () => ({
+        importId: "imp-s",
+        drafts: [DRAFT],
+        errors: [],
+        // Account match → server suggests p2 (the matched portfolio).
+        matchedPortfolioId: "p2",
+        suggestedPortfolioId: "p2",
+      })),
+    });
     const { container } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
       { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
     ]);
 
-    // Portfolio is NOT selected before upload — picker is now on the review step.
-    const csv = csvFile("t.csv");
-    fireEvent.change(fileInput(container), { target: { files: [csv] } });
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("dkb.csv")] } });
 
-    // Wait for the review step to render with the portfolio picker.
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
-    );
-    // Upload call has NO portfolioId in the new upload-first flow.
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+    // The "pre-selected from the account number" note is shown.
+    expect(screen.getByText(messages.Import.confirmPortfolio.matched)).toBeInTheDocument();
     expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
 
-    // The portfolio picker (rich Radix dropdown) is now shown on the review step.
-    // Radix opens on Enter under jsdom, then a menuitem click selects.
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
+    expect(client.materializeImport).toHaveBeenCalledWith("imp-s", "p2", false);
+  });
+
+  it("routes to a portfolio chosen on the confirm step", async () => {
+    pushMock.mockClear();
+    const client = makeClient({
+      importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
+    });
+    const { container } = renderFlow(client, [
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
+    ]);
+
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("t.csv")] } });
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
+
+    // Pick a different portfolio (rich Radix dropdown: Enter opens, click selects).
     fireEvent.keyDown(
       screen.getByRole("button", { name: messages.Import.targetPortfolio }),
       { key: "Enter" },
     );
     fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    // Confirm carries the selected portfolio.
-    expect(client.confirmImport).toHaveBeenCalledWith("imp4", [DRAFT], [], "p2", false, false);
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
+    expect(client.materializeImport).toHaveBeenCalledWith("imp4", "p2", false);
   });
 
-  it("maps an unrecognised-type issue into a draft and confirms it (TR CSV flag-for-review)", async () => {
-    const confirmImport = vi.fn(async () => ({ confirmed: 2 }));
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({
-        importId: "imp6",
-        drafts: [DRAFT],
-        // An unrecognised Trade Republic row surfaced as a mappable attention issue.
-        errors: [
-          {
-            eventId: "tr-csv:ev-1",
-            eventType: "KINDERGELD_BONUS",
-            severity: "attention" as const,
-            message: "unsupported Trade Republic type: KINDERGELD_BONUS — review to map manually",
-            raw: { name: "Kindergeld bonus", currency: "EUR", executedAt: "2026-02-01", amount: 5, shares: null },
-          },
-        ],
-      })),
-      confirmImport,
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [csvFile("tr.csv")] } });
-
-    // The issue lands as a mappable row in the review table (its raw name is shown).
-    await waitFor(() => expect(screen.getByText("Kindergeld bonus")).toBeInTheDocument());
-
-    // Map it into a draft via the row Map button + dialog Save.
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.review.issues.map }));
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.review.issues.mapSave }));
-
-    // Confirm now carries BOTH the original draft and the mapped issue (externalId = eventId).
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    const drafts = (confirmImport.mock.calls[0] as unknown[])[1] as ImportDraft[];
-    expect(drafts).toHaveLength(2);
-    expect(drafts[1]).toMatchObject({ externalId: "tr-csv:ev-1", name: "Kindergeld bonus" });
-  });
-
-  it("auto-parses a screenshot handed in via initialFile (share target)", async () => {
-    const client: ImportClient = {
+  it("warns on an account mismatch and re-materializes with acknowledgement (#197)", async () => {
+    pushMock.mockClear();
+    const materializeImport = vi
+      .fn()
+      // First attempt blocked by the mismatch guard.
+      .mockRejectedValueOnce(
+        new ApiError(
+          409,
+          JSON.stringify({
+            error: "account_mismatch",
+            kind: "other_portfolio",
+            matchedPortfolioId: "p2",
+            matchedName: "Other",
+            detected: "506740786",
+          }),
+        ),
+      )
+      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+    const client = makeClient({
       importScreenshot: vi.fn(async () => ({
-        importId: "imp5",
+        importId: "imp-mm",
         drafts: [DRAFT],
         errors: [],
       })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    render(
-      <NextIntlClientProvider locale="en" messages={messages}>
-        <ImportFlow
-          client={client}
-          portfolios={[{ id: "p1", name: "Main", brokerage: null, accountHolder: null }]}
-          defaultPortfolioId="p1"
-          initialFile={pngFile()}
-        />
-      </NextIntlClientProvider>,
-    );
+      materializeImport,
+    });
+    renderFlow(client, [
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "Other", brokerage: null, accountHolder: null },
+    ]);
 
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
-    );
-    expect(client.importScreenshot).toHaveBeenCalledTimes(1);
-    expect(client.importScreenshot).toHaveBeenCalledWith(
-      expect.any(File),
-      false,
-    );
-    expect(client.importCsv).not.toHaveBeenCalled();
+    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+
+    // First confirm → 409 → mismatch banner.
+    fireEvent.click(confirmBtn());
+    const importAnyway = await screen.findByRole("button", {
+      name: messages.Import.accountMismatch.importAnyway,
+    });
+    fireEvent.click(importAnyway);
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
+    expect(materializeImport).toHaveBeenNthCalledWith(1, "imp-mm", "p1", false);
+    expect(materializeImport).toHaveBeenNthCalledWith(2, "imp-mm", "p1", true);
   });
 
-  it("surfaces the not-configured message on a 503", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => {
-        throw Object.assign(new Error("x"), { status: 503 });
-      }),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
-
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        messages.Import.errors.notConfigured,
-      ),
-    );
-  });
-
-  it("reviews a gold installment contract and confirms it", async () => {
+  it("reviews a gold installment contract and confirms it (confirm path, unchanged)", async () => {
     const contract = {
       provider: "GALERI24",
       contractNo: "C-9",
@@ -417,18 +249,15 @@ describe("ImportFlow", () => {
       schedule: [],
       confidence: 0.95,
     };
-    const client: ImportClient = {
+    const client = makeClient({
       importScreenshot: vi.fn(async () => ({
         importId: "imp-c",
         drafts: [],
         contracts: [contract],
         errors: [],
       })),
-      importCsv: vi.fn(),
       confirmImport: vi.fn(async () => ({ confirmed: 4 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+    });
     const { container } = renderFlow(client);
 
     fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
@@ -436,7 +265,6 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.contract.title)).toBeInTheDocument(),
     );
-
     fireEvent.click(
       screen.getByRole("button", { name: messages.Import.contract.confirm }),
     );
@@ -445,52 +273,63 @@ describe("ImportFlow", () => {
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
     expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false, false);
+    // Gold contracts never use the materialize path.
+    expect(client.materializeImport).not.toHaveBeenCalled();
   });
 
-  // ── Multi-file CSV tests ────────────────────────────────────────────────────
+  it("offers a force re-import when a file was already confirmed (#229)", async () => {
+    const importCsv = vi
+      .fn()
+      .mockResolvedValueOnce({ importId: "imp-x", drafts: [], errors: [], alreadyConfirmed: true })
+      .mockResolvedValueOnce({ importId: "imp-x2", drafts: [DRAFT], errors: [] });
+    const client = makeClient({ importCsv });
+    const { container } = renderFlow(client);
 
-  it("two CSV files → grouped review sections → confirm fans out per import", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("dup.csv")] } });
+
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.errors.alreadyConfirmed)).toBeInTheDocument(),
+    );
+    const reImport = screen.getByRole("button", { name: messages.Import.reImportAnyway });
+    expect(importCsv).toHaveBeenLastCalledWith(expect.any(String), "auto", false);
+
+    fireEvent.click(reImport);
+
+    await waitFor(() =>
+      expect(importCsv).toHaveBeenLastCalledWith(expect.any(String), "auto", true),
+    );
+    // Force re-import lands on the confirm-portfolio step.
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+  });
+
+  it("two CSV files → per-group confirm → materialize fans out per import", async () => {
+    pushMock.mockClear();
+    const client = makeClient({
       importCsv: vi
         .fn()
         .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
         .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+    });
     const { container } = renderFlow(client);
 
-    const fileA = csvFile("broker-a.csv", "a");
-    const fileB = csvFile("broker-b.csv", "b");
-    fireEvent.change(fileInput(container), { target: { files: [fileA, fileB] } });
+    fireEvent.change(fileInput(container), {
+      target: { files: [csvFile("broker-a.csv", "a"), csvFile("broker-b.csv", "b")] },
+    });
 
-    // Wait for the review step: both draft names appear (unique to review; filenames also
-    // appear in the parsing-step status list so they're not a reliable wait condition).
-    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
-
-    // Both filenames should appear as group-header rows (appear twice: desktop table + mobile cards).
+    // Both filenames show as group headings on the confirm step.
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
     expect(screen.getAllByText("broker-a.csv").length).toBeGreaterThan(0);
     expect(screen.getAllByText("broker-b.csv").length).toBeGreaterThan(0);
 
-    // Global confirm button (from the shared footer).
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-
-    // One confirmImport call per import id, each with the default portfolio.
-    expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false, false);
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
+    expect(client.materializeImport).toHaveBeenCalledTimes(2);
+    expect(client.materializeImport).toHaveBeenCalledWith("imp-a", "p1", false);
+    expect(client.materializeImport).toHaveBeenCalledWith("imp-b", "p1", false);
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
+    const client = makeClient({
       importCsv: vi
         .fn()
         .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
@@ -501,10 +340,7 @@ describe("ImportFlow", () => {
           alreadyConfirmed: true,
         })
         .mockResolvedValueOnce({ importId: "imp-c", drafts: [DRAFT_B], errors: [] }),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+    });
     const { container } = renderFlow(client);
 
     fireEvent.change(fileInput(container), {
@@ -513,34 +349,19 @@ describe("ImportFlow", () => {
       },
     });
 
-    // Wait for the review step using draft names (filenames also appear in the
-    // parsing-step status list and are not a reliable wait condition).
-    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
-
-    // Good section group headers appear in the review table (appear twice: desktop table + mobile cards).
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
     expect(screen.getAllByText("good-a.csv").length).toBeGreaterThan(0);
     expect(screen.getAllByText("good-c.csv").length).toBeGreaterThan(0);
-
-    // Skip notice for the confirmed file (inside the collapsible error banner).
+    // Skip notice for the confirmed file (inside the collapsible banner).
     expect(
       screen.getByText(
         messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.csv"),
       ),
     ).toBeInTheDocument();
-
-    // Confirm fans out over only the two good imports.
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    expect(client.confirmImport).toHaveBeenCalledTimes(2);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [DRAFT_B], [], "p1", false, false);
   });
 
   it("all files empty/duplicate → stays on upload with error notice", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
+    const client = makeClient({
       importCsv: vi
         .fn()
         .mockResolvedValueOnce({
@@ -550,333 +371,57 @@ describe("ImportFlow", () => {
           alreadyConfirmed: true,
         })
         .mockResolvedValueOnce({ importId: "i2", drafts: [], errors: [] }),
-      confirmImport: vi.fn(),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+    });
     const { container } = renderFlow(client);
 
     fireEvent.change(fileInput(container), {
       target: { files: [csvFile("a.csv", "a"), csvFile("b.csv", "b")] },
     });
 
-    // Should stay on upload (no filename headings in review).
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.queryByText("a.csv")).not.toBeInTheDocument();
-    expect(client.confirmImport).not.toHaveBeenCalled();
+    expect(client.materializeImport).not.toHaveBeenCalled();
   });
 
-  it("multi-file: distinct skip reasons for each failed file (regression: tautological ternary)", async () => {
-    // Regression guard: every multi-file failure used to collapse to "parseError"
-    // ("couldn't be read") because of a tautological ternary bug. Now each error
-    // maps to its own reason via importSkipReason().
-    const client: ImportClient = {
-      importScreenshot: vi
-        .fn()
-        // File 1: succeeds (so we reach the review step and can see the skip notices)
-        .mockResolvedValueOnce({ importId: "imp-ok", drafts: [DRAFT], errors: [] })
-        // File 2: provider error → parseFailed (502)
-        .mockRejectedValueOnce(Object.assign(new Error("parse"), { status: 502 }))
-        // File 3: file too large → tooLarge (413)
-        .mockRejectedValueOnce(Object.assign(new Error("large"), { status: 413 })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    const file1 = pngFile();
-    const file2 = new File([new Uint8Array([4, 5])], "bad1.png", { type: "image/png" });
-    const file3 = new File([new Uint8Array([6, 7])], "big.png", { type: "image/png" });
-    fireEvent.change(fileInput(container), { target: { files: [file1, file2, file3] } });
-
-    // We should reach the review step (file1 succeeded).
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
-    );
-
-    // The two failed files must show DIFFERENT skip messages, not both "couldn't be read".
-    const parseFailed = messages.Import.skipped.parseFailed.replace("{file}", "bad1.png");
-    const tooLarge = messages.Import.skipped.tooLarge.replace("{file}", "big.png");
-    expect(screen.getByText(parseFailed)).toBeInTheDocument();
-    expect(screen.getByText(tooLarge)).toBeInTheDocument();
-  });
-
-  it("single CSV file uses single-group path with ImportReview's own footer", async () => {
-    // The single-file path must NOT render filename headings.
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi.fn(async () => ({
-        importId: "imp-s",
+  it("auto-parses a screenshot handed in via initialFile (share target)", async () => {
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp5",
         drafts: [DRAFT],
         errors: [],
       })),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), { target: { files: [csvFile("single.csv")] } });
-
-    await waitFor(() =>
-      expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0),
+    });
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportFlow
+          client={client}
+          portfolios={[{ id: "p1", name: "Main", brokerage: null, accountHolder: null }]}
+          defaultPortfolioId="p1"
+          initialFile={pngFile()}
+        />
+      </NextIntlClientProvider>,
     );
 
-    // No filename heading rendered.
-    expect(screen.queryByText("single.csv")).not.toBeInTheDocument();
-
-    // The standard Confirm button (from ImportReview's own footer) works.
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-s", [DRAFT], [], "p1", false, false);
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+    expect(client.importScreenshot).toHaveBeenCalledTimes(1);
+    expect(client.importScreenshot).toHaveBeenCalledWith(expect.any(File), false);
+    expect(client.importCsv).not.toHaveBeenCalled();
   });
 
-  it("excludes likely-duplicate drafts from the default Confirm (#196)", async () => {
-    const dup: ImportDraft = {
-      ...DRAFT,
-      likelyDuplicate: { kind: "duplicate" as const, source: "screenshot", executedAt: "2026-02-08" },
-    };
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({
-        importId: "imp-dup",
-        drafts: [dup, DRAFT_B],
-        errors: [],
-      })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
+  it("surfaces the not-configured message on a 503", async () => {
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => {
+        throw Object.assign(new Error("x"), { status: 503 });
+      }),
+    });
     const { container } = renderFlow(client);
 
     fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
 
-    // The duplicate badge + notice render in review.
     await waitFor(() =>
-      expect(screen.getAllByText(/Already imported/i).length).toBeGreaterThan(0),
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        messages.Import.errors.notConfigured,
+      ),
     );
-
-    // Confirm (all) writes everything EXCEPT the flagged duplicate.
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-dup", [DRAFT_B], [], "p1", false, false);
-  });
-
-  it("warns on an account mismatch and re-confirms with acknowledgement (#197)", async () => {
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({
-        importId: "imp-mm",
-        drafts: [DRAFT],
-        errors: [],
-        accountMismatch: {
-          kind: "other_portfolio" as const,
-          matchedPortfolioId: "p2",
-          matchedName: "Other",
-          detected: "506740786",
-        },
-      })),
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    renderFlow(client, [
-      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-      { id: "p2", name: "Other", brokerage: null, accountHolder: null },
-    ]);
-
-    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
-
-    // The mismatch banner + "Import anyway" CTA render.
-    const importAnyway = await screen.findByRole("button", {
-      name: messages.Import.accountMismatch.importAnyway,
-    });
-    fireEvent.click(importAnyway);
-
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    // Re-confirm carries the acknowledgement flag.
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-mm", [DRAFT], [], "p1", true, false);
-  });
-
-  // ── Multi-group partial-commit & 2.4 re-import ─────────────────────────────
-
-  it("multi-group partial-409: successful group drops from review; failed group stays visible (#fix-2.1)", async () => {
-    // Two groups (imp-a=DRAFT/Antam Gold, imp-b=DRAFT_B/BBCA).
-    // imp-a succeeds; imp-b hits a 409 duplicate.
-    // Expected: DRAFT (Antam Gold) is removed from review; DRAFT_B (BBCA) remains; duplicate
-    // banner appears. Guards the Promise.allSettled partial-commit fix — before the fix,
-    // both groups' drafts stayed in review even when one group confirmed successfully.
-    const dupPayload = {
-      error: "duplicate_transactions",
-      count: 1,
-      duplicates: [
-        {
-          name: "BBCA",
-          action: "buy",
-          quantity: "100",
-          executedAt: "2026-03-01",
-          matchedSource: "csv",
-          matchedExecutedAt: "2026-03-01",
-        },
-      ],
-    };
-    const confirmImport = vi.fn().mockImplementation(async (iid: string) => {
-      if (iid === "imp-b") throw new ApiError(409, JSON.stringify(dupPayload));
-      return { confirmed: 1 };
-    });
-    const client: ImportClient = {
-      importScreenshot: vi.fn(),
-      importCsv: vi
-        .fn()
-        .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
-        .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
-      confirmImport,
-      enrichImport: vi.fn(async () => ({ enriched: 0, skipped: [] })),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    fireEvent.change(fileInput(container), {
-      target: { files: [csvFile("broker-a.csv", "a"), csvFile("broker-b.csv", "b")] },
-    });
-
-    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-
-    // Wait for the duplicate banner from imp-b's 409.
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: messages.Duplicates.importAnyway }),
-      ).toBeInTheDocument(),
-    );
-
-    // imp-a confirmed → its draft (Antam Gold) must be gone from review.
-    expect(screen.queryByText("Antam Gold")).not.toBeInTheDocument();
-    // imp-b failed → its draft (BBCA) must still be in review.
-    expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
-
-    // Both confirm calls were fired (parallel fan-out).
-    expect(confirmImport).toHaveBeenCalledTimes(2);
-    expect(confirmImport).toHaveBeenCalledWith("imp-a", [DRAFT], [], "p1", false, false);
-    expect(confirmImport).toHaveBeenCalledWith("imp-b", [DRAFT_B], [], "p1", false, false);
-  });
-
-  it("per-file 'Re-import anyway' re-uploads an alreadyConfirmed screenshot with force=true (#fix-2.4)", async () => {
-    // Multi-file batch: file1 succeeds, file2 returns alreadyConfirmed.
-    // The skipped banner must show a per-file "Re-import anyway" button for file2.
-    // Clicking it calls importScreenshot(file2, true) and adds the new draft to review.
-    const importScreenshot = vi
-      .fn()
-      .mockResolvedValueOnce({ importId: "imp-ok", drafts: [DRAFT], errors: [] })
-      // Second upload: already confirmed on first attempt.
-      .mockResolvedValueOnce({ importId: "imp-dup", drafts: [], errors: [], alreadyConfirmed: true })
-      // Force re-import: succeeds, returns BBCA draft.
-      .mockResolvedValueOnce({ importId: "imp-force", drafts: [DRAFT_B], errors: [] });
-
-    const client: ImportClient = {
-      importScreenshot,
-      importCsv: vi.fn(),
-      confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    const { container } = renderFlow(client);
-
-    const file1 = pngFile();
-    const file2 = new File([new Uint8Array([4, 5])], "dup.png", { type: "image/png" });
-    fireEvent.change(fileInput(container), { target: { files: [file1, file2] } });
-
-    // Wait for review: file1's draft (Antam Gold) is visible.
-    await waitFor(() => expect(screen.getAllByText("Antam Gold").length).toBeGreaterThan(0));
-
-    // The skipped banner shows the already-confirmed message for dup.png.
-    expect(
-      screen.getByText(messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.png")),
-    ).toBeInTheDocument();
-
-    // The per-file "Re-import anyway" button is present.
-    const reImportBtn = screen.getByRole("button", { name: messages.Import.reImportAnyway });
-    expect(reImportBtn).toBeInTheDocument();
-
-    // Click it — should re-call importScreenshot with force=true.
-    fireEvent.click(reImportBtn);
-
-    // After force re-import, BBCA draft should appear in review.
-    await waitFor(() => expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0));
-
-    // Verify the force flag was set on the third call.
-    expect(importScreenshot).toHaveBeenNthCalledWith(3, expect.any(File), true);
-
-    // The skipped notice for dup.png should be cleared.
-    expect(
-      screen.queryByText(messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.png")),
-    ).not.toBeInTheDocument();
-  });
-
-  it("surfaces a cross-source duplicate 409 and re-confirms with acknowledgement (#217)", async () => {
-    const confirmImport = vi
-      .fn()
-      // First confirm is blocked by the backstop with the duplicate verdict.
-      .mockRejectedValueOnce(
-        new ApiError(
-          409,
-          JSON.stringify({
-            error: "duplicate_transactions",
-            count: 1,
-            duplicates: [
-              {
-                name: "Antam Gold",
-                action: "buy",
-                quantity: "5",
-                executedAt: "2026-02-08",
-                matchedSource: "csv",
-                matchedExecutedAt: "2026-02-08",
-              },
-            ],
-          }),
-        ),
-      )
-      // The acknowledged retry goes through.
-      .mockResolvedValueOnce({ confirmed: 1 });
-    const client: ImportClient = {
-      importScreenshot: vi.fn(async () => ({ importId: "imp-dup2", drafts: [DRAFT], errors: [] })),
-      importCsv: vi.fn(),
-      confirmImport,
-      enrichImport: vi.fn(),
-      checkImportDuplicates: vi.fn().mockResolvedValue({ annotations: [] }),
-    };
-    renderFlow(client);
-
-    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: messages.Import.confirm })).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
-
-    // The duplicate banner + "Import anyway" CTA render instead of a generic error.
-    const importAnyway = await screen.findByRole("button", {
-      name: messages.Duplicates.importAnyway,
-    });
-    fireEvent.click(importAnyway);
-
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
-    );
-    // The first attempt did not acknowledge; the retry does.
-    expect(confirmImport).toHaveBeenNthCalledWith(1, "imp-dup2", [DRAFT], [], "p1", false, false);
-    expect(confirmImport).toHaveBeenNthCalledWith(2, "imp-dup2", [DRAFT], [], "p1", false, true);
   });
 });

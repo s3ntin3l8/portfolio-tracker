@@ -3,6 +3,7 @@ import { z } from "zod";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { loans, portfolios, screenshotImports, transactions } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
+import { parsedTransactionSchema } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
 import { parseCsv } from "../../services/parsers/csv.js";
 import { parseDkb } from "../../services/parsers/dkb.js";
@@ -30,7 +31,17 @@ import {
   accountMismatchVerdict,
   accountsMatch,
   normalizeAccountNumber,
+  ownedPortfolio,
 } from "./helpers.js";
+
+const materializeBodySchema = z.object({
+  // Target portfolio the user picked/confirmed in the upload modal.
+  portfolioId: z.string().uuid(),
+  // Proceed past the account-mismatch guard (the file's detected account looks like it
+  // belongs to a different portfolio than the one chosen). The web flow surfaces this as
+  // an inline "Import anyway" re-confirm.
+  acknowledgeAccountMismatch: z.boolean().default(false),
+});
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -455,31 +466,11 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         source: PARSER_TAG[resolved] ?? "csv",
       });
 
-      // Direct-materialize (Phase 2): a deterministic parser whose detected account number
-      // unambiguously matches a portfolio → write drafts into the table now, skip the review
-      // screen. We require an explicit *account match* (not merely a sole portfolio) so a
-      // generic/accountless CSV still goes through review where the user picks the portfolio.
-      if (matchedPortfolioId && result.drafts.length > 0 && !accountMismatch) {
-        const mat = await materializeResolvedDrafts({
-          imp,
-          drafts: result.drafts,
-          parserTag: PARSER_TAG[resolved] ?? "csv",
-          targetPortfolioId: matchedPortfolioId,
-        });
-        request.log.info(
-          { importId: imp.id, materialized: mat.materialized, portfolioId: matchedPortfolioId },
-          "csv import materialized as drafts",
-        );
-        reply.code(201);
-        return {
-          importId: imp.id,
-          materialized: true,
-          portfolioId: matchedPortfolioId,
-          materializedCount: mat.materialized,
-          excludedCashMovements: mat.excludedCashMovements,
-        };
-      }
-
+      // Always stage (no auto-materialize): the user picks/confirms a target portfolio in the
+      // upload modal — pre-selected from `suggestedPortfolioId` (account match, else the sole
+      // portfolio) — and the materialize endpoint writes the drafts. This makes portfolio
+      // assignment a conscious confirm even when an account matched (the mismatch guard still
+      // re-confirms when the file points at a *different* portfolio than the one chosen).
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length, matchedPortfolioId },
         "csv parse complete",
@@ -491,6 +482,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         contracts: [] as unknown[],
         errors: result.errors,
         matchedPortfolioId,
+        suggestedPortfolioId: candidate,
         accountMismatch,
       };
     },
@@ -744,39 +736,12 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         source: parserTag,
       });
 
-      // Direct-materialize (Phase 2 deterministic PDF; Phase 3 also vision screenshots): an
-      // unambiguous account match + no gold contracts → write drafts into the table now. The
-      // per-draft `confidence` rides onto transaction_sources so the table can flag low-
-      // confidence rows as "needs review". Accountless / unmatched / gold-contract uploads
-      // still fall back to the review screen (+ portfolio picker). The vision parser is lossy,
-      // but its detected account must match a portfolio's exactly, so mis-routing is unlikely;
-      // and a low-confidence row is editable/confirmable in the table like any other draft.
-      if (
-        matchedPortfolioId &&
-        result.drafts.length > 0 &&
-        result.contracts.length === 0 &&
-        !accountMismatch
-      ) {
-        const mat = await materializeResolvedDrafts({
-          imp,
-          drafts: result.drafts,
-          parserTag,
-          targetPortfolioId: matchedPortfolioId,
-        });
-        request.log.info(
-          { importId: imp.id, materialized: mat.materialized, portfolioId: matchedPortfolioId, parser: parserTag },
-          "pdf import materialized as drafts",
-        );
-        reply.code(201);
-        return {
-          importId: imp.id,
-          materialized: true,
-          portfolioId: matchedPortfolioId,
-          materializedCount: mat.materialized,
-          excludedCashMovements: mat.excludedCashMovements,
-        };
-      }
-
+      // Always stage (no auto-materialize): the user confirms a target portfolio in the upload
+      // modal — pre-selected from `suggestedPortfolioId` (account match, else the sole
+      // portfolio) — then the materialize endpoint writes the drafts as `status='draft'` rows
+      // carrying their per-draft confidence. The mismatch guard re-confirms when the detected
+      // account points at a different portfolio than the one chosen. Gold contracts keep the
+      // confirm path (they become loans, not draft transactions).
       request.log.info(
         { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence, matchedPortfolioId },
         "screenshot parse stored",
@@ -788,7 +753,95 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         contracts: result.contracts,
         errors: result.errors,
         matchedPortfolioId,
+        suggestedPortfolioId: candidate,
         accountMismatch,
+      };
+    },
+  );
+
+  // Materialize a staged import's drafts into the chosen portfolio as `status='draft'` rows.
+  // This is the "confirm portfolio" step of the upload flow: parse staged the drafts (+ the
+  // detected account number); the user picked a portfolio; we write the drafts here. Reads
+  // the stored `parsedJson.drafts` — it NEVER re-parses (so a vision screenshot's LLM call is
+  // not repeated on an account-mismatch acknowledge). Gold contracts keep the confirm path.
+  app.post<{ Params: { importId: string } }>(
+    "/imports/:importId/materialize",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, acknowledgeAccountMismatch } = materializeBodySchema.parse(
+        request.body,
+      );
+
+      const [imp] = await app.db
+        .select()
+        .from(screenshotImports)
+        .where(
+          and(
+            eq(screenshotImports.id, request.params.importId),
+            eq(screenshotImports.userId, id),
+          ),
+        )
+        .limit(1);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+      if (imp.status === "confirmed") {
+        return reply.code(409).send({ error: "already_confirmed" });
+      }
+
+      const parsed = (imp.parsedJson ?? {}) as {
+        drafts?: unknown[];
+        contracts?: unknown[];
+        accountNumber?: string | null;
+      };
+      // Coerce the stored drafts through the schema — JSON round-trips `executedAt` as a
+      // string, but the writer needs a Date (same coercion the confirm route's body does).
+      const drafts = z
+        .array(parsedTransactionSchema)
+        .parse(Array.isArray(parsed.drafts) ? parsed.drafts : []);
+      const contracts = Array.isArray(parsed.contracts) ? parsed.contracts : [];
+      // Gold cicilan contracts become loans, not draft transactions — they stay on the
+      // confirm path (POST /imports/:id/confirm), which owns the loan + leg machinery.
+      if (contracts.length > 0) {
+        return reply.code(400).send({ error: "use_confirm_for_contracts" });
+      }
+      if (drafts.length === 0) {
+        return reply.code(400).send({ error: "nothing_to_materialize" });
+      }
+
+      const targetPortfolio = await ownedPortfolio(app, id, portfolioId);
+      if (!targetPortfolio) return reply.code(404).send({ error: "portfolio_not_found" });
+
+      // Account-mismatch guard (#197): if the file's detected account looks like it belongs to
+      // a different portfolio than the chosen one, refuse until acknowledged. pytr is exempt
+      // (sync is always bound to its connection's portfolio) but never reaches this route.
+      if (!acknowledgeAccountMismatch && imp.parser !== "pytr") {
+        const mismatch = await accountMismatchVerdict(app, id, parsed.accountNumber, portfolioId);
+        if (mismatch) {
+          request.log.info(
+            { importId: imp.id, kind: mismatch.kind },
+            "materialize blocked: account mismatch",
+          );
+          return reply.code(409).send({ error: "account_mismatch", ...mismatch });
+        }
+      }
+
+      const mat = await materializeResolvedDrafts({
+        imp,
+        drafts,
+        parserTag: imp.parser ?? "csv",
+        targetPortfolioId: portfolioId,
+      });
+      request.log.info(
+        { importId: imp.id, materialized: mat.materialized, portfolioId },
+        "import materialized as drafts",
+      );
+      reply.code(201);
+      return {
+        importId: imp.id,
+        materialized: true,
+        portfolioId,
+        materializedCount: mat.materialized,
+        excludedCashMovements: mat.excludedCashMovements,
       };
     },
   );

@@ -86,6 +86,8 @@ export function ImportFlowClient({
       router.refresh(); // surface the new transactions on other screens
       return res;
     },
+    materializeImport: (importId, portfolioId, acknowledgeAccountMismatch) =>
+      api.materializeImport(importId, portfolioId, acknowledgeAccountMismatch),
     enrichImport: (importId, enrichments, portfolioId) =>
       api.enrichImport(
         importId,

@@ -335,7 +335,7 @@
     "reImportAnyway": "Tetap impor ulang",
     "steps": {
       "upload": "Unggah",
-      "review": "Periksa",
+      "review": "Konfirmasi",
       "done": "Selesai"
     },
     "targetPortfolio": "Impor ke",
@@ -474,7 +474,18 @@
       "fileRead": "Tidak dapat membaca berkas itu. Silakan coba lagi.",
       "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
       "alreadyConfirmed": "Berkas ini sudah diimpor dan dikonfirmasi. Impor ulang jika Anda telah menghapus sebagian transaksinya.",
-      "generic": "Terjadi kesalahan. Silakan coba lagi."
+      "generic": "Terjadi kesalahan. Silakan coba lagi.",
+      "portfolioRequired": "Pilih portofolio tujuan impor."
+    },
+    "confirmPortfolio": {
+      "title": "Konfirmasi portofolio",
+      "summary": "{count, plural, one {# transaksi} other {# transaksi}} akan diimpor sebagai draf yang bisa Anda tinjau di tabel.",
+      "matched": "Dipilih otomatis dari nomor rekening pada berkas ini.",
+      "onlyPortfolio": "Satu-satunya portofolio Anda.",
+      "choose": "Pilih tujuan impor.",
+      "confirm": "Impor sebagai draf",
+      "discard": "Batal",
+      "importing": "Mengimpor…"
     }
   },
   "ImportHistory": {

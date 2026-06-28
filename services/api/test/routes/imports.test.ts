@@ -165,9 +165,9 @@ describe("CSV import → confirm flow", () => {
     expect(again.statusCode).toBe(409);
   });
 
-  it("materializes drafts directly when a deterministic import's account matches a portfolio (Phase 2)", async () => {
+  it("stages a deterministic import then materializes it into the account-matched portfolio", async () => {
     const t = await token("mat-user");
-    // Portfolio carries the DKB Girokonto IBAN, so the upload auto-routes to it.
+    // Portfolio carries the DKB Girokonto IBAN, so the upload suggests it.
     const pid = (
       await app.inject({
         method: "POST",
@@ -185,11 +185,22 @@ describe("CSV import → confirm flow", () => {
     });
     expect(imp.statusCode).toBe(201);
     const body = imp.json();
-    // Direct-materialize response (no drafts to review).
-    expect(body.materialized).toBe(true);
-    expect(body.portfolioId).toBe(pid);
-    expect(body.materializedCount).toBe(4);
-    expect(body.drafts).toBeUndefined();
+    // Always staged now: the account match is surfaced as a suggestion (conscious confirm),
+    // never auto-written. The drafts come back for the confirm-portfolio step.
+    expect(body.materialized).toBeFalsy();
+    expect(body.suggestedPortfolioId).toBe(pid);
+    expect(body.drafts.length).toBe(4);
+
+    // Confirm-portfolio step: materialize the staged drafts into the chosen portfolio.
+    const mat = await app.inject({
+      method: "POST",
+      url: `/imports/${body.importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(mat.statusCode).toBe(201);
+    expect(mat.json().materialized).toBe(true);
+    expect(mat.json().materializedCount).toBe(4);
 
     // The rows live in the transactions table as status='draft'.
     const list = await app.inject({ method: "GET", url: `/portfolios/${pid}/transactions`, headers: auth(t) });
@@ -1517,9 +1528,21 @@ describe("screenshot import → confirm flow", () => {
       payload: detectForm.payload,
     });
     expect(res.statusCode).toBe(201);
-    // Phase 3: an account-matched screenshot materializes straight into the matched portfolio.
-    expect(res.json().materialized).toBe(true);
-    expect(res.json().portfolioId).toBe(pid1);
+    // An account-matched screenshot is staged with the matched portfolio as the suggestion;
+    // materializing it then writes the drafts into that portfolio.
+    expect(res.json().materialized).toBeFalsy();
+    expect(res.json().matchedPortfolioId).toBe(pid1);
+    expect(res.json().suggestedPortfolioId).toBe(pid1);
+
+    const mat = await detectApp.inject({
+      method: "POST",
+      url: `/imports/${res.json().importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid1 },
+    });
+    expect(mat.statusCode).toBe(201);
+    expect(mat.json().materialized).toBe(true);
+
     const list = (
       await detectApp.inject({ method: "GET", url: `/portfolios/${pid1}/transactions`, headers: auth(t) })
     ).json() as Array<{ status: string }>;
@@ -1934,7 +1957,7 @@ describe("import dedup + account mismatch (#196, #197)", () => {
     await a.close();
   });
 
-  it("materializes a low-confidence vision import on account match and flags it needsReview (Phase 3)", async () => {
+  it("materializes a low-confidence vision import and flags it needsReview (Phase 3)", async () => {
     const lowConf: ParsedTransaction = { ...GOLD_DRAFT, confidence: 0.5 };
     const { a, mkTok } = await freshApp({
       name: "mock-lowconf",
@@ -1959,8 +1982,17 @@ describe("import dedup + account mismatch (#196, #197)", () => {
       payload: up.payload,
     });
     expect(r.statusCode).toBe(201);
-    expect(r.json().materialized).toBe(true);
-    expect(r.json().portfolioId).toBe(pid);
+    expect(r.json().materialized).toBeFalsy();
+    expect(r.json().suggestedPortfolioId).toBe(pid);
+
+    const mat = await a.inject({
+      method: "POST",
+      url: `/imports/${r.json().importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(mat.statusCode).toBe(201);
+    expect(mat.json().materialized).toBe(true);
 
     // The materialized draft carries the low parse confidence → flagged for review.
     const list = (
@@ -1968,6 +2000,65 @@ describe("import dedup + account mismatch (#196, #197)", () => {
     ).json() as Array<{ status: string; needsReview?: boolean; source: string }>;
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ status: "draft", source: "screenshot", needsReview: true });
+
+    await a.close();
+  });
+
+  it("materialize re-confirms the account mismatch (409 → acknowledge → written)", async () => {
+    const { a, mkTok } = await freshApp({
+      name: "mock-mm-mat",
+      isConfigured: () => true,
+      parse: async () => ({ drafts: [GOLD_DRAFT], contracts: [], accountNumber: "MM-7654321" }),
+    });
+    const t = await mkTok("mm-mat-user");
+    // Depot A owns the file's account; depot B is the wrong target.
+    const a1 = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Depot A", baseCurrency: "EUR", accountNumber: "MM7654321" },
+      })
+    ).json().id;
+    const b = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Depot B", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const up = screenshotPart(Buffer.from("mm-mat-img"), "image/png");
+    const r = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...up.headers },
+      payload: up.payload,
+    });
+    expect(r.json().suggestedPortfolioId).toBe(a1);
+    const importId = r.json().importId;
+
+    // Materialize into the WRONG portfolio without acknowledging → 409 with the verdict.
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: b },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("account_mismatch");
+    expect(blocked.json().matchedPortfolioId).toBe(a1);
+
+    // Acknowledge → it writes the drafts into B.
+    const forced = await a.inject({
+      method: "POST",
+      url: `/imports/${importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: b, acknowledgeAccountMismatch: true },
+    });
+    expect(forced.statusCode).toBe(201);
+    expect(forced.json().materialized).toBe(true);
 
     await a.close();
   });
