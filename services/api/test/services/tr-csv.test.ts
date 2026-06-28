@@ -257,16 +257,16 @@ describe("parseTrCsv", () => {
     });
   });
 
-  it("maps EARNINGS (Vorabpauschale) to a negative-cash income leg: cash & gain drop, not contribution", () => {
-    // Gross 0, tax 0.06 withheld → net cash −0.06. `price` is the net cashFlow reads;
-    // action `interest` keeps it out of contributed capital. Self-labelled by the name.
+  it("maps EARNINGS (Vorabpauschale) to a standalone `tax` debit: cash & gain drop, not contribution", () => {
+    // Gross 0, tax 0.06 withheld → a tax outflow. The magnitude lives in `price`
+    // (cashFlow(tax) = −price); the tax FIELD is unused so the display gross isn't doubled.
     expect(draft(23)).toMatchObject({
-      action: "interest",
+      action: "tax",
       quantity: "0",
-      price: "-0.06",
-      tax: "0.06",
+      price: "0.06",
       name: "Vorabpauschale for ISIN IE00BK5BQT80",
     });
+    expect(draft(23)?.tax).toBeUndefined();
     expect(draft(23)?.isin).toBeUndefined();
   });
 

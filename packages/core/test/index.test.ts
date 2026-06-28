@@ -202,6 +202,8 @@ describe("cashFlow", () => {
     expect(cashFlow({ ...base, type: "dividend", quantity: "10", price: "25" }).toString()).toBe("250");
     expect(cashFlow({ ...base, type: "coupon", price: "300" }).toString()).toBe("300");
     expect(cashFlow({ ...base, type: "fee", price: "20" }).toString()).toBe("-20");
+    // `tax` (e.g. Vorabpauschale): magnitude in price → a cash outflow, like fee.
+    expect(cashFlow({ ...base, type: "tax", price: "0.13" }).toString()).toBe("-0.13");
     expect(cashFlow({ ...base, type: "split", fees: "0" }).toString()).toBe("0");
     expect(cashFlow({ ...base, type: "bonus" }).toString()).toBe("0");
     expect(cashFlow({ ...base, type: "rights", fees: "10" }).toString()).toBe("-10");

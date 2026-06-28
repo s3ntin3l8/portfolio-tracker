@@ -111,6 +111,10 @@ const FIXED_ACTIONS: Record<string, ParsedAction> = {
   // TR renamed the event type in late 2024, not a notice-then-settlement pair).
   INTEREST_PAYOUT: "interest",
   INTEREST_PAYOUT_CREATED: "interest",
+  // German Vorabpauschale (advance lump-sum fund tax) — a standalone tax debit, not income.
+  // Best-guess live eventType (the CSV taxonomy name); if the real timeline name differs it
+  // still surfaces as an attention gap until added. Magnitude resolved below (amount or tax).
+  EARNINGS: "tax",
   CARD_REFUND: "deposit",
   // --- cash out ---
   PAYMENT_OUTBOUND: "withdrawal",
@@ -404,6 +408,15 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     price = "0"; // no cash consideration for a bonus share issue
   }
 
+  if (action === "tax") {
+    // Standalone tax debit (Vorabpauschale): the magnitude in `price` drives cashFlow(tax) =
+    // −price. A Vorabpauschale event has gross amount 0 with the figure in the tax field, so
+    // source the magnitude from `amount` and fall back to `tax` — using the default
+    // `price = |amount|` alone would emit 0 and the tax would never reduce cash.
+    price = formatDecimal(amount !== 0 ? amount : Math.abs(ev.tax ?? 0));
+    quantity = "0";
+  }
+
   // Asset class at the source: crypto when TR's synthetic ISIN says so, else equity/ETF
   // (refined at confirm via OpenFIGI). Avoids the old confirm-only crypto workaround.
   const assetClass = ev.isin && TR_CRYPTO_ISIN.test(ev.isin) ? "crypto" : "equity";
@@ -435,7 +448,9 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
       (ev.eventType === SHARE_CORPORATE_ACTION && action === "buy"
         ? "reinvestment"
         : (EVENT_KIND[ev.eventType] ?? null)),
-    tax: ev.tax != null ? formatDecimal(Math.abs(ev.tax)) : null,
+    // For a standalone `tax` debit the magnitude already lives in `price`; leave the tax
+    // FIELD null so the display's gross (price + tax) doesn't double-count it.
+    tax: action === "tax" ? null : ev.tax != null ? formatDecimal(Math.abs(ev.tax)) : null,
     executedPrice: ev.executedPrice != null ? formatDecimal(ev.executedPrice) : null,
     fxRate: ev.fxRate != null ? formatDecimal(ev.fxRate) : null,
     venue: ev.venue ?? null,

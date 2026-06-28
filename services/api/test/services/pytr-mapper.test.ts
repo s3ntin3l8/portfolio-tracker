@@ -164,6 +164,16 @@ describe("mapTrEventToDraft", () => {
     expect(draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 1000 }).action).toBe(
       "deposit",
     );
+    // Vorabpauschale (EARNINGS): a standalone tax debit. Gross amount 0 with the figure in
+    // the tax field → the magnitude must come from `tax` so it doesn't emit a 0 (which would
+    // never reduce cash). The tax FIELD is left null (magnitude lives in price).
+    expect(draftOf({ ...base, eventType: "EARNINGS", amount: 0, tax: -0.06 })).toMatchObject({
+      action: "tax",
+      isin: null,
+      quantity: "0",
+      price: "0.06",
+      tax: null,
+    });
     // Delegated (standing-order) transfers are the same external cash movement as their
     // non-delegation counterparts.
     expect(

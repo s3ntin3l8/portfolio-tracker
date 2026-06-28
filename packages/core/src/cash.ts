@@ -45,6 +45,9 @@ export function cashFlow(tx: CoreTransaction): Decimal {
       // always lump sums (no instrument) — cash in, never a contribution.
       return (q.gt(0) ? notional : p).sub(f);
     case "fee":
+    case "tax":
+      // `tax` = a standalone tax debit (e.g. Vorabpauschale): the magnitude is in `price`,
+      // a cash outflow. Like `fee` — never income, never a contribution.
       return p.neg().sub(f);
     case "loan_drawdown":
       // Financed cash arrives; it is immediately spent on the paired buy, so the

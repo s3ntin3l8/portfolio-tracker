@@ -25,6 +25,10 @@ export const transactionTypeSchema = z.enum([
   // `deposit` so it doesn't inflate invested capital / depress money-weighted return).
   "interest",
   "fee",
+  // A standalone tax debit NOT tied to a disposal — e.g. German Vorabpauschale (advance
+  // lump-sum fund tax). Cash outflow (like `fee`), never income or a contribution.
+  // Withholding tax *on* a dividend/sale stays in the transaction `tax` FIELD, not here.
+  "tax",
   "split",
   "bonus",
   "rights",
@@ -358,6 +362,8 @@ export const parsedActionSchema = z.enum([
   "withdrawal",
   "bonus",
   "bonus_cash",
+  // Standalone tax debit (e.g. Vorabpauschale) — a cash outflow, not income. See txTypeEnum.
+  "tax",
   "transfer_in",
   "transfer_out",
 ]);

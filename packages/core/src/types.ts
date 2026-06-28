@@ -7,6 +7,9 @@ export type TransactionType =
   | "coupon"
   | "interest"
   | "fee"
+  // A standalone tax debit NOT tied to a disposal — e.g. German Vorabpauschale (advance
+  // lump-sum fund tax). Cash outflow (like `fee`), never income or a contribution.
+  | "tax"
   | "split"
   | "bonus"
   | "rights"

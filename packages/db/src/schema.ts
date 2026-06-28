@@ -38,6 +38,10 @@ export const txTypeEnum = pgEnum("transaction_type", [
   // Interest on uninvested cash — income, not a contribution. See transactionTypeSchema.
   "interest",
   "fee",
+  // A standalone tax debit NOT tied to a disposal — e.g. German Vorabpauschale (advance
+  // lump-sum fund tax). Cash outflow (like `fee`), never income or a contribution.
+  // Withholding tax *on* a dividend/sale stays in the transaction `tax` FIELD, not here.
+  "tax",
   "split",
   "bonus",
   "rights",

@@ -70,7 +70,7 @@ export interface AddTransactionInitial {
 const ACQUISITION_TYPES = ["buy", "sell", "savings_plan"] as const;
 const SHARE_RECEIPT_TYPES = ["bonus", "split", "rights"] as const;
 const INCOME_TYPES = ["dividend", "coupon"] as const;
-const CASH_TYPES = ["deposit", "withdrawal", "fee", "interest", "bonus_cash"] as const;
+const CASH_TYPES = ["deposit", "withdrawal", "fee", "tax", "interest", "bonus_cash"] as const;
 // First-class transfer types (depot-to-depot, PR #309). Cash-neutral; price = carried basis.
 const TRANSFER_TYPES = ["transfer_in", "transfer_out"] as const;
 

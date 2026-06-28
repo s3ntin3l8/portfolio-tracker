@@ -919,6 +919,7 @@
     "dividend": "Dividend",
     "coupon": "Coupon",
     "fee": "Fee",
+    "tax": "Tax",
     "split": "Split",
     "bonus": "Bonus shares",
     "rights": "Rights",

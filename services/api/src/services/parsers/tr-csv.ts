@@ -231,23 +231,20 @@ export function parseTrCsv(content: string): CsvParseResult {
       };
     } else if (type === "EARNINGS") {
       // German Vorabpauschale (advance lump-sum fund tax): the gross payout is 0 and only a
-      // `tax` is withheld, so the net cash effect is −|tax|. Model it as a negative-cash
-      // income leg (cf. the dividend net/gross convention above): `price` is the net cash
-      // `cashFlow` reads, so cash and gain both drop by the tax while contribution is
-      // unchanged (interest is return, never contributed capital). No instrument leg — the
-      // tax doesn't change the holding; the name labels it for review.
+      // `tax` is withheld, so the net cash effect is −|tax|. It's a standalone tax debit, not
+      // income — model it as the first-class `tax` type with the magnitude in `price`
+      // (cashFlow(tax) = −price). No instrument leg; the name labels it. Excluded from
+      // holdings/contributions/income; reduces cash and total return.
       if (tax == null) {
         fail("EARNINGS row missing tax");
         continue;
       }
-      const net = (amount ?? 0) - Math.abs(tax);
       candidate = {
         ...base,
         name: decodeName(get(cols.description)) || name || "Vorabpauschale",
-        action: "interest",
+        action: "tax",
         quantity: "0",
-        price: formatDecimal(net),
-        tax: formatDecimal(Math.abs(tax)),
+        price: formatDecimal(Math.abs(tax)),
         fees: "0",
       };
     } else if (DEPOSIT_TYPES.has(type)) {
