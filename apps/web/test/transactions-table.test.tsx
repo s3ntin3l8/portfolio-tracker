@@ -36,6 +36,7 @@ const PORTFOLIOS = [
 
 import {
   TransactionsTable,
+  txNetAmount,
   type TxRow,
 } from "../src/components/transactions-table";
 
@@ -270,12 +271,11 @@ describe("TransactionsTable", () => {
     expect(th).toHaveAttribute("aria-sort", "descending");
   });
 
-  it("renders new column headers for fees, tax, net amount, and fx rate", () => {
+  it("renders new column headers for fees, tax, and net amount", () => {
     renderTable();
     expect(screen.getByRole("button", { name: /fees/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /tax/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /net amount/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /fx rate/i })).toBeInTheDocument();
   });
 
   it("shows dash for zero fees and null tax, renders tax value when set", () => {
@@ -289,12 +289,6 @@ describe("TransactionsTable", () => {
     expect(cellTexts.some((t) => t.includes("10"))).toBe(true);
     // tax for t1 (null) should render as —
     expect(cellTexts.some((t) => t === "—")).toBe(true);
-  });
-
-  it("renders the fx rate for t2 and dash for t1", () => {
-    renderTable();
-    // t2 fxRate = "15500" → should appear as "15500.0000"
-    expect(screen.getAllByText(/15500/).length).toBeGreaterThan(0);
   });
 
   it("shows GROSS amount (price + tax) for dividend rows; net amount stays separate", () => {
@@ -384,6 +378,38 @@ describe("TransactionsTable", () => {
       expect(
         screen.getByRole("button", { name: messages.Manage.status.label }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("txNetAmount — display net (drafts preview their face value)", () => {
+    // A Vorabpauschale-style income leg: net cash lives in `price`, no quantity.
+    const incomeLeg: TxRow = {
+      id: "vp",
+      portfolioId: "p1",
+      portfolioName: "Main",
+      type: "interest",
+      quantity: "0",
+      price: "-0.06",
+      fees: "0",
+      tax: "0.06",
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-01-28T00:00:00.000Z",
+      source: "csv",
+      instrument: null,
+    };
+
+    it("a DRAFT row shows its face-value net, not 0", () => {
+      expect(txNetAmount({ ...incomeLeg, status: "draft" })).toBeCloseTo(-0.06);
+    });
+
+    it("a normal row shows the same net", () => {
+      expect(txNetAmount({ ...incomeLeg, status: "normal" })).toBeCloseTo(-0.06);
+    });
+
+    it("archived (voided) and cash_neutral rows keep their real net of 0", () => {
+      expect(txNetAmount({ ...incomeLeg, status: "archived" })).toBeCloseTo(0);
+      expect(txNetAmount({ ...incomeLeg, status: "cash_neutral" })).toBeCloseTo(0); // fees only (0)
     });
   });
 

@@ -27,11 +27,14 @@ export function TransactionStatusButton({
   txId,
   status,
   onChanged,
+  className,
 }: {
   portfolioId: string;
   txId: string;
   status: TransactionStatus;
   onChanged?: () => void;
+  /** Extra classes for the dropdown trigger (e.g. compact sizing). */
+  className?: string;
 }) {
   const t = useTranslations("Manage.status");
   const api = useApiClient();
@@ -53,7 +56,7 @@ export function TransactionStatusButton({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("label")} disabled={busy}>
+        <Button variant="ghost" size="icon" aria-label={t("label")} disabled={busy} className={className}>
           {busy ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (

@@ -12,11 +12,14 @@ export function DeleteTransactionButton({
   portfolioId,
   txId,
   onDeleted,
+  className,
 }: {
   portfolioId: string;
   txId: string;
   /** Called after the delete succeeds (after router.refresh). */
   onDeleted?: () => void;
+  /** Extra classes for the idle icon trigger (e.g. compact sizing). */
+  className?: string;
 }) {
   const t = useTranslations("Manage.delete");
   const api = useApiClient();
@@ -66,6 +69,7 @@ export function DeleteTransactionButton({
       variant="ghost"
       aria-label={t("label")}
       onClick={() => setConfirming(true)}
+      className={className}
     >
       <Trash2 className="size-4" />
     </Button>
