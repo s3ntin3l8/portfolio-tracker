@@ -135,6 +135,7 @@ export function AddTransactionMenu({
               <ImportFlowClient
                 portfolios={portfolios}
                 defaultPortfolioId={defaultPortfolioId}
+                onClose={() => setImportOpen(false)}
               />
             )}
           </div>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
+import { ImportTasksProvider } from "@/components/import-tasks-provider";
 import { SessionErrorGuard } from "@/components/session-error-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { resolveSelection, loadMe, loadAccountHolders } from "@/lib/server-api";
@@ -45,20 +46,22 @@ export default async function AppLayout({
     <>
       <SessionErrorGuard />
       <Toaster richColors position="bottom-right" />
-      <AppShell
-        portfolios={selection.portfolios.map((p) => ({
-          id: p.id,
-          name: p.name,
-          brokerage: p.brokerage,
-          accountHolder: p.accountHolder,
-        }))}
-        holders={qualHolders}
-        selectedId={selection.selectedId}
-        selectedHolderId={selection.selectedHolderId}
-        isAdmin={Boolean(me?.isAdmin)}
-      >
-        {children}
-      </AppShell>
+      <ImportTasksProvider>
+        <AppShell
+          portfolios={selection.portfolios.map((p) => ({
+            id: p.id,
+            name: p.name,
+            brokerage: p.brokerage,
+            accountHolder: p.accountHolder,
+          }))}
+          holders={qualHolders}
+          selectedId={selection.selectedId}
+          selectedHolderId={selection.selectedHolderId}
+          isAdmin={Boolean(me?.isAdmin)}
+        >
+          {children}
+        </AppShell>
+      </ImportTasksProvider>
     </>
   );
 }

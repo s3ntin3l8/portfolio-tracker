@@ -9,9 +9,10 @@ import {
   AlertCircle,
   ChevronDown,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Link, useRouter } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { Label } from "@/components/ui/label";
 import { PortfolioPicker } from "@/components/portfolio-picker";
 import type {
@@ -19,7 +20,6 @@ import type {
   ImportIssue,
   LikelyDuplicate,
 } from "@portfolio/api-client";
-import { accountMismatchFromError } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
 import { ContractReview } from "@/components/contract-review";
@@ -161,7 +161,35 @@ export interface ImportClient {
   ): Promise<{ materializedCount: number; excludedCashMovements: number }>;
 }
 
-type Step = "upload" | "parsing" | "review" | "done";
+/** One portfolio target for a backgrounded materialize (one per import group). */
+export interface MaterializeUnit {
+  importId: string;
+  portfolioId: string;
+}
+
+/**
+ * A plain-data snapshot of a confirmed import, handed to `ImportTasksProvider.run()` so
+ * the write can finish in the background after the modal closes. Carries everything the
+ * provider needs — nothing references `ImportFlow`'s component state after handoff.
+ */
+export interface ImportTask {
+  kind: "materialize" | "confirm";
+  /** Human label for the toast — a filename (single) or "N files" (multi). */
+  label: string;
+  /** Pre-set `true` only when launched from the parse-time account-mismatch banner. */
+  acknowledge: boolean;
+  /** Drafts submitted (the "Y" in "imported X of Y") — set for materialize, not contracts. */
+  expectedCount?: number;
+  // kind === "materialize" (the common securities path):
+  units?: MaterializeUnit[];
+  // kind === "confirm" (gold installment contracts):
+  importId?: string;
+  drafts?: ImportDraft[];
+  contracts?: ImportContract[];
+  portfolioId?: string;
+}
+
+type Step = "upload" | "parsing" | "review";
 type CsvFormat = "auto" | "generic" | "dkb" | "ibkr" | "coinbase";
 
 export interface ImportTargetPortfolio {
@@ -171,7 +199,7 @@ export interface ImportTargetPortfolio {
   accountHolder: string | null;
 }
 
-const STEPS: Step[] = ["upload", "review", "done"];
+const STEPS: Step[] = ["upload", "review"];
 
 const SAMPLE_DRAFT: ImportDraft = {
   assetClass: "gold",
@@ -256,6 +284,8 @@ export function ImportFlow({
   portfolios = [{ id: "demo", name: "Demo", brokerage: null, accountHolder: null }],
   defaultPortfolioId,
   initialFile,
+  onSubmit,
+  onClose,
 }: {
   client?: ImportClient;
   portfolios?: ImportTargetPortfolio[];
@@ -263,13 +293,15 @@ export function ImportFlow({
   // A screenshot handed in from the Web Share Target — parsed automatically on mount,
   // reusing the same path as the file picker.
   initialFile?: File | null;
+  // Hand the confirmed import off to the shell-level provider that finishes the write in
+  // the background; called just before `onClose`. No-op default keeps the demo path alive.
+  onSubmit?: (task: ImportTask) => void;
+  // Close the surrounding modal — invoked the moment an import is committed or completes.
+  onClose?: () => void;
 } = {}) {
   const t = useTranslations("Import");
   const router = useRouter();
   const [step, setStep] = useState<Step>("upload");
-  // Tracks in-flight confirm calls so ImportReview can disable buttons without unmounting
-  // (unmounting would clear the row selection, forcing the user to re-select on 409 errors).
-  const [isConfirming, setIsConfirming] = useState(false);
   // Per-group portfolio selection: importId → portfolioId. Populated in handleFiles,
   // updated by the per-group pickers on the review step.
   const [portfolioByImport, setPortfolioByImport] = useState<PortfolioByImportMap>(new Map());
@@ -296,9 +328,6 @@ export function ImportFlow({
   // Account-mismatch warning (#197) — set from the upload hint or a confirm 409. Shown as
   // a banner in the review step; "Import anyway" re-confirms with the acknowledge flag.
   const [accountMismatch, setAccountMismatch] = useState<AccountMismatch | null>(null);
-  const [confirmedCount, setConfirmedCount] = useState(0);
-  // Cash-movement rows the server dropped because the target portfolio is cash-outside (#326).
-  const [excludedCount, setExcludedCount] = useState(0);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   // Drag-and-drop hover state for the dropzone.
@@ -310,6 +339,28 @@ export function ImportFlow({
   function errorMessage(err: unknown): string {
     const reason = importSkipReason(err);
     return t(`errors.${reason}`);
+  }
+
+  /** A human label for the in-flight import toast: the filename, or "N files" for groups. */
+  function taskLabel(): string {
+    const names = Array.from(groups.values());
+    if (names.length === 1) return names[0] ?? "";
+    return t("toast.filesLabel", { count: names.length });
+  }
+
+  /**
+   * Phase-2 success notice: the server already wrote these rows during the synchronous
+   * parse (no review step), so there's nothing to background — just refresh route data
+   * and drop a success toast with a "View" action.
+   */
+  function notifyMaterialized(count: number) {
+    router.refresh();
+    toast.success(t("toast.success", { count }), {
+      action: {
+        label: t("toast.viewTransactions"),
+        onClick: () => router.push("/transactions"),
+      },
+    });
   }
 
   /**
@@ -361,9 +412,10 @@ export function ImportFlow({
           return;
         }
         // Phase 2: a deterministic import with a matched portfolio was written straight into
-        // the transactions table as draft rows — skip review, go see them.
+        // the transactions table as draft rows — skip review, close + toast.
         if (result.materialized) {
-          router.push("/transactions");
+          notifyMaterialized(result.materializedCount ?? 0);
+          onClose?.();
           return;
         }
         const resultContracts = result.contracts ?? [];
@@ -466,10 +518,11 @@ export function ImportFlow({
     setSkipped(newSkipped);
 
     // If some files materialized straight into the table and nothing remains to review,
-    // go to the transactions table (Phase 2). If there are also drafts to review, fall
-    // through to the review screen for those — the materialized rows already landed.
+    // close + toast (Phase 2). If there are also drafts to review, fall through to the
+    // review screen for those — the materialized rows already landed.
     if (mergedDrafts.length === 0 && contracts.length === 0 && materializedTotal > 0) {
-      router.push("/transactions");
+      notifyMaterialized(materializedTotal);
+      onClose?.();
       return;
     }
 
@@ -520,62 +573,50 @@ export function ImportFlow({
 
   /**
    * Confirm gold installment contracts — the remaining confirm path (pure-securities uploads
-   * go through the materialize step). One `confirmImport` call writes the loan + its legs;
-   * an account mismatch surfaces the banner, whose "Import anyway" re-confirms with the flag.
-   * Any flat drafts that arrived alongside the contracts in the same parse are written too
-   * (a single document carrying both is rare but must not silently drop the securities).
+   * go through the materialize step). Hands the write off to the background provider, then
+   * closes the modal. Any flat drafts that arrived alongside the contracts in the same parse
+   * are written too (a single document carrying both is rare but must not silently drop the
+   * securities). The parse-time mismatch banner's "Import anyway" passes `acknowledge=true`.
    */
-  async function confirm(acknowledgeMismatch = false) {
-    setError(null);
-    setIsConfirming(true);
-    try {
-      const { confirmed, excludedCashMovements } = await client.confirmImport(
-        importId,
-        drafts.map(stripUid),
-        contracts,
-        portfolioByImport.get(importId),
-        acknowledgeMismatch,
-      );
-      setConfirmedCount(confirmed);
-      setExcludedCount(excludedCashMovements ?? 0);
-      setAccountMismatch(null);
-      setIsConfirming(false);
-      setStep("done");
-    } catch (err) {
-      const mismatch = accountMismatchFromError(err);
-      if (mismatch) setAccountMismatch(mismatch);
-      else setError(errorMessage(err));
-      setIsConfirming(false);
-    }
+  function submitConfirm(acknowledge = false) {
+    onSubmit?.({
+      kind: "confirm",
+      label: taskLabel(),
+      acknowledge,
+      importId,
+      drafts: drafts.map(stripUid),
+      contracts,
+      portfolioId: portfolioByImport.get(importId),
+    });
+    onClose?.();
   }
 
   /**
-   * Confirm-portfolio step (drafts, non-contract): write each group's staged drafts into its
-   * chosen portfolio as `status='draft'` transactions, then go to the table. Cross-source
-   * duplicates collapse server-side (no 409 dance). On an account mismatch the server returns
-   * a 409 verdict → surface the banner; "Import anyway" replays with `acknowledgeMismatch`.
+   * Confirm-portfolio step (drafts, non-contract): validate every group has a target, then
+   * hand the per-group writes off to the background provider and close the modal. The
+   * provider materializes each import as `status='draft'` rows (cross-source duplicates
+   * collapse server-side) and drives the status toast — including a 409 account-mismatch
+   * "Import anyway" retry, since the modal is gone by the time the server responds.
    */
-  async function materialize(acknowledgeMismatch = false) {
+  function submitMaterialize(acknowledge = false) {
     setError(null);
-    setIsConfirming(true);
-    try {
-      for (const iid of groups.keys()) {
-        const pid = portfolioByImport.get(iid);
-        if (!pid) {
-          setError(t("errors.portfolioRequired"));
-          setIsConfirming(false);
-          return;
-        }
-        await client.materializeImport(iid, pid, acknowledgeMismatch);
+    const units: MaterializeUnit[] = [];
+    for (const iid of groups.keys()) {
+      const pid = portfolioByImport.get(iid);
+      if (!pid) {
+        setError(t("errors.portfolioRequired"));
+        return;
       }
-      setAccountMismatch(null);
-      router.push("/transactions");
-    } catch (err) {
-      const mismatch = accountMismatchFromError(err);
-      if (mismatch) setAccountMismatch(mismatch);
-      else setError(errorMessage(err));
-      setIsConfirming(false);
+      units.push({ importId: iid, portfolioId: pid });
     }
+    onSubmit?.({
+      kind: "materialize",
+      label: taskLabel(),
+      acknowledge,
+      expectedCount: drafts.length,
+      units,
+    });
+    onClose?.();
   }
 
   function reset() {
@@ -591,8 +632,6 @@ export function ImportFlow({
     setFileStatuses([]);
     setError(null);
     setAccountMismatch(null);
-    setConfirmedCount(0);
-    setExcludedCount(0);
     setStep("upload");
   }
 
@@ -771,9 +810,9 @@ export function ImportFlow({
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  void (drafts.length > 0 && contracts.length === 0
-                    ? materialize(true)
-                    : confirm(true))
+                  drafts.length > 0 && contracts.length === 0
+                    ? submitMaterialize(true)
+                    : submitConfirm(true)
                 }
               >
                 {t("accountMismatch.importAnyway")}
@@ -819,9 +858,9 @@ export function ImportFlow({
             <ContractReview
               contracts={contracts}
               onUpdate={updateContract}
-              // The contract card drives confirm/discard. confirm() also writes any flat
+              // The contract card drives confirm/discard. submitConfirm() also writes any flat
               // drafts that arrived in the same parse, so it owns the whole import.
-              onConfirm={() => confirm()}
+              onConfirm={() => submitConfirm()}
               onDiscard={reset}
             />
           )}
@@ -878,17 +917,10 @@ export function ImportFlow({
                 },
               )}
               <div className="flex items-center gap-2">
-                <Button onClick={() => void materialize()} disabled={isConfirming}>
-                  {isConfirming ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      {t("confirmPortfolio.importing")}
-                    </>
-                  ) : (
-                    t("confirmPortfolio.confirm")
-                  )}
+                <Button onClick={() => submitMaterialize()}>
+                  {t("confirmPortfolio.confirm")}
                 </Button>
-                <Button variant="ghost" onClick={reset} disabled={isConfirming}>
+                <Button variant="ghost" onClick={reset}>
                   {t("confirmPortfolio.discard")}
                 </Button>
               </div>
@@ -897,28 +929,6 @@ export function ImportFlow({
         </div>
       )}
 
-      {step === "done" && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <CheckCircle2 className="size-8 text-success" />
-            <p className="font-medium">{t("done.title")}</p>
-            <p className="text-sm text-muted-foreground">
-              {t("done.hint", { count: confirmedCount })}
-            </p>
-            {excludedCount > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {t("done.excludedCash", { count: excludedCount })}
-              </p>
-            )}
-            <Button variant="outline" className="mt-2" onClick={reset}>
-              {t("done.again")}
-            </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/transactions">{t("done.history")}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

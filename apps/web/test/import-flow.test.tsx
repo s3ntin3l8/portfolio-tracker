@@ -5,15 +5,24 @@ import {
   ImportFlow,
   type ImportClient,
   type ImportDraft,
+  type ImportTask,
 } from "../src/components/import-flow";
-import { ApiError } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
-// Spy on the router so the post-materialize redirect can be asserted.
+// Spy on the router so the Phase-2 (auto-materialized) path's refresh is satisfied.
 const pushMock = vi.fn();
+const refreshMock = vi.fn();
 vi.mock("@/i18n/navigation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/i18n/navigation")>();
-  return { ...actual, useRouter: () => ({ push: pushMock, replace: vi.fn(), back: vi.fn() }) };
+  return {
+    ...actual,
+    useRouter: () => ({
+      push: pushMock,
+      replace: vi.fn(),
+      back: vi.fn(),
+      refresh: refreshMock,
+    }),
+  };
 });
 
 const DRAFT: ImportDraft = {
@@ -62,15 +71,20 @@ function renderFlow(
     accountHolder: string | null;
   }[] = [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
 ) {
-  return render(
+  const onSubmit = vi.fn<(task: ImportTask) => void>();
+  const onClose = vi.fn();
+  const result = render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <ImportFlow
         client={client}
         portfolios={portfolios}
         defaultPortfolioId={portfolios[0].id}
+        onSubmit={onSubmit}
+        onClose={onClose}
       />
     </NextIntlClientProvider>,
   );
+  return { ...result, onSubmit, onClose };
 }
 
 function pngFile() {
@@ -89,8 +103,7 @@ const confirmBtn = () =>
   screen.getByRole("button", { name: messages.Import.confirmPortfolio.confirm });
 
 describe("ImportFlow", () => {
-  it("uploads a screenshot, confirms the portfolio, and materializes drafts", async () => {
-    pushMock.mockClear();
+  it("uploads a screenshot, then hands a materialize task off and closes", async () => {
     const client = makeClient({
       importScreenshot: vi.fn(async () => ({
         importId: "imp1",
@@ -98,7 +111,7 @@ describe("ImportFlow", () => {
         errors: [],
       })),
     });
-    const { container } = renderFlow(client);
+    const { container, onSubmit, onClose } = renderFlow(client);
 
     fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
 
@@ -109,9 +122,18 @@ describe("ImportFlow", () => {
 
     fireEvent.click(confirmBtn());
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    // Sole portfolio is used as the target (no picker shown).
-    expect(client.materializeImport).toHaveBeenCalledWith("imp1", "p1", false);
+    // Sole portfolio is used as the target (no picker shown). The write is backgrounded.
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "materialize",
+        acknowledge: false,
+        expectedCount: 1,
+        units: [{ importId: "imp1", portfolioId: "p1" }],
+      }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // The write itself is the provider's job — ImportFlow no longer calls the client.
+    expect(client.materializeImport).not.toHaveBeenCalled();
   });
 
   it("auto-detects file type: CSV → importCsv, PNG → importScreenshot", async () => {
@@ -126,8 +148,7 @@ describe("ImportFlow", () => {
     expect(client.importScreenshot).not.toHaveBeenCalled();
   });
 
-  it("pre-selects the suggested portfolio and materializes into it", async () => {
-    pushMock.mockClear();
+  it("pre-selects the suggested portfolio and targets it in the task", async () => {
     const client = makeClient({
       importCsv: vi.fn(async () => ({
         importId: "imp-s",
@@ -138,7 +159,7 @@ describe("ImportFlow", () => {
         suggestedPortfolioId: "p2",
       })),
     });
-    const { container } = renderFlow(client, [
+    const { container, onSubmit } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
       { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
     ]);
@@ -148,26 +169,24 @@ describe("ImportFlow", () => {
     await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
     // The "pre-selected from the account number" note is shown.
     expect(screen.getByText(messages.Import.confirmPortfolio.matched)).toBeInTheDocument();
-    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
 
     fireEvent.click(confirmBtn());
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    expect(client.materializeImport).toHaveBeenCalledWith("imp-s", "p2", false);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ units: [{ importId: "imp-s", portfolioId: "p2" }] }),
+    );
   });
 
-  it("routes to a portfolio chosen on the confirm step", async () => {
-    pushMock.mockClear();
+  it("targets a portfolio chosen on the confirm step", async () => {
     const client = makeClient({
       importCsv: vi.fn(async () => ({ importId: "imp4", drafts: [DRAFT], errors: [] })),
     });
-    const { container } = renderFlow(client, [
+    const { container, onSubmit, onClose } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
       { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
     ]);
 
     fireEvent.change(fileInput(container), { target: { files: [csvFile("t.csv")] } });
     await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
-    expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "auto", false);
 
     // Pick a different portfolio (rich Radix dropdown: Enter opens, click selects).
     fireEvent.keyDown(
@@ -177,57 +196,50 @@ describe("ImportFlow", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
 
     fireEvent.click(confirmBtn());
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    expect(client.materializeImport).toHaveBeenCalledWith("imp4", "p2", false);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ units: [{ importId: "imp4", portfolioId: "p2" }] }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("warns on an account mismatch and re-materializes with acknowledgement (#197)", async () => {
-    pushMock.mockClear();
-    const materializeImport = vi
-      .fn()
-      // First attempt blocked by the mismatch guard.
-      .mockRejectedValueOnce(
-        new ApiError(
-          409,
-          JSON.stringify({
-            error: "account_mismatch",
-            kind: "other_portfolio",
-            matchedPortfolioId: "p2",
-            matchedName: "Other",
-            detected: "506740786",
-          }),
-        ),
-      )
-      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+  it("a parse-time account mismatch shows a banner; Import anyway submits with acknowledge (#197)", async () => {
     const client = makeClient({
       importScreenshot: vi.fn(async () => ({
         importId: "imp-mm",
         drafts: [DRAFT],
         errors: [],
+        accountMismatch: {
+          kind: "other_portfolio" as const,
+          matchedPortfolioId: "p2",
+          matchedName: "Other",
+          detected: "506740786",
+        },
       })),
-      materializeImport,
     });
-    renderFlow(client, [
+    const { onSubmit, onClose } = renderFlow(client, [
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
       { id: "p2", name: "Other", brokerage: null, accountHolder: null },
     ]);
 
     fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
-    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
 
-    // First confirm → 409 → mismatch banner.
-    fireEvent.click(confirmBtn());
+    // The mismatch banner renders on the review step with an "Import anyway" button.
     const importAnyway = await screen.findByRole("button", {
       name: messages.Import.accountMismatch.importAnyway,
     });
     fireEvent.click(importAnyway);
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    expect(materializeImport).toHaveBeenNthCalledWith(1, "imp-mm", "p1", false);
-    expect(materializeImport).toHaveBeenNthCalledWith(2, "imp-mm", "p1", true);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "materialize",
+        acknowledge: true,
+        units: [{ importId: "imp-mm", portfolioId: "p1" }],
+      }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("reviews a gold installment contract and confirms it (confirm path, unchanged)", async () => {
+  it("reviews a gold installment contract and hands off a confirm task", async () => {
     const contract = {
       provider: "GALERI24",
       contractNo: "C-9",
@@ -254,9 +266,8 @@ describe("ImportFlow", () => {
         contracts: [contract],
         errors: [],
       })),
-      confirmImport: vi.fn(async () => ({ confirmed: 4 })),
     });
-    const { container } = renderFlow(client);
+    const { container, onSubmit, onClose } = renderFlow(client);
 
     fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
 
@@ -267,12 +278,39 @@ describe("ImportFlow", () => {
       screen.getByRole("button", { name: messages.Import.contract.confirm }),
     );
 
-    await waitFor(() =>
-      expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "confirm",
+        importId: "imp-c",
+        contracts: [contract],
+        portfolioId: "p1",
+        acknowledge: false,
+      }),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false);
+    expect(onClose).toHaveBeenCalledTimes(1);
     // Gold contracts never use the materialize path.
     expect(client.materializeImport).not.toHaveBeenCalled();
+  });
+
+  it("Phase 2: a server-materialized upload closes the modal without a submit task", async () => {
+    refreshMock.mockClear();
+    const client = makeClient({
+      importCsv: vi.fn(async () => ({
+        importId: "imp-p2",
+        drafts: [],
+        errors: [],
+        materialized: true,
+        materializedCount: 3,
+      })),
+    });
+    const { container, onSubmit, onClose } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), { target: { files: [csvFile("dkb.csv")] } });
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // The write already happened server-side, so there's nothing to background.
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   it("offers a force re-import when a file was already confirmed (#229)", async () => {
@@ -300,15 +338,14 @@ describe("ImportFlow", () => {
     await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
   });
 
-  it("two CSV files → per-group confirm → materialize fans out per import", async () => {
-    pushMock.mockClear();
+  it("two CSV files → per-group confirm → materialize task fans out per import", async () => {
     const client = makeClient({
       importCsv: vi
         .fn()
         .mockResolvedValueOnce({ importId: "imp-a", drafts: [DRAFT], errors: [] })
         .mockResolvedValueOnce({ importId: "imp-b", drafts: [DRAFT_B], errors: [] }),
     });
-    const { container } = renderFlow(client);
+    const { container, onSubmit } = renderFlow(client);
 
     fireEvent.change(fileInput(container), {
       target: { files: [csvFile("broker-a.csv", "a"), csvFile("broker-b.csv", "b")] },
@@ -320,10 +357,15 @@ describe("ImportFlow", () => {
     expect(screen.getAllByText("broker-b.csv").length).toBeGreaterThan(0);
 
     fireEvent.click(confirmBtn());
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/transactions"));
-    expect(client.materializeImport).toHaveBeenCalledTimes(2);
-    expect(client.materializeImport).toHaveBeenCalledWith("imp-a", "p1", false);
-    expect(client.materializeImport).toHaveBeenCalledWith("imp-b", "p1", false);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "materialize",
+        units: [
+          { importId: "imp-a", portfolioId: "p1" },
+          { importId: "imp-b", portfolioId: "p1" },
+        ],
+      }),
+    );
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {
@@ -370,7 +412,7 @@ describe("ImportFlow", () => {
         })
         .mockResolvedValueOnce({ importId: "i2", drafts: [], errors: [] }),
     });
-    const { container } = renderFlow(client);
+    const { container, onSubmit } = renderFlow(client);
 
     fireEvent.change(fileInput(container), {
       target: { files: [csvFile("a.csv", "a"), csvFile("b.csv", "b")] },
@@ -378,7 +420,7 @@ describe("ImportFlow", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.queryByText("a.csv")).not.toBeInTheDocument();
-    expect(client.materializeImport).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("auto-parses a screenshot handed in via initialFile (share target)", async () => {

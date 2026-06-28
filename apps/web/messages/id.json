@@ -335,6 +335,19 @@
     "title": "Impor transaksi",
     "subtitle": "Unggah tangkapan layar atau CSV — periksa drafnya, lalu konfirmasi.",
     "reImportAnyway": "Tetap impor ulang",
+    "toast": {
+      "importing": "Mengimpor {label}…",
+      "importingProgress": "Mengimpor berkas {current} dari {total}…",
+      "addedSoFar": "{count, plural, one {# ditambahkan sejauh ini} other {# ditambahkan sejauh ini}}",
+      "filesLabel": "{count, plural, one {# berkas} other {# berkas}}",
+      "success": "{count, plural, one {# transaksi diimpor} other {# transaksi diimpor}}",
+      "successOfTotal": "Mengimpor {count} dari {total} transaksi",
+      "excluded": "{count, plural, one {# pergerakan kas dikecualikan} other {# pergerakan kas dikecualikan}} — kas berada di luar batas portofolio ini.",
+      "skipped": "{count, plural, one {# duplikat dilewati} other {# duplikat dilewati}}",
+      "error": "Impor gagal",
+      "retry": "Coba lagi",
+      "viewTransactions": "Lihat"
+    },
     "steps": {
       "upload": "Unggah",
       "review": "Konfirmasi",

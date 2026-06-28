@@ -335,6 +335,19 @@
     "title": "Import transactions",
     "subtitle": "Upload a screenshot or CSV — review the draft, then confirm.",
     "reImportAnyway": "Re-import anyway",
+    "toast": {
+      "importing": "Importing {label}…",
+      "importingProgress": "Importing file {current} of {total}…",
+      "addedSoFar": "{count, plural, one {# added so far} other {# added so far}}",
+      "filesLabel": "{count, plural, one {# file} other {# files}}",
+      "success": "{count, plural, one {# transaction imported} other {# transactions imported}}",
+      "successOfTotal": "Imported {count} of {total} transactions",
+      "excluded": "{count, plural, one {# cash movement excluded} other {# cash movements excluded}} — cash is outside this portfolio's boundary.",
+      "skipped": "{count, plural, one {# duplicate skipped} other {# duplicates skipped}}",
+      "error": "Import failed",
+      "retry": "Retry",
+      "viewTransactions": "View"
+    },
     "steps": {
       "upload": "Upload",
       "review": "Confirm",

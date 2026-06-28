@@ -4,11 +4,10 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ImportFlow,
-  type ImportClient,
-  type ImportResult,
   type ImportTargetPortfolio,
 } from "@/components/import-flow";
-import { useApiClient } from "@/lib/api";
+import { useImportClient } from "@/lib/use-import-client";
+import { useImportTasks } from "@/components/import-tasks-provider";
 import { useRouter, usePathname } from "@/i18n/navigation";
 
 // Must match SHARE_CACHE / SHARE_KEY in src/app/sw.ts — where the share-target handler
@@ -30,18 +29,21 @@ async function takeSharedImage(): Promise<File | null> {
 }
 
 /**
- * Wires the import flow to the real API. The api-client returns ParsedTransaction
- * drafts (executedAt typed as Date) while ImportFlow works with string dates; they
- * are the same JSON over the wire, so the boundary is bridged with casts here.
+ * Wires the import flow to the real API. Parsing stays inline (the user reviews drafts and
+ * picks a portfolio); the final write is handed to the shell-level `ImportTasksProvider`
+ * via `onSubmit`, which closes the modal (`onClose`) and tracks status in a toast.
  */
 export function ImportFlowClient({
   portfolios,
   defaultPortfolioId,
+  onClose,
 }: {
   portfolios: ImportTargetPortfolio[];
   defaultPortfolioId: string;
+  onClose?: () => void;
 }) {
-  const api = useApiClient();
+  const client = useImportClient();
+  const { run } = useImportTasks();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -62,40 +64,14 @@ export function ImportFlowClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const client: ImportClient = {
-    importScreenshot: (file, force) =>
-      api.importScreenshot(file, force) as unknown as Promise<ImportResult>,
-    importCsv: (content, format, force) =>
-      api.importCsv(content, format, force) as unknown as Promise<ImportResult>,
-    confirmImport: async (
-      importId,
-      drafts,
-      contracts,
-      portfolioId,
-      acknowledgeAccountMismatch,
-      acknowledgeDuplicates,
-    ) => {
-      const res = await api.confirmImport(
-        importId,
-        drafts as unknown as Parameters<typeof api.confirmImport>[1],
-        contracts as unknown as Parameters<typeof api.confirmImport>[2],
-        portfolioId,
-        acknowledgeAccountMismatch,
-        acknowledgeDuplicates,
-      );
-      router.refresh(); // surface the new transactions on other screens
-      return res;
-    },
-    materializeImport: (importId, portfolioId, acknowledgeAccountMismatch) =>
-      api.materializeImport(importId, portfolioId, acknowledgeAccountMismatch),
-  };
-
   return (
     <ImportFlow
       client={client}
       portfolios={portfolios}
       defaultPortfolioId={defaultPortfolioId}
       initialFile={sharedFile}
+      onSubmit={run}
+      onClose={onClose}
     />
   );
 }
