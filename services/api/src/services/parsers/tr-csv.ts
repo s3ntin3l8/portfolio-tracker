@@ -18,11 +18,10 @@ import { collapsePerkFundedAcquisitions } from "./perk-pairing.js";
 //                cashFlow/XIRR); `tax` stored as −csv_tax (positive = withheld, negative =
 //                refund) to match the DKB/manual convention. A reversal row has a negative
 //                `amount` and positive `tax`, yielding a negative net and negative stored tax.
-//   • Promos:    BENEFITS_SAVEBACK → income (action `interest` + kind `saveback`) — excluded
-//                from contributions. BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`,
-//                then collapsePerkFundedAcquisitions folds a perk credit into the same-day
-//                buy it funds → one `bonus` free-share row (a lone, uninvested perk stays
-//                `bonus_cash`). All excluded from contributions either way.
+//   • Promos:    BENEFITS_SAVEBACK/BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`,
+//                then collapsePerkFundedAcquisitions folds each reward credit into the
+//                savings-plan buy it funds (0–4 days later) → one `bonus` free-share row (a
+//                lone, uninvested reward stays `bonus_cash`). All excluded from contributions.
 //   • EARNINGS:  Vorabpauschale (advance fund tax): gross 0, only `tax` withheld, so the net
 //                cash is −|tax| → a negative-cash income leg (cash & gain drop, not contribution).
 //   • Sign:      buy amount<0/shares>0, sell amount>0/shares<0, cash-in>0, cash-out<0.
@@ -49,18 +48,20 @@ const WITHDRAWAL_TYPES = new Set([
 // recorded as a withdrawal — matching the pytr mapper. Users omit these at review if wanted.
 const CARD_TYPES = new Set(["CARD_TRANSACTION", "CARD_TRANSACTION_INTERNATIONAL"]);
 const DIVIDEND_TYPES = new Set(["DIVIDEND", "DISTRIBUTION"]);
-// Cash credits with no share leg (cashback / promos). Broker-credited money, not a user
-// contribution — excluded from contributed capital (cf. the pytr mapper). Unlike pytr's
-// SAVEBACK_AGGREGATE, the CSV rows have no reinvestment shares.
+// Reward credits with no share leg of their own (cashback / promos). Broker-credited money,
+// not a user contribution — excluded from contributed capital. All map to action `bonus_cash`
+// + kind `bonus`; collapsePerkFundedAcquisitions then folds each into the savings-plan buy it
+// funds (0–4 days later), so a reward-funded buy becomes a single `bonus` free-share row
+// instead of an income leg + a buy that wrongly counts as contributed capital. A reward with
+// no matching buy stays a `bonus_cash` income row (still return, still contribution-excluded).
 //
-// BENEFITS_SAVEBACK: recorded as action `interest` + kind `saveback` — keeping saveback's
-//   own contribution-exclusion path unchanged.
-// BONUS / KINDERGELD_BONUS / STOCKPERK: broker cash bonuses → action `bonus_cash` + kind
-//   `bonus`. KINDERGELD_BONUS is a TR cash credit on the Kindergeld feature; STOCKPERK is a
-//   reward credited as cash (the row has an instrument field but no share count). All three
-//   have the same economics but are now distinguishable in the UI as "Bonus".
-const CASH_SAVEBACK_TYPES = new Set(["BENEFITS_SAVEBACK"]);
-const CASH_BONUS_TYPES = new Set(["BONUS", "KINDERGELD_BONUS", "STOCKPERK"]);
+//   BENEFITS_SAVEBACK — saveback cashback reinvested into the chosen ETF (verified 1:1 against
+//     real exports: every saveback funds a same-week buy). The pytr live path books the same
+//     event as a cash-neutral `savings_plan`+`saveback`; the two dedup via the acquire class.
+//   KINDERGELD_BONUS — TR cash credit on the Kindergeld feature.
+//   STOCKPERK — reward credited as cash (row may carry an instrument field but no share count).
+//   BONUS — promo / crypto one-percent bonus compensation.
+const CASH_BONUS_TYPES = new Set(["BONUS", "KINDERGELD_BONUS", "STOCKPERK", "BENEFITS_SAVEBACK"]);
 // Shares received with no cash consideration → bonus (quantity = received shares, price 0).
 const SHARE_IN_TYPES = new Set(["FREE_RECEIPT", "DIVIDEND_OPTION", "DIVIDEND_REINVESTMENT"]);
 // Recognised but not representable as a single transaction leg — surfaced for manual
@@ -264,30 +265,14 @@ export function parseTrCsv(content: string): CsvParseResult {
     } else if (type === "CARD_ORDERING_FEE") {
       const charge = fee ?? amount ?? 0;
       candidate = { ...base, action: "withdrawal", quantity: "0", price: formatDecimal(Math.abs(charge)), fees: "0" };
-    } else if (CASH_SAVEBACK_TYPES.has(type)) {
-      if (amount == null) {
-        fail(`${type} row missing amount`);
-        continue;
-      }
-      // Saveback: broker-credited cashback on trades — income, not a contribution.
-      // Recorded as `interest` + kind `saveback` to reuse the saveback contribution-exclusion.
-      candidate = {
-        ...base,
-        name,
-        action: "interest",
-        quantity: "0",
-        price: formatDecimal(Math.abs(amount)),
-        fees: "0",
-        kind: "saveback",
-      };
     } else if (CASH_BONUS_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
         continue;
       }
-      // Broker cash bonus (Kindergeld credit, promotion bonus, stock perk) — income but
-      // distinct from uninvested-cash interest so it shows as "Bonus" in the UI.
-      // `kind: "bonus"` is kept for context and backfill matching.
+      // Reward credit (saveback / Kindergeld / stock perk / promo) — income but distinct from
+      // uninvested-cash interest so it shows as "Bonus". `kind: "bonus"` drives the perk
+      // collapse (collapsePerkFundedAcquisitions) and backfill matching.
       candidate = {
         ...base,
         name,

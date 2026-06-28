@@ -62,7 +62,8 @@ const ROWS: Record<string, string>[] = [
   // card ordering fee: amount 0, the charge lives in `fee`
   { datetime: "2024-05-06T11:47:18.865042Z", category: "CASH", type: "CARD_ORDERING_FEE",
     amount: "0.000000", fee: "-5.00", currency: "EUR", description: "Trade Republic Card", transaction_id: id(10) },
-  // saveback cashback: deposit + kind, name kept, no instrument
+  // saveback cashback: reward credit → bonus_cash (collapses into its funding buy when one
+  // exists; none in this fixture, so it stays a standalone bonus_cash income row). Name kept.
   { datetime: "2025-02-03T15:59:12.456716Z", category: "CASH", type: "BENEFITS_SAVEBACK", asset_class: "FUND",
     name: "Core S&amp;P 500 USD (Acc)", symbol: "IE00B5BMR087", amount: "0.550000", currency: "EUR",
     description: "Your Saveback payment", transaction_id: id(11) },
@@ -202,9 +203,10 @@ describe("parseTrCsv", () => {
     expect(draft(10)).toMatchObject({ action: "withdrawal", price: "5" });
   });
 
-  it("maps saveback cashback to interest (not a deposit) and broker cash bonuses to bonus_cash", () => {
-    // BENEFITS_SAVEBACK stays as interest+saveback for its own contribution-exclusion path.
-    expect(draft(11)).toMatchObject({ action: "interest", kind: "saveback", price: "0.55", name: "Core S&P 500 USD (Acc)" });
+  it("maps saveback cashback and broker cash bonuses to bonus_cash (collapse-eligible)", () => {
+    // BENEFITS_SAVEBACK is a reward-funded buy → bonus_cash; collapsePerkFundedAcquisitions
+    // folds it into its funding buy when one exists (none in this fixture → stays bonus_cash).
+    expect(draft(11)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "0.55", name: "Core S&P 500 USD (Acc)" });
     expect(draft(11)?.isin).toBeUndefined();
     // BONUS/KINDERGELD_BONUS/STOCKPERK → bonus_cash so they show as "Bonus" (not "Interest").
     expect(draft(12)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "22.86" });
@@ -346,6 +348,33 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
     expect(drafts[0].extraSources).toEqual([
       { externalId: `tr-csv:${id(101)}`, raw: { collapsedFrom: "perk_cash_credit" } },
     ]);
+  });
+
+  it("collapses a saveback (BENEFITS_SAVEBACK) into the buy it funds — both description variants", () => {
+    // Real main-account shape: a monthly saveback funds a Core S&P 500 buy 1 day later. Works
+    // whether the saveback carries the ETF name ("Your Saveback payment") or not ("for reservation").
+    const { drafts } = parseTrCsv(
+      csv([
+        // Named variant → matches the buy on the shared instrument name.
+        { datetime: "2026-01-01T00:14:38.919214Z", category: "CASH", type: "BENEFITS_SAVEBACK", asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", amount: "10.03",
+          currency: "EUR", description: "Your Saveback payment", transaction_id: id(120) },
+        { datetime: "2026-01-02T14:59:23.431Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", shares: "0.015935",
+          price: "629.4", amount: "-10.03", currency: "EUR", transaction_id: id(121) },
+        // Instrument-less variant → matches on amount + window.
+        { datetime: "2026-02-01T00:45:23.994476Z", category: "CASH", type: "BENEFITS_SAVEBACK",
+          amount: "11.71", currency: "EUR",
+          description: "Saveback cash reward 00000000-0000-0000-0000-0000000000aa for reservation: 00000000-0000-0000-0000-0000000000bb",
+          transaction_id: id(122) },
+        { datetime: "2026-02-02T14:52:08.122Z", category: "TRADING", type: "BUY", asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", shares: "0.018587",
+          price: "630", amount: "-11.71", currency: "EUR", transaction_id: id(123) },
+      ]),
+    );
+    expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
+    expect(drafts.filter((d) => d.action === "bonus_cash" || d.action === "interest")).toHaveLength(0);
+    expect(drafts.every((d) => d.isin === "IE00B5BMR087")).toBe(true);
   });
 
   it("collapses KINDERGELD credits with buys that execute a day later (cross-day window)", () => {

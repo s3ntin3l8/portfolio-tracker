@@ -73,9 +73,10 @@ describe("Trade Republic CSV import path", () => {
     expect(drafts).toHaveLength(4);
     const dividend = drafts.find((d: { action: string }) => d.action === "dividend");
     expect(dividend).toMatchObject({ price: "3.35", total: "3.94", tax: "0.59", fxRate: "1.103400" });
-    // Saveback is income, not a contribution — it maps to interest, not deposit.
-    const saveback = drafts.find((d: { kind?: string }) => d.kind === "saveback");
-    expect(saveback).toMatchObject({ action: "interest", price: "0.55" });
+    // Saveback is a reward-funded buy, not a contribution → bonus_cash (it would collapse into
+    // its funding buy, but this fixture has no Core S&P 500 buy, so it stays a standalone row).
+    const saveback = drafts.find((d: { kind?: string }) => d.kind === "bonus");
+    expect(saveback).toMatchObject({ action: "bonus_cash", price: "0.55" });
 
     const confirm = await app.inject({
       method: "POST",
@@ -100,7 +101,7 @@ describe("Trade Republic CSV import path", () => {
 
     // A TR account is the mixed-cash case → cash-outside (the default), so contribution is
     // the invested capital: the €241.52 buy (2 × 120.26 + €1 fee). The €500 deposit is
-    // ignored (cash outside the boundary), and the saveback (now `interest`) and the
+    // ignored (cash outside the boundary), and the saveback (now `bonus_cash`) and the
     // dividend are income — neither inflates the contributed total.
     const contrib = (
       await app.inject({
