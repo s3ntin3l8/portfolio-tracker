@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { contributionStats, type CoreTransaction } from "../src/index.js";
+import {
+  contributionStats,
+  mergeContributionStats,
+  type CoreTransaction,
+} from "../src/index.js";
 
 function tx(p: Partial<CoreTransaction>): CoreTransaction {
   return {
@@ -236,5 +240,91 @@ describe("contributionStats — shared", () => {
     expect(s.monthsElapsed).toBe(4);
     expect(s.monthsActive).toBe(2);
     expect(s.monthlyAverage).toBe("200");
+  });
+});
+
+describe("contributionStats — day-resolution series (dailySeries)", () => {
+  it("dates a mid-month deposit on its actual day while keeping the month rollup (inside)", () => {
+    // The Leona/Kinderdepot case: a €100 deposit in August, a €509.59 deposit on Apr 14.
+    const txns: CoreTransaction[] = [
+      tx({ type: "deposit", price: "100", executedAt: new Date("2025-08-18T08:00:00Z") }),
+      tx({ type: "deposit", price: "509.59", executedAt: new Date("2026-04-14T08:45:33Z") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "inside" });
+    // Day series carries the exact transaction day — the fix that aligns the chart step.
+    expect(s.dailySeries).toEqual([
+      { date: "2025-08-18", contributed: "100" },
+      { date: "2026-04-14", contributed: "509.59" },
+    ]);
+    // Monthly rollup is byte-identical to bucketing by month directly.
+    expect(s.series).toEqual([
+      { month: "2025-08", contributed: "100" },
+      { month: "2026-04", contributed: "509.59" },
+    ]);
+  });
+
+  it("dates an outside-boundary buy on its actual day", () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "buy", quantity: "5", price: "100", fees: "1", executedAt: new Date("2026-04-14") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
+    expect(s.dailySeries).toEqual([{ date: "2026-04-14", contributed: "501" }]);
+    expect(s.series).toEqual([{ month: "2026-04", contributed: "501" }]);
+  });
+
+  it("aggregates multiple contributions on the same day into one entry", () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "deposit", price: "100", executedAt: new Date("2026-04-14T09:00:00Z") }),
+      tx({ type: "deposit", price: "200", executedAt: new Date("2026-04-14T15:00:00Z") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "inside" });
+    expect(s.dailySeries).toEqual([{ date: "2026-04-14", contributed: "300" }]);
+  });
+
+  it("renders a mid-month withdrawal as a separate down-step day", () => {
+    const txns: CoreTransaction[] = [
+      tx({ type: "deposit", price: "500", executedAt: new Date("2026-04-05") }),
+      tx({ type: "withdrawal", price: "200", executedAt: new Date("2026-04-20") }),
+    ];
+    const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "inside" });
+    expect(s.dailySeries).toEqual([
+      { date: "2026-04-05", contributed: "500" },
+      { date: "2026-04-20", contributed: "-200" },
+    ]);
+    // Month nets to 300 — unchanged from coarse bucketing.
+    expect(s.series).toEqual([{ month: "2026-04", contributed: "300" }]);
+  });
+
+  it("keeps monthsElapsed/firstKey anchored even when the first activity nets to zero", () => {
+    // A dividend in January (income, never a contribution) is the earliest row; the first
+    // real contribution is in March. monthsElapsed must still anchor on January.
+    const txns: CoreTransaction[] = [
+      tx({ type: "dividend", quantity: "0", price: "5", executedAt: new Date("2026-01-10") }),
+      tx({ type: "buy", quantity: "1", price: "100", executedAt: new Date("2026-03-15") }),
+    ];
+    const s = contributionStats({
+      txns,
+      displayCurrency: "EUR",
+      boundary: "outside",
+      now: new Date("2026-04-30"),
+    });
+    expect(s.dailySeries).toEqual([{ date: "2026-03-15", contributed: "100" }]);
+    // Jan(1)→Apr(4) = 4 — proves the empty-bucket anchor survived the day→month rollup.
+    expect(s.monthsElapsed).toBe(4);
+  });
+
+  it("mergeContributionStats sums daily series across portfolios by date", () => {
+    const a = contributionStats({
+      txns: [tx({ type: "deposit", price: "100", executedAt: new Date("2026-04-14") })],
+      displayCurrency: "EUR",
+      boundary: "inside",
+    });
+    const b = contributionStats({
+      txns: [tx({ type: "deposit", price: "50", executedAt: new Date("2026-04-14") })],
+      displayCurrency: "EUR",
+      boundary: "inside",
+    });
+    const merged = mergeContributionStats([a, b], "EUR");
+    expect(merged.dailySeries).toEqual([{ date: "2026-04-14", contributed: "150" }]);
   });
 });

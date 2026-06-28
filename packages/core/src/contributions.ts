@@ -13,7 +13,7 @@ const D = (v: string | number) => new Decimal(v);
  * capital — so it's excluded here while still building the average-cost pool.
  * `merger` is the buy leg of a fund merger (Fondsverschmelzung): the new shares
  * replace old ones rather than being newly-funded, so they are not contributed
- * capital (its sell leg is likewise kept out of `outflow` — see {@link outsideMonths}).
+ * capital (its sell leg is likewise kept out of `outflow` — see {@link outsideDays}).
  */
 const EXCLUDED_ACQUISITION_KINDS = new Set(["saveback", "merger", "reinvestment", "crypto_bonus"]);
 
@@ -54,16 +54,21 @@ export interface ContributionStats {
   monthlyAverage: string;
   /** Net contribution per calendar month, ascending by `month` (YYYY-MM). */
   series: { month: string; contributed: string }[];
+  /** Net contribution per calendar DAY, ascending by `date` (YYYY-MM-DD). Day-resolution
+   * companion to `series`; `series` is the month rollup of these same buckets. Used by the
+   * overlay chart so the contributed step lands on the actual transaction day. */
+  dailySeries: { date: string; contributed: string }[];
 }
 
-interface MonthAgg {
+interface FlowAgg {
   inflow: Decimal;
   outflow: Decimal;
 }
 
-/** UTC year-month bucket key, e.g. "2026-06". */
-function monthKey(d: Date): string {
-  return d.toISOString().slice(0, 7);
+/** UTC year-month-day bucket key, e.g. "2026-06-28". Day resolution so the contributed
+ * step aligns with the daily value series (`portfolioSnapshots.date` is likewise UTC). */
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -121,15 +126,15 @@ function transferInflow(tx: CoreTransaction, fx: FxRateFn, display: string): Dec
   return D(convert(gross.toString(), tx.currency, display, fx));
 }
 
-/** Per-month {inflow, outflow} when cash is INSIDE the boundary: net external cash. */
-function insideMonths(
+/** Per-day {inflow, outflow} when cash is INSIDE the boundary: net external cash. */
+function insideDays(
   txns: CoreTransaction[],
   fx: FxRateFn,
   display: string,
-): Map<string, MonthAgg> {
-  const months = new Map<string, MonthAgg>();
+): Map<string, FlowAgg> {
+  const months = new Map<string, FlowAgg>();
   for (const tx of txns) {
-    const key = monthKey(tx.executedAt);
+    const key = dayKey(tx.executedAt);
     const m = months.get(key) ?? { inflow: D(0), outflow: D(0) };
     if (tx.type === "deposit") {
       m.inflow = m.inflow.add(depositInflow(tx, fx, display));
@@ -151,27 +156,27 @@ function insideMonths(
 }
 
 /**
- * Per-month {inflow, outflow} when cash is OUTSIDE the boundary: net invested
+ * Per-day {inflow, outflow} when cash is OUTSIDE the boundary: net invested
  * capital. Inflow = externally-funded acquisitions at cost; outflow = sells at
  * running average cost (so the cumulative net equals the cost basis still
  * deployed, pairing correctly with the securities-only value used downstream).
  * All real acquisitions (incl. broker-credited ones) build the average-cost pool;
  * only externally-funded ones count toward `inflow`.
  */
-function outsideMonths(
+function outsideDays(
   txns: CoreTransaction[],
   fx: FxRateFn,
   display: string,
-): Map<string, MonthAgg> {
+): Map<string, FlowAgg> {
   const sorted = [...txns].sort(
     (a, b) => a.executedAt.getTime() - b.executedAt.getTime(),
   );
   const pool = new Map<string, { qty: Decimal; cost: Decimal }>();
-  const months = new Map<string, MonthAgg>();
+  const months = new Map<string, FlowAgg>();
 
   for (const tx of sorted) {
     if (!tx.instrumentId) continue;
-    const key = monthKey(tx.executedAt);
+    const key = dayKey(tx.executedAt);
     const m = months.get(key) ?? { inflow: D(0), outflow: D(0) };
 
     if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "bonus" ||
@@ -224,10 +229,30 @@ export function contributionStats(input: ContributionInput): ContributionStats {
 
   // Archived + draft rows are excluded from every derivation.
   const txns = input.txns.filter((t) => t.status !== "archived" && t.status !== "draft");
-  const months =
+  const days =
     boundary === "outside"
-      ? outsideMonths(txns, fx, display)
-      : insideMonths(txns, fx, display);
+      ? outsideDays(txns, fx, display)
+      : insideDays(txns, fx, display);
+
+  // Day-resolution series: non-zero net days, ascending. Drives the overlay chart so the
+  // contributed step lands on the actual transaction day.
+  const dailySeries: { date: string; contributed: string }[] = [];
+  for (const key of [...days.keys()].sort()) {
+    const { inflow, outflow } = days.get(key)!;
+    const net = inflow.sub(outflow);
+    if (!net.isZero()) dailySeries.push({ date: key, contributed: net.toString() });
+  }
+
+  // Roll day buckets up to month buckets — single source of truth, so every monthly stat
+  // below is byte-identical to bucketing by month directly (Decimal addition is associative).
+  const months = new Map<string, FlowAgg>();
+  for (const [day, agg] of days) {
+    const mk = day.slice(0, 7);
+    const m = months.get(mk) ?? { inflow: D(0), outflow: D(0) };
+    m.inflow = m.inflow.add(agg.inflow);
+    m.outflow = m.outflow.add(agg.outflow);
+    months.set(mk, m);
+  }
 
   let totalContributed = D(0);
   let totalWithdrawn = D(0);
@@ -261,6 +286,7 @@ export function contributionStats(input: ContributionInput): ContributionStats {
     monthsActive,
     monthlyAverage,
     series,
+    dailySeries,
   };
 }
 
@@ -276,6 +302,7 @@ export function mergeContributionStats(
   now?: Date,
 ): ContributionStats {
   const byMonth = new Map<string, Decimal>();
+  const byDay = new Map<string, Decimal>();
   let totalContributed = D(0);
   let totalWithdrawn = D(0);
   for (const s of stats) {
@@ -284,10 +311,17 @@ export function mergeContributionStats(
     for (const pt of s.series) {
       byMonth.set(pt.month, (byMonth.get(pt.month) ?? D(0)).add(pt.contributed));
     }
+    for (const pt of s.dailySeries) {
+      byDay.set(pt.date, (byDay.get(pt.date) ?? D(0)).add(pt.contributed));
+    }
   }
   const series = [...byMonth.keys()]
     .sort()
     .map((month) => ({ month, contributed: byMonth.get(month)!.toString() }))
+    .filter((pt) => !D(pt.contributed).isZero());
+  const dailySeries = [...byDay.keys()]
+    .sort()
+    .map((date) => ({ date, contributed: byDay.get(date)!.toString() }))
     .filter((pt) => !D(pt.contributed).isZero());
   const netContributed = totalContributed.sub(totalWithdrawn);
   const monthsActive = series.length;
@@ -307,5 +341,6 @@ export function mergeContributionStats(
     monthsActive,
     monthlyAverage,
     series,
+    dailySeries,
   };
 }
