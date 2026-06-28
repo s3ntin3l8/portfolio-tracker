@@ -26,6 +26,8 @@ import {
 } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 import { ownedPortfolio } from "./imports/helpers.js";
+import { reassignTransactions } from "../services/reassign.js";
+import { enqueueRecompute } from "../services/scheduler.js";
 import { registerConfirmImportRoute } from "./imports/confirm.js";
 import { registerParseImportRoutes } from "./imports/parse.js";
 
@@ -209,6 +211,39 @@ export async function importsRoute(app: FastifyInstance) {
         .where(eq(screenshotImports.id, imp.id));
       request.log.info({ importId: imp.id, removedTransactions: removed.length }, "import undone");
       return { removed: removed.length };
+    },
+  );
+
+  // Reassign every transaction this import wrote to another portfolio (fix a wrong-portfolio
+  // import in one action). Delegates to the shared mover: dedup-index conflicts and
+  // financed-gold legs are skipped and reported; source + target are recomputed.
+  app.post<{ Params: { importId: string } }>(
+    "/imports/:importId/reassign",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const imp = await ownedImport(id, request.params.importId);
+      if (!imp) return reply.code(404).send({ error: "import_not_found" });
+      const { targetPortfolioId } = z
+        .object({ targetPortfolioId: z.string().uuid() })
+        .parse(request.body);
+      if (!(await ownedPortfolio(app, id, targetPortfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const res = await reassignTransactions(app.db, {
+        importId: imp.id,
+        toPortfolioId: targetPortfolioId,
+      });
+      for (const { portfolioId: pid, day } of res.recompute) await enqueueRecompute(pid, day);
+      request.log.info(
+        { importId: imp.id, ...res, recompute: res.recompute.length },
+        "import reassigned",
+      );
+      return {
+        moved: res.moved,
+        skippedConflicts: res.skippedConflicts,
+        skippedLoans: res.skippedLoans,
+      };
     },
   );
 

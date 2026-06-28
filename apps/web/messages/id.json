@@ -512,7 +512,8 @@
     "onlyCompleted": "{count, plural, other {# impor selesai disembunyikan}}",
     "downloadReceipt": "Unduh tanda terima",
     "actionError": "Terjadi kesalahan. Silakan coba lagi.",
-    "downloadError": "Tanda terima tidak tersedia — mungkin sudah dihapus atau penyimpanan sedang bermasalah."
+    "downloadError": "Tanda terima tidak tersedia — mungkin sudah dihapus atau penyimpanan sedang bermasalah.",
+    "reassign": "Pindahkan semua ke…"
   },
   "Dashboard": {
     "title": "Dasbor",
@@ -758,11 +759,22 @@
       "selectAll": "Pilih semua transaksi",
       "selectRow": "Pilih transaksi",
       "confirmDrafts": "Konfirmasi yang dipilih",
-      "discardDrafts": "Buang yang dipilih"
+      "discardDrafts": "Buang yang dipilih",
+      "reassign": "Pindahkan…"
     },
     "filterDraftLabel": "Filter draf",
     "draftShowAll": "Semua",
-    "draftOnly": "Hanya draf ({count})"
+    "draftOnly": "Hanya draf ({count})",
+    "reassign": {
+      "title": "Pindahkan ke portofolio",
+      "description": "Pindahkan transaksi ini ke portofolio lain. Holdings dan kontribusi ikut berpindah.",
+      "target": "Pindahkan ke",
+      "cancel": "Batal",
+      "confirm": "Pindahkan",
+      "success": "{count, plural, one {# transaksi dipindahkan} other {# transaksi dipindahkan}}.",
+      "successWithSkips": "{moved} dipindahkan; {skipped} dilewati karena sudah ada di tujuan.",
+      "none": "Tidak ada yang dipindahkan — sudah ada di portofolio tujuan."
+    }
   },
   "Manage": {
     "addTransaction": "Tambah transaksi",
@@ -860,7 +872,8 @@
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Pembulatan",
       "subTypeMerger": "Merger"
-    }
+    },
+    "reassign": "Pindahkan"
   },
   "TxType": {
     "buy": "Beli",

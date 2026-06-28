@@ -1670,6 +1670,26 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/transactions/resolve-drafts`,
         { ids: [txId], action: "discard" },
       ),
+    /** Reassign transactions to another portfolio (move a wrong-portfolio import in one
+     * action). Rows already in the target, or whose economic identity already exists there,
+     * are skipped (`skippedConflicts`); financed-gold legs are skipped (`skippedLoans`). */
+    reassignTransactions: (
+      portfolioId: string,
+      ids: string[],
+      targetPortfolioId: string,
+    ) =>
+      request<{ moved: number; skippedConflicts: number; skippedLoans: number }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/reassign`,
+        { ids, targetPortfolioId },
+      ),
+    /** Reassign every transaction an import wrote to another portfolio. */
+    reassignImport: (importId: string, targetPortfolioId: string) =>
+      request<{ moved: number; skippedConflicts: number; skippedLoans: number }>(
+        "POST",
+        `/imports/${importId}/reassign`,
+        { targetPortfolioId },
+      ),
     /** Record a fund merger (Fondsverschmelzung) as an atomic sell+buy pair. */
     createMerger: (portfolioId: string, input: Omit<MergerInput, "portfolioId">) =>
       request<Transaction[]>("POST", `/portfolios/${portfolioId}/mergers`, input),

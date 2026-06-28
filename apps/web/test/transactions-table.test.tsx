@@ -8,6 +8,11 @@ const bulkDeleteTransactions = vi.fn(async () => ({ deleted: 1 }));
 const deleteTransaction = vi.fn(async () => undefined);
 const setTransactionStatus = vi.fn(async () => ({}));
 const resolveDraftTransactions = vi.fn(async () => ({ updated: 1 }));
+const reassignTransactions = vi.fn(async () => ({
+  moved: 1,
+  skippedConflicts: 0,
+  skippedLoans: 0,
+}));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -19,8 +24,15 @@ vi.mock("@/lib/api", () => ({
     deleteTransaction,
     setTransactionStatus,
     resolveDraftTransactions,
+    reassignTransactions,
   }),
 }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+
+const PORTFOLIOS = [
+  { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+  { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
+];
 
 import {
   TransactionsTable,
@@ -137,6 +149,39 @@ describe("TransactionsTable", () => {
   beforeEach(() => {
     refresh.mockClear();
     bulkDeleteTransactions.mockClear();
+    reassignTransactions.mockClear();
+  });
+
+  it("reassigns a single row to another portfolio", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <TransactionsTable rows={ROWS} showPortfolio portfolios={PORTFOLIOS} />
+      </NextIntlClientProvider>,
+    );
+    // Open the row's Reassign action (first row is portfolio p1).
+    const reassignButtons = screen.getAllByRole("button", {
+      name: messages.Manage.reassign,
+    });
+    fireEvent.click(reassignButtons[0]);
+
+    // The dialog shows; p1 is excluded so the only target is DKB (p2) — confirm the move.
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.Transactions.reassign.confirm }),
+    );
+    await waitFor(() =>
+      expect(reassignTransactions).toHaveBeenCalledWith("p1", ["t1"], "p2"),
+    );
+  });
+
+  it("hides the reassign action when only one portfolio exists", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <TransactionsTable rows={ROWS} portfolios={[PORTFOLIOS[0]]} />
+      </NextIntlClientProvider>,
+    );
+    expect(
+      screen.queryByRole("button", { name: messages.Manage.reassign }),
+    ).toBeNull();
   });
 
   it("shows the portfolio column only in the aggregate view", () => {

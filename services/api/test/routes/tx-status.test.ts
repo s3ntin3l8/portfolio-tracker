@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { instruments, transactions, trResolvedEvents } from "@portfolio/db";
+import { instruments, screenshotImports, transactions, trResolvedEvents, users } from "@portfolio/db";
 import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
@@ -251,5 +251,109 @@ describe("transaction status (archived / cash_neutral)", () => {
     });
     // Only the draft row was updated; the already-normal row is untouched.
     expect(res.json().updated).toBe(1);
+  });
+
+  // ── Reassignment ──────────────────────────────────────────────────────────
+  async function newPortfolio(t: string, name: string) {
+    return (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name, baseCurrency: "EUR", cashCounted: true },
+      })
+    ).json().id as string;
+  }
+
+  it("reassigns a transaction to another portfolio (holdings move with it)", async () => {
+    const { t, portfolioId: a, addBuy } = await setup();
+    const b = await newPortfolio(t, "Dest");
+    const txId = await addBuy("10", "10");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${a}/transactions/reassign`,
+      headers: auth(t),
+      payload: { ids: [txId], targetPortfolioId: b },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ moved: 1, skippedConflicts: 0, skippedLoans: 0 });
+
+    const aH = await app.inject({ method: "GET", url: `/portfolios/${a}/holdings`, headers: auth(t) });
+    expect(aH.json().holdings).toHaveLength(0);
+    const bH = await app.inject({ method: "GET", url: `/portfolios/${b}/holdings`, headers: auth(t) });
+    expect(bH.json().holdings).toHaveLength(1);
+    expect(bH.json().holdings[0].quantity).toBe("10");
+  });
+
+  it("reassign rejects moving to the same portfolio", async () => {
+    const { t, portfolioId: a, addBuy } = await setup();
+    const txId = await addBuy("1", "10");
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${a}/transactions/reassign`,
+      headers: auth(t),
+      payload: { ids: [txId], targetPortfolioId: a },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe("same_portfolio");
+  });
+
+  it("reassign skips a row whose (source, externalId) already exists in the target", async () => {
+    const { t, portfolioId: a } = await setup();
+    const b = await newPortfolio(t, "Dest2");
+    // Same economic identity exists in both: moving A's row into B would hit the dedup index.
+    const aRow = await addDraftBuy(a, "ev-collide", "5");
+    await addDraftBuy(b, "ev-collide", "5");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${a}/transactions/reassign`,
+      headers: auth(t),
+      payload: { ids: [aRow], targetPortfolioId: b },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ moved: 0, skippedConflicts: 1 });
+    // The row stays in A (not moved, not crashed on).
+    const aList = await app.inject({ method: "GET", url: `/portfolios/${a}/transactions`, headers: auth(t) });
+    expect(aList.json().find((r: { id: string }) => r.id === aRow)).toBeTruthy();
+  });
+
+  it("reassigns every transaction an import wrote to another portfolio", async () => {
+    const { t, portfolioId: a } = await setup();
+    const b = await newPortfolio(t, "Dest3");
+    const [u] = await app.db.select().from(users).where(eq(users.authSub, "status-user"));
+    const [imp] = await app.db
+      .insert(screenshotImports)
+      .values({ userId: u.id, parser: "csv", status: "confirmed", parsedJson: {} })
+      .returning({ id: screenshotImports.id });
+    // Two rows from this import live in A.
+    for (const ext of ["imp-r-1", "imp-r-2"]) {
+      await app.db.insert(transactions).values({
+        portfolioId: a,
+        instrumentId: acmeId,
+        type: "buy",
+        quantity: "2",
+        price: "10",
+        currency: "EUR",
+        executedAt: new Date("2026-03-01T00:00:00.000Z"),
+        source: "csv",
+        externalId: ext,
+        importId: imp.id,
+        status: "draft",
+      });
+    }
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/imports/${imp.id}/reassign`,
+      headers: auth(t),
+      payload: { targetPortfolioId: b },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().moved).toBe(2);
+
+    const bList = await app.inject({ method: "GET", url: `/portfolios/${b}/transactions`, headers: auth(t) });
+    expect(bList.json().filter((r: { importId: string }) => r.importId === imp.id)).toHaveLength(2);
   });
 });

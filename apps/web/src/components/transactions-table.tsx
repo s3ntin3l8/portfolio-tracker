@@ -17,7 +17,9 @@ import {
   AlertTriangle,
   AlertCircle,
   Check,
+  FolderInput,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import {
   Table,
@@ -42,6 +44,8 @@ import type { ColDef } from "@/lib/table-sort";
 import type { CoreTransaction } from "@portfolio/core";
 import type { SourceSummary, Anomaly, TransactionStatus } from "@portfolio/api-client";
 import { TransactionStatusButton } from "@/components/transaction-status-button";
+import { ReassignDialog } from "@/components/reassign-dialog";
+import type { PickablePortfolio } from "@/components/portfolio-picker";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
@@ -161,12 +165,16 @@ export function TransactionsTable({
   showPortfolio = false,
   defaultInvestmentsOnly = false,
   anomalies = [],
+  portfolios = [],
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
   defaultInvestmentsOnly?: boolean;
   /** Per-transaction anomalies keyed by transactionId; shows a flag icon on the row. */
   anomalies?: Anomaly[];
+  /** All of the user's portfolios — enables the "Reassign…" action (hidden when fewer
+   *  than two are available, since there's nowhere to move rows to). */
+  portfolios?: PickablePortfolio[];
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -343,6 +351,41 @@ export function TransactionsTable({
     } finally {
       setResolvingId(null);
     }
+  }
+
+  // Reassignment: the rows queued for a move (a single row, or the current selection). The
+  // dialog is open whenever this is non-null; reassignable only when ≥2 portfolios exist.
+  const canReassign = portfolios.length > 1;
+  const [reassignRows, setReassignRows] = useState<TxRow[] | null>(null);
+  const tr = useTranslations("Transactions.reassign");
+
+  async function doReassign(targetPortfolioId: string) {
+    const queued = reassignRows ?? [];
+    // Group by source portfolio — the reassign endpoint is scoped to one source portfolio.
+    const byPortfolio = new Map<string, string[]>();
+    for (const r of queued) {
+      if (r.portfolioId === targetPortfolioId) continue;
+      const ids = byPortfolio.get(r.portfolioId) ?? [];
+      ids.push(r.id);
+      byPortfolio.set(r.portfolioId, ids);
+    }
+    let moved = 0;
+    let skipped = 0;
+    const results = await Promise.all(
+      [...byPortfolio.entries()].map(([pid, ids]) =>
+        api.reassignTransactions(pid, ids, targetPortfolioId),
+      ),
+    );
+    for (const r of results) {
+      moved += r.moved;
+      skipped += r.skippedConflicts + r.skippedLoans;
+    }
+    if (moved === 0) toast.info(tr("none"));
+    else if (skipped > 0) toast.success(tr("successWithSkips", { moved, skipped }));
+    else toast.success(tr("success", { count: moved }));
+    setReassignRows(null);
+    setSelected(new Set());
+    router.refresh();
   }
 
   // checkbox + date + type + instrument + [portfolio] + qty + amount + fees(sm) +
@@ -529,6 +572,17 @@ export function TransactionsTable({
                   </Button>
                 </>
               )}
+              {canReassign && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setReassignRows(rows.filter((r) => selected.has(r.id)))}
+                  disabled={busy}
+                >
+                  <FolderInput className="size-3.5" />
+                  {tb("reassign")}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="destructive"
@@ -541,6 +595,23 @@ export function TransactionsTable({
             </span>
           )}
         </div>
+      )}
+
+      {reassignRows && (
+        <ReassignDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setReassignRows(null);
+          }}
+          portfolios={portfolios}
+          excludePortfolioId={
+            // When every queued row shares one source portfolio, hide it from the targets.
+            new Set(reassignRows.map((r) => r.portfolioId)).size === 1
+              ? reassignRows[0]?.portfolioId
+              : undefined
+          }
+          onConfirm={doReassign}
+        />
       )}
 
       <div className="overflow-x-auto rounded-xl border border-border">
@@ -750,6 +821,17 @@ export function TransactionsTable({
                           <Pencil className="size-4" />
                         </Link>
                       </Button>
+                      {canReassign && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={tm("reassign")}
+                          title={tm("reassign")}
+                          onClick={() => setReassignRows([tx])}
+                        >
+                          <FolderInput className="size-4" />
+                        </Button>
+                      )}
                       {status !== "draft" && (
                         <TransactionStatusButton
                           portfolioId={tx.portfolioId}

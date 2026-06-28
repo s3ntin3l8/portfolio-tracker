@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ImportRecord } from "@portfolio/api-client";
 import { ImportHistory } from "@/components/import-history";
+import type { PickablePortfolio } from "@/components/portfolio-picker";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +13,13 @@ import { cn } from "@/lib/utils";
  * default so it doesn't crowd the transaction table. Reuses {@link ImportHistory} for
  * the table and its per-row actions; this wrapper only owns the collapse + heading.
  */
-export function RecentImportsSection({ items }: { items: ImportRecord[] }) {
+export function RecentImportsSection({
+  items,
+  portfolios = [],
+}: {
+  items: ImportRecord[];
+  portfolios?: PickablePortfolio[];
+}) {
   const t = useTranslations("ImportHistory");
   // Open by default when there's an actionable draft to review (a TR sync, a partial
   // confirm, a shared screenshot); a confirmed/discarded-only audit trail stays collapsed.
@@ -34,7 +41,9 @@ export function RecentImportsSection({ items }: { items: ImportRecord[] }) {
         {t("title")}
         <span className="text-muted-foreground">({items.length})</span>
       </button>
-      {open && <ImportHistory items={items} showTitle={false} />}
+      {open && (
+        <ImportHistory items={items} showTitle={false} portfolios={portfolios} />
+      )}
     </div>
   );
 }

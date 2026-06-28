@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Download, Eye, EyeOff, Loader2, Trash2, Undo2 } from "lucide-react";
+import { Download, Eye, EyeOff, FolderInput, Loader2, Trash2, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 import type { ImportRecord } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ import {
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useApiClient } from "@/lib/api";
+import { ReassignDialog } from "@/components/reassign-dialog";
+import type { PickablePortfolio } from "@/components/portfolio-picker";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
@@ -49,12 +52,16 @@ const STATUS_VARIANT: Record<
 export function ImportHistory({
   items,
   showTitle = true,
+  portfolios = [],
 }: {
   items: ImportRecord[];
   /** Hide the card's own title when an outer section (e.g. a collapsible) supplies it. */
   showTitle?: boolean;
+  /** All of the user's portfolios — enables "Reassign all to…" (hidden when < 2 exist). */
+  portfolios?: PickablePortfolio[];
 }) {
   const t = useTranslations("ImportHistory");
+  const trx = useTranslations("Transactions.reassign");
   const locale = useLocale();
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" });
   const api = useApiClient();
@@ -106,6 +113,25 @@ export function ImportHistory({
       setActionError(t("actionError"));
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // Import currently queued for "Reassign all to…" (dialog open when non-null).
+  const [reassignId, setReassignId] = useState<string | null>(null);
+  const canReassign = portfolios.length > 1;
+
+  async function doReassignImport(targetPortfolioId: string) {
+    if (!reassignId) return;
+    try {
+      const r = await api.reassignImport(reassignId, targetPortfolioId);
+      const skipped = r.skippedConflicts + r.skippedLoans;
+      if (r.moved === 0) toast.info(trx("none"));
+      else if (skipped > 0) toast.success(trx("successWithSkips", { moved: r.moved, skipped }));
+      else toast.success(trx("success", { count: r.moved }));
+      setReassignId(null);
+      router.refresh();
+    } catch {
+      setActionError(t("actionError"));
     }
   }
 
@@ -312,6 +338,16 @@ export function ImportHistory({
                                 {t("downloadReceipt")}
                               </Button>
                             )}
+                            {canReassign && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setReassignId(imp.id)}
+                              >
+                                <FolderInput className="size-3.5" />
+                                {t("reassign")}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
@@ -330,6 +366,16 @@ export function ImportHistory({
           </TableBody>
         </Table>
       </CardContent>
+      {reassignId && (
+        <ReassignDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setReassignId(null);
+          }}
+          portfolios={portfolios}
+          onConfirm={doReassignImport}
+        />
+      )}
     </Card>
   );
 }

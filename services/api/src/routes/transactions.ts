@@ -78,6 +78,7 @@ import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js"
 import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 import { enqueueRecompute, enqueueInstrumentMetadata } from "../services/scheduler.js";
+import { reassignTransactions } from "../services/reassign.js";
 import { needsSectorEnrichment } from "../services/instrument-metadata.js";
 import { flattenJoinRow } from "../lib/portfolio.js";
 
@@ -1066,6 +1067,43 @@ export async function transactionsRoute(app: FastifyInstance) {
       for (const day of days) await enqueueRecompute(portfolioId, day);
 
       return { updated: updated.length };
+    },
+  );
+
+  // Reassign transactions to another portfolio (move a wrong-portfolio import in one action).
+  // One request, N ids → never fan out. Rows whose economic identity already exists in the
+  // target are skipped (dedup index), as are financed-gold legs (can't split from the loan).
+  // Both the source and target portfolios are recomputed for each affected day.
+  const reassignSchema = z.object({
+    ids: z.array(z.string().uuid()).min(1),
+    targetPortfolioId: z.string().uuid(),
+  });
+  app.post<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/transactions/reassign",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      const { ids, targetPortfolioId } = reassignSchema.parse(request.body);
+      if (portfolioId === targetPortfolioId) {
+        return reply.code(400).send({ error: "same_portfolio" });
+      }
+      if (!(await ownedPortfolio(id, portfolioId)) || !(await ownedPortfolio(id, targetPortfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      const res = await reassignTransactions(app.db, {
+        rowIds: ids,
+        fromPortfolioId: portfolioId,
+        toPortfolioId: targetPortfolioId,
+      });
+      for (const { portfolioId: pid, day } of res.recompute) await enqueueRecompute(pid, day);
+
+      return {
+        moved: res.moved,
+        skippedConflicts: res.skippedConflicts,
+        skippedLoans: res.skippedLoans,
+      };
     },
   );
 

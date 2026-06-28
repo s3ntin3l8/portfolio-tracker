@@ -514,7 +514,8 @@
     "onlyCompleted": "{count, plural, one {# completed import hidden} other {# completed imports hidden}}",
     "downloadReceipt": "Download receipt",
     "actionError": "Something went wrong. Please try again.",
-    "downloadError": "Receipt unavailable — it may have been deleted or storage is down."
+    "downloadError": "Receipt unavailable — it may have been deleted or storage is down.",
+    "reassign": "Reassign all to…"
   },
   "Dashboard": {
     "title": "Dashboard",
@@ -760,11 +761,22 @@
       "selectAll": "Select all transactions",
       "selectRow": "Select transaction",
       "confirmDrafts": "Confirm selected",
-      "discardDrafts": "Discard selected"
+      "discardDrafts": "Discard selected",
+      "reassign": "Reassign…"
     },
     "filterDraftLabel": "Draft filter",
     "draftShowAll": "All",
-    "draftOnly": "Drafts only ({count})"
+    "draftOnly": "Drafts only ({count})",
+    "reassign": {
+      "title": "Reassign to portfolio",
+      "description": "Move these transactions to another portfolio. Holdings and contributions follow them.",
+      "target": "Move to",
+      "cancel": "Cancel",
+      "confirm": "Move",
+      "success": "{count, plural, one {Moved # transaction} other {Moved # transactions}}.",
+      "successWithSkips": "Moved {moved}; skipped {skipped} already in the target.",
+      "none": "Nothing moved — already in the target portfolio."
+    }
   },
   "Manage": {
     "addTransaction": "Add transaction",
@@ -862,7 +874,8 @@
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Round-up",
       "subTypeMerger": "Merger"
-    }
+    },
+    "reassign": "Reassign"
   },
   "TxType": {
     "buy": "Buy",

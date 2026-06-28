@@ -15,6 +15,7 @@ import {
   getSelectedPortfolioId,
   loadImports,
   loadPortfolio,
+  loadPortfolioList,
   loadTransactionsAcrossPortfolios,
   loadAnomalies,
 } from "@/lib/server-api";
@@ -72,8 +73,13 @@ export default async function TransactionsPage({
   // a collapsed section whenever any imports exist — including for a portfolio that has
   // only pending drafts and no confirmed transactions yet.
   const imports = await loadImports();
+  // The full portfolio list powers the "Reassign…" actions (move rows / a whole import to
+  // another portfolio) in both the table and the import history.
+  const portfolioList = await loadPortfolioList();
   const importsSection =
-    imports.length > 0 ? <RecentImportsSection items={imports} /> : null;
+    imports.length > 0 ? (
+      <RecentImportsSection items={imports} portfolios={portfolioList} />
+    ) : null;
 
   // Plain-data CSV of the visible transactions (built client-side on click).
   const exportHeaders = [
@@ -179,6 +185,7 @@ export default async function TransactionsPage({
         showPortfolio={aggregate}
         defaultInvestmentsOnly={defaultInvestmentsOnly}
         anomalies={anomalies ?? []}
+        portfolios={portfolioList}
       />
       {importsSection}
     </div>
