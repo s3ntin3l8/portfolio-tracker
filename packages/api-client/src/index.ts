@@ -9,6 +9,7 @@ import type {
   ImportIssue,
   TaxComponents,
   UserUpdate,
+  ApiTokenCreate,
   ProviderSettingUpdate,
   ProviderCredentialInput,
   ImportStrategy,
@@ -740,6 +741,22 @@ export interface NetWorth {
 export interface UserPreferences {
   dashboardPeriod: "ytd" | "1y" | "5y" | "max";
   dashboardKpis: string[] | null;
+}
+
+/** A personal access token's metadata (never the secret). */
+export interface ApiToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scope: "read" | "write";
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** The create response — the only place the plaintext `token` is ever returned. */
+export interface ApiTokenWithSecret extends ApiToken {
+  token: string;
 }
 
 /** A point on a net-worth-over-time series (display/base currency). */
@@ -1484,6 +1501,13 @@ export function createApiClient(config: ApiClientConfig) {
   return {
     me: () => request<User>("GET", "/me"),
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
+
+    // Personal access tokens (programmatic API access scoped to the user).
+    listApiTokens: () => request<ApiToken[]>("GET", "/me/tokens"),
+    createApiToken: (input: ApiTokenCreate) =>
+      request<ApiTokenWithSecret>("POST", "/me/tokens", input),
+    deleteApiToken: (id: string) =>
+      request<void>("DELETE", `/me/tokens/${encodeURIComponent(id)}`),
 
     // Admin: market-data provider config (enable/disable + fallback priority + credentials).
     getAdminProviders: () => request<AdminProvidersResponse>("GET", "/admin/providers"),

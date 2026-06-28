@@ -5,7 +5,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
 import { UpdateProfile } from "@/components/update-profile";
-import { loadMe } from "@/lib/server-api";
+import { ApiTokens } from "@/components/api-tokens";
+import { loadMe, loadApiTokens } from "@/lib/server-api";
 
 export default async function SettingsPage({
   params,
@@ -17,6 +18,7 @@ export default async function SettingsPage({
   const t = await getTranslations("Settings");
 
   const me = await loadMe();
+  const apiTokens = await loadApiTokens();
 
   return (
     <div className="space-y-6">
@@ -46,6 +48,15 @@ export default async function SettingsPage({
           <p className="mt-4 text-xs text-muted-foreground">{t("authVia")}</p>
           <Separator className="my-4" />
           <SignOutButton />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("tokens")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ApiTokens initialTokens={apiTokens} />
         </CardContent>
       </Card>
 

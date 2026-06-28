@@ -11,6 +11,8 @@ export const migrationsDir = path.resolve(import.meta.dirname, "../drizzle");
 // Inferred row types (select) and insert types for each table.
 export type User = typeof schema.users.$inferSelect;
 export type NewUser = typeof schema.users.$inferInsert;
+export type ApiToken = typeof schema.apiTokens.$inferSelect;
+export type NewApiToken = typeof schema.apiTokens.$inferInsert;
 export type Portfolio = typeof schema.portfolios.$inferSelect;
 export type NewPortfolio = typeof schema.portfolios.$inferInsert;
 export type AccountHolder = typeof schema.accountHolders.$inferSelect;

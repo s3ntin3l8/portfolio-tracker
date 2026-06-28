@@ -33,6 +33,7 @@ import {
   type PortfolioTaxSummary,
   type UserPreferences,
   type Anomaly,
+  type ApiToken,
 } from "@portfolio/api-client";
 import { auth } from "@/auth";
 import {
@@ -676,6 +677,16 @@ export async function loadMe(): Promise<User | null> {
     return await api.me();
   } catch {
     return null;
+  }
+}
+
+export async function loadApiTokens(): Promise<ApiToken[]> {
+  const api = await getServerApi();
+  if (!api) return [];
+  try {
+    return await api.listApiTokens();
+  } catch {
+    return [];
   }
 }
 

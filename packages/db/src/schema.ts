@@ -143,6 +143,28 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Personal access tokens: long-lived Bearer credentials a user mints from an
+// interactive (Authentik JWT) session for programmatic/CLI access scoped to their own
+// account. Only the SHA-256 hash of the secret is stored — never the secret itself.
+// `scope` gates mutating requests (read-only by default); PATs never grant admin. See
+// the auth plugin's `pt_`-prefix branch and the `/me/tokens` routes.
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  // sha256(secret), hex — the unique index doubles as the lookup key.
+  tokenHash: text("token_hash").notNull().unique(),
+  // First ~12 chars of the secret, shown in the UI to identify a token (not secret).
+  tokenPrefix: text("token_prefix").notNull(),
+  // "read" | "write" — read-only is the safe default for handing a token to an agent.
+  scope: text("scope").notNull().default("read"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // A person an investment account belongs to (the user themselves, a child, a
 // spouse, …). Defined once per user and linked from any number of portfolios so
 // shared details — birth year today, a per-person tax allowance later — live in one
@@ -909,6 +931,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.id],
     references: [userPreferences.userId],
   }),
+  apiTokens: many(apiTokens),
+}));
+
+export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
+  user: one(users, { fields: [apiTokens.userId], references: [users.id] }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({

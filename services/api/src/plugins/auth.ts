@@ -1,12 +1,24 @@
+import { createHash } from "node:crypto";
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import type { JWTVerifyGetKey, JWTVerifyOptions } from "jose";
 import { eq } from "drizzle-orm";
-import { users } from "@portfolio/db";
+import { users, apiTokens } from "@portfolio/db";
 
 // A key (local public key for tests) or a JWKS resolver function (remote, prod).
 export type AuthKey = CryptoKey | Uint8Array | JWTVerifyGetKey;
+
+/** Prefix that marks a personal access token, distinguishing it from a JWT (`eyJ…`). */
+export const PAT_PREFIX = "pt_";
+
+/** SHA-256 (hex) of a secret — what we store and look PATs up by; never the secret. */
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+// Methods a read-scoped PAT may not use. GET/HEAD/OPTIONS are always allowed.
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
  * A lazy JWKS resolver that discovers the signing keys from the issuer via OIDC
@@ -46,6 +58,11 @@ export interface AuthedUser {
   authSub: string;
   // Derived from the Authentik `groups` claim each request — not stored on the row.
   isAdmin: boolean;
+  // How this request authenticated: an interactive Authentik session ("jwt") or a
+  // personal access token ("pat"). Minting a new PAT requires "jwt".
+  authMethod: "jwt" | "pat";
+  // "write" for interactive sessions; a PAT carries its own (read-only by default).
+  scope: "read" | "write";
 }
 
 /** Returns the authenticated user or throws — use inside `authenticate`d handlers. */
@@ -100,12 +117,49 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
       if (!header?.startsWith("Bearer ")) {
         return reply.code(401).send({ error: "missing_token" });
       }
+      const token = header.slice(7);
+
+      // Personal access token: our own long-lived credential, looked up by hash on a
+      // unique index (no timing-unsafe secret comparison). PATs never grant admin and
+      // carry their own scope; the secret is never logged.
+      if (token.startsWith(PAT_PREFIX)) {
+        const [row] = await app.db
+          .select()
+          .from(apiTokens)
+          .where(eq(apiTokens.tokenHash, hashToken(token)))
+          .limit(1);
+        if (!row || (row.expiresAt && row.expiresAt.getTime() <= Date.now())) {
+          return reply.code(401).send({ error: "invalid_token" });
+        }
+        const [u] = await app.db
+          .select()
+          .from(users)
+          .where(eq(users.id, row.userId))
+          .limit(1);
+        if (!u) return reply.code(401).send({ error: "invalid_token" });
+        // Stamp last-used (one indexed UPDATE) so the token list shows activity.
+        await app.db
+          .update(apiTokens)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(apiTokens.id, row.id));
+        const scope = row.scope === "write" ? "write" : "read";
+        if (scope === "read" && MUTATING_METHODS.has(request.method)) {
+          return reply.code(403).send({ error: "read_only_token" });
+        }
+        request.user = {
+          id: u.id,
+          authSub: u.authSub,
+          isAdmin: false,
+          authMethod: "pat",
+          scope,
+        };
+        return;
+      }
 
       let sub: string;
       let email: string;
       let isAdmin: boolean;
       try {
-        const token = header.slice(7);
         const verifyOpts: JWTVerifyOptions = {
           issuer: app.config.AUTHENTIK_ISSUER || undefined,
           audience: app.config.AUTHENTIK_AUDIENCE || undefined,
@@ -142,7 +196,13 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
           .returning();
         user = created;
       }
-      request.user = { id: user.id, authSub: user.authSub, isAdmin };
+      request.user = {
+        id: user.id,
+        authSub: user.authSub,
+        isAdmin,
+        authMethod: "jwt",
+        scope: "write",
+      };
     },
   );
 

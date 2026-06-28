@@ -171,6 +171,16 @@ export const userUpdateSchema = z.object({
 });
 export type UserUpdate = z.infer<typeof userUpdateSchema>;
 
+// Personal access token creation (POST /me/tokens). `scope` defaults to read-only —
+// the safer default for a long-lived credential. `expiresInDays`, when given, sets an
+// absolute expiry; omit it for a non-expiring token.
+export const apiTokenCreateSchema = z.object({
+  name: z.string().min(1).max(120),
+  scope: z.enum(["read", "write"]).default("read"),
+  expiresInDays: z.number().int().positive().max(3650).optional(),
+});
+export type ApiTokenCreate = z.infer<typeof apiTokenCreateSchema>;
+
 // Admin-editable market-data or vision provider config (PATCH /admin/providers or
 // PATCH /admin/vision-providers). The id must match a known registry provider
 // (validated server-side); `enabled` toggles it and `priority` orders the fallback

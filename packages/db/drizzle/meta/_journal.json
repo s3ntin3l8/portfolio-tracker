@@ -358,6 +358,13 @@
       "when": 1782508073680,
       "tag": "0050_lame_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1782604845470,
+      "tag": "0051_clumsy_puff_adder",
+      "breakpoints": true
     }
   ]
 }
