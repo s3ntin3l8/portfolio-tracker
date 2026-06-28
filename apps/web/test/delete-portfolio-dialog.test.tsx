@@ -20,6 +20,7 @@ const BASE = {
   portfolioType: "standard" as const,
   brokerage: null,
   accountNumber: null,
+  iban: null,
   includeInAggregate: true,
   cashCounted: false,
   documentRetention: false,

@@ -29,9 +29,9 @@ import { materializeDrafts } from "../../services/materialize-drafts.js";
 import { isCashMovementAction } from "../../services/pytr/mapper.js";
 import {
   accountMismatchVerdict,
-  accountsMatch,
   normalizeAccountNumber,
   ownedPortfolio,
+  portfolioMatchesAccount,
 } from "./helpers.js";
 
 const materializeBodySchema = z.object({
@@ -196,7 +196,8 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   /**
    * Find the portfolio whose accountNumber matches the detected value. Returns null when
    * no account number was detected, no portfolio has one, or more than one portfolio
-   * matches (ambiguous → no prefill). Uses {@link accountsMatch} so IBAN-vs-depot still routes.
+   * matches (ambiguous → no prefill). Uses {@link portfolioMatchesAccount} so the detected
+   * value routes against either the portfolio's account number or its IBAN.
    */
   async function matchAccountNumber(
     userId: string,
@@ -204,10 +205,10 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   ): Promise<string | null> {
     if (!normalizeAccountNumber(detected)) return null;
     const rows = await app.db
-      .select({ id: portfolios.id, accountNumber: portfolios.accountNumber })
+      .select({ id: portfolios.id, accountNumber: portfolios.accountNumber, iban: portfolios.iban })
       .from(portfolios)
       .where(eq(portfolios.userId, userId));
-    const matches = rows.filter((p) => accountsMatch(p.accountNumber, detected));
+    const matches = rows.filter((p) => portfolioMatchesAccount(p, detected));
     return matches.length === 1 ? (matches[0]?.id ?? null) : null;
   }
 

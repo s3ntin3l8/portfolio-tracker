@@ -365,6 +365,13 @@
       "when": 1782604845470,
       "tag": "0051_clumsy_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1782636881417,
+      "tag": "0052_noisy_sumo",
+      "breakpoints": true
     }
   ]
 }

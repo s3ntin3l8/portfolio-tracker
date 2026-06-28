@@ -46,6 +46,19 @@ export function accountsMatch(a: string | null | undefined, b: string | null | u
 }
 
 /**
+ * Does a portfolio match a single identifier detected in a document? A portfolio carries
+ * up to two identifiers (depot account number + bank IBAN); a given document only shows
+ * one, so we test the detected value against both. Keeps the OR in one place across the
+ * import call sites (auto-prefill match + mismatch verdict).
+ */
+export function portfolioMatchesAccount(
+  p: { accountNumber: string | null; iban: string | null },
+  detected: string | null | undefined,
+): boolean {
+  return accountsMatch(p.accountNumber, detected) || accountsMatch(p.iban, detected);
+}
+
+/**
  * Verdict on whether a file's detected account number conflicts with the *selected*
  * target portfolio (#197). Returns null when there's nothing to warn about (no detected
  * number, it matches the selected portfolio, or there's nothing comparable on either
@@ -64,13 +77,18 @@ export async function accountMismatchVerdict(
 > {
   if (!normalizeAccountNumber(detected)) return null;
   const rows = await app.db
-    .select({ id: portfolios.id, name: portfolios.name, accountNumber: portfolios.accountNumber })
+    .select({
+      id: portfolios.id,
+      name: portfolios.name,
+      accountNumber: portfolios.accountNumber,
+      iban: portfolios.iban,
+    })
     .from(portfolios)
     .where(eq(portfolios.userId, userId));
   const selected = rows.find((p) => p.id === selectedPortfolioId);
-  if (selected && accountsMatch(selected.accountNumber, detected)) return null;
+  if (selected && portfolioMatchesAccount(selected, detected)) return null;
   const other = rows.find(
-    (p) => p.id !== selectedPortfolioId && accountsMatch(p.accountNumber, detected),
+    (p) => p.id !== selectedPortfolioId && portfolioMatchesAccount(p, detected),
   );
   if (other) {
     return {
@@ -81,7 +99,9 @@ export async function accountMismatchVerdict(
     };
   }
   // No portfolio matches: warn only when the selected portfolio has its own (differing)
-  // account number — otherwise there's nothing to compare against.
-  if (selected?.accountNumber) return { kind: "no_match", detected: detected as string };
+  // account number or IBAN — otherwise there's nothing to compare against.
+  if (selected?.accountNumber || selected?.iban) {
+    return { kind: "no_match", detected: detected as string };
+  }
   return null;
 }

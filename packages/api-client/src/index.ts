@@ -360,6 +360,8 @@ export interface Portfolio {
   accountHolder: string | null;
   /** Brokerage/bank account number used for screenshot auto-detect, or null. */
   accountNumber: string | null;
+  /** IBAN, matched alongside accountNumber for import auto-detect, or null. */
+  iban: string | null;
   /** When false, this portfolio is excluded from the aggregate net-worth/performance view. */
   includeInAggregate: boolean;
   /** Whether cash is inside this portfolio's investment boundary. `true` = savings/

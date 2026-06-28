@@ -1624,6 +1624,64 @@ describe("screenshot import → confirm flow", () => {
     await detectApp.close();
   });
 
+  it("matches a detected identifier against a portfolio's iban field", async () => {
+    const kp = await generateKeyPair("ES256");
+    const ibanApp = await buildApp({
+      authKey: kp.publicKey,
+      screenshotParser: {
+        name: "mock-iban",
+        isConfigured: () => true,
+        parse: async () => ({
+          drafts: [GOLD_DRAFT],
+          contracts: [],
+          accountNumber: "DE78 1203 0000 1066 5053 87",
+        }),
+      },
+    });
+    const t = await new SignJWT({})
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject("iban-user")
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(kp.privateKey);
+
+    // The IBAN lives only in the dedicated `iban` field; the account number is unrelated,
+    // so a match here proves the detected value routed via `iban`.
+    const pid = (
+      await ibanApp.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: {
+          name: "IBAN matched",
+          baseCurrency: "EUR",
+          accountNumber: "SID00000000",
+          iban: "DE78120300001066505387",
+        },
+      })
+    ).json().id;
+    await ibanApp.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Other", baseCurrency: "EUR" },
+    });
+
+    const form = screenshotPart(Buffer.from("iban-img"), "image/png", "iban.png");
+    const res = await ibanApp.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().matchedPortfolioId).toBe(pid);
+
+    await ibanApp.close();
+  });
+
   it("returns null matchedPortfolioId when no portfolio account number matches", async () => {
     const kp = await generateKeyPair("ES256");
     const noMatchApp = await buildApp({

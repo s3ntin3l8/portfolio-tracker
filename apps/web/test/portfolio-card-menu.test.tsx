@@ -53,6 +53,7 @@ const PORTFOLIO = {
   portfolioType: "standard" as const,
   brokerage: "Trade Republic",
   accountNumber: null,
+  iban: null,
   includeInAggregate: true,
   cashCounted: false,
   documentRetention: false,

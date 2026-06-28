@@ -37,7 +37,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
  * (derived from the holder) and only used to gate the TR connection section. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "includeInAggregate" | "cashCounted" | "documentRetention" | "taxAllowanceAnnual" | "transactionCount"
+  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "iban" | "includeInAggregate" | "cashCounted" | "documentRetention" | "taxAllowanceAnnual" | "transactionCount"
 >;
 
 // Sentinel select value for "create a new holder inline".
@@ -86,6 +86,7 @@ export function PortfolioFormDialog({
   const [newHolderBirthYear, setNewHolderBirthYear] = useState("");
   const [brokerage, setBrokerage] = useState(portfolio?.brokerage ?? "");
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
+  const [iban, setIban] = useState(portfolio?.iban ?? "");
   const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
   const [cashCounted, setCashCounted] = useState(portfolio?.cashCounted ?? false);
   const [documentRetention, setDocumentRetention] = useState(portfolio?.documentRetention ?? false);
@@ -214,6 +215,7 @@ export function PortfolioFormDialog({
       setNewHolderBirthYear("");
       setBrokerage(portfolio?.brokerage ?? "");
       setAccountNumber(portfolio?.accountNumber ?? "");
+      setIban(portfolio?.iban ?? "");
       setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
       setCashCounted(portfolio?.cashCounted ?? false);
       setDocumentRetention(portfolio?.documentRetention ?? false);
@@ -264,6 +266,7 @@ export function PortfolioFormDialog({
         accountHolderId: holderId,
         brokerage: brokerage.trim() || null,
         accountNumber: accountNumber.trim() || null,
+        iban: iban.trim() || null,
         includeInAggregate,
         cashCounted,
         documentRetention,
@@ -471,6 +474,16 @@ export function PortfolioFormDialog({
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
               placeholder={t("accountNumberPlaceholder")}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="portfolio-iban">{t("iban")}</Label>
+            <Input
+              id="portfolio-iban"
+              value={iban}
+              onChange={(e) => setIban(e.target.value)}
+              placeholder={t("ibanPlaceholder")}
             />
           </div>
 
