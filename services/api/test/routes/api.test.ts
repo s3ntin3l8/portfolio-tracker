@@ -322,33 +322,42 @@ describe("auth + portfolios + transactions", () => {
         method: "POST",
         url: "/portfolios",
         headers: auth(t),
-        payload: { name: "Stockbit", baseCurrency: "IDR", accountNumber: "SID12345678" },
+        payload: {
+          name: "Stockbit",
+          baseCurrency: "IDR",
+          accountNumber: "SID12345678",
+          iban: "DE78120300001066505387",
+        },
       })
     ).json().id;
 
-    // accountNumber persisted on create.
+    // accountNumber and iban persisted on create.
     const created = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
     expect(created.json()[0].accountNumber).toBe("SID12345678");
+    expect(created.json()[0].iban).toBe("DE78120300001066505387");
 
-    // PATCH updates it.
+    // PATCH updates both.
     const updated = await app.inject({
       method: "PATCH",
       url: `/portfolios/${portfolioId}`,
       headers: auth(t),
-      payload: { accountNumber: "SID99999999" },
+      payload: { accountNumber: "SID99999999", iban: "DE00000000000000000000" },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({ accountNumber: "SID99999999" });
+    expect(updated.json()).toMatchObject({
+      accountNumber: "SID99999999",
+      iban: "DE00000000000000000000",
+    });
 
-    // Explicit null clears it.
+    // Explicit null clears both.
     const cleared = await app.inject({
       method: "PATCH",
       url: `/portfolios/${portfolioId}`,
       headers: auth(t),
-      payload: { accountNumber: null },
+      payload: { accountNumber: null, iban: null },
     });
     expect(cleared.statusCode).toBe(200);
-    expect(cleared.json()).toMatchObject({ accountNumber: null });
+    expect(cleared.json()).toMatchObject({ accountNumber: null, iban: null });
   });
 
   it("validates portfolio input", async () => {

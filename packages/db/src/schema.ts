@@ -220,9 +220,12 @@ export const portfolios = pgTable(
     // Optional brokerage/custodian the portfolio is held at (e.g. Trade Republic,
     // DKB, Stockbit). Free text; powers the brokerage logo on the dashboard.
     brokerage: text("brokerage"),
-    // Optional brokerage/bank account number (e.g. SID, IBAN). Used for auto-detecting
+    // Optional brokerage/bank account number (e.g. SID, depot number). Used for auto-detecting
     // which portfolio a screenshot belongs to when the account number appears in the document.
     accountNumber: text("account_number"),
+    // Optional IBAN, kept separate from accountNumber so a portfolio can carry both a depot
+    // number and a bank IBAN — each source (depot PDF vs Girokonto CSV) matches one of them.
+    iban: text("iban"),
     includeInAggregate: boolean("include_in_aggregate").notNull().default(true),
     // Where this portfolio's investment boundary sits (see `@portfolio/core`
     // contributionStats and the "one boundary per portfolio" rule in CLAUDE.md).
