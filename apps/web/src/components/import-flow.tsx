@@ -519,9 +519,11 @@ export function ImportFlow({
   }
 
   /**
-   * Confirm gold installment contracts — the only remaining confirm path (securities upload
-   * goes through the materialize step). One `confirmImport` call writes the loan + its legs;
+   * Confirm gold installment contracts — the remaining confirm path (pure-securities uploads
+   * go through the materialize step). One `confirmImport` call writes the loan + its legs;
    * an account mismatch surfaces the banner, whose "Import anyway" re-confirms with the flag.
+   * Any flat drafts that arrived alongside the contracts in the same parse are written too
+   * (a single document carrying both is rare but must not silently drop the securities).
    */
   async function confirm(acknowledgeMismatch = false) {
     setError(null);
@@ -529,7 +531,7 @@ export function ImportFlow({
     try {
       const { confirmed, excludedCashMovements } = await client.confirmImport(
         importId,
-        [],
+        drafts.map(stripUid),
         contracts,
         portfolioByImport.get(importId),
         acknowledgeMismatch,
@@ -817,10 +819,10 @@ export function ImportFlow({
             <ContractReview
               contracts={contracts}
               onUpdate={updateContract}
-              // When there are also flat drafts, the draft table owns the confirm
-              // button; otherwise the contract card drives confirm/discard.
-              onConfirm={drafts.length === 0 ? () => confirm() : undefined}
-              onDiscard={drafts.length === 0 ? reset : undefined}
+              // The contract card drives confirm/discard. confirm() also writes any flat
+              // drafts that arrived in the same parse, so it owns the whole import.
+              onConfirm={() => confirm()}
+              onDiscard={reset}
             />
           )}
 

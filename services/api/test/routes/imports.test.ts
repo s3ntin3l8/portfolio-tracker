@@ -226,6 +226,78 @@ describe("CSV import → confirm flow", () => {
     expect(holdings2.json().holdings.length).toBeGreaterThan(0);
   });
 
+  it("materialize guards: unknown import, bad portfolio, empty drafts, already-confirmed", async () => {
+    const t = await token("mat-guards");
+    const pid = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Guards", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    // Unknown import → 404.
+    const unknown = await app.inject({
+      method: "POST",
+      url: `/imports/00000000-0000-0000-0000-000000000000/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    // Stage a DKB CSV (yields drafts; the guard portfolio has no account number → no match).
+    const imp = await app.inject({
+      method: "POST",
+      url: `/imports/csv`,
+      headers: auth(t),
+      payload: { content: DKB_GIRO_CSV, format: "dkb" },
+    });
+    const importId = imp.json().importId as string;
+
+    // Bad target portfolio → 404.
+    const badPf = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(badPf.statusCode).toBe(404);
+
+    // Materialize into a valid portfolio → 201, then a second call → 409 already_confirmed.
+    const ok = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(ok.statusCode).toBe(201);
+    const again = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error).toBe("already_confirmed");
+
+    // A staged import with no drafts → 400 nothing_to_materialize.
+    const empty = await app.inject({
+      method: "POST",
+      url: `/imports/csv`,
+      headers: auth(t),
+      payload: { content: "date,action,quantity,price\n", format: "generic" },
+    });
+    const emptyMat = await app.inject({
+      method: "POST",
+      url: `/imports/${empty.json().importId}/materialize`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
+    expect(emptyMat.statusCode).toBe(400);
+    expect(emptyMat.json().error).toBe("nothing_to_materialize");
+  });
+
   it("imports a DKB Girokonto export: securities + cash, idempotent on re-import", async () => {
     const t = await token("dkb-user");
     const portfolioId = (

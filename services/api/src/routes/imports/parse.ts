@@ -394,6 +394,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           alreadyExists: isDraft,
           alreadyConfirmed: !isDraft,
           matchedPortfolioId,
+          suggestedPortfolioId: matchedPortfolioId ?? (await soleOwnedPortfolioId(id)),
         };
       }
 
@@ -604,6 +605,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           alreadyExists: isDraft,
           alreadyConfirmed: !isDraft,
           matchedPortfolioId,
+          suggestedPortfolioId: matchedPortfolioId ?? (await soleOwnedPortfolioId(id)),
         };
       }
 

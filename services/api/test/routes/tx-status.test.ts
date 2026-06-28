@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { instruments, screenshotImports, transactions, trResolvedEvents, users } from "@portfolio/db";
+import { instruments, loans, screenshotImports, transactions, trResolvedEvents, users } from "@portfolio/db";
 import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
@@ -355,5 +355,65 @@ describe("transaction status (archived / cash_neutral)", () => {
 
     const bList = await app.inject({ method: "GET", url: `/portfolios/${b}/transactions`, headers: auth(t) });
     expect(bList.json().filter((r: { importId: string }) => r.importId === imp.id)).toHaveLength(2);
+  });
+
+  it("reassign returns 404 when the target portfolio isn't owned, and for an unknown import", async () => {
+    const { t, portfolioId: a, addBuy } = await setup();
+    const txId = await addBuy("1", "10");
+    const badTarget = await app.inject({
+      method: "POST",
+      url: `/portfolios/${a}/transactions/reassign`,
+      headers: auth(t),
+      payload: { ids: [txId], targetPortfolioId: "00000000-0000-0000-0000-000000000000" },
+    });
+    expect(badTarget.statusCode).toBe(404);
+
+    const badImport = await app.inject({
+      method: "POST",
+      url: `/imports/00000000-0000-0000-0000-000000000000/reassign`,
+      headers: auth(t),
+      payload: { targetPortfolioId: a },
+    });
+    expect(badImport.statusCode).toBe(404);
+  });
+
+  it("reassign skips financed-gold legs (can't split a leg from its loan)", async () => {
+    const { t, portfolioId: a } = await setup();
+    const b = await newPortfolio(t, "Dest4");
+    const [loan] = await app.db
+      .insert(loans)
+      .values({
+        portfolioId: a,
+        instrumentId: acmeId,
+        purchasePrice: "100",
+        principal: "100",
+        tenorMonths: 12,
+        startDate: "2026-01-01",
+      })
+      .returning({ id: loans.id });
+    const [leg] = await app.db
+      .insert(transactions)
+      .values({
+        portfolioId: a,
+        instrumentId: acmeId,
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        currency: "EUR",
+        executedAt: new Date("2026-01-01T00:00:00.000Z"),
+        source: "screenshot",
+        loanId: loan.id,
+        status: "normal",
+      })
+      .returning({ id: transactions.id });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/portfolios/${a}/transactions/reassign`,
+      headers: auth(t),
+      payload: { ids: [leg.id], targetPortfolioId: b },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ moved: 0, skippedLoans: 1 });
   });
 });

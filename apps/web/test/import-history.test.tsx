@@ -11,6 +11,7 @@ const deleteImport = vi.fn(async () => ({ removed: 1 }));
 const clearImport = vi.fn(async () => undefined);
 const bulkClearImports = vi.fn(async () => ({ cleared: 2 }));
 const getImportDocumentUrl = vi.fn(async () => ({ url: "https://example.com/doc.pdf" }));
+const reassignImport = vi.fn(async () => ({ moved: 4, skippedConflicts: 0, skippedLoans: 0 }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -19,8 +20,21 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ discardImport, deleteImport, clearImport, bulkClearImports, getImportDocumentUrl }),
+  useApiClient: () => ({
+    discardImport,
+    deleteImport,
+    clearImport,
+    bulkClearImports,
+    getImportDocumentUrl,
+    reassignImport,
+  }),
 }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
+
+const PORTFOLIOS = [
+  { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+  { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
+];
 
 import { ImportHistory } from "../src/components/import-history";
 
@@ -138,6 +152,32 @@ describe("ImportHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: m.undo }));
     await waitFor(() => expect(deleteImport).toHaveBeenCalledWith("conf1"));
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("reassigns a whole confirmed import to another portfolio", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={items} portfolios={PORTFOLIOS} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+    fireEvent.click(screen.getByRole("button", { name: m.reassign }));
+    // The dialog confirms the move to the chosen portfolio.
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.Transactions.reassign.confirm }),
+    );
+    await waitFor(() => expect(reassignImport).toHaveBeenCalledWith("conf1", "p1"));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("hides the import reassign action when only one portfolio exists", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={items} portfolios={[PORTFOLIOS[0]]} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+    expect(screen.queryByRole("button", { name: m.reassign })).toBeNull();
   });
 
   it("renders sortable column headers", () => {
