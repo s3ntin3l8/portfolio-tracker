@@ -49,8 +49,6 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
     materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0 })),
-    enrichImport: vi.fn(async () => ({ enriched: 0, skipped: [] })),
-    checkImportDuplicates: vi.fn(async () => ({ annotations: [] })),
     ...overrides,
   };
 }
@@ -272,7 +270,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.done.title)).toBeInTheDocument(),
     );
-    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false, false);
+    expect(client.confirmImport).toHaveBeenCalledWith("imp-c", [], [contract], "p1", false);
     // Gold contracts never use the materialize path.
     expect(client.materializeImport).not.toHaveBeenCalled();
   });

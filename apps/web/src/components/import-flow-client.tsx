@@ -88,14 +88,6 @@ export function ImportFlowClient({
     },
     materializeImport: (importId, portfolioId, acknowledgeAccountMismatch) =>
       api.materializeImport(importId, portfolioId, acknowledgeAccountMismatch),
-    enrichImport: (importId, enrichments, portfolioId) =>
-      api.enrichImport(
-        importId,
-        enrichments as unknown as Parameters<typeof api.enrichImport>[1],
-        portfolioId,
-      ),
-    checkImportDuplicates: (importId, portfolioId) =>
-      api.checkImportDuplicates(importId, portfolioId),
   };
 
   return (
