@@ -43,6 +43,17 @@ const materializeBodySchema = z.object({
   acknowledgeAccountMismatch: z.boolean().default(false),
 });
 
+// Read-only pre-flight: the upload modal asks, at confirm time, whether the detected account
+// on each staged import conflicts with the portfolio the user actually selected — so the
+// account-mismatch warning surfaces in the still-open modal instead of as a post-close toast.
+const accountCheckBodySchema = z.object({
+  units: z
+    .array(
+      z.object({ importId: z.string().uuid(), portfolioId: z.string().uuid() }),
+    )
+    .max(50),
+});
+
 const csvBodySchema = z.object({
   content: z.string().min(1),
   // `auto` sniffs the content (default); otherwise force a specific parser: `dkb`
@@ -846,6 +857,51 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         materializedCount: mat.materialized,
         excludedCashMovements: mat.excludedCashMovements,
       };
+    },
+  );
+
+  // Read-only account-mismatch pre-flight for the upload modal. For each (importId, portfolioId)
+  // unit the user is about to confirm, re-run the same verdict the materialize/confirm guards
+  // use (against the *selected* portfolio) and return only the units that conflict — so the modal
+  // can keep itself open and show the warning before handing the write to the background runner.
+  // Writes nothing. pytr imports are exempt (sync is always bound to its connection's portfolio).
+  app.post(
+    "/imports/account-check",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const { units } = accountCheckBodySchema.parse(request.body);
+
+      const mismatches: Array<{ importId: string } & NonNullable<
+        Awaited<ReturnType<typeof accountMismatchVerdict>>
+      >> = [];
+
+      for (const unit of units) {
+        const [imp] = await app.db
+          .select()
+          .from(screenshotImports)
+          .where(
+            and(
+              eq(screenshotImports.id, unit.importId),
+              eq(screenshotImports.userId, id),
+            ),
+          )
+          .limit(1);
+        // Skip silently: a missing/confirmed/pytr import simply has no warning to surface;
+        // the real write guard still re-checks, so this never gates correctness.
+        if (!imp || imp.status === "confirmed" || imp.parser === "pytr") continue;
+
+        const parsed = (imp.parsedJson ?? {}) as { accountNumber?: string | null };
+        const verdict = await accountMismatchVerdict(
+          app,
+          id,
+          parsed.accountNumber,
+          unit.portfolioId,
+        );
+        if (verdict) mismatches.push({ importId: imp.id, ...verdict });
+      }
+
+      return { mismatches };
     },
   );
 }

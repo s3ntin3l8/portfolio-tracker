@@ -58,6 +58,7 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
     materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0 })),
+    checkAccounts: vi.fn(async () => ({ mismatches: [] })),
     ...overrides,
   };
 }
@@ -122,15 +123,21 @@ describe("ImportFlow", () => {
 
     fireEvent.click(confirmBtn());
 
-    // Sole portfolio is used as the target (no picker shown). The write is backgrounded.
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "materialize",
-        acknowledge: false,
-        expectedCount: 1,
-        units: [{ importId: "imp1", portfolioId: "p1" }],
-      }),
+    // Sole portfolio is used as the target (no picker shown). The write is backgrounded after
+    // the confirm-time account-mismatch pre-flight clears.
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "materialize",
+          acknowledge: false,
+          expectedCount: 1,
+          units: [{ importId: "imp1", portfolioId: "p1" }],
+        }),
+      ),
     );
+    expect(client.checkAccounts).toHaveBeenCalledWith([
+      { importId: "imp1", portfolioId: "p1" },
+    ]);
     expect(onClose).toHaveBeenCalledTimes(1);
     // The write itself is the provider's job — ImportFlow no longer calls the client.
     expect(client.materializeImport).not.toHaveBeenCalled();
@@ -171,8 +178,10 @@ describe("ImportFlow", () => {
     expect(screen.getByText(messages.Import.confirmPortfolio.matched)).toBeInTheDocument();
 
     fireEvent.click(confirmBtn());
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ units: [{ importId: "imp-s", portfolioId: "p2" }] }),
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ units: [{ importId: "imp-s", portfolioId: "p2" }] }),
+      ),
     );
   });
 
@@ -196,8 +205,10 @@ describe("ImportFlow", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
 
     fireEvent.click(confirmBtn());
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ units: [{ importId: "imp4", portfolioId: "p2" }] }),
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ units: [{ importId: "imp4", portfolioId: "p2" }] }),
+      ),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -229,12 +240,97 @@ describe("ImportFlow", () => {
     });
     fireEvent.click(importAnyway);
 
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "materialize",
-        acknowledge: true,
-        units: [{ importId: "imp-mm", portfolioId: "p1" }],
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "materialize",
+          acknowledge: true,
+          units: [{ importId: "imp-mm", portfolioId: "p1" }],
+        }),
+      ),
+    );
+    // "Import anyway" acknowledges, so it bypasses the pre-flight entirely.
+    expect(client.checkAccounts).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("a confirm-time mismatch (clean parse) keeps the modal open, then Import anyway commits", async () => {
+    // The gap the parse-time banner can't catch (#197): >1 portfolio, file matches none, so the
+    // server returns no parse-time `accountMismatch`. The pre-flight at Confirm surfaces it in the
+    // still-open modal instead of as a post-close toast.
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp-late",
+        drafts: [DRAFT],
+        errors: [],
+        // No accountMismatch at parse — clean.
+      })),
+      checkAccounts: vi.fn(async () => ({
+        mismatches: [
+          { importId: "imp-late", kind: "no_match" as const, detected: "999888777" },
+        ],
+      })),
+    });
+    const { onSubmit, onClose } = renderFlow(client, [
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "Other", brokerage: null, accountHolder: null },
+    ]);
+
+    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+
+    // Confirm runs the pre-flight, finds the mismatch, and keeps the modal open (no handoff).
+    fireEvent.click(confirmBtn());
+    const importAnyway = await screen.findByRole("button", {
+      name: messages.Import.accountMismatch.importAnyway,
+    });
+    expect(client.checkAccounts).toHaveBeenCalledWith([
+      { importId: "imp-late", portfolioId: "p1" },
+    ]);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // "Import anyway" acknowledges and hands off the write.
+    fireEvent.click(importAnyway);
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "materialize",
+          acknowledge: true,
+          units: [{ importId: "imp-late", portfolioId: "p1" }],
+        }),
+      ),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed pre-flight never blocks: falls through to the background handoff", async () => {
+    // The check itself erroring (network) must not strand the import — the real write guard
+    // still re-checks and drives its own error toast.
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "imp-err",
+        drafts: [DRAFT],
+        errors: [],
+      })),
+      checkAccounts: vi.fn(async () => {
+        throw new Error("network");
       }),
+    });
+    const { onSubmit, onClose } = renderFlow(client);
+
+    fireEvent.change(fileInput(document.body), { target: { files: [pngFile()] } });
+    await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
+
+    fireEvent.click(confirmBtn());
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "materialize",
+          acknowledge: false,
+          units: [{ importId: "imp-err", portfolioId: "p1" }],
+        }),
+      ),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -278,14 +374,16 @@ describe("ImportFlow", () => {
       screen.getByRole("button", { name: messages.Import.contract.confirm }),
     );
 
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "confirm",
-        importId: "imp-c",
-        contracts: [contract],
-        portfolioId: "p1",
-        acknowledge: false,
-      }),
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "confirm",
+          importId: "imp-c",
+          contracts: [contract],
+          portfolioId: "p1",
+          acknowledge: false,
+        }),
+      ),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
     // Gold contracts never use the materialize path.
@@ -357,15 +455,22 @@ describe("ImportFlow", () => {
     expect(screen.getAllByText("broker-b.csv").length).toBeGreaterThan(0);
 
     fireEvent.click(confirmBtn());
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "materialize",
-        units: [
-          { importId: "imp-a", portfolioId: "p1" },
-          { importId: "imp-b", portfolioId: "p1" },
-        ],
-      }),
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "materialize",
+          units: [
+            { importId: "imp-a", portfolioId: "p1" },
+            { importId: "imp-b", portfolioId: "p1" },
+          ],
+        }),
+      ),
     );
+    // The pre-flight checks both groups in one round-trip.
+    expect(client.checkAccounts).toHaveBeenCalledWith([
+      { importId: "imp-a", portfolioId: "p1" },
+      { importId: "imp-b", portfolioId: "p1" },
+    ]);
   });
 
   it("skip & continue: one already-confirmed file is skipped, the rest proceeds", async () => {

@@ -34,6 +34,7 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
     materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0 })),
+    checkAccounts: vi.fn(async () => ({ mismatches: [] })),
     ...overrides,
   };
 }

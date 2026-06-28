@@ -159,6 +159,10 @@ export interface ImportClient {
     portfolioId: string,
     acknowledgeAccountMismatch?: boolean,
   ): Promise<{ materializedCount: number; excludedCashMovements: number }>;
+  /** Read-only pre-flight: which of these (importId, portfolioId) units conflict on account? */
+  checkAccounts(
+    units: MaterializeUnit[],
+  ): Promise<{ mismatches: ({ importId: string } & AccountMismatch)[] }>;
 }
 
 /** One portfolio target for a backgrounded materialize (one per import group). */
@@ -232,6 +236,7 @@ const demoClient: ImportClient = {
     confirmed: drafts.length + (contracts?.length ?? 0),
   }),
   materializeImport: async () => ({ materializedCount: 0, excludedCashMovements: 0 }),
+  checkAccounts: async () => ({ mismatches: [] }),
 };
 
 /** Type map for per-import-group portfolio selection (importId → portfolioId). */
@@ -328,6 +333,12 @@ export function ImportFlow({
   // Account-mismatch warning (#197) — set from the upload hint or a confirm 409. Shown as
   // a banner in the review step; "Import anyway" re-confirms with the acknowledge flag.
   const [accountMismatch, setAccountMismatch] = useState<AccountMismatch | null>(null);
+  // The import the live mismatch verdict belongs to — lets the banner name the file in a
+  // multi-group upload (where one of several files is the one that doesn't match).
+  const [mismatchImportId, setMismatchImportId] = useState<string>("");
+  // True while the confirm-time account-mismatch pre-flight is in flight — disables the
+  // Confirm button so the async round-trip can't be double-submitted.
+  const [submitting, setSubmitting] = useState(false);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   // Drag-and-drop hover state for the dropzone.
@@ -572,13 +583,44 @@ export function ImportFlow({
   }
 
   /**
-   * Confirm gold installment contracts — the remaining confirm path (pure-securities uploads
-   * go through the materialize step). Hands the write off to the background provider, then
-   * closes the modal. Any flat drafts that arrived alongside the contracts in the same parse
-   * are written too (a single document carrying both is rare but must not silently drop the
-   * securities). The parse-time mismatch banner's "Import anyway" passes `acknowledge=true`.
+   * Confirm-time account-mismatch pre-flight (#197): ask the server whether the file's detected
+   * account conflicts with the portfolio the user *actually* selected, for the units about to be
+   * written. Returns the first conflicting verdict (with its importId) so the caller can keep the
+   * modal open and surface the warning in place — instead of letting the background write 409 and
+   * surface it as a post-close toast. A failed check returns null: never block the import on the
+   * pre-flight, since the real write guard still re-checks and drives its own error toast.
    */
-  function submitConfirm(acknowledge = false) {
+  async function preflightAccounts(
+    units: MaterializeUnit[],
+  ): Promise<({ importId: string } & AccountMismatch) | null> {
+    try {
+      const { mismatches } = await client.checkAccounts(units);
+      return mismatches[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Confirm gold installment contracts — the remaining confirm path (pure-securities uploads
+   * go through the materialize step). Pre-flights the account-mismatch check, then hands the
+   * write off to the background provider and closes the modal. Any flat drafts that arrived
+   * alongside the contracts in the same parse are written too (a single document carrying both
+   * is rare but must not silently drop the securities). The banner's "Import anyway" passes
+   * `acknowledge=true`, which skips the pre-flight.
+   */
+  async function submitConfirm(acknowledge = false) {
+    const portfolioId = portfolioByImport.get(importId);
+    if (!acknowledge && portfolioId) {
+      setSubmitting(true);
+      const mismatch = await preflightAccounts([{ importId, portfolioId }]);
+      setSubmitting(false);
+      if (mismatch) {
+        setAccountMismatch(mismatch);
+        setMismatchImportId(mismatch.importId);
+        return;
+      }
+    }
     onSubmit?.({
       kind: "confirm",
       label: taskLabel(),
@@ -586,19 +628,21 @@ export function ImportFlow({
       importId,
       drafts: drafts.map(stripUid),
       contracts,
-      portfolioId: portfolioByImport.get(importId),
+      portfolioId,
     });
     onClose?.();
   }
 
   /**
-   * Confirm-portfolio step (drafts, non-contract): validate every group has a target, then
-   * hand the per-group writes off to the background provider and close the modal. The
-   * provider materializes each import as `status='draft'` rows (cross-source duplicates
-   * collapse server-side) and drives the status toast — including a 409 account-mismatch
-   * "Import anyway" retry, since the modal is gone by the time the server responds.
+   * Confirm-portfolio step (drafts, non-contract): validate every group has a target, pre-flight
+   * the account-mismatch check against the *selected* portfolios, then hand the per-group writes
+   * off to the background provider and close the modal. A mismatch keeps the modal open and shows
+   * the warning banner; "Import anyway" re-runs with `acknowledge=true`. The provider still owns
+   * the actual write (cross-source duplicates collapse server-side) and its status toast — and
+   * keeps the 409 account-mismatch fallback for the race where a portfolio changes after the
+   * pre-flight.
    */
-  function submitMaterialize(acknowledge = false) {
+  async function submitMaterialize(acknowledge = false) {
     setError(null);
     const units: MaterializeUnit[] = [];
     for (const iid of groups.keys()) {
@@ -608,6 +652,16 @@ export function ImportFlow({
         return;
       }
       units.push({ importId: iid, portfolioId: pid });
+    }
+    if (!acknowledge) {
+      setSubmitting(true);
+      const mismatch = await preflightAccounts(units);
+      setSubmitting(false);
+      if (mismatch) {
+        setAccountMismatch(mismatch);
+        setMismatchImportId(mismatch.importId);
+        return;
+      }
     }
     onSubmit?.({
       kind: "materialize",
@@ -632,6 +686,8 @@ export function ImportFlow({
     setFileStatuses([]);
     setError(null);
     setAccountMismatch(null);
+    setMismatchImportId("");
+    setSubmitting(false);
     setStep("upload");
   }
 
@@ -799,6 +855,10 @@ export function ImportFlow({
             >
               <AlertCircle className="size-4 shrink-0" />
               <span className="flex-1">
+                {/* Name the file in a multi-group upload so the user knows which one mismatched. */}
+                {groups.size > 1 && groups.get(mismatchImportId) && (
+                  <span className="font-medium">{groups.get(mismatchImportId)}: </span>
+                )}
                 {accountMismatch.kind === "other_portfolio"
                   ? t("accountMismatch.otherPortfolio", {
                       portfolio: accountMismatch.matchedName ?? "",
@@ -809,10 +869,11 @@ export function ImportFlow({
               <Button
                 size="sm"
                 variant="outline"
+                disabled={submitting}
                 onClick={() =>
                   drafts.length > 0 && contracts.length === 0
-                    ? submitMaterialize(true)
-                    : submitConfirm(true)
+                    ? void submitMaterialize(true)
+                    : void submitConfirm(true)
                 }
               >
                 {t("accountMismatch.importAnyway")}
@@ -917,10 +978,11 @@ export function ImportFlow({
                 },
               )}
               <div className="flex items-center gap-2">
-                <Button onClick={() => submitMaterialize()}>
+                <Button onClick={() => void submitMaterialize()} disabled={submitting}>
+                  {submitting && <Loader2 className="size-4 animate-spin" />}
                   {t("confirmPortfolio.confirm")}
                 </Button>
-                <Button variant="ghost" onClick={reset}>
+                <Button variant="ghost" onClick={reset} disabled={submitting}>
                   {t("confirmPortfolio.discard")}
                 </Button>
               </div>

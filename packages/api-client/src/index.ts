@@ -1953,6 +1953,19 @@ export function createApiClient(config: ApiClientConfig) {
         acknowledgeAccountMismatch,
       }),
     /**
+     * Read-only pre-flight for the upload modal's Confirm: for each (importId, portfolioId)
+     * the user is about to commit, ask whether the file's detected account conflicts with the
+     * *selected* portfolio — the same verdict the materialize/confirm guards apply. Returns only
+     * the conflicting units so the modal can show the warning in place instead of as a
+     * post-close toast. Writes nothing. (#197)
+     */
+    checkAccounts: (units: { importId: string; portfolioId: string }[]) =>
+      request<{ mismatches: ({ importId: string } & AccountMismatch)[] }>(
+        "POST",
+        `/imports/account-check`,
+        { units },
+      ),
+    /**
      * Preview which drafts in an import economically duplicate (or enrich) transactions in
      * the chosen portfolio — without persisting anything. Call this when the user selects or
      * changes the target portfolio in the review screen so badges appear before Confirm (#259).

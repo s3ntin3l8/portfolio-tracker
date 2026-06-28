@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
+import { eq } from "drizzle-orm";
+import { screenshotImports } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 import {
@@ -296,6 +298,80 @@ describe("CSV import → confirm flow", () => {
     });
     expect(emptyMat.statusCode).toBe(400);
     expect(emptyMat.json().error).toBe("nothing_to_materialize");
+  });
+
+  it("account-check pre-flight: flags the selected-portfolio mismatch, clears on the matched one (#197)", async () => {
+    const t = await token("acct-check");
+    // Portfolio A carries the file's IBAN — it's the file's true owner.
+    const a = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DKB", baseCurrency: "EUR", accountNumber: "DE78120300001066505387" },
+      })
+    ).json().id;
+    // Portfolio B has its own, differing account number.
+    const b = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Other", baseCurrency: "EUR", accountNumber: "DE00111122223333444455" },
+      })
+    ).json().id;
+
+    const importId = (
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: DKB_GIRO_CSV, format: "dkb" },
+      })
+    ).json().importId as string;
+
+    // Selecting B (the wrong portfolio) → the file looks like it belongs to A.
+    const wrong = await app.inject({
+      method: "POST",
+      url: `/imports/account-check`,
+      headers: auth(t),
+      payload: { units: [{ importId, portfolioId: b }] },
+    });
+    expect(wrong.statusCode).toBe(200);
+    expect(wrong.json().mismatches).toEqual([
+      expect.objectContaining({
+        importId,
+        kind: "other_portfolio",
+        matchedPortfolioId: a,
+        matchedName: "DKB",
+        detected: "DE78120300001066505387",
+      }),
+    ]);
+
+    // Selecting A (the matched portfolio) → nothing to warn about.
+    const right = await app.inject({
+      method: "POST",
+      url: `/imports/account-check`,
+      headers: auth(t),
+      payload: { units: [{ importId, portfolioId: a }] },
+    });
+    expect(right.statusCode).toBe(200);
+    expect(right.json().mismatches).toEqual([]);
+
+    // pytr imports are exempt (sync is always bound to its connection's portfolio): flip the
+    // parser and the same mismatching unit now yields no warning.
+    await app.db
+      .update(screenshotImports)
+      .set({ parser: "pytr" })
+      .where(eq(screenshotImports.id, importId));
+    const pytr = await app.inject({
+      method: "POST",
+      url: `/imports/account-check`,
+      headers: auth(t),
+      payload: { units: [{ importId, portfolioId: b }] },
+    });
+    expect(pytr.statusCode).toBe(200);
+    expect(pytr.json().mismatches).toEqual([]);
   });
 
   it("imports a DKB Girokonto export: securities + cash, idempotent on re-import", async () => {

@@ -42,6 +42,7 @@ export function useImportClient(): ImportClient {
         ),
       materializeImport: (importId, portfolioId, acknowledgeAccountMismatch) =>
         api.materializeImport(importId, portfolioId, acknowledgeAccountMismatch),
+      checkAccounts: (units) => api.checkAccounts(units),
     }),
     [api],
   );
