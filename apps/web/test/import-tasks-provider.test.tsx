@@ -17,11 +17,13 @@ const h = vi.hoisted(() => ({
   loading: vi.fn((_message?: unknown, _opts?: unknown): string | number => "toast-1"),
   success: vi.fn(),
   error: vi.fn(),
+  getSession: vi.fn(async () => ({ accessToken: "fresh" })),
 }));
 
 vi.mock("sonner", () => ({
   toast: { loading: h.loading, success: h.success, error: h.error },
 }));
+vi.mock("next-auth/react", () => ({ getSession: h.getSession }));
 vi.mock("@/lib/use-import-client", () => ({ useImportClient: () => h.client }));
 vi.mock("@/i18n/navigation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/i18n/navigation")>();
@@ -74,6 +76,7 @@ describe("ImportTasksProvider", () => {
     h.loading.mockClear();
     h.success.mockClear();
     h.error.mockClear();
+    h.getSession.mockClear();
   });
 
   it("throws when used outside the provider", () => {
@@ -115,7 +118,9 @@ describe("ImportTasksProvider", () => {
     // 2 + 3 = 5 imported.
     const [msg, opts] = h.success.mock.calls[0]! as [string, { id?: string | number }];
     expect(msg).toContain("5");
-    expect(opts.id).toBe("toast-1");
+    // The success toast reuses the same id the loading toast was painted with (one lifecycle).
+    const loadingId = (h.loading.mock.calls[0]![1] as { id?: string | number }).id;
+    expect(opts.id).toBe(loadingId);
     expect(h.refresh).toHaveBeenCalledTimes(1);
     // Live per-file progress ticked through the loading toast (by the same id).
     const loadingMsgs = h.loading.mock.calls.map((c) => String(c[0]));
@@ -130,6 +135,15 @@ describe("ImportTasksProvider", () => {
     await waitFor(() => expect(h.success).toHaveBeenCalled());
     const loadingMsgs = h.loading.mock.calls.map((c) => String(c[0]));
     expect(loadingMsgs.some((m) => m.includes(" of "))).toBe(false);
+  });
+
+  it("paints exactly one loading toast for a single-file import (no throwaway)", async () => {
+    h.client = makeClient();
+    renderRunner(materializeTask({ expectedCount: 1 }));
+
+    await waitFor(() => expect(h.success).toHaveBeenCalled());
+    // Only execute()'s initial loading toast — run() no longer mints a throwaway one.
+    expect(h.loading).toHaveBeenCalledTimes(1);
   });
 
   it("reports 'X of Y' and splits the gap into excluded cash + skipped duplicates", async () => {
@@ -176,7 +190,8 @@ describe("ImportTasksProvider", () => {
       id?: string | number;
       action?: { label: string; onClick: () => void };
     };
-    expect(opts.id).toBe("toast-1");
+    const loadingId = (h.loading.mock.calls[0]![1] as { id?: string | number }).id;
+    expect(opts.id).toBe(loadingId);
     expect(opts.description).toBe(messages.Import.errors.notConfigured);
     expect(opts.action?.label).toBe(messages.Import.toast.retry);
     expect(h.success).not.toHaveBeenCalled();
@@ -185,6 +200,85 @@ describe("ImportTasksProvider", () => {
     opts.action!.onClick();
     await waitFor(() => expect(h.success).toHaveBeenCalled());
     expect(materializeImport).toHaveBeenNthCalledWith(2, "imp1", "p1", false);
+  });
+
+  it("session-expiry 401 → 'session expired' description (not opaque generic)", async () => {
+    h.client = makeClient({
+      materializeImport: vi.fn(async () => {
+        throw Object.assign(new Error("unauthorized"), { status: 401 });
+      }),
+    });
+    renderRunner(materializeTask());
+
+    await waitFor(() => expect(h.error).toHaveBeenCalled());
+    const opts = h.error.mock.calls[0]![1] as { description?: string };
+    expect(opts.description).toBe(messages.Import.errors.sessionExpired);
+  });
+
+  it("session-expiry Retry forces getSession() before replaying (fresh token)", async () => {
+    const materializeImport = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error("unauthorized"), { status: 401 }))
+      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+    h.client = makeClient({ materializeImport });
+    renderRunner(materializeTask());
+
+    await waitFor(() => expect(h.error).toHaveBeenCalled());
+    const opts = h.error.mock.calls[0]![1] as { action?: { onClick: () => void } };
+
+    opts.action!.onClick();
+    await waitFor(() => expect(h.success).toHaveBeenCalled());
+    // The refresh ran before the replay landed.
+    expect(h.getSession).toHaveBeenCalledTimes(1);
+    expect(materializeImport).toHaveBeenCalledTimes(2);
+  });
+
+  it("unmapped 500 → self-diagnosing description carrying the HTTP status", async () => {
+    h.client = makeClient({
+      materializeImport: vi.fn(async () => {
+        throw new ApiError(500, JSON.stringify({ error: "server_error" }));
+      }),
+    });
+    renderRunner(materializeTask());
+
+    await waitFor(() => expect(h.error).toHaveBeenCalled());
+    const opts = h.error.mock.calls[0]![1] as { description?: string };
+    expect(opts.description).toContain("HTTP 500");
+    expect(opts.description).toContain("server_error");
+  });
+
+  it("partial failure → Retry resumes only the un-written units and totals correctly", async () => {
+    let impBCalls = 0;
+    const materializeImport = vi.fn(async (importId: string) => {
+      if (importId === "imp-a") return { materializedCount: 2, excludedCashMovements: 0 };
+      impBCalls++;
+      if (impBCalls === 1) throw Object.assign(new Error("x"), { status: 401 });
+      return { materializedCount: 3, excludedCashMovements: 0 };
+    });
+    h.client = makeClient({ materializeImport });
+
+    renderRunner(
+      materializeTask({
+        expectedCount: 5,
+        units: [
+          { importId: "imp-a", portfolioId: "p1" },
+          { importId: "imp-b", portfolioId: "p2" },
+        ],
+      }),
+    );
+
+    // First pass: imp-a lands, imp-b 401 → error toast with Retry.
+    await waitFor(() => expect(h.error).toHaveBeenCalled());
+    const opts = h.error.mock.calls[0]![1] as { action?: { onClick: () => void } };
+
+    // Retry resumes from imp-b only — imp-a is not re-materialized.
+    opts.action!.onClick();
+    await waitFor(() => expect(h.success).toHaveBeenCalled());
+    expect(materializeImport.mock.calls.filter((c) => c[0] === "imp-a")).toHaveLength(1);
+    expect(materializeImport.mock.calls.filter((c) => c[0] === "imp-b")).toHaveLength(2);
+    // Total carried across the retry: imp-a (2) + imp-b (3) = 5, matching expectedCount.
+    const msg = h.success.mock.calls[0]![0] as string;
+    expect(msg).toContain("5");
   });
 
   it("account-mismatch 409 → error toast whose action replays with acknowledge=true", async () => {

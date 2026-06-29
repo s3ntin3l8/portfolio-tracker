@@ -46,4 +46,21 @@ describe("useApiClient", () => {
       (init.headers as Record<string, string>).authorization,
     ).toBeUndefined();
   });
+
+  it("reads the LATEST token after a re-render, not a render-time snapshot", async () => {
+    // The client built while the token was "tok-A" must send "tok-B" once the session rotates —
+    // this is what keeps a long backgrounded import from 401ing on a stale captured token.
+    useSessionMock.mockReturnValue({ data: { accessToken: "tok-A" } });
+    const fetchSpy = stubFetch();
+
+    const { result, rerender } = renderHook(() => useApiClient());
+    const clientBeforeRotation = result.current;
+
+    useSessionMock.mockReturnValue({ data: { accessToken: "tok-B" } });
+    rerender();
+
+    await clientBeforeRotation.listPortfolios();
+    const init = fetchSpy.mock.calls.at(-1)![1] as RequestInit;
+    expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok-B");
+  });
 });

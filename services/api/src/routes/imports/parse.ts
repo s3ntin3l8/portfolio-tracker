@@ -361,7 +361,9 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   // Portfolio is NOT required at upload time — it is supplied at confirm time.
   app.post(
     "/imports/csv",
-    { preHandler: app.authenticate, bodyLimit: 5 * 1024 * 1024 },
+    // 25 MB to match the screenshot/PDF multipart limit (app.ts) and the user-facing "max 25 MB"
+    // message — full transaction-history CSVs can be large, and the body is plain text.
+    { preHandler: app.authenticate, bodyLimit: 25 * 1024 * 1024 },
     async (request, reply) => {
       const { id } = requireUser(request);
       const { content, format } = csvBodySchema.parse(request.body);
