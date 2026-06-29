@@ -280,6 +280,39 @@ describe("retention=true — confirm retains bytes, download URL issued", () => 
     expect(res.json().url).toMatch(/^https:\/\/fake\.storage\//);
   });
 
+  it("per-source document-url falls back to the import receipt when the CSV source row has no documentId", async () => {
+    const { t, portfolioId } = await setup("src-doc-user", true);
+    const { importId, drafts } = await uploadCsv(t);
+    const { transactions: txns } = await confirmImport(t, portfolioId, importId, drafts as unknown[]);
+    const txId = txns[0].id;
+
+    // Read the transaction's source rows: a CSV source has documentId=null but is
+    // downloadable via the import-linked receipt (hasDocument=true).
+    const listRes = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
+    expect(listRes.statusCode).toBe(200);
+    const list = listRes.json() as Array<{
+      id: string;
+      sources: Array<{ id: string; documentId: string | null; hasDocument: boolean; filename: string | null }>;
+    }>;
+    const src = list.find((r) => r.id === txId)!.sources[0];
+    expect(src.documentId).toBeNull();
+    expect(src.hasDocument).toBe(true);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions/${txId}/sources/${src.id}/document-url`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { url: string; mimeType: string };
+    expect(body.url).toMatch(/^https:\/\/fake\.storage\//);
+    expect(body.mimeType).toBe("text/csv");
+  });
+
   it("GET /imports includes document summary for retained docs", async () => {
     const { t, portfolioId } = await setup("list-doc-user", true);
     const { importId, drafts } = await uploadCsv(t);

@@ -2123,29 +2123,51 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       // Fetch the transaction_sources row and verify it belongs to this transaction.
       const [sourceRow] = await app.db
-        .select({ id: transactionSources.id, documentId: transactionSources.documentId })
+        .select({
+          id: transactionSources.id,
+          documentId: transactionSources.documentId,
+          importId: transactionSources.importId,
+        })
         .from(transactionSources)
         .where(and(eq(transactionSources.id, sourceId), eq(transactionSources.transactionId, txId)))
         .limit(1);
       if (!sourceRow) return reply.code(404).send({ error: "source_not_found" });
-      if (!sourceRow.documentId) return reply.code(404).send({ error: "document_not_found" });
 
-      // Fetch the linked document.
-      const [doc] = await app.db
-        .select({
-          id: documents.id,
-          storageKey: documents.storageKey,
-          originalFilename: documents.originalFilename,
-          mimeType: documents.mimeType,
-          source: documents.source,
-          storedAt: documents.storedAt,
-          importId: documents.importId,
-          transactionId: documents.transactionId,
-          userId: documents.userId,
-        })
-        .from(documents)
-        .where(eq(documents.id, sourceRow.documentId))
-        .limit(1);
+      // Resolve the document: the row's own documentId (retained PDF imports), else fall back
+      // to getDocumentForTransaction (transaction-scoped doc first — correct for TR, whose
+      // collector import holds many docs — then the import-linked doc, the common CSV case
+      // where documentId is null because the file is linked at documents.importId).
+      let doc: {
+        id: string;
+        storageKey: string;
+        originalFilename: string | null;
+        mimeType: string;
+        source: string | null;
+        storedAt: Date;
+        importId: string | null;
+        transactionId: string | null;
+        userId: string;
+      } | null;
+      if (sourceRow.documentId) {
+        const [row] = await app.db
+          .select({
+            id: documents.id,
+            storageKey: documents.storageKey,
+            originalFilename: documents.originalFilename,
+            mimeType: documents.mimeType,
+            source: documents.source,
+            storedAt: documents.storedAt,
+            importId: documents.importId,
+            transactionId: documents.transactionId,
+            userId: documents.userId,
+          })
+          .from(documents)
+          .where(eq(documents.id, sourceRow.documentId))
+          .limit(1);
+        doc = row ?? null;
+      } else {
+        doc = await getDocumentForTransaction(app, txId, sourceRow.importId);
+      }
       if (!doc) return reply.code(404).send({ error: "document_not_found" });
       // IDOR: document must belong to the authenticated user.
       if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });

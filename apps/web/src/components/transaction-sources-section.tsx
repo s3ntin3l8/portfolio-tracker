@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Download, FileCheck2, Loader2, PencilLine } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { SourceSummary } from "@portfolio/api-client";
@@ -50,8 +50,13 @@ export function TransactionSourcesSection({
   readOnly = false,
 }: TransactionSourcesSectionProps) {
   const t = useTranslations("Transactions");
+  const locale = useLocale();
   const api = useApiClient();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const df = useMemo(
+    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
+    [locale],
+  );
 
   async function downloadSource(sourceId: string) {
     setDownloading(sourceId);
@@ -78,9 +83,10 @@ export function TransactionSourcesSection({
               <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0 space-y-0.5">
                 <p className="font-medium capitalize">{src.sourceType}</p>
-                {src.externalId && (
-                  <p className="text-xs text-muted-foreground truncate">{src.externalId}</p>
-                )}
+                <p className="text-xs text-muted-foreground truncate">
+                  {t("sourcesSection.importedAt", { date: df.format(new Date(src.createdAt)) })}
+                  {src.filename ? ` · ${src.filename}` : ""}
+                </p>
                 {tcEntries.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {tcEntries
@@ -89,7 +95,7 @@ export function TransactionSourcesSection({
                   </p>
                 )}
               </div>
-              {!readOnly && src.documentId && (
+              {!readOnly && src.hasDocument && (
                 <Button
                   type="button"
                   size="sm"

@@ -809,7 +809,8 @@
     },
     "sourcesSection": {
       "title": "Sumber data",
-      "download": "Unduh PDF sumber",
+      "download": "Unduh berkas sumber",
+      "importedAt": "Diimpor {date}",
       "fullDetailBadge": "Rincian pajak lengkap tersedia dari PDF penyelesaian.",
       "notRetained": "Dokumen asli tidak disimpan. Untuk menyimpan file yang diimpor, aktifkan retensi dokumen di pengaturan portofolio."
     },

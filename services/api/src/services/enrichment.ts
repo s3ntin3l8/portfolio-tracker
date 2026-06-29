@@ -15,7 +15,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { transactionSources, transactions, documents } from "@portfolio/db";
 import type { TransactionSource } from "@portfolio/db";
 import type { ParsedTransaction, TaxComponents } from "@portfolio/schema";
@@ -315,11 +315,21 @@ export interface SourceSummary {
   documentId: string | null;
   taxComponents: TaxComponents | null;
   createdAt: Date;
+  /** Original filename of the document this row resolves to (null when none is retained). */
+  filename: string | null;
+  /** True when a document can be downloaded for this row — either its own `documentId`,
+   * or (for upload imports) a retained document linked via the row's `importId`. */
+  hasDocument: boolean;
 }
 
 /**
  * Fetch all source rows for the given transaction ids, keyed by transactionId.
  * Used by the transactions list endpoint to expose sources in bulk.
+ *
+ * Each row also carries `filename`/`hasDocument`, resolved in bulk to mirror
+ * `getDocumentForTransaction`: a row downloads its own `documentId` when set (retained PDF
+ * imports); otherwise the transaction-scoped document (correct for TR, whose collector import
+ * holds many docs), then the import-linked document (the common CSV case, `documentId` null).
  */
 export async function sourcesForTransactions(
   app: AppLike,
@@ -335,14 +345,79 @@ export async function sourcesForTransactions(
       externalId: transactionSources.externalId,
       orderRef: transactionSources.orderRef,
       documentId: transactionSources.documentId,
+      importId: transactionSources.importId,
       taxComponents: transactionSources.taxComponents,
       createdAt: transactionSources.createdAt,
     })
     .from(transactionSources)
     .where(inArray(transactionSources.transactionId, txIds));
 
+  // Resolve filenames + downloadability in bulk to avoid N+1 lookups. Rows without their own
+  // documentId fall back to the transaction-scoped doc (txId), then the import-linked doc —
+  // exactly as getDocumentForTransaction resolves at download time.
+  const fallbackRows = rows.filter((r) => !r.documentId);
+  const docIds = [...new Set(rows.map((r) => r.documentId).filter((d): d is string => !!d))];
+  const fallbackTxIds = [...new Set(fallbackRows.map((r) => r.transactionId))];
+  const importIds = [
+    ...new Set(fallbackRows.map((r) => r.importId).filter((i): i is string => !!i)),
+  ];
+
+  const docNameById = new Map<string, string | null>();
+  if (docIds.length > 0) {
+    const docRows = await db(app)
+      .select({ id: documents.id, originalFilename: documents.originalFilename })
+      .from(documents)
+      .where(and(inArray(documents.id, docIds), eq(documents.status, "retained")));
+    for (const d of docRows) docNameById.set(d.id, d.originalFilename);
+  }
+
+  // Transaction-scoped docs (TR per-event receipts), newest first to match getDocumentForTransaction.
+  const docNameByTxId = new Map<string, string | null>();
+  if (fallbackTxIds.length > 0) {
+    const txDocRows = await db(app)
+      .select({
+        transactionId: documents.transactionId,
+        originalFilename: documents.originalFilename,
+      })
+      .from(documents)
+      .where(
+        and(inArray(documents.transactionId, fallbackTxIds), eq(documents.status, "retained")),
+      )
+      .orderBy(desc(documents.storedAt));
+    for (const d of txDocRows) {
+      if (d.transactionId && !docNameByTxId.has(d.transactionId)) {
+        docNameByTxId.set(d.transactionId, d.originalFilename);
+      }
+    }
+  }
+
+  const docNameByImportId = new Map<string, string | null>();
+  if (importIds.length > 0) {
+    const impRows = await db(app)
+      .select({ importId: documents.importId, originalFilename: documents.originalFilename })
+      .from(documents)
+      .where(and(inArray(documents.importId, importIds), eq(documents.status, "retained")));
+    for (const d of impRows) {
+      if (d.importId && !docNameByImportId.has(d.importId)) {
+        docNameByImportId.set(d.importId, d.originalFilename);
+      }
+    }
+  }
+
   const out = new Map<string, SourceSummary[]>();
   for (const r of rows) {
+    let filename: string | null = null;
+    let hasDocument = false;
+    if (r.documentId && docNameById.has(r.documentId)) {
+      filename = docNameById.get(r.documentId) ?? null;
+      hasDocument = true;
+    } else if (docNameByTxId.has(r.transactionId)) {
+      filename = docNameByTxId.get(r.transactionId) ?? null;
+      hasDocument = true;
+    } else if (r.importId && docNameByImportId.has(r.importId)) {
+      filename = docNameByImportId.get(r.importId) ?? null;
+      hasDocument = true;
+    }
     const bucket = out.get(r.transactionId);
     const entry: SourceSummary = {
       id: r.id,
@@ -352,6 +427,8 @@ export async function sourcesForTransactions(
       documentId: r.documentId,
       taxComponents: r.taxComponents as TaxComponents | null,
       createdAt: r.createdAt,
+      filename,
+      hasDocument,
     };
     if (bucket) bucket.push(entry);
     else out.set(r.transactionId, [entry]);

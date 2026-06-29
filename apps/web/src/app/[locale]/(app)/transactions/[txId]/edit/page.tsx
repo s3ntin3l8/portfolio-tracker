@@ -5,7 +5,6 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { EditTransaction } from "@/components/edit-transaction";
-import { DownloadReceiptButton } from "@/components/download-receipt-button";
 import { loadTransactionsAcrossPortfolios } from "@/lib/server-api";
 
 export default async function EditTransactionPage({
@@ -53,12 +52,7 @@ export default async function EditTransactionPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        {header(t("tx.editTitle"), t("tx.subtitle"))}
-        {tx.hasDocument && (
-          <DownloadReceiptButton portfolioId={tx.portfolioId} txId={tx.id} />
-        )}
-      </div>
+      {header(t("tx.editTitle"), t("tx.subtitle"))}
       <EditTransaction
         portfolioId={tx.portfolioId}
         txId={tx.id}

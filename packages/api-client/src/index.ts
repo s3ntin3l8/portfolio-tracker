@@ -570,6 +570,10 @@ export interface SourceSummary {
   /** Per-component tax breakdown from the settlement PDF (null for CSV/timeline sources). */
   taxComponents: TaxComponents | null;
   createdAt: string;
+  /** Original filename of the document this row resolves to (null when none is retained). */
+  filename: string | null;
+  /** True when a document can be downloaded for this row (own documentId or import-linked doc). */
+  hasDocument: boolean;
 }
 
 /** Visibility status of a transaction (see the API's transaction_status enum). */

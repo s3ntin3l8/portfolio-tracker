@@ -162,16 +162,19 @@ export function TransactionDetailSheet({
               </dd>
             </div>
 
-            {/* Source */}
-            <div>
-              <dt className="text-muted-foreground">{t("source")}</dt>
-              <dd>
-                <span className="flex items-center gap-1.5 text-xs">
-                  {Icon && <Icon className="size-3.5" />}
-                  {t(`sources.${tx.source}`)}
-                </span>
-              </dd>
-            </div>
+            {/* Source — only for transactions with no source rows (e.g. manual entries);
+                otherwise the Data sources section below covers provenance. */}
+            {(tx.sources?.length ?? 0) === 0 && (
+              <div>
+                <dt className="text-muted-foreground">{t("source")}</dt>
+                <dd>
+                  <span className="flex items-center gap-1.5 text-xs">
+                    {Icon && <Icon className="size-3.5" />}
+                    {t(`sources.${tx.source}`)}
+                  </span>
+                </dd>
+              </div>
+            )}
           </dl>
 
           {/* Import provenance — source rows with per-source download buttons */}
@@ -189,7 +192,7 @@ export function TransactionDetailSheet({
           {/* Retention hint — shown when source rows exist but no document was retained */}
           {(tx.sources?.length ?? 0) > 0 &&
             !tx.hasDocument &&
-            !tx.sources?.some((s) => s.documentId) && (
+            !tx.sources?.some((s) => s.hasDocument) && (
             <p className="mt-2 text-xs text-muted-foreground">
               {t("sourcesSection.notRetained")}
             </p>
@@ -222,7 +225,7 @@ export function TransactionDetailSheet({
 
           {/* Actions footer */}
           <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-            {tx.hasDocument && (
+            {tx.hasDocument && !tx.sources?.some((s) => s.hasDocument) && (
               <Button
                 variant="outline"
                 size="sm"

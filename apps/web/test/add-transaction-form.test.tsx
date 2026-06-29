@@ -618,6 +618,8 @@ const SOURCE_WITH_DOC: SourceSummary = {
   documentId: "doc-1",
   taxComponents: { kapitalertragsteuer: "3.75", solidaritaetszuschlag: "0.21" },
   createdAt: "2026-03-01T12:00:00Z",
+  filename: "settlement.pdf",
+  hasDocument: true,
 };
 
 const SOURCE_NO_DOC: SourceSummary = {
@@ -628,6 +630,8 @@ const SOURCE_NO_DOC: SourceSummary = {
   documentId: null,
   taxComponents: null,
   createdAt: "2026-03-01T10:00:00Z",
+  filename: null,
+  hasDocument: false,
 };
 
 function renderEditForm(sources: SourceSummary[], hasFullTaxDetail: boolean) {
@@ -645,19 +649,21 @@ function renderEditForm(sources: SourceSummary[], hasFullTaxDetail: boolean) {
 }
 
 describe("TransactionSourcesSection (edit mode, #230)", () => {
-  it("shows source type, externalId and tax components", () => {
+  it("shows source type, imported date + filename (not the raw fingerprint) and tax components", () => {
     renderEditForm([SOURCE_WITH_DOC], true);
 
     expect(screen.getByText(ms.title)).toBeInTheDocument();
     // sourceType rendered capitalised
     expect(screen.getByText("pdf")).toBeInTheDocument();
-    expect(screen.getByText("tr:exec:abc-123")).toBeInTheDocument();
+    // Imported date + filename replaces the internal externalId fingerprint
+    expect(screen.getByText(/Imported.*settlement\.pdf/)).toBeInTheDocument();
+    expect(screen.queryByText("tr:exec:abc-123")).toBeNull();
     // Tax breakdown: KapSt and SolZ labels
     expect(screen.getByText(/KapSt.*3\.75/)).toBeInTheDocument();
     expect(screen.getByText(/SolZ.*0\.21/)).toBeInTheDocument();
   });
 
-  it("shows the download button when documentId is present and calls getSourceDocumentUrl on click", async () => {
+  it("shows the download button when a document is available and calls getSourceDocumentUrl on click", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     renderEditForm([SOURCE_WITH_DOC], true);
 
@@ -678,7 +684,7 @@ describe("TransactionSourcesSection (edit mode, #230)", () => {
     open.mockRestore();
   });
 
-  it("shows no download button when source has no documentId", () => {
+  it("shows no download button when no document is available for the source", () => {
     renderEditForm([SOURCE_NO_DOC], false);
     expect(screen.queryByRole("button", { name: ms.download })).toBeNull();
   });

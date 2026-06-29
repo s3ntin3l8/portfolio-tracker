@@ -182,19 +182,21 @@ describe("TransactionDetailSheet", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders the import provenance section when tx.sources is non-empty", () => {
+  it("renders the import provenance section with an Imported date + filename, not the raw fingerprint", () => {
     const txWithSources = {
       ...TX,
-      hasDocument: false,
+      hasDocument: true,
       sources: [
         {
           id: "src-1",
           sourceType: "pdf",
           externalId: "dkb:12345",
           orderRef: null,
-          documentId: null,
+          documentId: "doc-1",
           taxComponents: null,
           createdAt: "2026-03-15T00:00:00.000Z",
+          filename: "settlement.pdf",
+          hasDocument: true,
         },
       ],
     };
@@ -203,8 +205,65 @@ describe("TransactionDetailSheet", () => {
     expect(screen.getByText(messages.Transactions.sourcesSection.title)).toBeInTheDocument();
     // Source type chip
     expect(screen.getByText("pdf")).toBeInTheDocument();
-    // External ID
-    expect(screen.getByText("dkb:12345")).toBeInTheDocument();
+    // Imported date + filename, NOT the raw externalId fingerprint
+    expect(screen.getByText(/Imported.*settlement\.pdf/)).toBeInTheDocument();
+    expect(screen.queryByText("dkb:12345")).toBeNull();
+  });
+
+  it("hides the top-level Source field when source rows exist, shows it for manual (no sources)", () => {
+    // Manual transaction (no source rows) → top-level Source field is shown.
+    renderSheet();
+    expect(screen.getByText(messages.Transactions.source)).toBeInTheDocument();
+
+    // With source rows the Data sources section replaces it.
+    renderSheet({
+      tx: {
+        ...TX,
+        sources: [
+          {
+            id: "src-x",
+            sourceType: "csv",
+            externalId: null,
+            orderRef: null,
+            documentId: null,
+            taxComponents: null,
+            createdAt: "2026-03-15T00:00:00.000Z",
+            filename: null,
+            hasDocument: false,
+          },
+        ],
+      },
+    });
+    expect(screen.getByText(messages.Transactions.sourcesSection.title)).toBeInTheDocument();
+  });
+
+  it("hides the global Download receipt button when a source row carries its own document", () => {
+    const txWithDoc = {
+      ...TX,
+      hasDocument: true,
+      sources: [
+        {
+          id: "src-d",
+          sourceType: "csv",
+          externalId: null,
+          orderRef: null,
+          documentId: null,
+          taxComponents: null,
+          createdAt: "2026-03-15T00:00:00.000Z",
+          filename: "statement.csv",
+          hasDocument: true,
+        },
+      ],
+    };
+    renderSheet({ tx: txWithDoc });
+    // No legacy global button — the inline per-source download covers it.
+    expect(
+      screen.queryByRole("button", { name: messages.Manage.downloadReceipt }),
+    ).toBeNull();
+    // The inline per-source download is present instead.
+    expect(
+      screen.getByRole("button", { name: messages.Transactions.sourcesSection.download }),
+    ).toBeInTheDocument();
   });
 
   it("calls getSourceDocumentUrl when per-source download button is clicked", async () => {
@@ -219,6 +278,8 @@ describe("TransactionDetailSheet", () => {
           documentId: "doc-abc",
           taxComponents: null,
           createdAt: "2026-03-15T00:00:00.000Z",
+          filename: "settlement.pdf",
+          hasDocument: true,
         },
       ],
     };
@@ -245,6 +306,8 @@ describe("TransactionDetailSheet", () => {
           documentId: null,
           taxComponents: null,
           createdAt: "2026-03-15T00:00:00.000Z",
+          filename: null,
+          hasDocument: false,
         },
       ],
     };

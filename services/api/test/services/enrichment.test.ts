@@ -14,6 +14,7 @@ import {
   transactions,
   transactionSources,
   documents,
+  screenshotImports,
 } from "@portfolio/db";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import {
@@ -368,6 +369,118 @@ describe("sourcesForTransactions", () => {
     const app = { db: getDb(), log: { warn: vi.fn(), info: vi.fn() } };
     const map = await sourcesForTransactions(app as never, []);
     expect(map.size).toBe(0);
+  });
+
+  it("resolves filename + hasDocument from a per-source documentId (retained PDF)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id);
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        storageKey: `receipts/${user.id}/settlement.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "settlement.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    expect(row.hasDocument).toBe(true);
+    expect(row.filename).toBe("settlement.pdf");
+  });
+
+  it("falls back to the import-linked document when the source has no documentId (CSV case)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id);
+    const [imp] = await db
+      .insert(screenshotImports)
+      .values({ userId: user.id, portfolioId: portfolio.id })
+      .returning();
+    await db.insert(documents).values({
+      userId: user.id,
+      importId: imp.id,
+      storageKey: `receipts/${user.id}/statement.csv`,
+      mimeType: "text/csv",
+      originalFilename: "statement.csv",
+      status: "retained",
+    });
+    // CSV source row: documentId is null, file linked via importId.
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "csv", importId: imp.id, documentId: null });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    expect(row.documentId).toBeNull();
+    expect(row.hasDocument).toBe(true);
+    expect(row.filename).toBe("statement.csv");
+  });
+
+  it("resolves the transaction-scoped doc, not an arbitrary one, when many docs share a collector import (TR)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const txA = await makeTx(db, portfolio.id);
+    const txB = await makeTx(db, portfolio.id);
+    const [imp] = await db
+      .insert(screenshotImports)
+      .values({ userId: user.id, portfolioId: portfolio.id })
+      .returning();
+    // Two docs share the collector importId but each is linked to its own transaction.
+    await db.insert(documents).values([
+      {
+        userId: user.id,
+        importId: imp.id,
+        transactionId: txA.id,
+        storageKey: `receipts/${user.id}/a.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "receipt-A.pdf",
+        status: "retained",
+      },
+      {
+        userId: user.id,
+        importId: imp.id,
+        transactionId: txB.id,
+        storageKey: `receipts/${user.id}/b.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "receipt-B.pdf",
+        status: "retained",
+      },
+    ]);
+    await db.insert(transactionSources).values([
+      { transactionId: txA.id, sourceType: "pytr", importId: imp.id, documentId: null },
+      { transactionId: txB.id, sourceType: "pytr", importId: imp.id, documentId: null },
+    ]);
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const map = await sourcesForTransactions(app as never, [txA.id, txB.id]);
+    // Each transaction resolves its OWN per-transaction receipt, not a shared/arbitrary one.
+    expect(map.get(txA.id)![0].filename).toBe("receipt-A.pdf");
+    expect(map.get(txB.id)![0].filename).toBe("receipt-B.pdf");
+  });
+
+  it("reports hasDocument=false + null filename when no document is retained", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id);
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "manual", documentId: null });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    expect(row.hasDocument).toBe(false);
+    expect(row.filename).toBeNull();
   });
 });
 
