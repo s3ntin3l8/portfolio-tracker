@@ -5,6 +5,7 @@ import {
   accountHolders,
   allocationTargets,
   corporateActions,
+  dismissedAnomalies,
   dividendEvents,
   documents,
   instruments,
@@ -1009,6 +1010,63 @@ export async function transactionsRoute(app: FastifyInstance) {
     },
   );
 
+  // Persistently dismiss / undo a transaction-scoped anomaly. Anomalies are derived live by
+  // detectAnomalies(); a dismissed (transactionId, code) is filtered out of the holdings route
+  // so a knowingly-accepted warning (e.g. a benign, self-corrected negative_cash) stops nagging.
+  const dismissAnomalySchema = z.object({
+    transactionId: z.guid(),
+    code: z.string().min(1),
+  });
+  app.post<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/anomalies/dismiss",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { transactionId, code } = dismissAnomalySchema.parse(request.body);
+      // The transaction must belong to this portfolio (avoid dismissing a foreign tx's anomaly).
+      const [tx] = await app.db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(eq(transactions.id, transactionId), eq(transactions.portfolioId, portfolioId)))
+        .limit(1);
+      if (!tx) {
+        return reply.code(404).send({ error: "transaction_not_found" });
+      }
+      // Idempotent: a repeat dismissal is a no-op (unique index guards the pairing).
+      await app.db
+        .insert(dismissedAnomalies)
+        .values({ userId: id, portfolioId, transactionId, code })
+        .onConflictDoNothing();
+      return reply.code(204).send();
+    },
+  );
+  app.delete<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/anomalies/dismiss",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const { transactionId, code } = dismissAnomalySchema.parse(request.body);
+      await app.db
+        .delete(dismissedAnomalies)
+        .where(
+          and(
+            eq(dismissedAnomalies.portfolioId, portfolioId),
+            eq(dismissedAnomalies.transactionId, transactionId),
+            eq(dismissedAnomalies.code, code),
+          ),
+        );
+      return reply.code(204).send();
+    },
+  );
+
   // Resolve draft transactions (from a sync/import) in bulk: confirm (draft → normal, now
   // counts everywhere) or discard (draft → archived, kept + visible but excluded from every
   // derivation). One request, N ids — never fan out N PATCHes (rate-limit, #227). For
@@ -1118,7 +1176,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const [rows, trConn] = await Promise.all([
+      const [rows, trConn, dismissed] = await Promise.all([
         app.db
           .select()
           .from(transactions)
@@ -1129,6 +1187,13 @@ export async function transactionsRoute(app: FastifyInstance) {
           .where(eq(trConnections.portfolioId, portfolioId))
           .limit(1)
           .then((r) => r[0] ?? null),
+        app.db
+          .select({
+            transactionId: dismissedAnomalies.transactionId,
+            code: dismissedAnomalies.code,
+          })
+          .from(dismissedAnomalies)
+          .where(eq(dismissedAnomalies.portfolioId, portfolioId)),
       ]);
       const coreTxns: CoreTransaction[] = toCoreTxns(rows);
       const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
@@ -1139,9 +1204,15 @@ export async function transactionsRoute(app: FastifyInstance) {
         | undefined;
       const anomalies = detectAnomalies(coreTxns, cas, {
         cashCounted: portfolio.cashCounted,
+        allowNegativeCash: portfolio.allowNegativeCash,
         reconciliationGap: reconciliation ?? null,
       });
-      return { holdings, anomalies };
+      // Drop anomalies the user has explicitly dismissed for a specific transaction.
+      const dismissedSet = new Set(dismissed.map((d) => `${d.transactionId}:${d.code}`));
+      const filtered = anomalies.filter(
+        (a) => !(a.transactionId && dismissedSet.has(`${a.transactionId}:${a.code}`)),
+      );
+      return { holdings, anomalies: filtered };
     },
   );
 

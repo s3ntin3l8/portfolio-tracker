@@ -368,6 +368,9 @@ export interface Portfolio {
    * deposit account (contribution = net external cash, net worth includes cash);
    * `false` = mixed/invest-only (contribution = net invested capital, cash excluded). */
   cashCounted: boolean;
+  /** When true, the negative-cash data-integrity guard is suppressed for this portfolio —
+   *  for accounts where a buy routinely posts before its funding deposit clears. */
+  allowNegativeCash: boolean;
   /** Opt-in per-portfolio source-document retention (issue #231). When false (default),
    * uploaded PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
    * When true, the source file is kept after import confirmation. */
@@ -1783,6 +1786,18 @@ export function createApiClient(config: ApiClientConfig) {
 
     getHoldings: (portfolioId: string) =>
       request<HoldingsResult>("GET", `/portfolios/${portfolioId}/holdings`),
+    /** Persistently dismiss a transaction-scoped anomaly (e.g. an accepted negative_cash). */
+    dismissAnomaly: (portfolioId: string, transactionId: string, code: string) =>
+      request<void>("POST", `/portfolios/${portfolioId}/anomalies/dismiss`, {
+        transactionId,
+        code,
+      }),
+    /** Undo a previously-dismissed anomaly (it reappears if still derived). */
+    undismissAnomaly: (portfolioId: string, transactionId: string, code: string) =>
+      request<void>("DELETE", `/portfolios/${portfolioId}/anomalies/dismiss`, {
+        transactionId,
+        code,
+      }),
     getSummary: (portfolioId: string, costBasis?: "purchase_price" | "total_paid") =>
       request<PortfolioSummary>(
         "GET",

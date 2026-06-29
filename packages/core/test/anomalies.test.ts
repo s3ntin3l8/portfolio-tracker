@@ -247,6 +247,68 @@ describe("negative_cash", () => {
     expect(negs).toHaveLength(1);
     expect(negs[0].transactionId).toBe("w1");
   });
+
+  it("does NOT flag a same-day buy that its same-day deposit funds (nets positive)", () => {
+    // A buy posts before its same-day funding deposit clears — intraday it dips, but the
+    // day closes positive, so it must not flag.
+    const txns = [
+      tx({ type: "buy", quantity: "1", price: "100", id: "buy", executedAt: new Date("2024-05-05") }),
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep", executedAt: new Date("2024-05-05") }),
+    ];
+    const anomalies = detectAnomalies(txns, [], { cashCounted: true });
+    expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
+  });
+
+  it("still flags a cross-day negative even if a later deposit recovers it", () => {
+    // Sophia's DKB case: buy day N takes cash to −0.98, deposit on day N+3 zeroes it.
+    const txns = [
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep1", executedAt: new Date("2021-11-01") }),
+      tx({ type: "buy", quantity: "1", price: "100.98", id: "buy", executedAt: new Date("2021-11-05") }),
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "0.98", id: "dep2", executedAt: new Date("2021-11-08") }),
+    ];
+    const anomalies = detectAnomalies(txns, [], { cashCounted: true });
+    const negs = anomalies.filter((a) => a.code === "negative_cash");
+    expect(negs).toHaveLength(1);
+    expect(negs[0]).toMatchObject({ transactionId: "buy", meta: { currency: "EUR", balance: "-0.98" } });
+  });
+
+  it("attributes a same-day end-of-day negative deterministically regardless of input order", () => {
+    const base = [
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "150", id: "dep", executedAt: new Date("2021-11-01") }),
+      tx({ type: "buy", quantity: "1", price: "100", id: "buy-a", executedAt: new Date("2021-11-05") }),
+      tx({ type: "buy", quantity: "1", price: "51", id: "buy-b", executedAt: new Date("2021-11-05") }),
+    ];
+    const forward = detectAnomalies(base, [], { cashCounted: true })
+      .filter((a) => a.code === "negative_cash");
+    const reversed = detectAnomalies([base[0], base[2], base[1]], [], { cashCounted: true })
+      .filter((a) => a.code === "negative_cash");
+    expect(forward).toHaveLength(1);
+    expect(reversed).toHaveLength(1);
+    // Same attributed transaction (last under (executedAt, id) → "buy-b") both ways.
+    expect(forward[0].transactionId).toBe("buy-b");
+    expect(reversed[0].transactionId).toBe("buy-b");
+  });
+
+  it("attributes a mixed-sign day to the spending row, not a later-sorting deposit", () => {
+    // Same day nets negative (−150) but ends with an inflow that sorts last by id. The flag
+    // must point at the buy (which caused the dip), not the deposit (which added cash).
+    const txns = [
+      tx({ type: "buy", quantity: "1", price: "200", id: "aaa-buy", executedAt: new Date("2024-05-05") }),
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "50", id: "zzz-dep", executedAt: new Date("2024-05-05") }),
+    ];
+    const negs = detectAnomalies(txns, [], { cashCounted: true }).filter((a) => a.code === "negative_cash");
+    expect(negs).toHaveLength(1);
+    expect(negs[0].transactionId).toBe("aaa-buy");
+  });
+
+  it("does NOT flag negative cash when allowNegativeCash=true", () => {
+    const txns = [
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "10", id: "dep", executedAt: new Date("2024-01-01") }),
+      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "50", id: "w", executedAt: new Date("2024-02-01") }),
+    ];
+    const anomalies = detectAnomalies(txns, [], { cashCounted: true, allowNegativeCash: true });
+    expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
+  });
 });
 
 // ── Reconciliation gap ─────────────────────────────────────────────────────────

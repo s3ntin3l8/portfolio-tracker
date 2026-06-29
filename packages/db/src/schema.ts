@@ -239,6 +239,10 @@ export const portfolios = pgTable(
     // contribution = net invested capital, cash is excluded from this portfolio's
     // net worth. Income is never a contribution in either case.
     cashCounted: boolean("cash_counted").notNull().default(false),
+    // Opt-out for the negative-cash data-integrity guard. When true, the cash balance is
+    // allowed to dip below zero without flagging — for accounts where a buy routinely posts
+    // before its funding deposit clears (see detectAnomalies in `@portfolio/core`).
+    allowNegativeCash: boolean("allow_negative_cash").notNull().default(false),
     // Opt-in per-portfolio source-document retention. When false (default), uploaded
     // PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
     // When true, staged bytes are retained after import confirmation — see issue #231.
@@ -719,6 +723,38 @@ export const transactionSources = pgTable(
     uniqueIndex("transaction_sources_dedup_idx")
       .on(t.transactionId, t.sourceType, t.externalId)
       .where(sql`${t.externalId} is not null`),
+  ],
+);
+
+// Persistently dismissed transaction-scoped anomalies. Anomalies are derived live by
+// detectAnomalies() and never stored; a row here suppresses one (transactionId, code)
+// pairing from the holdings route's anomaly list so a knowingly-accepted warning (e.g. a
+// benign, self-corrected negative_cash) stops resurfacing. Survives recompute; cleared by undo.
+export const dismissedAnomalies = pgTable(
+  "dismissed_anomalies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    portfolioId: uuid("portfolio_id")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    // notNull on purpose: only transaction-scoped anomalies are dismissible, and a NULL here
+    // would defeat the unique index (Postgres treats NULLs as distinct).
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("dismissed_anomalies_pf_tx_code_idx").on(
+      t.portfolioId,
+      t.transactionId,
+      t.code,
+    ),
+    index("dismissed_anomalies_portfolio_id_idx").on(t.portfolioId),
   ],
 );
 

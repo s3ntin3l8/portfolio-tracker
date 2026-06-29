@@ -7,6 +7,7 @@ const refresh = vi.fn();
 const getTransactionDocumentUrl = vi.fn(async () => ({ url: "https://example.com/doc" }));
 const getSourceDocumentUrl = vi.fn(async () => ({ url: "https://example.com/src-doc" }));
 const deleteTransaction = vi.fn(async () => undefined);
+const dismissAnomaly = vi.fn(async () => undefined);
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -15,7 +16,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ getTransactionDocumentUrl, getSourceDocumentUrl, deleteTransaction }),
+  useApiClient: () => ({ getTransactionDocumentUrl, getSourceDocumentUrl, deleteTransaction, dismissAnomaly }),
 }));
 
 import {
@@ -66,6 +67,31 @@ describe("TransactionDetailSheet", () => {
     getTransactionDocumentUrl.mockClear();
     getSourceDocumentUrl.mockClear();
     deleteTransaction.mockClear();
+    dismissAnomaly.mockClear();
+  });
+
+  it("shows a negative_cash anomaly with its balance and dismisses it", async () => {
+    const { onOpenChange } = renderSheet({
+      anomaly: {
+        code: "negative_cash",
+        severity: "error",
+        scope: "transaction",
+        transactionId: "tx-1",
+        meta: { currency: "EUR", balance: "-0.98" },
+      },
+    });
+    // The localized message folds in the formatted balance.
+    expect(screen.getByText(/Negative cash balance/)).toHaveTextContent("-€0.98");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss warning" }));
+    await waitFor(() => expect(dismissAnomaly).toHaveBeenCalledWith("p-1", "tx-1", "negative_cash"));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("renders no dismiss control when there is no anomaly", () => {
+    renderSheet();
+    expect(screen.queryByRole("button", { name: "Dismiss warning" })).toBeNull();
   });
 
   it("renders date, type, instrument symbol, quantity and currency when open", () => {

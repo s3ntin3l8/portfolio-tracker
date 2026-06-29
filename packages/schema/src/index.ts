@@ -143,6 +143,10 @@ export const portfolioInputSchema = z.object({
   // includes cash. `false` (default) = cash outside (mixed/invest-only): contribution
   // = net invested capital, cash excluded from net worth.
   cashCounted: z.boolean().default(false),
+  // Opt-out for the negative-cash data-integrity guard. When true, the cash balance may dip
+  // below zero without flagging — for accounts where a buy routinely posts before its funding
+  // deposit clears. Only meaningful when cashCounted is true. Defaults to false.
+  allowNegativeCash: z.boolean().default(false),
   // Opt-in source-document retention (issue #231). When false (default), uploaded
   // PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
   // When true, the source file is kept after import confirmation.
@@ -166,6 +170,7 @@ export const portfolioPatchSchema = z.object({
   iban: z.string().trim().nullable().optional(),
   includeInAggregate: z.boolean().optional(),
   cashCounted: z.boolean().optional(),
+  allowNegativeCash: z.boolean().optional(),
   documentRetention: z.boolean().optional(),
   taxAllowanceAnnual: decimalString.nullable().optional(),
 });

@@ -1,18 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Download } from "lucide-react";
+import { AlertCircle, AlertTriangle, Download } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 import { TransactionSourcesSection } from "@/components/transaction-sources-section";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
 import { txAmount, txNetAmount, SOURCE_ICON } from "@/components/transactions-table";
 import type { TxRow } from "@/components/transactions-table";
+import type { Anomaly } from "@portfolio/api-client";
 
 const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
   buy: "success",
@@ -21,6 +22,8 @@ const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
 
 interface TransactionDetailSheetProps {
   tx: TxRow | null;
+  /** The worst-severity anomaly flagged on this transaction, if any. */
+  anomaly?: Anomaly | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted: () => void;
@@ -28,6 +31,7 @@ interface TransactionDetailSheetProps {
 
 export function TransactionDetailSheet({
   tx,
+  anomaly,
   open,
   onOpenChange,
   onDeleted,
@@ -35,8 +39,11 @@ export function TransactionDetailSheet({
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
   const tm = useTranslations("Manage");
+  const ta = useTranslations("Anomalies");
   const locale = useLocale();
   const api = useApiClient();
+  const router = useRouter();
+  const [dismissing, setDismissing] = useState(false);
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
@@ -49,6 +56,20 @@ export function TransactionDetailSheet({
   const amount = txAmount(tx);
   const netAmount = txNetAmount(tx);
   const Icon = SOURCE_ICON[tx.source] ?? null;
+
+  const dismissAnomaly = async () => {
+    if (!anomaly) return;
+    setDismissing(true);
+    try {
+      await api.dismissAnomaly(tx.portfolioId, tx.id, anomaly.code);
+      onOpenChange(false);
+      router.refresh();
+    } catch {
+      // Leave the sheet open on failure so the user can retry.
+    } finally {
+      setDismissing(false);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -172,6 +193,31 @@ export function TransactionDetailSheet({
             <p className="mt-2 text-xs text-muted-foreground">
               {t("sourcesSection.notRetained")}
             </p>
+          )}
+
+          {/* Data-integrity warning + dismiss */}
+          {anomaly && (
+            <div className="mt-4 rounded-md border border-amber-400/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/10">
+              <div className="flex items-start gap-2">
+                {anomaly.severity === "error" ? (
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                )}
+                <p className="text-muted-foreground">
+                  {anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                disabled={dismissing}
+                onClick={dismissAnomaly}
+              >
+                {ta("dismiss")}
+              </Button>
+            </div>
           )}
 
           {/* Actions footer */}

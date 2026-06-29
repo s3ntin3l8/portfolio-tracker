@@ -86,6 +86,7 @@ const baseInput = {
   iban: null,
   includeInAggregate: true,
   cashCounted: false,
+  allowNegativeCash: false,
   documentRetention: false,
   taxAllowanceAnnual: null,
 };
@@ -110,6 +111,7 @@ function renderEdit(
     iban: null,
     includeInAggregate: true,
     cashCounted: false,
+    allowNegativeCash: false,
     documentRetention: false,
     taxAllowanceAnnual: null,
   },
@@ -305,6 +307,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -331,6 +334,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -354,6 +358,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -379,6 +384,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -404,6 +410,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -425,6 +432,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
@@ -466,6 +474,7 @@ describe("PortfolioFormDialog", () => {
         accountNumber: null,
         includeInAggregate: true,
         cashCounted: false,
+        allowNegativeCash: false,
         documentRetention: false,
         taxAllowanceAnnual: "600",
         userId: "u1",
@@ -514,6 +523,7 @@ describe("PortfolioFormDialog", () => {
         accountNumber: null,
         includeInAggregate: true,
         cashCounted: false,
+        allowNegativeCash: false,
         documentRetention: false,
         taxAllowanceAnnual: "600",
         userId: "u1",
@@ -564,6 +574,7 @@ describe("PortfolioFormDialog", () => {
       iban: null,
       includeInAggregate: true,
       cashCounted: false,
+      allowNegativeCash: false,
       documentRetention: false,
       taxAllowanceAnnual: null,
     });
