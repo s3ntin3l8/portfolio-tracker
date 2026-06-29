@@ -464,6 +464,32 @@ describe("TransactionsTable", () => {
       expect(rows[0]).toHaveTextContent("AAPL"); // t2 is the draft
     });
 
+    it("auto-clears the draft filter when the last draft is confirmed", () => {
+      const draftRow = { ...ROWS[1], status: "draft" as const };
+      const { rerender } = render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[ROWS[0], draftRow]} />
+        </NextIntlClientProvider>,
+      );
+
+      // Filter to drafts only: just the one draft row is visible.
+      fireEvent.change(
+        screen.getByRole("combobox", { name: messages.Transactions.filterDraftLabel }),
+        { target: { value: "drafts" } },
+      );
+      expect(screen.getAllByRole("row").slice(1).length).toBe(1);
+
+      // Confirming the last draft → router.refresh re-feeds rows with no drafts.
+      rerender(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[ROWS[0], ROWS[1]]} />
+        </NextIntlClientProvider>,
+      );
+
+      // Filter auto-clears: all rows visible again instead of an empty "No results" list.
+      expect(screen.getAllByRole("row").slice(1).length).toBe(2);
+    });
+
     it("batch-confirms only the selected draft rows", async () => {
       resolveDraftTransactions.mockClear();
       render(
