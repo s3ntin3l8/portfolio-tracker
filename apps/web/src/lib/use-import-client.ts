@@ -20,10 +20,10 @@ export function useImportClient(): ImportClient {
   const api = useApiClient();
   return useMemo<ImportClient>(
     () => ({
-      importScreenshot: (file, force) =>
-        api.importScreenshot(file, force) as unknown as Promise<ImportResult>,
-      importCsv: (content, format, force) =>
-        api.importCsv(content, format, force) as unknown as Promise<ImportResult>,
+      importScreenshot: (file, force, batchId) =>
+        api.importScreenshot(file, force, batchId) as unknown as Promise<ImportResult>,
+      importCsv: (content, format, force, batchId) =>
+        api.importCsv(content, format, force, batchId) as unknown as Promise<ImportResult>,
       confirmImport: (
         importId,
         drafts,

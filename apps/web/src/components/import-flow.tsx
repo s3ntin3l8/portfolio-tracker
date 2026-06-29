@@ -124,6 +124,15 @@ export interface ImportResult {
 // the correct local draft even after the user removes some rows.
 export type ReviewDraft = ImportDraft & { uid: string; importId: string; _serverIdx: number };
 
+/** A correlation id shared by every file in one multi-file upload step, so the import
+ *  history can group and bulk-act on the batch as a unit. Undefined when randomUUID is
+ *  unavailable (the server simply stores null → ungrouped). */
+function newBatchId(): string | undefined {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : undefined;
+}
+
 let uidCounter = 0;
 export function withUid(draft: ImportDraft, importId: string, serverIdx: number): ReviewDraft {
   const uid =
@@ -146,11 +155,13 @@ export interface ImportClient {
   importScreenshot(
     file: File | Blob,
     force?: boolean,
+    batchId?: string,
   ): Promise<ImportResult>;
   importCsv(
     content: string,
     format?: CsvFormat,
     force?: boolean,
+    batchId?: string,
   ): Promise<ImportResult>;
   confirmImport(
     importId: string,
@@ -482,14 +493,18 @@ export function ImportFlow({
     const setStatus = (i: number, status: FileStatus["status"]) =>
       setFileStatuses((prev) => prev.map((s, idx) => (idx === i ? { ...s, status } : s)));
 
+    // One batch id for the whole upload step → every file's import row shares it, so the
+    // history can group and bulk-delete the batch as a unit.
+    const batchId = newBatchId();
+
     // Parse one file → a tagged outcome. Catches its own errors so a single bad file never
     // rejects the pool; the per-file `fileStatuses` entry is updated live as it runs.
     async function parseOne(file: File, i: number): Promise<ParseOutcome> {
       setStatus(i, "parsing");
       try {
         const result = isCsvFile(file)
-          ? await client.importCsv(await fileToText(file), "auto", force)
-          : await client.importScreenshot(file, force);
+          ? await client.importCsv(await fileToText(file), "auto", force, batchId)
+          : await client.importScreenshot(file, force, batchId);
         if (result.alreadyConfirmed) {
           setStatus(i, "failed");
           // Keep the original File so the per-file "Re-import anyway" button can force-reimport it.

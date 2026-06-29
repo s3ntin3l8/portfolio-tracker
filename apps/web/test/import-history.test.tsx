@@ -10,6 +10,12 @@ const discardImport = vi.fn(async () => undefined);
 const deleteImport = vi.fn(async () => ({ removed: 1 }));
 const clearImport = vi.fn(async () => undefined);
 const bulkClearImports = vi.fn(async () => ({ cleared: 2 }));
+const bulkDeleteImports = vi.fn(async (_ids: string[]) => ({
+  discarded: 0,
+  undone: 0,
+  cleared: 0,
+  removedTransactions: 0,
+}));
 const getImportDocumentUrl = vi.fn(async () => ({ url: "https://example.com/doc.pdf" }));
 const reassignImport = vi.fn(async () => ({ moved: 4, skippedConflicts: 0, skippedLoans: 0 }));
 
@@ -25,6 +31,7 @@ vi.mock("@/lib/api", () => ({
     deleteImport,
     clearImport,
     bulkClearImports,
+    bulkDeleteImports,
     getImportDocumentUrl,
     reassignImport,
   }),
@@ -49,6 +56,7 @@ const items: ImportRecord[] = [
     confidence: null,
     count: 2,
     createdAt: "2026-06-10T10:00:00.000Z",
+    batchId: null,
     document: null,
   },
   {
@@ -59,6 +67,7 @@ const items: ImportRecord[] = [
     confidence: null,
     count: 4,
     createdAt: "2026-06-09T10:00:00.000Z",
+    batchId: null,
     document: null,
   },
 ];
@@ -72,6 +81,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 10,
     createdAt: "2026-06-12T10:00:00.000Z",
+    batchId: null,
     document: null,
   },
   {
@@ -82,6 +92,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 1,
     createdAt: "2026-06-11T10:00:00.000Z",
+    batchId: null,
     document: null,
   },
   {
@@ -92,6 +103,7 @@ const threeItems: ImportRecord[] = [
     confidence: null,
     count: 5,
     createdAt: "2026-06-10T10:00:00.000Z",
+    batchId: null,
     document: null,
   },
 ];
@@ -112,6 +124,7 @@ const discardedItem: ImportRecord = {
   confidence: null,
   count: 1,
   createdAt: "2026-06-08T10:00:00.000Z",
+  batchId: null,
   document: null,
 };
 
@@ -124,6 +137,7 @@ describe("ImportHistory", () => {
     deleteImport.mockClear();
     clearImport.mockClear();
     bulkClearImports.mockClear();
+    bulkDeleteImports.mockClear();
     getImportDocumentUrl.mockClear();
   });
 
@@ -382,6 +396,7 @@ describe("ImportHistory", () => {
       confidence: null,
       count: 2,
       createdAt: "2026-06-09T10:00:00.000Z",
+      batchId: null,
       document: { id: "doc1", originalFilename: "export.pdf", mimeType: "application/pdf", sizeBytes: 12345, storedAt: "2026-06-09T10:00:00.000Z" },
     };
     render(
@@ -394,5 +409,57 @@ describe("ImportHistory", () => {
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(m.downloadError),
     );
+  });
+
+  it("bulk-deletes a multi-select of drafts in one request (no confirm step)", async () => {
+    const drafts: ImportRecord[] = [
+      { id: "d1", portfolioId: "p1", parser: "csv", status: "draft", confidence: null, count: 2, createdAt: "2026-06-10T10:00:00.000Z", batchId: null, document: null },
+      { id: "d2", portfolioId: "p1", parser: "dkb", status: "draft", confidence: null, count: 3, createdAt: "2026-06-09T10:00:00.000Z", batchId: null, document: null },
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={drafts} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByLabelText(m.selectAll));
+    fireEvent.click(screen.getByRole("button", { name: m.deleteSelected }));
+    await waitFor(() => expect(bulkDeleteImports).toHaveBeenCalledTimes(1));
+    expect(new Set(bulkDeleteImports.mock.calls[0][0])).toEqual(new Set(["d1", "d2"]));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("requires a confirmation click before bulk-deleting a selection with confirmed imports", async () => {
+    const confirmed: ImportRecord = { id: "c1", portfolioId: "p1", parser: "dkb", status: "confirmed", confidence: null, count: 7, createdAt: "2026-06-09T10:00:00.000Z", batchId: null, document: null };
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={[confirmed]} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+    fireEvent.click(screen.getByLabelText(m.selectRow));
+    // First click → warning, no request yet.
+    fireEvent.click(screen.getByRole("button", { name: m.deleteSelected }));
+    expect(bulkDeleteImports).not.toHaveBeenCalled();
+    expect(screen.getByText(/Removes 7 transactions/)).toBeInTheDocument();
+    // Second click → fires.
+    fireEvent.click(screen.getByRole("button", { name: m.deleteSelected }));
+    await waitFor(() => expect(bulkDeleteImports).toHaveBeenCalledWith(["c1"]));
+  });
+
+  it("groups same-batch uploads and selects the whole batch in one click", async () => {
+    const batched: ImportRecord[] = [
+      { id: "b-a", portfolioId: "p1", parser: "dkb-pdf", status: "draft", confidence: null, count: 1, createdAt: "2026-06-10T10:00:01.000Z", batchId: "batch-1", document: null },
+      { id: "b-b", portfolioId: "p1", parser: "dkb-pdf", status: "draft", confidence: null, count: 1, createdAt: "2026-06-10T10:00:02.000Z", batchId: "batch-1", document: null },
+    ];
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportHistory items={batched} />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText(/Upload · 2 files/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(m.selectBatch));
+    fireEvent.click(screen.getByRole("button", { name: m.deleteSelected }));
+    await waitFor(() => expect(bulkDeleteImports).toHaveBeenCalledTimes(1));
+    expect(new Set(bulkDeleteImports.mock.calls[0][0])).toEqual(new Set(["b-a", "b-b"]));
   });
 });

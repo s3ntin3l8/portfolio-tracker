@@ -1233,6 +1233,9 @@ export interface ImportRecord {
   status: "draft" | "confirmed" | "discarded";
   confidence: string | null;
   count: number;
+  /** Correlation id shared by all imports created in one upload step (null for legacy/
+   *  single-file rows). Lets the import history group a same-step batch as one unit. */
+  batchId: string | null;
   createdAt: string;
   /** Retained source document, if one exists and the portfolio has retention enabled. */
   document: ImportDocumentSummary | null;
@@ -1507,6 +1510,16 @@ export interface ApiClientConfig {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+/** Build the upload query string for the CSV/screenshot routes from the `force` re-import
+ *  flag and the optional per-upload-step `batchId` correlation id. */
+function uploadQuery(force: boolean, batchId?: string): string {
+  const params = new URLSearchParams();
+  if (force) params.set("force", "true");
+  if (batchId) params.set("batchId", batchId);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
 
 export function createApiClient(config: ApiClientConfig) {
   const doFetch = config.fetch ?? globalThis.fetch;
@@ -1939,18 +1952,19 @@ export function createApiClient(config: ApiClientConfig) {
       content: string,
       format: "auto" | "generic" | "dkb" | "ibkr" | "ibkr-xml" | "coinbase" | "tr-csv" = "auto",
       force = false,
+      batchId?: string,
     ) =>
-      request<CsvImportResult>("POST", `/imports/csv${force ? "?force=true" : ""}`, {
+      request<CsvImportResult>("POST", `/imports/csv${uploadQuery(force, batchId)}`, {
         content,
         format,
       }),
-    importScreenshot: (file: File | Blob, force = false) => {
+    importScreenshot: (file: File | Blob, force = false, batchId?: string) => {
       const form = new FormData();
       // name hint for filename preservation; mime comes from the file part itself.
       form.append("file", file, (file as File).name ?? "upload");
       return request<ScreenshotImportResult>(
         "POST",
-        `/imports/screenshot${force ? "?force=true" : ""}`,
+        `/imports/screenshot${uploadQuery(force, batchId)}`,
         form,
       );
     },
@@ -2043,6 +2057,17 @@ export function createApiClient(config: ApiClientConfig) {
     /** Batch hard-delete of discarded imports (one request — used by "clear all"). */
     bulkClearImports: (ids: string[]) =>
       request<{ cleared: number }>("POST", `/imports/bulk-clear`, { ids }),
+    /** Batch delete a mixed selection of imports in one request (avoids the N-per-row
+     *  delete + refresh fan-out that trips the rate limiter). Dispatches per status server
+     *  side: draft → discard, confirmed → undo, discarded → clear. Two-step semantics:
+     *  undo/discard leave the row `discarded`; a follow-up call on those ids clears them. */
+    bulkDeleteImports: (ids: string[]) =>
+      request<{
+        discarded: number;
+        undone: number;
+        cleared: number;
+        removedTransactions: number;
+      }>("POST", `/imports/bulk-delete`, { ids }),
     /** Return a signed URL for the retained source document of an import (#231). */
     getImportDocumentUrl: (importId: string) =>
       request<DocumentUrlResponse>("GET", `/imports/${importId}/document-url`),

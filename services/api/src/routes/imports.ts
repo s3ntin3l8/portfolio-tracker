@@ -58,6 +58,76 @@ export async function importsRoute(app: FastifyInstance) {
     return imp ?? null;
   }
 
+  type OwnedImport = NonNullable<Awaited<ReturnType<typeof ownedImport>>>;
+
+  // Discard a draft (draft → discarded): for pytr/ibkr durably record the events as
+  // discarded so the next sync doesn't resurface them, drop any staged documents, then
+  // flip the status. Shared by POST /imports/:id/discard and the bulk path so both apply
+  // identical side effects. Returns how many resolved-events rows were recorded.
+  async function discardImportRow(imp: OwnedImport): Promise<number> {
+    let resolvedEventsRecorded = 0;
+    const isSyncParser = (imp.parser === "pytr" || imp.parser === "ibkr") && imp.portfolioId;
+    if (isSyncParser) {
+      const source = imp.parser as "pytr" | "ibkr";
+      const parsed = (imp.parsedJson ?? {}) as {
+        drafts?: { externalId?: string | null }[];
+        errors?: { eventId?: string | null }[];
+      };
+      const ids = [
+        ...(parsed.drafts ?? []).map((d) => d.externalId),
+        ...(parsed.errors ?? []).map((e) => e.eventId),
+      ].filter((x): x is string => Boolean(x));
+      if (ids.length) {
+        await app.db
+          .insert(trResolvedEvents)
+          .values(
+            ids.map((eventId) => ({
+              portfolioId: imp.portfolioId!,
+              source,
+              eventId,
+              resolution: "discarded",
+            })),
+          )
+          .onConflictDoNothing();
+        resolvedEventsRecorded = ids.length;
+      }
+    }
+    await deleteReceiptsForImport(app, imp.id);
+    await app.db
+      .update(screenshotImports)
+      .set({ status: "discarded" })
+      .where(eq(screenshotImports.id, imp.id));
+    return resolvedEventsRecorded;
+  }
+
+  // Undo a confirmed import (confirmed → discarded): remove the transactions + loans it
+  // wrote, drop its documents, flip the status, and enqueue a recompute for each affected
+  // (portfolio, day) so derived snapshots/holdings don't go stale. Shared by DELETE
+  // /imports/:id and the bulk path. Returns how many transactions were removed.
+  async function undoImportRow(imp: OwnedImport): Promise<number> {
+    const removed = await app.db
+      .delete(transactions)
+      .where(eq(transactions.importId, imp.id))
+      .returning();
+    await app.db.delete(loans).where(eq(loans.importId, imp.id));
+    await deleteReceiptsForImport(app, imp.id);
+    await app.db
+      .update(screenshotImports)
+      .set({ status: "discarded" })
+      .where(eq(screenshotImports.id, imp.id));
+    // Recompute each distinct (portfolio, day) the removed rows touched (mirrors the
+    // single-transaction delete, which the per-import undo historically skipped).
+    const days = new Set<string>();
+    for (const t of removed) {
+      days.add(`${t.portfolioId}|${t.executedAt.toISOString().slice(0, 10)}`);
+    }
+    for (const key of days) {
+      const [pid, day] = key.split("|");
+      await enqueueRecompute(pid, day);
+    }
+    return removed.length;
+  }
+
   // List the current user's imports (newest first) — id, status, parser, draft count,
   // and document summary if one has been retained (#231).
   app.get("/imports", { preHandler: app.authenticate }, async (request) => {
@@ -80,6 +150,7 @@ export async function importsRoute(app: FastifyInstance) {
         status: r.status,
         confidence: r.confidence,
         count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
+        batchId: r.batchId,
         createdAt: r.createdAt,
         document,
       };
@@ -145,41 +216,7 @@ export async function importsRoute(app: FastifyInstance) {
       if (imp.status === "confirmed") {
         return reply.code(409).send({ error: "already_confirmed" });
       }
-      // For pytr/ibkr drafts, durably record events as discarded so the next sync doesn't
-      // re-stage them (the collector would otherwise resurface them indefinitely).
-      let resolvedEventsRecorded = 0;
-      const isSyncParser = (imp.parser === "pytr" || imp.parser === "ibkr") && imp.portfolioId;
-      if (isSyncParser) {
-        const source = imp.parser as "pytr" | "ibkr";
-        const parsed = (imp.parsedJson ?? {}) as {
-          drafts?: { externalId?: string | null }[];
-          errors?: { eventId?: string | null }[];
-        };
-        const ids = [
-          ...(parsed.drafts ?? []).map((d) => d.externalId),
-          ...(parsed.errors ?? []).map((e) => e.eventId),
-        ].filter((x): x is string => Boolean(x));
-        if (ids.length) {
-          await app.db
-            .insert(trResolvedEvents)
-            .values(
-              ids.map((eventId) => ({
-                portfolioId: imp.portfolioId!,
-                source,
-                eventId,
-                resolution: "discarded",
-              })),
-            )
-            .onConflictDoNothing();
-          resolvedEventsRecorded = ids.length;
-        }
-      }
-      // Clean up any staged/retained documents before marking discarded (#231).
-      await deleteReceiptsForImport(app, imp.id);
-      await app.db
-        .update(screenshotImports)
-        .set({ status: "discarded" })
-        .where(eq(screenshotImports.id, imp.id));
+      const resolvedEventsRecorded = await discardImportRow(imp);
       request.log.info(
         { importId: imp.id, parser: imp.parser, resolvedEventsRecorded },
         "import discarded",
@@ -197,20 +234,9 @@ export async function importsRoute(app: FastifyInstance) {
       const { id } = requireUser(request);
       const imp = await ownedImport(id, request.params.importId);
       if (!imp) return reply.code(404).send({ error: "import_not_found" });
-      const removed = await app.db
-        .delete(transactions)
-        .where(eq(transactions.importId, imp.id))
-        .returning();
-      // Remove any loans the import created (transactions referencing them are gone).
-      await app.db.delete(loans).where(eq(loans.importId, imp.id));
-      // Clean up any staged/retained documents for this import (#231).
-      await deleteReceiptsForImport(app, imp.id);
-      await app.db
-        .update(screenshotImports)
-        .set({ status: "discarded" })
-        .where(eq(screenshotImports.id, imp.id));
-      request.log.info({ importId: imp.id, removedTransactions: removed.length }, "import undone");
-      return { removed: removed.length };
+      const removed = await undoImportRow(imp);
+      request.log.info({ importId: imp.id, removedTransactions: removed }, "import undone");
+      return { removed };
     },
   );
 
@@ -269,6 +295,50 @@ export async function importsRoute(app: FastifyInstance) {
         .returning({ id: screenshotImports.id });
       request.log.info({ requested: ids.length, cleared: cleared.length }, "imports bulk-cleared");
       return { cleared: cleared.length };
+    },
+  );
+
+  // Batch delete of a mixed selection — one request instead of N per-row discard/undo/clear
+  // calls (each followed by a route refresh), which is what trips the rate limiter when
+  // cleaning up a large upload batch. Dispatches per current status, reusing the exact
+  // per-row side effects: draft → discard, confirmed → undo (remove its transactions/loans),
+  // discarded → hard clear. Forgiving contract: ids not owned by the user are silently
+  // skipped. Two-step semantics preserved — undo/discard leave the row as `discarded` (the
+  // audit trail); a follow-up bulk-delete of those same ids then clears them.
+  app.post<{ Body: { ids?: unknown } }>(
+    "/imports/bulk-delete",
+    { preHandler: app.authenticate },
+    async (request) => {
+      const { id } = requireUser(request);
+      const { ids } = bulkClearSchema.parse(request.body);
+      const owned = await app.db
+        .select()
+        .from(screenshotImports)
+        .where(
+          and(eq(screenshotImports.userId, id), inArray(screenshotImports.id, ids)),
+        );
+      let discarded = 0;
+      let undone = 0;
+      let cleared = 0;
+      let removedTransactions = 0;
+      for (const imp of owned) {
+        if (imp.status === "draft") {
+          await discardImportRow(imp);
+          discarded += 1;
+        } else if (imp.status === "confirmed") {
+          removedTransactions += await undoImportRow(imp);
+          undone += 1;
+        } else {
+          // already discarded → hard clear the row
+          await app.db.delete(screenshotImports).where(eq(screenshotImports.id, imp.id));
+          cleared += 1;
+        }
+      }
+      request.log.info(
+        { requested: ids.length, discarded, undone, cleared, removedTransactions },
+        "imports bulk-deleted",
+      );
+      return { discarded, undone, cleared, removedTransactions };
     },
   );
 

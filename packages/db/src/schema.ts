@@ -343,6 +343,13 @@ export const screenshotImports = pgTable(
     /** djb2 hash of the raw upload bytes — used to detect re-uploads of the same file. */
     contentHash: text("content_hash"),
     status: importStatusEnum("status").notNull().default("draft"),
+    /**
+     * Correlation id shared by every import created in one upload step (a multi-file
+     * selection). Lets the UI group a same-step batch and act on it as one unit. NOT a
+     * row-merge: each file keeps its own import row (and its own parser/confidence/hash/
+     * document). Null for legacy rows and single-file uploads-without-a-batch.
+     */
+    batchId: uuid("batch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -352,6 +359,8 @@ export const screenshotImports = pgTable(
     uniqueIndex("screenshot_imports_user_content_hash_idx")
       .on(t.userId, t.contentHash)
       .where(sql`${t.status} <> 'discarded' AND ${t.contentHash} IS NOT NULL`),
+    // Group a user's same-step uploads efficiently (import history batch headers).
+    index("screenshot_imports_user_batch_idx").on(t.userId, t.batchId),
   ],
 );
 

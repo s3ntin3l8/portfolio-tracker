@@ -550,7 +550,14 @@
     "downloadReceipt": "Download receipt",
     "actionError": "Something went wrong. Please try again.",
     "downloadError": "Receipt unavailable — it may have been deleted or storage is down.",
-    "reassign": "Reassign all to…"
+    "reassign": "Reassign all to…",
+    "selectAll": "Select all",
+    "selectRow": "Select import",
+    "selectBatch": "Select batch",
+    "batchLabel": "Upload · {count, plural, one {# file} other {# files}}",
+    "selectedCount": "{count, plural, one {# selected} other {# selected}}",
+    "deleteSelected": "Delete selected",
+    "bulkConfirmPrompt": "Removes {count, plural, one {# transaction} other {# transactions}} from confirmed imports."
   },
   "Dashboard": {
     "title": "Dashboard",

@@ -204,6 +204,15 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     return f === true || f === "true" || f === "1";
   }
 
+  /** Read the per-upload-step batch correlation id from the query (`?batchId=<uuid>`).
+   *  Same channel as `force` so it works uniformly across the CSV (JSON) and screenshot/PDF
+   *  (multipart) routes. Returns null when absent or not a uuid (every file in one upload
+   *  step shares it; a single-file upload may omit it). */
+  function batchIdFromQuery(query: unknown): string | null {
+    const b = (query as { batchId?: unknown } | null)?.batchId;
+    return typeof b === "string" && z.string().uuid().safeParse(b).success ? b : null;
+  }
+
   /**
    * Find the portfolio whose accountNumber matches the detected value. Returns null when
    * no account number was detected, no portfolio has one, or more than one portfolio
@@ -448,6 +457,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           // `result` carries `accountNumber` (DKB) so re-upload + confirm can re-match.
           parsedJson: result,
           contentHash,
+          batchId: batchIdFromQuery(request.query),
           status: "draft",
         })
         .onConflictDoNothing()
@@ -720,6 +730,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           parsedJson: result,
           confidence,
           contentHash,
+          batchId: batchIdFromQuery(request.query),
           status: "draft",
         })
         .onConflictDoNothing()

@@ -779,6 +779,106 @@ describe("CSV import → confirm flow", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("bulk-deletes a mixed selection: discards drafts, undoes confirmed, clears discarded", async () => {
+    const t = await token("bulk-delete-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "BulkDelete", baseCurrency: "IDR" },
+      })
+    ).json().id;
+
+    // Three distinct imports.
+    const mk = async (i: number) =>
+      (
+        await app.inject({
+          method: "POST",
+          url: `/imports/csv`,
+          headers: auth(t),
+          payload: { content: `${CSV}\n# bd ${i}` },
+        })
+      ).json();
+    const draft = await mk(1); // stays a draft → discard
+    const confirmed = await mk(2); // confirm → undo (removes its transaction)
+    const discarded = await mk(3); // discard first → clear
+
+    await app.inject({
+      method: "POST",
+      url: `/imports/${confirmed.importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId, transactions: confirmed.drafts },
+    });
+    await app.inject({ method: "POST", url: `/imports/${discarded.importId}/discard`, headers: auth(t) });
+
+    // Another user's draft — must be skipped (IDOR).
+    const other = await token("bulk-delete-other");
+    await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(other),
+      payload: { name: "OtherBD", baseCurrency: "IDR" },
+    });
+    const otherImp = (
+      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(other), payload: { content: CSV } })
+    ).json();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/imports/bulk-delete",
+      headers: auth(t),
+      payload: {
+        ids: [draft.importId, confirmed.importId, discarded.importId, otherImp.importId],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ discarded: 1, undone: 1, cleared: 1, removedTransactions: 1 });
+
+    // Confirmed import's transaction was removed.
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
+    expect(holdings.json().holdings).toHaveLength(0);
+
+    // Draft + confirmed are now discarded (kept for the audit trail); the already-discarded
+    // row was hard-cleared (404).
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${draft.importId}`, headers: auth(t) })).json().status,
+    ).toBe("discarded");
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${confirmed.importId}`, headers: auth(t) })).json().status,
+    ).toBe("discarded");
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${discarded.importId}`, headers: auth(t) })).statusCode,
+    ).toBe(404);
+
+    // The other user's draft is untouched.
+    expect(
+      (await app.inject({ method: "GET", url: `/imports/${otherImp.importId}`, headers: auth(other) })).json().status,
+    ).toBe("draft");
+  });
+
+  it("persists a per-upload-step batchId on the import row and returns it in the list", async () => {
+    const t = await token("batch-id-user");
+    const batchId = crypto.randomUUID();
+    const imp = (
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv?batchId=${batchId}`,
+        headers: auth(t),
+        payload: { content: `${CSV}\n# batch tag` },
+      })
+    ).json();
+    const rows = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) })).json() as Array<{
+      id: string;
+      batchId: string | null;
+    }>;
+    expect(rows.find((r) => r.id === imp.importId)!.batchId).toBe(batchId);
+  });
+
   it("returns existing draft import on re-upload of identical CSV", async () => {
     const t = await token("fingerprint-draft-user");
     const _portfolioId = (

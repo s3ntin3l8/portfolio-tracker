@@ -548,7 +548,14 @@
     "downloadReceipt": "Unduh tanda terima",
     "actionError": "Terjadi kesalahan. Silakan coba lagi.",
     "downloadError": "Tanda terima tidak tersedia — mungkin sudah dihapus atau penyimpanan sedang bermasalah.",
-    "reassign": "Pindahkan semua ke…"
+    "reassign": "Pindahkan semua ke…",
+    "selectAll": "Pilih semua",
+    "selectRow": "Pilih impor",
+    "selectBatch": "Pilih batch",
+    "batchLabel": "Unggahan · {count, plural, other {# berkas}}",
+    "selectedCount": "{count, plural, other {# dipilih}}",
+    "deleteSelected": "Hapus pilihan",
+    "bulkConfirmPrompt": "Menghapus {count, plural, other {# transaksi}} dari impor terkonfirmasi."
   },
   "Dashboard": {
     "title": "Dasbor",
