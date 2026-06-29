@@ -218,6 +218,13 @@ export function TransactionsTable({
   const [query, setQuery] = useState("");
   const [showFlagged, setShowFlagged] = useState(false);
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
+
+  // When the last flagged transaction is dismissed (router.refresh re-feeds an empty
+  // anomalies list), clear the filter so the user isn't stranded on an empty list.
+  // Adjusting state during render is React's recommended pattern over a setState-in-effect.
+  if (showFlagged && flaggedCount === 0) {
+    setShowFlagged(false);
+  }
   // Id of a single row currently being confirmed/discarded (shows a spinner on that row).
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 

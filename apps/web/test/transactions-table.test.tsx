@@ -641,6 +641,31 @@ describe("TransactionsTable", () => {
       expect(screen.getAllByRole("row").slice(1).length).toBe(3);
     });
 
+    it("auto-clears the flagged filter when the last flagged transaction is dismissed", () => {
+      const { rerender } = render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
+        </NextIntlClientProvider>,
+      );
+
+      // Turn the filter on: only the 2 flagged rows are visible.
+      fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
+      expect(screen.getAllByRole("row").slice(1).length).toBe(2);
+
+      // Dismissing the last warning → router.refresh re-feeds an empty anomalies list.
+      rerender(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={[]} />
+        </NextIntlClientProvider>,
+      );
+
+      // Filter auto-clears: all rows visible again instead of an empty "No results" list.
+      const restored = screen.getAllByRole("row").slice(1);
+      expect(restored.length).toBe(3);
+      // The previously-hidden clean row (a2 / TLKM) is back.
+      expect(restored.some((r) => r.textContent?.includes("TLKM"))).toBe(true);
+    });
+
     it("does not show the toggle when only portfolio-scoped anomalies are present", () => {
       const portfolioOnlyAnomalies = [
         { code: "reconciliation_gap" as const, severity: "warning" as const, scope: "portfolio" as const },
