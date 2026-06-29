@@ -873,7 +873,9 @@ export function ImportFlow({
                     )}
                     <span
                       className={cn(
-                        "truncate",
+                        // min-w-0 lets the truncate actually shrink inside the flex row,
+                        // otherwise a long filename overflows the card.
+                        "min-w-0 truncate",
                         fs.status === "failed" && "text-muted-foreground line-through",
                         fs.status === "pending" && "text-muted-foreground",
                       )}
@@ -905,10 +907,14 @@ export function ImportFlow({
               className="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm text-warning"
             >
               <AlertCircle className="size-4 shrink-0" />
-              <span className="flex-1">
-                {/* Name the file in a multi-group upload so the user knows which one mismatched. */}
+              <span className="min-w-0 flex-1">
+                {/* Name the file in a multi-group upload so the user knows which one mismatched.
+                    Its own truncated line so a long (often space-less) broker filename can't
+                    overflow and force a horizontal scrollbar — worst on mobile. */}
                 {groups.size > 1 && groups.get(mismatchImportId) && (
-                  <span className="font-medium">{groups.get(mismatchImportId)}: </span>
+                  <span className="block truncate font-medium">
+                    {groups.get(mismatchImportId)}
+                  </span>
                 )}
                 {accountMismatch.kind === "other_portfolio"
                   ? t("accountMismatch.otherPortfolio", {

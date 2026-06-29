@@ -230,6 +230,13 @@ export function TransactionsTable({
 
   const draftCount = useMemo(() => rows.filter((r) => r.status === "draft").length, [rows]);
 
+  // When the last draft is confirmed/discarded (router.refresh re-feeds rows with no
+  // drafts), clear the filter so the user isn't stranded on an empty list. Adjusting
+  // state during render is React's recommended pattern over a setState-in-effect.
+  if (draftFilter === "drafts" && draftCount === 0) {
+    setDraftFilter("all");
+  }
+
   // Derive distinct options from `rows` so selects only show values present in the data.
   const typeOptions = useMemo(
     () => [...new Set(rows.map((r) => r.type))].sort(),
