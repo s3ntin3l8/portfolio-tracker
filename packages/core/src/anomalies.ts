@@ -5,6 +5,9 @@ import { cashFlow } from "./cash.js";
 const D = (v: string) => new Decimal(v);
 const ZERO = new Decimal(0);
 
+/** UTC year-month-day bucket key, e.g. "2026-06-28" (mirrors contributions.ts). */
+const dayKey = (d: Date): string => d.toISOString().slice(0, 10);
+
 export type AnomalyCode =
   | "oversell"
   | "sell_before_acquisition"
@@ -77,6 +80,9 @@ export function detectAnomalies(
     /** Whether cash is inside the portfolio boundary (cashCounted). Gates negative-cash
      *  checks — outside-boundary portfolios intentionally exclude cash from valuation. */
     cashCounted?: boolean;
+    /** Per-portfolio opt-out: accounts that routinely dip negative between deposits (a buy
+     *  posts before its funding deposit clears) can suppress the negative-cash check entirely. */
+    allowNegativeCash?: boolean;
     /** Broker-reported vs. derived cash reconciliation from the TR connection. */
     reconciliationGap?: ReconciliationGap | null;
   },
@@ -184,27 +190,49 @@ export function detectAnomalies(
   }
 
   // ── 2. Cash integrity pass — only for inside-boundary portfolios ───────────
-  if (opts?.cashCounted) {
-    const sorted = [...transactions].sort(
-      (a, b) => a.executedAt.getTime() - b.executedAt.getTime(),
-    );
+  if (opts?.cashCounted && !opts?.allowNegativeCash) {
+    // Deterministic total order: same-day rows share executedAt (stored at midnight) and
+    // may even share createdAt, so id is the essential final tiebreaker. Without it the
+    // attributed transaction would flip between reads and a keyed dismissal would un-stick.
+    const sorted = [...transactions].sort((a, b) => {
+      const byTime = a.executedAt.getTime() - b.executedAt.getTime();
+      return byTime !== 0 ? byTime : (a.id ?? "").localeCompare(b.id ?? "");
+    });
     // Track the first time each currency crosses into negative.
     const flagged = new Set<string>();
     const running = new Map<string, Decimal>();
-    for (const tx of sorted) {
-      const cur = tx.currency;
-      const prev = running.get(cur) ?? ZERO;
-      const next = prev.add(cashFlow(tx));
-      running.set(cur, next);
-      if (!flagged.has(cur) && next.lt(ZERO) && prev.gte(ZERO)) {
-        flagged.add(cur);
-        anomalies.push({
-          code: "negative_cash",
-          severity: "error",
-          scope: "transaction",
-          transactionId: tx.id,
-          meta: { currency: cur, balance: next.toString() },
-        });
+    // Net a whole day's flows per currency before checking: a buy that posts before its
+    // same-day funding deposit must not trip a transient intraday negative. Only cash still
+    // short at the day's close is a real anomaly. Attribute it to that day's last transaction
+    // in the currency (deterministic under the sort above).
+    let i = 0;
+    while (i < sorted.length) {
+      const key = dayKey(sorted[i].executedAt);
+      const dayFlow = new Map<string, Decimal>();
+      const lastTx = new Map<string, string | undefined>();
+      while (i < sorted.length && dayKey(sorted[i].executedAt) === key) {
+        const tx = sorted[i];
+        const flow = cashFlow(tx);
+        dayFlow.set(tx.currency, (dayFlow.get(tx.currency) ?? ZERO).add(flow));
+        // Attribute only to a spending row — never to a deposit/dividend/zero-flow row that
+        // happens to sort last. A flagged day nets negative, so a negative-flow row exists.
+        if (flow.lt(ZERO)) lastTx.set(tx.currency, tx.id);
+        i++;
+      }
+      for (const [cur, flow] of dayFlow) {
+        const prev = running.get(cur) ?? ZERO;
+        const next = prev.add(flow);
+        running.set(cur, next);
+        if (!flagged.has(cur) && next.lt(ZERO) && prev.gte(ZERO)) {
+          flagged.add(cur);
+          anomalies.push({
+            code: "negative_cash",
+            severity: "error",
+            scope: "transaction",
+            transactionId: lastTx.get(cur),
+            meta: { currency: cur, balance: next.toString() },
+          });
+        }
       }
     }
   }

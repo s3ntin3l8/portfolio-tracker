@@ -319,6 +319,8 @@
     "includeInAggregateHint": "Hilangkan centang untuk mengecualikan portofolio ini dari perhitungan total kekayaan bersih.",
     "cashCounted": "Kas adalah bagian dari portofolio ini",
     "cashCountedHint": "Centang untuk rekening tabungan/deposito (Tagesgeld, Festgeld, depot tabungan anak): kas dihitung sebagai uang yang ditabung dan masuk ke kekayaan bersih. Biarkan kosong untuk rekening sekuritas atau giro/campuran: hanya modal yang diinvestasikan yang dihitung dan kas menganggur dikecualikan — default yang tepat untuk akun yang kasnya hanya numpang lewat.",
+    "allowNegativeCash": "Izinkan saldo kas negatif sementara",
+    "allowNegativeCashHint": "Centang jika pembelian sering tercatat sebelum setoran pendanaannya masuk, sehingga saldo kas sempat di bawah nol. Ini mencegah peringatan integritas data kas-negatif menandai penurunan sesaat yang akan terkoreksi sendiri. Hanya relevan saat kas adalah bagian dari portofolio ini.",
     "documentRetention": "Simpan dokumen sumber",
     "documentRetentionHint": "Saat diaktifkan, PDF dan tangkapan layar yang diunggah akan disimpan setelah konfirmasi sehingga dapat diunduh nanti. Nonaktif secara default — dokumen dihapus setelah parsing untuk melindungi privasi Anda.",
     "taxAllowanceAnnual": "Freistellungsauftrag (FSA)",
@@ -1180,7 +1182,7 @@
     "codes": {
       "oversell": "Jual berlebih: menjual lebih dari jumlah yang tersedia",
       "sell_before_acquisition": "Jual sebelum dimiliki: tidak ada saham pada tanggal ini",
-      "negative_cash": "Saldo kas negatif",
+      "negative_cash": "Saldo kas negatif ({balance})",
       "income_on_non_held": "Pendapatan pada instrumen yang tidak dimiliki",
       "missing_transfer_basis": "Basis biaya tidak ada: harga transfer masuk adalah 0 — tetapkan biaya yang dibawa",
       "zero_price": "Harga nol: beli atau jual dicatat dengan harga Rp0",
@@ -1188,7 +1190,8 @@
       "position_gap": "Selisih rekonsiliasi posisi vs. broker ({isin}: dilaporkan {reported}, dihitung {derived})"
     },
     "noneTitle": "Tidak ada masalah data",
-    "noneBody": "Semua transaksi konsisten."
+    "noneBody": "Semua transaksi konsisten.",
+    "dismiss": "Tutup peringatan"
   },
   "PeriodSelector": {
     "ytd": "YTD",

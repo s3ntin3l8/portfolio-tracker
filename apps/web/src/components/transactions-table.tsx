@@ -36,7 +36,7 @@ import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cashFlow } from "@portfolio/core";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
@@ -708,7 +708,10 @@ export function TransactionsTable({
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       {anomaly && (
-                        <span title={anomaly.code} aria-label={anomaly.code}>
+                        <span
+                          title={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                          aria-label={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                        >
                           {anomaly.severity === "error" ? (
                             <AlertCircle className="size-3.5 shrink-0 text-destructive" />
                           ) : (
@@ -860,6 +863,7 @@ export function TransactionsTable({
 
       <TransactionDetailSheet
         tx={detailTx}
+        anomaly={detailTx ? anomalyByTxId.get(detailTx.id) ?? null : null}
         open={!!detailTx}
         onOpenChange={(o) => { if (!o) setDetailTx(null); }}
         onDeleted={() => { setDetailTx(null); router.refresh(); }}

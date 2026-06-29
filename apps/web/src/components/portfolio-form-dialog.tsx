@@ -37,7 +37,7 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
  * (derived from the holder) and only used to gate the TR connection section. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "iban" | "includeInAggregate" | "cashCounted" | "documentRetention" | "taxAllowanceAnnual" | "transactionCount"
+  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "iban" | "includeInAggregate" | "cashCounted" | "allowNegativeCash" | "documentRetention" | "taxAllowanceAnnual" | "transactionCount"
 >;
 
 // Sentinel select value for "create a new holder inline".
@@ -89,6 +89,7 @@ export function PortfolioFormDialog({
   const [iban, setIban] = useState(portfolio?.iban ?? "");
   const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
   const [cashCounted, setCashCounted] = useState(portfolio?.cashCounted ?? false);
+  const [allowNegativeCash, setAllowNegativeCash] = useState(portfolio?.allowNegativeCash ?? false);
   const [documentRetention, setDocumentRetention] = useState(portfolio?.documentRetention ?? false);
   // Per-depot Freistellungsauftrag allocation (FSA). Empty string = no allocation.
   const [taxAllowanceAnnual, setTaxAllowanceAnnual] = useState(portfolio?.taxAllowanceAnnual ?? "");
@@ -218,6 +219,7 @@ export function PortfolioFormDialog({
       setIban(portfolio?.iban ?? "");
       setIncludeInAggregate(portfolio?.includeInAggregate ?? true);
       setCashCounted(portfolio?.cashCounted ?? false);
+      setAllowNegativeCash(portfolio?.allowNegativeCash ?? false);
       setDocumentRetention(portfolio?.documentRetention ?? false);
       setTaxAllowanceAnnual(portfolio?.taxAllowanceAnnual ?? "");
       setSiblingPortfolios([]);
@@ -269,6 +271,7 @@ export function PortfolioFormDialog({
         iban: iban.trim() || null,
         includeInAggregate,
         cashCounted,
+        allowNegativeCash,
         documentRetention,
         taxAllowanceAnnual: fsaTrimmed !== "" ? fsaTrimmed : null,
       };
@@ -549,6 +552,23 @@ export function PortfolioFormDialog({
               <p className="text-xs text-muted-foreground">{t("cashCountedHint")}</p>
             </div>
           </div>
+
+          {/* Only meaningful when cash is inside the boundary — the guard runs only then. */}
+          {cashCounted && (
+            <div className="flex items-center gap-3">
+              <input
+                id="portfolio-allow-negative-cash"
+                type="checkbox"
+                checked={allowNegativeCash}
+                onChange={(e) => setAllowNegativeCash(e.target.checked)}
+                className="size-4 rounded border-input accent-primary"
+              />
+              <div>
+                <Label htmlFor="portfolio-allow-negative-cash">{t("allowNegativeCash")}</Label>
+                <p className="text-xs text-muted-foreground">{t("allowNegativeCashHint")}</p>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3">
             <input

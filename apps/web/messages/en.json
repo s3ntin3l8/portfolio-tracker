@@ -319,6 +319,8 @@
     "includeInAggregateHint": "Uncheck to exclude this portfolio from total net-worth calculations.",
     "cashCounted": "Cash is part of this portfolio",
     "cashCountedHint": "Check for a savings/deposit account (Tagesgeld, Festgeld, a child's savings depot): cash counts as money saved and is included in net worth. Leave unchecked for a brokerage or mixed/checking account: only invested capital counts and idle cash is excluded — the right default for accounts where cash is just passing through.",
+    "allowNegativeCash": "Allow transient negative cash",
+    "allowNegativeCashHint": "Check this if a buy regularly posts before its funding deposit clears, so the cash balance briefly dips below zero. It stops the negative-cash data-integrity warning from flagging those self-correcting dips. Only relevant when cash is part of this portfolio.",
     "documentRetention": "Keep source documents",
     "documentRetentionHint": "When enabled, uploaded PDFs and screenshots are retained after confirmation so you can download them later. Off by default — documents are discarded after parsing to protect your privacy.",
     "taxAllowanceAnnual": "Freistellungsauftrag (FSA)",
@@ -1182,7 +1184,7 @@
     "codes": {
       "oversell": "Oversell: sold more than available quantity",
       "sell_before_acquisition": "Sell before acquisition: no shares held at this date",
-      "negative_cash": "Negative cash balance",
+      "negative_cash": "Negative cash balance ({balance})",
       "income_on_non_held": "Income on instrument not held at this date",
       "missing_transfer_basis": "Missing cost basis: transfer-in price is 0 — set the carried cost",
       "zero_price": "Zero price: buy or sell recorded at €0",
@@ -1190,7 +1192,8 @@
       "position_gap": "Position reconciliation gap vs. broker ({isin}: reported {reported}, derived {derived})"
     },
     "noneTitle": "No data issues found",
-    "noneBody": "All transactions are consistent."
+    "noneBody": "All transactions are consistent.",
+    "dismiss": "Dismiss warning"
   },
   "PeriodSelector": {
     "ytd": "YTD",

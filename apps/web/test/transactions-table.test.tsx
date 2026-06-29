@@ -742,4 +742,27 @@ describe("TransactionsTable", () => {
       expect(rows[0]).toHaveTextContent("AAPL");
     });
   });
+
+  describe("anomaly tooltip", () => {
+    it("localizes the negative_cash flag tooltip with the formatted balance", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable
+            rows={ROWS}
+            anomalies={[
+              {
+                code: "negative_cash",
+                severity: "error",
+                scope: "transaction",
+                transactionId: "t1",
+                meta: { currency: "EUR", balance: "-0.98" },
+              },
+            ]}
+          />
+        </NextIntlClientProvider>,
+      );
+      const flag = screen.getByLabelText(/Negative cash balance/);
+      expect(flag).toHaveAttribute("title", expect.stringContaining("-€0.98"));
+    });
+  });
 });

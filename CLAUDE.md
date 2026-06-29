@@ -100,6 +100,10 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   `npm run db:generate` and commit the migration.
 - **Conventional Commits** (Release Please cuts versions). `detect-secrets` runs in
   pre-commit/CI against `.secrets.baseline`.
+- **PR descriptions (and commit messages) stay generic.** No personal/account-holder
+  names and no private account specifics (depot/account numbers, exact balances); keep
+  them concise and high-level — describe the change and the class of problem, not the
+  individual account that surfaced it.
 - **Before committing:** `npm run lint && npm run typecheck && npm test`.
 
 ## Testing & coverage

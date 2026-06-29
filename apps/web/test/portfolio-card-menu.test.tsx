@@ -56,6 +56,7 @@ const PORTFOLIO = {
   iban: null,
   includeInAggregate: true,
   cashCounted: false,
+  allowNegativeCash: false,
   documentRetention: false,
   taxAllowanceAnnual: null,
 };
