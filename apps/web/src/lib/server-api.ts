@@ -88,6 +88,11 @@ async function getServerApi(): Promise<ApiClient | null> {
   const session = await auth();
   const token = session?.accessToken;
   if (!token) return null;
+  // Snapshotting the token in the closure is safe here: this client is per-request and
+  // short-lived (it doesn't outlive a single RSC render). The long-lived client-side hook
+  // (`useApiClient` in lib/api.ts) reads the token live from a ref instead, because its
+  // client can outlive the token (e.g. a backgrounded multi-file import). Don't copy this
+  // snapshot pattern into a long-lived context.
   return createApiClient({ baseUrl: apiBaseUrl, getToken: () => token });
 }
 

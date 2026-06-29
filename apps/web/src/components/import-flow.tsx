@@ -21,8 +21,14 @@ import type {
   LikelyDuplicate,
 } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
-import { importSkipReason, type ImportSkipReason } from "@/lib/import-errors";
+import {
+  classifyImportError,
+  importErrorDetail,
+  type ImportSkipReason,
+} from "@/lib/import-errors";
+import { mapPool, IMPORT_CONCURRENCY } from "@/lib/promise-pool";
 import { ContractReview } from "@/components/contract-review";
+import { ImportFilesTable } from "@/components/import-files-table";
 
 export type { ImportIssue } from "@portfolio/api-client";
 
@@ -268,9 +274,21 @@ function isCsvFile(file: File): boolean {
 interface SkippedFile {
   file: string;
   reason: ImportSkipReason;
+  /** Provider name for rateLimited / providerAuth / providerDown reasons (e.g. "claude"). */
+  provider?: string;
   /** Original File object — present only for alreadyConfirmed so the user can force-reimport it. */
   originalFile?: File;
 }
+
+/**
+ * Outcome of parsing one file in the multi-file pass. Returned by the bounded pool and assembled
+ * back into groups/drafts in *input order* afterwards (the pool runs files concurrently, so they
+ * complete out of order — order is reconstructed so the confirm table is deterministic).
+ */
+type ParseOutcome =
+  | { status: "ok"; importId: string; filename: string; result: ImportResult }
+  | { status: "materialized"; count: number }
+  | { status: "skipped"; skip: SkippedFile };
 
 /** Per-file parse status (shown during multi-file parsing). */
 interface FileStatus {
@@ -315,10 +333,8 @@ export function ImportFlow({
   const [matchedImports, setMatchedImports] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<ReviewDraft[]>([]);
   const [contracts, setContracts] = useState<ImportContract[]>([]);
-  // For the single-file/screenshot path: the one import id.
-  // For multi-file CSV: the id of the import that carries contracts (if any).
-  const [contractImportId, setContractImportId] = useState<string>("");
-  // importId kept for backwards-compat in single-file path (points at contractImportId).
+  // The "primary" import id: the single-file/screenshot import, or the first group in a
+  // multi-file batch. Drives the gold-contract confirm (`submitConfirm`).
   const [importId, setImportId] = useState<string>("");
   // Multi-file groups: importId → filename.
   const [groups, setGroups] = useState<GroupMap>(new Map());
@@ -348,8 +364,13 @@ export function ImportFlow({
   const activeIndex = step === "parsing" ? 0 : STEPS.indexOf(step);
 
   function errorMessage(err: unknown): string {
-    const reason = importSkipReason(err);
-    return t(`errors.${reason}`);
+    const info = classifyImportError(err);
+    // On the opaque `generic` fallthrough, surface the real HTTP status + code so the user
+    // isn't left with a bare "something went wrong" (covers 500 / network / unmapped failures).
+    const detail = info.reason === "generic" ? importErrorDetail(info) : null;
+    return detail
+      ? t("errors.genericDetailed", { detail })
+      : t(`errors.${info.reason}`, { provider: info.provider ?? "" });
   }
 
   /** A human label for the in-flight import toast: the filename, or "N files" for groups. */
@@ -436,7 +457,6 @@ export function ImportFlow({
           return;
         }
         setImportId(result.importId);
-        setContractImportId(result.importId);
         setDrafts(result.drafts.map((d, i) => withUid(d, result.importId, i)));
         setContracts(resultContracts);
         setGroups(new Map([[result.importId, file.name]]));
@@ -457,6 +477,54 @@ export function ImportFlow({
     }
 
     // ── Multi-file path ───────────────────────────────────────────────────
+    setFileStatuses(files.map((f) => ({ filename: f.name, status: "pending" })));
+
+    const setStatus = (i: number, status: FileStatus["status"]) =>
+      setFileStatuses((prev) => prev.map((s, idx) => (idx === i ? { ...s, status } : s)));
+
+    // Parse one file → a tagged outcome. Catches its own errors so a single bad file never
+    // rejects the pool; the per-file `fileStatuses` entry is updated live as it runs.
+    async function parseOne(file: File, i: number): Promise<ParseOutcome> {
+      setStatus(i, "parsing");
+      try {
+        const result = isCsvFile(file)
+          ? await client.importCsv(await fileToText(file), "auto", force)
+          : await client.importScreenshot(file, force);
+        if (result.alreadyConfirmed) {
+          setStatus(i, "failed");
+          // Keep the original File so the per-file "Re-import anyway" button can force-reimport it.
+          return {
+            status: "skipped",
+            skip: { file: file.name, reason: "alreadyConfirmed", originalFile: file },
+          };
+        }
+        // Phase 2: this file's drafts went straight into the table (no review needed).
+        if (result.materialized) {
+          setStatus(i, "done");
+          return { status: "materialized", count: result.materializedCount ?? 0 };
+        }
+        if (result.drafts.length === 0 && (result.contracts ?? []).length === 0) {
+          setStatus(i, "failed");
+          return { status: "skipped", skip: { file: file.name, reason: "noDrafts" } };
+        }
+        setStatus(i, "done");
+        return { status: "ok", importId: result.importId, filename: file.name, result };
+      } catch (err) {
+        // Classify so multi-file failures show distinct per-file reasons instead of all
+        // collapsing to the same "couldn't be read" message.
+        const info = classifyImportError(err);
+        setStatus(i, "failed");
+        return {
+          status: "skipped",
+          skip: { file: file.name, reason: info.reason, provider: info.provider },
+        };
+      }
+    }
+
+    // Parse a few files at a time (bounded) — results come back in input order.
+    const outcomes = await mapPool(files, IMPORT_CONCURRENCY, parseOne);
+
+    // Assemble groups/drafts in input order so the confirm table is deterministic.
     const mergedDrafts: ReviewDraft[] = [];
     const newGroups: GroupMap = new Map();
     const newIssueMap: IssueMap = new Map();
@@ -464,65 +532,31 @@ export function ImportFlow({
     const newPortfolioByImport: PortfolioByImportMap = new Map();
     const newMatchedImports = new Set<string>();
     let materializedTotal = 0;
+    let pickedContractImportId = "";
+    let pickedContracts: ImportContract[] = [];
 
-    setFileStatuses(files.map((f) => ({ filename: f.name, status: "pending" })));
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]!;
-      setFileStatuses((prev) =>
-        prev.map((s, idx) => (idx === i ? { ...s, status: "parsing" } : s)),
-      );
-      try {
-        const result = isCsvFile(file)
-          ? await client.importCsv(await fileToText(file), "auto", force)
-          : await client.importScreenshot(file, force);
-
-        if (result.alreadyConfirmed) {
-          // Store the original File so the per-file "Re-import anyway" button can force-reimport it.
-          newSkipped.push({ file: file.name, reason: "alreadyConfirmed", originalFile: file });
-          setFileStatuses((prev) =>
-            prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
-          );
-          continue;
-        }
-        // Phase 2: this file's drafts went straight into the table (no review needed).
-        if (result.materialized) {
-          materializedTotal += result.materializedCount ?? 0;
-          setFileStatuses((prev) =>
-            prev.map((s, idx) => (idx === i ? { ...s, status: "done" } : s)),
-          );
-          continue;
-        }
-        if (result.drafts.length === 0 && (result.contracts ?? []).length === 0) {
-          newSkipped.push({ file: file.name, reason: "noDrafts" });
-          setFileStatuses((prev) =>
-            prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
-          );
-          continue;
-        }
-        setFileStatuses((prev) =>
-          prev.map((s, idx) => (idx === i ? { ...s, status: "done" } : s)),
-        );
-        newGroups.set(result.importId, file.name);
-        newIssueMap.set(result.importId, result.errors);
-        newPortfolioByImport.set(result.importId, result.suggestedPortfolioId ?? defaultPid);
-        if (result.matchedPortfolioId) newMatchedImports.add(result.importId);
-        for (let i = 0; i < result.drafts.length; i++) {
-          mergedDrafts.push(withUid(result.drafts[i]!, result.importId, i));
-        }
-        // Contracts: only the first file to return contracts "owns" them.
-        // In practice CSV files don't produce contracts, but guard defensively.
-        if ((result.contracts ?? []).length > 0 && !contractImportId) {
-          setContractImportId(result.importId);
-          setContracts(result.contracts ?? []);
-        }
-      } catch (err) {
-        // Classify the error so multi-file failures show distinct per-file reasons
-        // instead of all collapsing to the same "couldn't be read" message (was a bug).
-        newSkipped.push({ file: file.name, reason: importSkipReason(err) });
-        setFileStatuses((prev) =>
-          prev.map((s, idx) => (idx === i ? { ...s, status: "failed" } : s)),
-        );
+    for (const o of outcomes) {
+      if (o.status === "materialized") {
+        materializedTotal += o.count;
+        continue;
+      }
+      if (o.status === "skipped") {
+        newSkipped.push(o.skip);
+        continue;
+      }
+      const { importId: iid, filename, result } = o;
+      newGroups.set(iid, filename);
+      newIssueMap.set(iid, result.errors);
+      newPortfolioByImport.set(iid, result.suggestedPortfolioId ?? defaultPid);
+      if (result.matchedPortfolioId) newMatchedImports.add(iid);
+      for (let j = 0; j < result.drafts.length; j++) {
+        mergedDrafts.push(withUid(result.drafts[j]!, iid, j));
+      }
+      // Contracts: the first file (in input order) to return contracts "owns" them.
+      // In practice CSV files don't produce contracts, but guard defensively.
+      if ((result.contracts ?? []).length > 0 && !pickedContractImportId) {
+        pickedContractImportId = iid;
+        pickedContracts = result.contracts ?? [];
       }
     }
 
@@ -531,18 +565,18 @@ export function ImportFlow({
     // If some files materialized straight into the table and nothing remains to review,
     // close + toast (Phase 2). If there are also drafts to review, fall through to the
     // review screen for those — the materialized rows already landed.
-    if (mergedDrafts.length === 0 && contracts.length === 0 && materializedTotal > 0) {
+    if (mergedDrafts.length === 0 && pickedContracts.length === 0 && materializedTotal > 0) {
       notifyMaterialized(materializedTotal);
       onClose?.();
       return;
     }
 
-    if (mergedDrafts.length === 0 && contracts.length === 0) {
+    if (mergedDrafts.length === 0 && pickedContracts.length === 0) {
       // Everything failed / was skipped — show a combined notice and stay on upload.
       if (newSkipped.length === 1) {
         const s = newSkipped[0]!;
         // Show the specific reason for the one file; multi-file mixed failures → generic.
-        setError(t(`errors.${s.reason}`));
+        setError(t(`errors.${s.reason}`, { provider: s.provider ?? "" }));
       } else {
         setError(t("errors.generic"));
       }
@@ -550,6 +584,9 @@ export function ImportFlow({
       return;
     }
 
+    if (pickedContracts.length > 0) {
+      setContracts(pickedContracts);
+    }
     setDrafts(mergedDrafts);
     setGroups(newGroups);
     setIssueMap(newIssueMap);
@@ -677,7 +714,6 @@ export function ImportFlow({
     setDrafts([]);
     setContracts([]);
     setImportId("");
-    setContractImportId("");
     setGroups(new Map());
     setIssueMap(new Map());
     setSkipped([]);
@@ -892,7 +928,9 @@ export function ImportFlow({
               <ul className="border-t border-border px-3 pb-2.5 pt-2 space-y-1.5">
                 {skipped.map((s) => (
                   <li key={s.file} className="flex flex-wrap items-center gap-2">
-                    <span className="flex-1">{t(`skipped.${s.reason}`, { file: s.file })}</span>
+                    <span className="flex-1">
+                      {t(`skipped.${s.reason}`, { file: s.file, provider: s.provider ?? "" })}
+                    </span>
                     {s.reason === "alreadyConfirmed" && s.originalFile && (
                       <Button
                         type="button"
@@ -931,19 +969,28 @@ export function ImportFlow({
             //    file's detected account), then materialize the staged drafts into the table.
             <div className="space-y-4">
               <h2 className="text-lg font-semibold">{t("confirmPortfolio.title")}</h2>
-              {(reviewGroups ?? [{ importId, filename: groups.get(importId) ?? "" }]).map(
-                ({ importId: iid, filename }) => {
+              {isMultiGroup ? (
+                // Many files → one compact row each, with checkbox bulk-assign.
+                <ImportFilesTable
+                  groups={reviewGroups!}
+                  portfolios={portfolios}
+                  portfolioByImport={portfolioByImport}
+                  matchedImports={matchedImports}
+                  countByImport={(iid) => drafts.filter((d) => d.importId === iid).length}
+                  issueCountByImport={(iid) => (issueMap.get(iid) ?? []).length}
+                  onPortfolioChange={(iid, pid) =>
+                    setPortfolioByImport((m) => new Map(m).set(iid, pid))
+                  }
+                />
+              ) : (
+                // Single file → the familiar single card.
+                (() => {
+                  const iid = importId;
                   const count = drafts.filter((d) => d.importId === iid).length;
                   const matched = matchedImports.has(iid);
                   const issues = issueMap.get(iid) ?? [];
                   return (
-                    <div
-                      key={iid}
-                      className="space-y-3 rounded-lg border border-border bg-card/40 p-4"
-                    >
-                      {isMultiGroup && filename && (
-                        <p className="text-sm font-medium">{filename}</p>
-                      )}
+                    <div className="space-y-3 rounded-lg border border-border bg-card/40 p-4">
                       <p className="text-sm text-muted-foreground">
                         {t("confirmPortfolio.summary", { count })}
                       </p>
@@ -975,7 +1022,7 @@ export function ImportFlow({
                       )}
                     </div>
                   );
-                },
+                })()
               )}
               <div className="flex items-center gap-2">
                 <Button onClick={() => void submitMaterialize()} disabled={submitting}>

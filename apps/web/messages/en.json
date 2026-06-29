@@ -392,6 +392,10 @@
       "notConfigured": "{file}: no vision parser configured — skipped.",
       "fileRead": "{file}: couldn't be read — skipped.",
       "noDrafts": "{file}: no transactions found.",
+      "sessionExpired": "{file}: session expired — skipped.",
+      "rateLimited": "{file}: {provider} rate/usage limit reached — skipped.",
+      "providerAuth": "{file}: {provider} API key rejected — skipped.",
+      "providerDown": "{file}: {provider} temporarily unavailable — skipped.",
       "generic": "{file}: something went wrong — skipped."
     },
     "reviewHint": "Check the details before confirming — nothing is saved until you do.",
@@ -495,6 +499,11 @@
       "noDrafts": "No transactions were found in that file.",
       "alreadyConfirmed": "This file was already imported and confirmed. Re-import it if you've since deleted some of those transactions.",
       "generic": "Something went wrong. Please try again.",
+      "genericDetailed": "Something went wrong ({detail}). Please retry.",
+      "sessionExpired": "Your session expired. Please retry — you may need to sign in again.",
+      "rateLimited": "The {provider} parser hit its rate or usage limit. Wait a moment and retry.",
+      "providerAuth": "The {provider} parser rejected its API key. Check the provider settings.",
+      "providerDown": "The {provider} parser is temporarily unavailable. Try again shortly.",
       "portfolioRequired": "Choose a portfolio to import into."
     },
     "confirmPortfolio": {
@@ -505,7 +514,15 @@
       "choose": "Choose where to import.",
       "confirm": "Import as drafts",
       "discard": "Cancel",
-      "importing": "Importing…"
+      "importing": "Importing…",
+      "fileColumn": "File",
+      "importInto": "Import into",
+      "countColumn": "Transactions",
+      "autoDetected": "Auto-detected",
+      "selectAll": "Select all files",
+      "selectFile": "Select {file}",
+      "selectedCount": "{count, plural, one {# file selected} other {# files selected}}",
+      "assignSelected": "Assign to selected"
     }
   },
   "ImportHistory": {

@@ -5,6 +5,7 @@ import {
   apiErrorCode,
   accountMismatchFromError,
   duplicatesFromError,
+  visionProviderErrorFromError,
 } from "../src/index.js";
 
 function mockFetch(
@@ -233,6 +234,42 @@ describe("duplicatesFromError", () => {
     const body = { error: "duplicate_transactions" };
     const result = duplicatesFromError(new ApiError(409, JSON.stringify(body)));
     expect(result).toEqual({ count: 0, duplicates: [] });
+  });
+});
+
+describe("visionProviderErrorFromError", () => {
+  it("returns null for non-ApiErrors and non-502 status", () => {
+    expect(visionProviderErrorFromError(new Error("boom"))).toBeNull();
+    expect(
+      visionProviderErrorFromError(
+        new ApiError(500, JSON.stringify({ error: "screenshot_parse_failed" })),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when body is not JSON or error key doesn't match", () => {
+    expect(visionProviderErrorFromError(new ApiError(502, "not-json"))).toBeNull();
+    expect(
+      visionProviderErrorFromError(new ApiError(502, JSON.stringify({ error: "other" }))),
+    ).toBeNull();
+  });
+
+  it("extracts provider + providerStatus from a valid 502", () => {
+    const err = new ApiError(
+      502,
+      JSON.stringify({
+        error: "screenshot_parse_failed",
+        reason: "provider_error",
+        provider: "claude",
+        providerStatus: 429,
+      }),
+    );
+    expect(visionProviderErrorFromError(err)).toEqual({ provider: "claude", providerStatus: 429 });
+  });
+
+  it("defaults provider/providerStatus to null when absent or wrong type", () => {
+    const err = new ApiError(502, JSON.stringify({ error: "screenshot_parse_failed" }));
+    expect(visionProviderErrorFromError(err)).toEqual({ provider: null, providerStatus: null });
   });
 });
 

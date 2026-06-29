@@ -3,10 +3,12 @@
 import { createContext, useContext, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { getSession } from "next-auth/react";
 import { accountMismatchFromError } from "@portfolio/api-client";
 import { useRouter } from "@/i18n/navigation";
 import { useImportClient } from "@/lib/use-import-client";
-import { importSkipReason } from "@/lib/import-errors";
+import { classifyImportError, importErrorDetail } from "@/lib/import-errors";
+import { mapPool, IMPORT_CONCURRENCY } from "@/lib/promise-pool";
 import type { ImportClient, ImportTask } from "@/components/import-flow";
 
 export interface ImportTasksContextValue {
@@ -26,43 +28,78 @@ export function useImportTasks(): ImportTasksContextValue {
   return ctx;
 }
 
+/** Progress carried across a retry so it resumes from the failure instead of re-running unit 0. */
+interface WriteProgress {
+  /** importIds already written OK — skipped on the next attempt. */
+  doneImportIds: string[];
+  /** Rows written so far (carried into the final "imported X of Y" total). */
+  count: number;
+  /** Cash movements excluded so far (boundary), carried into the toast description. */
+  excluded: number;
+}
+
+const emptyProgress = (): WriteProgress => ({ doneImportIds: [], count: 0, excluded: 0 });
+
+/** Monotonic toast-id source so concurrent imports get independent toasts (no throwaway paint). */
+let toastSeq = 0;
+
 /**
- * Sum the server-reported counts of a materialize/confirm task into `{ count, excluded }`.
- * `onProgress(current, total, addedSoFar)` fires before each materialize unit (the file
- * about to be written) so the caller can show live per-file progress.
+ * Thrown when some — but not all — materialize units failed. Carries the partial progress so the
+ * Retry action can resume from the un-written units, plus the first underlying error for
+ * classification (e.g. a 401 session-expiry or a 409 account-mismatch backstop).
  */
-async function runWrites(
-  client: ImportClient,
-  task: ImportTask,
-  onProgress?: (current: number, total: number, addedSoFar: number) => void,
-) {
-  let count = 0;
-  let excluded = 0;
-  if (task.kind === "materialize") {
-    const units = task.units ?? [];
-    for (let i = 0; i < units.length; i++) {
-      const unit = units[i]!;
-      onProgress?.(i + 1, units.length, count);
-      const r = await client.materializeImport(
-        unit.importId,
-        unit.portfolioId,
-        task.acknowledge,
-      );
-      count += r.materializedCount;
-      excluded += r.excludedCashMovements;
-    }
-  } else {
-    const r = await client.confirmImport(
-      task.importId ?? "",
-      task.drafts ?? [],
-      task.contracts,
-      task.portfolioId,
-      task.acknowledge,
-    );
-    count += r.confirmed;
-    excluded += r.excludedCashMovements ?? 0;
+class PartialWriteError extends Error {
+  constructor(
+    readonly underlying: unknown,
+    readonly progress: WriteProgress,
+  ) {
+    super("partial_write");
+    this.name = "PartialWriteError";
   }
-  return { count, excluded };
+}
+
+/**
+ * Materialize the given units with bounded concurrency. Each unit catches its own error (so one
+ * failure doesn't abort the others), and after the pool drains: if every unit succeeded, returns
+ * the summed counts; otherwise throws a {@link PartialWriteError} carrying which units DID land so
+ * a retry can resume. `onProgress(totalDone, addedThisPass)` fires as each unit lands —
+ * `addedThisPass` is the running row count written so far in this pass (drives the live toast).
+ */
+async function materializeUnits(
+  client: ImportClient,
+  units: { importId: string; portfolioId: string }[],
+  acknowledge: boolean,
+  startedDone: number,
+  onProgress: (totalDone: number, addedThisPass: number) => void,
+) {
+  let completed = 0;
+  let added = 0;
+  const outcomes = await mapPool(units, IMPORT_CONCURRENCY, async (unit) => {
+    try {
+      const r = await client.materializeImport(unit.importId, unit.portfolioId, acknowledge);
+      completed++;
+      added += r.materializedCount;
+      onProgress(startedDone + completed, added);
+      return {
+        ok: true as const,
+        importId: unit.importId,
+        count: r.materializedCount,
+        excluded: r.excludedCashMovements,
+      };
+    } catch (err) {
+      return { ok: false as const, importId: unit.importId, err };
+    }
+  });
+
+  const ok = outcomes.filter((o) => o.ok);
+  const count = ok.reduce((s, o) => s + (o.ok ? o.count : 0), 0);
+  const excluded = ok.reduce((s, o) => s + (o.ok ? o.excluded : 0), 0);
+  const doneImportIds = ok.map((o) => o.importId);
+  const failed = outcomes.find((o) => !o.ok);
+  if (failed && !failed.ok) {
+    throw new PartialWriteError(failed.err, { doneImportIds, count, excluded });
+  }
+  return { count, excluded, doneImportIds };
 }
 
 /**
@@ -74,7 +111,9 @@ async function runWrites(
  *
  * Because each `run()` mints its own toast id, concurrent imports get independent toasts.
  * On a 409 account-mismatch the error toast carries an "Import anyway" action that replays
- * the same task with `acknowledge: true` (the modal is gone, so recovery lives here).
+ * the same task with `acknowledge: true`. On any other failure (e.g. a session-expiry 401)
+ * the Retry action resumes from the un-written units — the client reads a fresh token, so the
+ * retry succeeds rather than replaying the same stale request.
  */
 export function ImportTasksProvider({ children }: { children: React.ReactNode }) {
   const t = useTranslations("Import");
@@ -82,23 +121,46 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
   const client = useImportClient();
 
   const value = useMemo<ImportTasksContextValue>(() => {
-    async function execute(task: ImportTask, id: string | number) {
+    async function execute(task: ImportTask, id: string | number, carry: WriteProgress) {
       toast.loading(t("toast.importing", { label: task.label }), { id });
       try {
-        const { count, excluded } = await runWrites(
-          client,
-          task,
-          (current, total, addedSoFar) => {
-            // Live per-file progress only makes sense for a multi-file import.
-            if (total > 1) {
-              toast.loading(t("toast.importingProgress", { current, total }), {
-                id,
-                description:
-                  addedSoFar > 0 ? t("toast.addedSoFar", { count: addedSoFar }) : undefined,
-              });
-            }
-          },
-        );
+        let count = carry.count;
+        let excluded = carry.excluded;
+
+        if (task.kind === "materialize") {
+          const allUnits = task.units ?? [];
+          const remaining = allUnits.filter((u) => !carry.doneImportIds.includes(u.importId));
+          const r = await materializeUnits(
+            client,
+            remaining,
+            task.acknowledge,
+            carry.doneImportIds.length,
+            (totalDone, addedThisPass) => {
+              // Live per-file progress only makes sense for a multi-file import.
+              if (allUnits.length > 1) {
+                // Rows added so far = carried-over (from a prior partial attempt) + this pass.
+                const addedSoFar = carry.count + addedThisPass;
+                toast.loading(t("toast.importingProgress", { current: totalDone, total: allUnits.length }), {
+                  id,
+                  description:
+                    addedSoFar > 0 ? t("toast.addedSoFar", { count: addedSoFar }) : undefined,
+                });
+              }
+            },
+          );
+          count += r.count;
+          excluded += r.excluded;
+        } else {
+          const r = await client.confirmImport(
+            task.importId ?? "",
+            task.drafts ?? [],
+            task.contracts,
+            task.portfolioId,
+            task.acknowledge,
+          );
+          count += r.confirmed;
+          excluded += r.excludedCashMovements ?? 0;
+        }
         router.refresh(); // surface the new transactions on whatever screen is open
 
         // "Imported X of Y" when some drafts didn't land; split the gap into cash
@@ -128,7 +190,19 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
           },
         });
       } catch (err) {
-        const mismatch = accountMismatchFromError(err);
+        // Unwrap a partial-write so the retry resumes from the units that didn't land, and so
+        // the underlying error (401 / 409 / …) is classified rather than our wrapper.
+        const partial = err instanceof PartialWriteError ? err : null;
+        const underlying = partial ? partial.underlying : err;
+        const nextCarry: WriteProgress = partial
+          ? {
+              doneImportIds: [...carry.doneImportIds, ...partial.progress.doneImportIds],
+              count: carry.count + partial.progress.count,
+              excluded: carry.excluded + partial.progress.excluded,
+            }
+          : carry;
+
+        const mismatch = accountMismatchFromError(underlying);
         if (mismatch) {
           const description =
             mismatch.kind === "other_portfolio"
@@ -143,18 +217,31 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
             duration: Infinity, // keep it up until the user decides
             action: {
               label: t("accountMismatch.importAnyway"),
-              onClick: () => void execute({ ...task, acknowledge: true }, id),
+              onClick: () => void execute({ ...task, acknowledge: true }, id, nextCarry),
             },
           });
         } else {
-          // The modal is gone, so the only way back is a toast action. Drafts are still
-          // staged server-side, so a retry replays the same task.
+          // The modal is gone, so the only way back is a toast action. Drafts are still staged
+          // server-side, so Retry replays the remaining units (with a fresh token).
+          const info = classifyImportError(underlying);
+          const detail = info.reason === "generic" ? importErrorDetail(info) : null;
+          const description = detail
+            ? t("errors.genericDetailed", { detail })
+            : t(`errors.${info.reason}`, { provider: info.provider ?? "" });
+          const retry = async () => {
+            // A session-expiry retry must force a token refresh first: replaying immediately would
+            // re-send the same stale token, because SessionProvider's focus-refetch may not have
+            // landed yet when the user clicks. `getSession()` round-trips and rotates the token,
+            // and the api-client reads it live (lib/api.ts), so the resumed write authenticates.
+            if (info.reason === "sessionExpired") await getSession();
+            await execute(task, id, nextCarry);
+          };
           toast.error(t("toast.error"), {
             id,
-            description: t(`errors.${importSkipReason(err)}`),
+            description,
             action: {
               label: t("toast.retry"),
-              onClick: () => void execute(task, id),
+              onClick: () => void retry(),
             },
           });
         }
@@ -163,8 +250,10 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
 
     return {
       run(task: ImportTask) {
-        const id = toast.loading(t("toast.importing", { label: task.label }));
-        void execute(task, id);
+        // Mint a unique toast id WITHOUT painting a throwaway loading toast — execute() owns the
+        // initial loading state, so a single toast drives the whole lifecycle.
+        const id = `import-${++toastSeq}`;
+        void execute(task, id, emptyProgress());
       },
     };
   }, [client, router, t]);

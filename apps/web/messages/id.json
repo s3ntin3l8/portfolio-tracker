@@ -392,6 +392,10 @@
       "notConfigured": "{file}: parser visi belum dikonfigurasi — dilewati.",
       "fileRead": "{file}: tidak dapat dibaca — dilewati.",
       "noDrafts": "{file}: tidak ada transaksi ditemukan.",
+      "sessionExpired": "{file}: sesi berakhir — dilewati.",
+      "rateLimited": "{file}: batas laju/pemakaian {provider} tercapai — dilewati.",
+      "providerAuth": "{file}: kunci API {provider} ditolak — dilewati.",
+      "providerDown": "{file}: {provider} sementara tidak tersedia — dilewati.",
       "generic": "{file}: terjadi kesalahan — dilewati."
     },
     "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
@@ -493,6 +497,11 @@
       "noDrafts": "Tidak ada transaksi yang ditemukan di berkas itu.",
       "alreadyConfirmed": "Berkas ini sudah diimpor dan dikonfirmasi. Impor ulang jika Anda telah menghapus sebagian transaksinya.",
       "generic": "Terjadi kesalahan. Silakan coba lagi.",
+      "genericDetailed": "Terjadi kesalahan ({detail}). Silakan coba lagi.",
+      "sessionExpired": "Sesi Anda berakhir. Silakan coba lagi — Anda mungkin perlu masuk kembali.",
+      "rateLimited": "Pembaca {provider} mencapai batas laju atau pemakaian. Tunggu sebentar lalu coba lagi.",
+      "providerAuth": "Pembaca {provider} menolak kunci API-nya. Periksa pengaturan provider.",
+      "providerDown": "Pembaca {provider} sementara tidak tersedia. Coba lagi sebentar.",
       "portfolioRequired": "Pilih portofolio tujuan impor."
     },
     "confirmPortfolio": {
@@ -503,7 +512,15 @@
       "choose": "Pilih tujuan impor.",
       "confirm": "Impor sebagai draf",
       "discard": "Batal",
-      "importing": "Mengimpor…"
+      "importing": "Mengimpor…",
+      "fileColumn": "Berkas",
+      "importInto": "Impor ke",
+      "countColumn": "Transaksi",
+      "autoDetected": "Terdeteksi otomatis",
+      "selectAll": "Pilih semua berkas",
+      "selectFile": "Pilih {file}",
+      "selectedCount": "{count, plural, one {# berkas dipilih} other {# berkas dipilih}}",
+      "assignSelected": "Tetapkan ke yang dipilih"
     }
   },
   "ImportHistory": {

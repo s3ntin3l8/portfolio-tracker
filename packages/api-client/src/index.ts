@@ -1391,6 +1391,41 @@ export function apiErrorCode(err: unknown): string | null {
   return null;
 }
 
+/** The vision-provider failure detail carried by a 502 `screenshot_parse_failed` response. */
+export interface VisionProviderError {
+  /** Which provider failed ("claude" | "gemini" | "openrouter" | "ollama"), or null if absent. */
+  provider: string | null;
+  /** The provider's own HTTP status (429 rate-limit, 401/403 auth, 5xx down), or null if unknown. */
+  providerStatus: number | null;
+}
+
+/**
+ * Extract the vision-provider failure from a thrown 502
+ * (`{ error: "screenshot_parse_failed", reason, provider, providerStatus }`). The web layer maps
+ * `providerStatus` to a specific reason (rate-limit / provider-auth / provider-down) instead of a
+ * generic "couldn't be read". Returns null for any other error.
+ */
+export function visionProviderErrorFromError(err: unknown): VisionProviderError | null {
+  if (!(err instanceof ApiError) || err.status !== 502) return null;
+  try {
+    const parsed: unknown = JSON.parse(err.body);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as { error?: unknown }).error === "screenshot_parse_failed"
+    ) {
+      const p = parsed as { provider?: unknown; providerStatus?: unknown };
+      return {
+        provider: typeof p.provider === "string" ? p.provider : null,
+        providerStatus: typeof p.providerStatus === "number" ? p.providerStatus : null,
+      };
+    }
+  } catch {
+    // body wasn't JSON — fall through
+  }
+  return null;
+}
+
 /**
  * Extract the account-mismatch verdict from a thrown 409 (`{ error: "account_mismatch", … }`).
  * Returns null for any other error so callers can `if (accountMismatchFromError(err))` to
