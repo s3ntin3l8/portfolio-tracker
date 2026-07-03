@@ -28,6 +28,14 @@
       "cash": "Cash"
     }
   },
+  "AuthError": {
+    "retrying": "Signing you back in…",
+    "title": "Sign-in couldn't complete",
+    "body": "Your sign-in link expired or was already used — this can happen with a stale or duplicate login tab. Try again to start a fresh sign-in.",
+    "retry": "Try again",
+    "deniedTitle": "Sign-in was cancelled",
+    "deniedBody": "You didn't approve the sign-in request. Try again to continue."
+  },
   "Nav": {
     "dashboard": "Dashboard",
     "holdings": "Holdings",

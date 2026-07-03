@@ -35,6 +35,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // security under `next start`. Without this, production throws `UntrustedHost`
   // and dev↔prod proto mismatches corrupt the PKCE cookie. Honors AUTH_TRUST_HOST too.
   trustHost: true,
+  // Send auth failures (notably a failed OAuth callback: a stale/replayed single-use
+  // `code` or a PKCE-verifier mismatch from overlapping login tabs) to our own page,
+  // which restarts a fresh sign-in instead of dead-ending on Auth.js's generic 500.
+  // next-intl localizes the path (→ /<locale>/auth-error). See auth-error-recovery.tsx.
+  pages: { error: "/auth-error" },
   providers: [
     Authentik({
       clientId: process.env.AUTHENTIK_CLIENT_ID,

@@ -28,6 +28,14 @@
       "cash": "Kas"
     }
   },
+  "AuthError": {
+    "retrying": "Menandatangani Anda kembali…",
+    "title": "Proses masuk tidak selesai",
+    "body": "Tautan masuk Anda kedaluwarsa atau sudah digunakan — ini bisa terjadi karena tab masuk yang basi atau ganda. Coba lagi untuk memulai proses masuk yang baru.",
+    "retry": "Coba lagi",
+    "deniedTitle": "Proses masuk dibatalkan",
+    "deniedBody": "Anda tidak menyetujui permintaan masuk. Coba lagi untuk melanjutkan."
+  },
   "Nav": {
     "dashboard": "Dasbor",
     "holdings": "Kepemilikan",
