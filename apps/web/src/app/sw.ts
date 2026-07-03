@@ -1,6 +1,6 @@
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist } from "serwist";
+import { NetworkOnly, Serwist } from "serwist";
 
 // `__SW_MANIFEST` is injected by @serwist/next at build time (the app-shell precache
 // list). Financial data is NOT cached here: `defaultCache` only matches same-origin
@@ -62,7 +62,18 @@ const serwist = new Serwist({
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: defaultCache,
+  // Auth + API routes must never be cached, preloaded, or replayed by the SW: the OAuth
+  // callback carries a single-use `code`, and `defaultCache`'s catch-all treats it as a
+  // same-origin document navigation — a replayed/cached hit consumes the code twice and
+  // the exchange fails with `invalid_grant`. Force everything under /api straight to the
+  // network. Ordered before defaultCache so this rule wins.
+  runtimeCaching: [
+    {
+      matcher: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith("/api"),
+      handler: new NetworkOnly(),
+    },
+    ...defaultCache,
+  ],
   // Serve the precached offline page when a navigation can't be fulfilled (the user is
   // offline and the route wasn't already cached). Visited routes still work from cache.
   // Routes are localized under /[locale]; precache the default-locale offline page.
@@ -70,7 +81,9 @@ const serwist = new Serwist({
     entries: [
       {
         url: "/en/offline",
-        matcher: ({ request }) => request.destination === "document",
+        matcher: ({ request }) =>
+          request.destination === "document" &&
+          !new URL(request.url).pathname.startsWith("/api"),
       },
     ],
   },
