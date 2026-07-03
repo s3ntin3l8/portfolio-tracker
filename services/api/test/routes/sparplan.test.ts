@@ -46,6 +46,22 @@ async function postTx(t: string, portfolioId: string, payload: Record<string, un
   expect(res.statusCode).toBe(201);
 }
 
+/**
+ * The 1st of each of the last `count` calendar months, oldest→newest, anchored to today.
+ * A savings plan is "active" only while its last execution is within 1.5× the cadence,
+ * so hardcoded execution dates silently expire once ~45 days pass — which is what turned
+ * these tests into a recurring, calendar-dependent CI failure. Relative dates keep the
+ * most recent execution inside the active window whenever the suite runs.
+ */
+function recentMonths(count: number): string[] {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  return Array.from({ length: count }, (_, i) =>
+    new Date(Date.UTC(y, m - (count - 1 - i), 1)).toISOString().slice(0, 10),
+  );
+}
+
 describe("sparplan detection", () => {
   beforeAll(async () => {
     const kp = await generateKeyPair("ES256");
@@ -82,8 +98,9 @@ describe("sparplan detection", () => {
       .values({ symbol: "VWCE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Vanguard FTSE All-World" })
       .returning();
 
-    // 4× €100/mo savings_plan
-    const months100 = ["2025-09-05", "2025-10-05", "2025-11-05", "2025-12-05"];
+    // 8 consecutive months ending this month: first 4 at €100, last 4 at €150 (step up).
+    const allMonths = recentMonths(8);
+    const months100 = allMonths.slice(0, 4);
     for (const d of months100) {
       await postTx(t, pf, {
         type: "savings_plan",
@@ -95,8 +112,8 @@ describe("sparplan detection", () => {
       });
     }
 
-    // 4× €150/mo savings_plan (step increase; last execution in June so it stays "active")
-    const months150 = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-06-05"];
+    // 4× €150/mo savings_plan (step increase; last execution is the current month → active)
+    const months150 = allMonths.slice(4);
     for (const d of months150) {
       await postTx(t, pf, {
         type: "savings_plan",
@@ -164,7 +181,7 @@ describe("sparplan detection", () => {
       .returning();
 
     // pfA: 5× €150/mo into EIMI
-    const monthsA = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05", "2026-05-05"];
+    const monthsA = recentMonths(5);
     for (const d of monthsA) {
       await postTx(t, pfA, {
         type: "savings_plan",

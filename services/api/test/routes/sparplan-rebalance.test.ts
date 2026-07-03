@@ -53,6 +53,22 @@ async function postTx(t: string, portfolioId: string, payload: Record<string, un
   expect(res.statusCode).toBe(201);
 }
 
+/**
+ * The 1st of each of the last `count` calendar months, oldest→newest, anchored to today.
+ * A savings plan is "active" only while its last execution is within 1.5× the cadence,
+ * so hardcoded execution dates silently expire once ~45 days pass — which is what turned
+ * these tests into a recurring, calendar-dependent CI failure. Relative dates keep the
+ * most recent execution inside the active window whenever the suite runs.
+ */
+function recentMonths(count: number): string[] {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  return Array.from({ length: count }, (_, i) =>
+    new Date(Date.UTC(y, m - (count - 1 - i), 1)).toISOString().slice(0, 10),
+  );
+}
+
 describe("sparplan rebalancing (Phase B)", () => {
   beforeAll(async () => {
     const kp = await generateKeyPair("ES256");
@@ -96,7 +112,7 @@ describe("sparplan rebalancing (Phase B)", () => {
       .values({ symbol: "RB-VWCE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal FTSE All-World" })
       .returning();
 
-    const months = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05", "2026-05-05"];
+    const months = recentMonths(5);
     for (const d of months) {
       await postTx(t, pf, {
         type: "savings_plan",
@@ -134,7 +150,7 @@ describe("sparplan rebalancing (Phase B)", () => {
       .returning();
 
     // Post 5× €70/mo into VWCE (7 units × €100) → ~€700 market value
-    const months = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05", "2026-05-05"];
+    const months = recentMonths(5);
     for (const d of months) {
       await postTx(t, pf, {
         type: "savings_plan",
@@ -228,7 +244,7 @@ describe("sparplan rebalancing (Phase B)", () => {
       .returning();
 
     // VWCE: 9 × €100 = €900 (90% of total)
-    const months = ["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05", "2026-05-05"];
+    const months = recentMonths(5);
     for (const d of months) {
       await postTx(t, pf, {
         type: "savings_plan",
@@ -320,7 +336,7 @@ describe("sparplan rebalancing (Phase B)", () => {
       .returning();
 
     // Add savings plan transactions and targets.
-    const months = ["2026-01-05", "2026-02-05", "2026-03-05"];
+    const months = recentMonths(3);
     for (const d of months) {
       await app.inject({
         method: "POST",
