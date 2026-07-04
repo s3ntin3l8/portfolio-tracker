@@ -731,6 +731,8 @@
   "Instrument": {
     "priceHistory": "Riwayat harga",
     "noHistory": "Belum ada riwayat harga — muncul dengan sumber data pasar yang dikonfigurasi.",
+    "lastPriceLabel": "Harga terakhir",
+    "dayChangeToday": "{change} · {pct} hari ini",
     "corporateActions": "Aksi korporasi",
     "noCorporateActions": "Belum ada.",
     "ratio": "Rasio",
@@ -750,7 +752,21 @@
     "lotAcquired": "Diperoleh",
     "lotQty": "Jumlah",
     "lotPrice": "Harga",
-    "lotCost": "Biaya"
+    "lotCost": "Biaya",
+    "marketValueLabel": "Nilai pasar",
+    "portfolioWeightLabel": "Bobot portofolio",
+    "incomeCardTitle": "Pendapatan dari posisi ini",
+    "incomeReceivedCaption": "diterima · sepanjang waktu",
+    "incomeEmpty": "Belum ada pendapatan tercatat untuk posisi ini.",
+    "yieldOnCostLabel": "Yield atas biaya",
+    "yieldOnCostCaption": "vs yield pasar saat ini",
+    "priceRange": {
+      "label": "Rentang harga",
+      "1m": "1B",
+      "6m": "6B",
+      "1y": "1T",
+      "all": "Semua"
+    }
   },
   "CorpAction": {
     "title": "Catat aksi korporasi",

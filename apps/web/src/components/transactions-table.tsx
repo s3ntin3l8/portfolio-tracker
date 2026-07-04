@@ -180,6 +180,7 @@ export function TransactionsTable({
   defaultInvestmentsOnly = false,
   anomalies = [],
   portfolios = [],
+  showFilterBanners = true,
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
@@ -189,6 +190,11 @@ export function TransactionsTable({
   /** All of the user's portfolios — enables the "Reassign…" action (hidden when fewer
    *  than two are available, since there's nowhere to move rows to). */
   portfolios?: PickablePortfolio[];
+  /** The Activity screen's filter-scoped summary banners (All/Income/Buys/Sells + the
+   *  reconciliation banner). Only the top-level `/transactions` list wants these; the
+   *  Instrument-detail page embeds this same table for its own "Transactions" section,
+   *  which the design shows as a plain list with no banners. */
+  showFilterBanners?: boolean;
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -620,8 +626,10 @@ export function TransactionsTable({
         </div>
       </div>
 
-      {allBanner && <AllFilterBanner data={allBanner} cashFlowMixLabel={tBanner("cashFlowMix")} />}
-      {incomeBanner && (
+      {showFilterBanners && allBanner && (
+        <AllFilterBanner data={allBanner} cashFlowMixLabel={tBanner("cashFlowMix")} />
+      )}
+      {showFilterBanners && incomeBanner && (
         <IncomeFilterBanner
           data={incomeBanner}
           receivedLabel={tBanner("receivedYtd")}
@@ -629,7 +637,7 @@ export function TransactionsTable({
           bySourceLabel={tBanner("bySource")}
         />
       )}
-      {tradeBanner && (activeBannerMode === "buy" || activeBannerMode === "sell") && (
+      {showFilterBanners && tradeBanner && (activeBannerMode === "buy" || activeBannerMode === "sell") && (
         <TradeFilterBanner
           data={tradeBanner}
           totalLabel={tBanner(activeBannerMode === "buy" ? "investedAllTime" : "proceedsAllTime")}
@@ -639,7 +647,7 @@ export function TransactionsTable({
           headingLabel={tBanner(activeBannerMode === "buy" ? "mostBought" : "mostSold")}
         />
       )}
-      {portfolioAnomaly && (
+      {showFilterBanners && portfolioAnomaly && (
         <ReconciliationBanner
           title={ta("reconciliationTitle")}
           detail={anomalyLabel(portfolioAnomaly, ta as AnomalyTranslator, locale)}

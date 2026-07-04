@@ -42,6 +42,7 @@ import {
   HOLDER_SCOPE_PREFIX,
   qualifyingHolders,
 } from "@/lib/portfolio-selection";
+import { toApiRange, type InstrumentPriceRange } from "@/lib/instrument-price-range";
 
 /**
  * The active scope derived from the `pf` cookie.
@@ -531,13 +532,16 @@ export interface InstrumentDetail {
 /** An instrument with its price history and corporate actions (or null). */
 export async function loadInstrument(
   id: string,
+  /** Price-history window for the detail chart's 1M/6M/1Y/All chips — defaults to 1Y
+   *  (unchanged from before the chips existed). */
+  range: InstrumentPriceRange = "1y",
 ): Promise<InstrumentDetail | null> {
   const api = await getServerApi();
   if (!api) return null;
   try {
     const [instrument, history, corporateActions] = await Promise.all([
       api.getInstrument(id),
-      api.getInstrumentHistory(id),
+      api.getInstrumentHistory(id, toApiRange(range)),
       api.listCorporateActions(id),
     ]);
     return { instrument, history, corporateActions };
@@ -554,6 +558,10 @@ export interface InstrumentScope {
   /** True in the cross-portfolio ("All portfolios") scope (drives the portfolio column). */
   aggregate: boolean;
   displayCurrency: string;
+  /** Sum of every held position's market value (display currency) in the active scope —
+   *  the denominator for the instrument page's "Portfolio weight" stat. Null when holdings
+   *  couldn't be loaded (signed out / API down), distinct from a genuine 0. */
+  totalMarketValueDisplay: number | null;
 }
 
 /**
@@ -593,11 +601,21 @@ export async function loadInstrumentScope(
     }
   }
 
+  // Reuses the `holdings` list `loadHoldings()` already fetched above — no new API call.
+  const totalMarketValueDisplay =
+    holdingsView.status === "ok"
+      ? holdingsView.holdings.reduce(
+          (sum, h) => sum + (h.marketValueDisplay ? Number(h.marketValueDisplay) : 0),
+          0,
+        )
+      : null;
+
   return {
     holding,
     transactions,
     aggregate,
     displayCurrency: holdingsView.displayCurrency,
+    totalMarketValueDisplay,
   };
 }
 

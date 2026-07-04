@@ -1,5 +1,5 @@
-import { txAmount, txNetAmount, type TxRow } from "@/components/transactions-table.js";
-import { formatMoney, formatPercent } from "@/lib/utils.js";
+import { txAmount, txNetAmount, type TxRow } from "@/components/transactions-table";
+import { formatMoney, formatPercent } from "@/lib/utils";
 
 /** Cash-in transaction types that count as "income" for the Activity banners — dividends,
  *  bond coupons, cash interest, and broker cash bonuses (same set the Income screen treats

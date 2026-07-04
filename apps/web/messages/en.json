@@ -733,6 +733,8 @@
   "Instrument": {
     "priceHistory": "Price history",
     "noHistory": "No price history yet — it appears with a configured market-data source.",
+    "lastPriceLabel": "Last price",
+    "dayChangeToday": "{change} · {pct} today",
     "corporateActions": "Corporate actions",
     "noCorporateActions": "None recorded.",
     "ratio": "Ratio",
@@ -752,7 +754,21 @@
     "lotAcquired": "Acquired",
     "lotQty": "Qty",
     "lotPrice": "Price",
-    "lotCost": "Cost"
+    "lotCost": "Cost",
+    "marketValueLabel": "Market value",
+    "portfolioWeightLabel": "Portfolio weight",
+    "incomeCardTitle": "Income from this position",
+    "incomeReceivedCaption": "received · lifetime",
+    "incomeEmpty": "No income recorded for this position yet.",
+    "yieldOnCostLabel": "Yield on cost",
+    "yieldOnCostCaption": "vs current market yield",
+    "priceRange": {
+      "label": "Price range",
+      "1m": "1M",
+      "6m": "6M",
+      "1y": "1Y",
+      "all": "All"
+    }
   },
   "CorpAction": {
     "title": "Record a corporate action",
