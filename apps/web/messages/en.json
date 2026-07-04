@@ -17,16 +17,22 @@
     "body": "Check your connection and try again. Pages you’ve already opened stay available; live prices and data resume once you’re back online."
   },
   "Landing": {
-    "title": "Portfolio Tracker",
-    "tagline": "Track Indonesian stocks, gold, bonds, mutual funds and cash — import transactions straight from a screenshot.",
-    "cta": "Sign in",
-    "assets": {
-      "stocks": "Stocks",
-      "gold": "Gold",
-      "bonds": "Bonds",
-      "funds": "Mutual funds",
-      "cash": "Cash"
-    }
+    "heroHeadline": "Every asset,\none clear number.",
+    "heroSub": "Stocks, funds, gold and cash across every brokerage — tracked in a single, honest figure.",
+    "glanceLabel": "Total portfolio value",
+    "connected": "Connected to",
+    "kicker": "Welcome back",
+    "signInTitle": "Sign in to Pocket",
+    "signInSub": "Use your organisation account, or your email.",
+    "sso": "Continue with Authentik",
+    "ssoBusy": "Redirecting to Authentik…",
+    "orEmail": "or with email",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@company.com",
+    "passwordLabel": "Password",
+    "forgot": "Forgot?",
+    "signIn": "Sign in",
+    "trust": "Encrypted in transit · Read-only by default"
   },
   "AuthError": {
     "retrying": "Signing you back in…",
@@ -47,7 +53,43 @@
     "admin": "Admin",
     "signOut": "Sign out",
     "trades": "Trades",
-    "tax": "Tax"
+    "tax": "Tax",
+    "activity": "Activity",
+    "reports": "Reports",
+    "insights": "Insights",
+    "profile": "Profile"
+  },
+  "Reports": {
+    "title": "Reports",
+    "subtitle": "Statements across income, gains, savings and tax.",
+    "income": {
+      "title": "Income",
+      "desc": "Dividends, coupons & distributions."
+    },
+    "trades": {
+      "title": "Realized P&L",
+      "desc": "Closed trades & performance."
+    },
+    "savings": {
+      "title": "Savings",
+      "desc": "Contributions, plans & forecast."
+    },
+    "tax": {
+      "title": "Tax",
+      "desc": "Estimated tax, allowances & harvesting."
+    }
+  },
+  "Insights": {
+    "title": "Insights",
+    "subtitle": "Performance, allocation and rebalancing.",
+    "allocation": {
+      "title": "Allocation & concentration",
+      "desc": "How your capital is spread across asset classes, regions and currencies."
+    },
+    "rebalancing": {
+      "title": "Rebalancing & targets",
+      "desc": "Drift from your target mix and where to direct your next top-up."
+    }
   },
   "Admin": {
     "title": "Admin",
@@ -719,6 +761,11 @@
     "name": "Name",
     "email": "Email",
     "authVia": "Signed in via Authentik (OIDC).",
+    "manage": "Manage",
+    "portfoliosLink": "Portfolios & holders",
+    "portfoliosDesc": "Accounts, brokerage connections and account holders.",
+    "adminLink": "Admin",
+    "adminDesc": "Providers, imports, storage, jobs and stats.",
     "preferences": "Preferences",
     "appearance": "Appearance",
     "language": "Language",

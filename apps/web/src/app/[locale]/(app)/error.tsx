@@ -2,14 +2,15 @@
 
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
+import { AlertTriangle } from "lucide-react";
+import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 
 /**
  * Error boundary for the authenticated app. Rendered inside (app)/layout, so the shell
  * (sidebar + header) stays mounted and the next-intl provider from [locale]/layout is in
- * scope — useTranslations works. `reset()` retries the failed segment render.
+ * scope — useTranslations works. `reset()` retries the failed segment render. The digest is
+ * surfaced as a copyable reference chip so a user can quote it in a support request.
  */
 export default function AppError({
   error,
@@ -25,11 +26,14 @@ export default function AppError({
   }, [error]);
 
   return (
-    <EmptyState
-      icon={AlertCircle}
+    <ErrorState
+      icon={AlertTriangle}
+      tone="warn"
+      eyebrow="500"
       title={t("title")}
-      description={t("body")}
-      action={<Button onClick={reset}>{t("retry")}</Button>}
+      body={t("body")}
+      code={error.digest ? `REF · ${error.digest}` : undefined}
+      primary={<Button onClick={reset}>{t("retry")}</Button>}
     />
   );
 }

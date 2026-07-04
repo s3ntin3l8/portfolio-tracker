@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Portfolio Tracker",
-  "short_name": "Portfolio",
-  "description": "Indonesian-first personal portfolio tracker with screenshot import.",
+  "name": "Pocket",
+  "short_name": "Pocket",
+  "description": "Every asset, one clear number — stocks, funds, gold and cash across every brokerage in a single figure.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,8 +10,8 @@
   "lang": "en",
   "dir": "ltr",
   "categories": ["finance", "productivity"],
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#0e1512",
+  "theme_color": "#0e1512",
   "icons": [
     {
       "src": "/icon.svg",
@@ -46,8 +46,8 @@
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Dashboard",
-      "url": "/dashboard",
+      "name": "Holdings",
+      "url": "/holdings",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ],

@@ -1,45 +1,21 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { useTranslations } from "next-intl";
-import {
-  LayoutDashboard,
-  Wallet,
-  ArrowLeftRight,
-  ScrollText,
-  Coins,
-  PiggyBank,
-  Briefcase,
-  Settings,
-  ShieldCheck,
-  Menu,
-  X,
-  LogOut,
-  Receipt,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 import type { Portfolio, AccountHolder } from "@portfolio/api-client";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { PortfolioSwitcher } from "@/components/portfolio-switcher";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { GlobalSearch } from "@/components/global-search";
 import { InstallPrompt } from "@/components/install-prompt";
-
-const NAV = [
-  { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" },
-  { href: "/holdings", icon: Wallet, key: "holdings" },
-  { href: "/transactions", icon: ArrowLeftRight, key: "transactions" },
-  { href: "/trades", icon: ScrollText, key: "trades" },
-  { href: "/tax", icon: Receipt, key: "tax" },
-  { href: "/income", icon: Coins, key: "income" },
-  { href: "/savings", icon: PiggyBank, key: "savings" },
-  { href: "/portfolios", icon: Briefcase, key: "portfolios" },
-  { href: "/settings", icon: Settings, key: "settings" },
-] as const;
+import { Brand } from "@/components/brand";
+import { BottomNav } from "@/components/bottom-nav";
+import { MAIN_NAV, ADMIN_NAV, navActiveKey } from "@/components/nav-items";
 
 export function AppShell({
   children,
@@ -48,6 +24,8 @@ export function AppShell({
   selectedId = null,
   selectedHolderId = null,
   isAdmin = false,
+  anomalyCount = 0,
+  anomalyError = false,
 }: {
   children: React.ReactNode;
   portfolios?: Pick<Portfolio, "id" | "name" | "brokerage" | "accountHolder">[];
@@ -55,18 +33,19 @@ export function AppShell({
   selectedId?: string | null;
   selectedHolderId?: string | null;
   isAdmin?: boolean;
+  anomalyCount?: number;
+  anomalyError?: boolean;
 }) {
   const t = useTranslations("Nav");
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const activeKey = navActiveKey(pathname);
 
-  // The admin entry is only shown to members of the Authentik admin group.
-  const navItems = isAdmin
-    ? [...NAV, { href: "/admin", icon: ShieldCheck, key: "admin" } as const]
-    : NAV;
+  const navItems = isAdmin ? [...MAIN_NAV, ADMIN_NAV] : MAIN_NAV;
 
-  const hideSelector = ["/portfolios", "/settings", "/admin"].some((p) =>
-    pathname === p || pathname.startsWith(p + "/"),
+  // The portfolio switcher is meaningless on account-scoped screens (settings/admin/
+  // portfolios all manage across portfolios), so hide it there.
+  const hideSelector = ["/portfolios", "/settings", "/admin"].some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
   );
 
   // Suspense required: PortfolioSwitcher reads useSearchParams (for the transient
@@ -86,78 +65,62 @@ export function AppShell({
     <button
       type="button"
       onClick={() => signOut({ callbackUrl: "/" })}
-      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
     >
       <LogOut className="size-4" />
       {t("signOut")}
     </button>
   );
 
-  const navLinks = (
-    <nav className="flex flex-col gap-1">
-      {navItems.map(({ href, icon: Icon, key }) => {
-        const active = pathname === href;
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={() => setOpen(false)}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-            )}
-          >
-            <Icon className="size-4" />
-            {t(key)}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-
   return (
     <div className="flex h-dvh overflow-hidden">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-card/40 p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
-        <Brand />
-        <div className="mt-6">{navLinks}</div>
+      <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-card p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] md:flex">
+        <div className="px-1 pb-4">
+          <Brand />
+        </div>
+        <nav className="flex flex-col gap-1">
+          {navItems.map(({ href, icon: Icon, key }) => {
+            const active = key === activeKey;
+            const badge =
+              key === "activity" && anomalyCount > 0 ? anomalyCount : null;
+            return (
+              <Link
+                key={key}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
+                  active
+                    ? "bg-primary/10 font-semibold text-primary"
+                    : "font-medium text-muted-foreground hover:bg-secondary hover:text-foreground",
+                )}
+              >
+                <Icon className="size-[18px]" strokeWidth={active ? 2 : 1.8} />
+                <span className="flex-1">{t(key)}</span>
+                {badge != null && (
+                  <span
+                    className={cn(
+                      "flex h-[19px] min-w-[19px] items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold text-white",
+                      anomalyError ? "bg-destructive" : "bg-[var(--gold-fg)]",
+                    )}
+                  >
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
         <div className="mt-auto pt-4">{signOutButton}</div>
       </aside>
 
-      {/* Mobile drawer */}
-      {open && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setOpen(false)}
-          />
-          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-border bg-card p-4 pl-[max(1rem,env(safe-area-inset-left))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-center justify-between">
-              <Brand />
-              <Button variant="ghost" size="icon" aria-label="Close menu" onClick={() => setOpen(false)}>
-                <X />
-              </Button>
-            </div>
-            <div className="mt-6">{navLinks}</div>
-            <div className="mt-auto pt-4">{signOutButton}</div>
-          </aside>
-        </div>
-      )}
-
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border bg-background/80 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] backdrop-blur">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-label="Open menu"
-            onClick={() => setOpen(true)}
-          >
-            <Menu />
-          </Button>
+          {/* Mobile brand (desktop shows it in the sidebar). */}
+          <Link href="/holdings" className="md:hidden" aria-label="Pocket">
+            <Brand />
+          </Link>
           <div className="min-w-0">{switcher}</div>
           <div className="ml-auto flex items-center gap-1">
             <GlobalSearch holderId={selectedHolderId} />
@@ -172,22 +135,13 @@ export function AppShell({
             <ThemeToggle />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6">
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))] sm:px-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <InstallPrompt />
           {children}
         </main>
       </div>
-    </div>
-  );
-}
 
-function Brand() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <Wallet className="size-4" />
-      </div>
-      <span className="font-semibold tracking-tight">Portfolio</span>
+      <BottomNav anomalyCount={anomalyCount} anomalyError={anomalyError} />
     </div>
   );
 }

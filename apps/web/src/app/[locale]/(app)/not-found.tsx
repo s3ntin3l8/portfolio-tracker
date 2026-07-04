@@ -1,26 +1,28 @@
 import { getTranslations } from "next-intl/server";
-import { SearchX } from "lucide-react";
+import { Compass } from "lucide-react";
 import { Link } from "@/i18n/navigation";
-import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 
 /**
  * Not-found boundary for the authenticated app — catches notFound() from (app) pages
  * (e.g. an unknown transaction id). Rendered within (app)/layout + the [locale] intl
  * provider, so it keeps the shell and is fully localized. Unmatched URLs outside the app
- * fall through to Next's default not-found.
+ * fall through to the root [locale]/not-found.
  */
 export default async function AppNotFound() {
   const t = await getTranslations("NotFound");
 
   return (
-    <EmptyState
-      icon={SearchX}
+    <ErrorState
+      icon={Compass}
+      tone="brand"
+      eyebrow="404"
       title={t("title")}
-      description={t("body")}
-      action={
+      body={t("body")}
+      primary={
         <Button asChild>
-          <Link href="/dashboard">{t("backHome")}</Link>
+          <Link href="/holdings">{t("backHome")}</Link>
         </Button>
       }
     />

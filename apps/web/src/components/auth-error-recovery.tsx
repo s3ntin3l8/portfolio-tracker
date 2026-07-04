@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
+import { AlertTriangle, Ban, Loader2 } from "lucide-react";
+import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -31,7 +31,7 @@ const RETRY_WINDOW_MS = 30_000;
 const NON_RECOVERABLE = new Set(["AccessDenied", "Verification"]);
 
 function startSignIn() {
-  void signIn("authentik", { callbackUrl: "/dashboard" });
+  void signIn("authentik", { callbackUrl: "/holdings" });
 }
 
 export function AuthErrorRecovery() {
@@ -60,22 +60,25 @@ export function AuthErrorRecovery() {
 
   if (phase === "retrying") {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border px-6 py-16 text-center">
-        <div className="mb-4 rounded-full bg-muted p-3 text-muted-foreground">
-          <Loader2 className="size-6 animate-spin" />
-        </div>
-        <h3 className="text-base font-medium">{t("retrying")}</h3>
+      <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+        <span className="flex size-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary">
+          <Loader2 className="size-7 animate-spin" />
+        </span>
+        <h1 className="text-balance text-2xl font-extrabold tracking-tight">
+          {t("retrying")}
+        </h1>
       </div>
     );
   }
 
   const denied = error === "AccessDenied";
   return (
-    <EmptyState
-      icon={AlertCircle}
+    <ErrorState
+      icon={denied ? Ban : AlertTriangle}
+      tone={denied ? "neutral" : "warn"}
       title={denied ? t("deniedTitle") : t("title")}
-      description={denied ? t("deniedBody") : t("body")}
-      action={
+      body={denied ? t("deniedBody") : t("body")}
+      primary={
         <Button
           onClick={() => {
             sessionStorage.removeItem(RETRY_KEY);

@@ -1,6 +1,8 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { Briefcase, ShieldCheck, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Link } from "@/i18n/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -48,6 +50,42 @@ export default async function SettingsPage({
           <p className="mt-4 text-xs text-muted-foreground">{t("authVia")}</p>
           <Separator className="my-4" />
           <SignOutButton />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("manage")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <Link
+            href="/portfolios"
+            className="group flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Briefcase className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{t("portfoliosLink")}</div>
+              <div className="text-xs text-muted-foreground">{t("portfoliosDesc")}</div>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
+          {me?.isAdmin && (
+            <Link
+              href="/admin"
+              className="group flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ShieldCheck className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{t("adminLink")}</div>
+                <div className="text-xs text-muted-foreground">{t("adminDesc")}</div>
+              </div>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </Link>
+          )}
         </CardContent>
       </Card>
 

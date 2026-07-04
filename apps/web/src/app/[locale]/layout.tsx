@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
+import { Plus_Jakarta_Sans, DM_Mono } from "next/font/google";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { routing } from "@/i18n/routing";
@@ -9,17 +8,30 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthSessionProvider } from "@/components/session-provider";
 import "../globals.css";
 
+// Pocket type system: Plus Jakarta Sans for UI, DM Mono for figures/codes.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-dm-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Portfolio Tracker",
+  title: "Pocket",
   description:
-    "Indonesian-first personal portfolio tracker with screenshot import.",
+    "Every asset, one clear number — stocks, funds, gold and cash across every brokerage in a single figure.",
   manifest: "/manifest.webmanifest",
   // iOS: enable standalone "Add to Home Screen". `black-translucent` lets the web
   // content extend under the status bar for an edge-to-edge look (paired with
   // `viewportFit: "cover"` below and the safe-area padding in <AppShell>).
   appleWebApp: {
     capable: true,
-    title: "Portfolio",
+    title: "Pocket",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -30,11 +42,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   // Follow the OS scheme so the browser/status-bar chrome matches the rendered
-  // background (`--background`: light `#ffffff`, dark `#0a0a0a`). This tracks the
+  // background (`--background`: light `#f4f7f5`, dark `#0e1512`). This tracks the
   // system preference, not the in-app theme toggle.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#f4f7f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e1512" },
   ],
   // Draw into the display cutout / safe areas; insets are reclaimed in the shell.
   viewportFit: "cover",
@@ -61,7 +73,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       suppressHydrationWarning
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      className={`${jakarta.variable} ${dmMono.variable}`}
     >
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>

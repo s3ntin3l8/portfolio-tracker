@@ -17,16 +17,22 @@
     "body": "Periksa koneksi Anda dan coba lagi. Halaman yang sudah dibuka tetap tersedia; harga dan data langsung akan kembali saat Anda online."
   },
   "Landing": {
-    "title": "Pelacak Portofolio",
-    "tagline": "Lacak saham Indonesia, emas, obligasi, reksa dana, dan kas — impor transaksi langsung dari tangkapan layar.",
-    "cta": "Masuk",
-    "assets": {
-      "stocks": "Saham",
-      "gold": "Emas",
-      "bonds": "Obligasi",
-      "funds": "Reksa dana",
-      "cash": "Kas"
-    }
+    "heroHeadline": "Setiap aset,\nsatu angka jelas.",
+    "heroSub": "Saham, reksa dana, emas, dan kas dari setiap broker — dilacak dalam satu angka yang jujur.",
+    "glanceLabel": "Total nilai portofolio",
+    "connected": "Terhubung ke",
+    "kicker": "Selamat datang kembali",
+    "signInTitle": "Masuk ke Pocket",
+    "signInSub": "Gunakan akun organisasi Anda, atau email.",
+    "sso": "Lanjutkan dengan Authentik",
+    "ssoBusy": "Mengalihkan ke Authentik…",
+    "orEmail": "atau dengan email",
+    "emailLabel": "Email",
+    "emailPlaceholder": "anda@perusahaan.com",
+    "passwordLabel": "Kata sandi",
+    "forgot": "Lupa?",
+    "signIn": "Masuk",
+    "trust": "Terenkripsi saat transit · Hanya-baca secara bawaan"
   },
   "AuthError": {
     "retrying": "Menandatangani Anda kembali…",
@@ -47,7 +53,43 @@
     "admin": "Admin",
     "signOut": "Keluar",
     "trades": "Catatan Dagang",
-    "tax": "Pajak"
+    "tax": "Pajak",
+    "activity": "Aktivitas",
+    "reports": "Laporan",
+    "insights": "Wawasan",
+    "profile": "Profil"
+  },
+  "Reports": {
+    "title": "Laporan",
+    "subtitle": "Ringkasan pendapatan, laba, tabungan, dan pajak.",
+    "income": {
+      "title": "Pendapatan",
+      "desc": "Dividen, kupon & distribusi."
+    },
+    "trades": {
+      "title": "Laba/Rugi Terealisasi",
+      "desc": "Transaksi tertutup & kinerja."
+    },
+    "savings": {
+      "title": "Tabungan",
+      "desc": "Kontribusi, rencana & proyeksi."
+    },
+    "tax": {
+      "title": "Pajak",
+      "desc": "Estimasi pajak, keringanan & panen rugi."
+    }
+  },
+  "Insights": {
+    "title": "Wawasan",
+    "subtitle": "Kinerja, alokasi, dan penyeimbangan.",
+    "allocation": {
+      "title": "Alokasi & konsentrasi",
+      "desc": "Sebaran modal Anda di seluruh kelas aset, wilayah, dan mata uang."
+    },
+    "rebalancing": {
+      "title": "Penyeimbangan & target",
+      "desc": "Penyimpangan dari target dan ke mana mengarahkan setoran berikutnya."
+    }
   },
   "Admin": {
     "title": "Admin",
@@ -717,6 +759,11 @@
     "name": "Nama",
     "email": "Email",
     "authVia": "Masuk melalui Authentik (OIDC).",
+    "manage": "Kelola",
+    "portfoliosLink": "Portofolio & pemilik",
+    "portfoliosDesc": "Akun, koneksi broker, dan pemilik akun.",
+    "adminLink": "Admin",
+    "adminDesc": "Penyedia, impor, penyimpanan, tugas, dan statistik.",
     "preferences": "Preferensi",
     "appearance": "Tampilan",
     "language": "Bahasa",

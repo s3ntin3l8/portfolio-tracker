@@ -34,7 +34,7 @@ describe("AuthErrorRecovery", () => {
     renderRecovery();
 
     expect(signInMock).toHaveBeenCalledWith("authentik", {
-      callbackUrl: "/dashboard",
+      callbackUrl: "/holdings",
     });
     expect(screen.getByText(messages.AuthError.retrying)).toBeTruthy();
   });
@@ -66,7 +66,7 @@ describe("AuthErrorRecovery", () => {
     fireEvent.click(screen.getByRole("button", { name: messages.AuthError.retry }));
 
     expect(signInMock).toHaveBeenCalledWith("authentik", {
-      callbackUrl: "/dashboard",
+      callbackUrl: "/holdings",
     });
     expect(sessionStorage.getItem("auth-callback-retry-at")).toBeNull();
   });

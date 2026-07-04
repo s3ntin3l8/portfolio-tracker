@@ -2,79 +2,101 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Modern-minimal, dark-default fintech. Neutral (zinc) base + emerald accent. */
+/* Pocket — dark-default fintech. Green-tinted slate base + brand green (#0E9F6E).
+   Exact hex values ported from the Pocket design system (Claude Design). */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.875rem;
   color-scheme: light;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.205 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.205 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.205 0 0);
+  --background: #f4f7f5;
+  --foreground: #11211a;
+  --card: #ffffff;
+  --card-foreground: #11211a;
+  --popover: #ffffff;
+  --popover-foreground: #11211a;
 
-  --primary: oklch(0.596 0.145 163.22); /* emerald-600 */
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #0e9f6e; /* Pocket brand green */
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: #edf1ef;
+  --secondary-foreground: #11211a;
+  --muted: #f0f3f1;
+  --muted-foreground: #7c8a82;
+  --accent: #edf1ef;
+  --accent-foreground: #11211a;
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.596 0.145 163.22);
-  --warning: oklch(0.769 0.16 70.08);
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --success: #0e9f6e;
+  --warning: #c98a1e;
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.596 0.145 163.22);
+  --border: #e7edea;
+  --input: #e7edea;
+  --ring: #0e9f6e;
 
-  /* Chart / asset-class palette */
-  --chart-1: oklch(0.696 0.17 162.48); /* emerald  — equities */
-  --chart-2: oklch(0.769 0.16 70.08); /* amber    — gold */
-  --chart-3: oklch(0.6 0.118 184.7); /* teal     — bonds */
-  --chart-4: oklch(0.627 0.205 286.5); /* violet   — funds */
-  --chart-5: oklch(0.708 0 0); /* zinc     — cash */
+  /* Chart / asset-class palette (Pocket CLASS_DEF) */
+  --chart-1: #0e9f6e; /* green  — equities */
+  --chart-2: #e0a53a; /* gold   — gold */
+  --chart-3: #0d9488; /* teal   — bonds */
+  --chart-4: #7c5cfc; /* violet — funds / ETF */
+  --chart-5: #94a3b8; /* slate  — cash */
+
+  /* Pocket surface & text ramp (feature components read these directly) */
+  --card-2: #f7faf8;
+  --text-2: #7c8a82;
+  --text-3: #9aa8a0;
+  --text-mute: #5b6b62;
+  --line: #f0f3f1;
+  --row-hover: #fbfcfb;
+  --gold-fg: #c98a1e;
+  --warn-strong: #7a5a1a;
+  --warn-soft: #9a7b3a;
 }
 
 .dark {
   color-scheme: dark;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --background: #0e1512;
+  --foreground: #e7ede9;
+  --card: #18211d;
+  --card-foreground: #e7ede9;
+  --popover: #18211d;
+  --popover-foreground: #e7ede9;
 
-  --primary: oklch(0.696 0.17 162.48); /* emerald-500 */
-  --primary-foreground: oklch(0.145 0 0);
+  --primary: #0e9f6e;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --secondary: #222a26;
+  --secondary-foreground: #e7ede9;
+  --muted: #1e2622;
+  --muted-foreground: #8a988f;
+  --accent: #222a26;
+  --accent-foreground: #e7ede9;
 
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.696 0.17 162.48);
-  --warning: oklch(0.828 0.189 84.429);
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --success: #12b981;
+  --warning: #e0a53a;
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.696 0.17 162.48);
+  --border: #262f2a;
+  --input: #2a342e;
+  --ring: #12b981;
 
-  --chart-1: oklch(0.696 0.17 162.48);
-  --chart-2: oklch(0.828 0.189 84.429);
-  --chart-3: oklch(0.696 0.117 184.7);
-  --chart-4: oklch(0.71 0.18 286.5);
-  --chart-5: oklch(0.708 0 0);
+  --chart-1: #12b981;
+  --chart-2: #e0a53a;
+  --chart-3: #14b8a6;
+  --chart-4: #9575ff;
+  --chart-5: #94a3b8;
+
+  --card-2: #141b17;
+  --text-2: #8a988f;
+  --text-3: #66746b;
+  --text-mute: #aebbb2;
+  --line: #222a26;
+  --row-hover: #1e2622;
+  --gold-fg: #e0a53a;
+  --warn-strong: #e6c07a;
+  --warn-soft: #c2a878;
 }
 
 @theme inline {
@@ -105,8 +127,8 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
