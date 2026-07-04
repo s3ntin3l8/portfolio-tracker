@@ -592,6 +592,53 @@ describe("loadHarvestPrefill", () => {
   });
 });
 
+describe("loadNetworthTax — Indonesian regime (blocker fix)", () => {
+  // ID final tax has no allowance/FSA concept, so loadNetworthTax must never call the
+  // FSA-gated getPortfolioTax/getNetworthTax endpoints (which 422/skip without one) —
+  // it builds a normalized holder stub directly from the portfolio list instead.
+
+  it("single-portfolio scope: returns a stub without calling getPortfolioTax", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    const getPortfolioTax = vi.fn();
+    h.client.getPortfolioTax = getPortfolioTax;
+
+    const holders = await api.loadNetworthTax(2026, "ID");
+    expect(getPortfolioTax).not.toHaveBeenCalled();
+    expect(holders).toHaveLength(1);
+    expect(holders[0].holder.id).toBe("p1");
+    expect(holders[0].year).toBe(2026);
+  });
+
+  it("aggregate scope (no holder-scope cookie): returns exactly one stub without calling getNetworthTax", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = {}; // no single portfolio selected, no holder scope
+    const getNetworthTax = vi.fn();
+    h.client.getNetworthTax = getNetworthTax;
+
+    const holders = await api.loadNetworthTax(2026, "ID");
+    expect(getNetworthTax).not.toHaveBeenCalled();
+    expect(holders).toHaveLength(1);
+  });
+
+  it("returns an empty array when the user has zero portfolios (not the German empty-state trigger)", async () => {
+    h.client.listPortfolios = async () => [];
+    expect(await api.loadNetworthTax(2026, "ID")).toEqual([]);
+  });
+
+  it("does not affect the German (default) regime's existing FSA-gated behavior", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    h.client.getPortfolioTax = async () => {
+      const err = new Error("no fsa") as Error & { status: number };
+      err.status = 422;
+      throw err;
+    };
+    // Default regime (omitted) behaves exactly as before this change: 422 → [].
+    expect(await api.loadNetworthTax(2026)).toEqual([]);
+  });
+});
+
 describe("loadTaxYearDetail", () => {
   const baseUsage = {
     year: 2026,
@@ -856,6 +903,85 @@ describe("loadTaxYearDetail", () => {
       { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
     ] as unknown as TaxSummaryHolder[];
     expect((await api.loadTaxYearDetail(holders, 2026)).size).toBe(0);
+  });
+
+  it("populates idByYear with per-year PROCEEDS (not just gain) across every year the trade log covers, not just the selected year", async () => {
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    h.client.getTrades = async () => ({
+      displayCurrency: "IDR",
+      trades: [
+        {
+          instrumentId: "i1",
+          instrument: { symbol: "BBNI", name: "BBNI", assetClass: "equity", market: "IDX" },
+          legs: [
+            {
+              acqDate: "2025-01-01", sellDate: "2026-05-18", quantity: "10",
+              cost: "1000", proceeds: "1640", gain: "640", holdingDays: 100,
+              longTerm: false, taxYear: 2026,
+            },
+            {
+              acqDate: "2024-01-01", sellDate: "2025-06-01", quantity: "5",
+              cost: "400", proceeds: "500", gain: "100", holdingDays: 200,
+              longTerm: true, taxYear: 2025,
+            },
+          ],
+        },
+      ],
+      realizedByYear: [
+        { year: 2025, amount: "100" },
+        { year: 2026, amount: "640" },
+      ],
+      dividendsByYear: [
+        { year: 2025, amount: "180", tax: "20" },
+        { year: 2026, amount: "133", tax: "15" },
+      ],
+    });
+    h.client.listTransactions = async () => [];
+
+    const holders = [
+      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+
+    const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;
+    expect(detail.idByYear).toEqual(
+      expect.arrayContaining([
+        // 2025's proceeds (500) come from the leg OUTSIDE the selected year — proof
+        // this is a real across-year rollup, not just the selected year's disposals.
+        { year: 2025, proceeds: "500.00", dividendGross: "200.00", realized: "100" },
+        { year: 2026, proceeds: "1640.00", dividendGross: "148.00", realized: "640" },
+      ]),
+    );
+  });
+
+  it("ID_ALL_PORTFOLIOS aggregate sentinel resolves to every portfolio in scope (not grouped by account holder)", async () => {
+    // Two portfolios, neither linked to any account holder — the German aggregate path
+    // would show nothing for holders like this (it only groups by accountHolderId).
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR" },
+      { id: "p2", name: "B", baseCurrency: "IDR" },
+    ];
+    h.cookies = {}; // aggregate, no holder-scope cookie
+    h.client.listAccountHolders = async () => [];
+
+    const idHolders = await api.loadNetworthTax(2026, "ID");
+    expect(idHolders).toHaveLength(1);
+
+    const getNetWorthTrades = vi.fn(async () => ({
+      displayCurrency: "IDR",
+      trades: [],
+      realizedByYear: [],
+      dividendsByYear: [],
+    }));
+    h.client.getNetWorthTrades = getNetWorthTrades;
+    const listTransactions = vi.fn(async () => []);
+    h.client.listTransactions = listTransactions;
+
+    await api.loadTaxYearDetail(idHolders, 2026);
+    // Both portfolios' transactions are fetched — the sentinel resolved to "every
+    // portfolio", not filtered down by a (non-existent) accountHolderId match.
+    expect(listTransactions).toHaveBeenCalledWith("p1");
+    expect(listTransactions).toHaveBeenCalledWith("p2");
   });
 });
 

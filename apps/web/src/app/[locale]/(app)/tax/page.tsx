@@ -3,6 +3,7 @@ import { Receipt, TrendingUp, Landmark, CalendarClock } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PreferenceChips } from "@/components/preference-chips";
 import {
   EstimatedTaxHero,
   DisposalTable,
@@ -12,11 +13,15 @@ import {
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
+  IdSalesTable,
+  IdDividendsTable,
+  IdByYearTable,
   type TaxTranslator,
 } from "@/components/tax/tax-cards";
-import { loadNetworthTax, loadTaxYearDetail, type TaxYearDetail } from "@/lib/server-api";
+import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
+import { indonesianFinalTax } from "@portfolio/core";
 
 export default async function TaxPage({
   params,
@@ -31,24 +36,51 @@ export default async function TaxPage({
   setRequestLocale(locale);
   const t = await getTranslations("Tax");
 
-  const holders = await loadNetworthTax(year);
+  const prefs = await loadPreferences();
+  const regime = prefs?.taxRegime ?? "DE";
+
+  // Both loaders run in BOTH regimes — `loadTaxYearDetail` needs a non-empty
+  // `holders` array to compute anything at all (see loadNetworthTax's ID branch,
+  // which builds a normalized holder stub instead of gating on a German FSA that an
+  // Indonesian user will almost never have configured). The regime only decides
+  // which components render from the result below, not which loaders run.
+  const holders = await loadNetworthTax(year, regime);
   const detailByHolder = await loadTaxYearDetail(holders, year);
 
   const Heading = (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground">
+          {regime === "ID" ? t("id.subtitle", { year: year ?? new Date().getUTCFullYear() }) : t("subtitle")}
+        </p>
+      </div>
+      <div className="flex flex-col items-start gap-1">
+        <PreferenceChips
+          prefKey="taxRegime"
+          current={regime}
+          options={[
+            { value: "DE", label: t("regime.de") },
+            { value: "ID", label: t("regime.id") },
+          ]}
+        />
+        <span className="px-0.5 text-[11px] text-muted-foreground">{t("regime.label")}</span>
+      </div>
     </div>
   );
 
   if (holders.length === 0) {
+    // Only reachable with zero portfolios at all (loadNetworthTax's ID branch always
+    // returns a stub otherwise) — the German-specific "no FSA" copy would be wrong
+    // here, so the DE-only empty state is gated to the DE regime.
+    const te = await getTranslations("Empty");
     return (
       <div className="space-y-6">
         {Heading}
         <EmptyState
           icon={Receipt}
-          title={t("empty.title")}
-          description={t("empty.description")}
+          title={regime === "ID" ? te("noPortfolioTitle") : t("empty.title")}
+          description={regime === "ID" ? te("noPortfolioBody") : t("empty.description")}
         />
       </div>
     );
@@ -62,6 +94,7 @@ export default async function TaxPage({
           key={entry.holder.id}
           entry={entry}
           detail={detailByHolder.get(entry.holder.id) ?? null}
+          regime={regime}
           locale={locale}
           t={t}
         />
@@ -73,16 +106,132 @@ export default async function TaxPage({
 function TaxHolderSection({
   entry,
   detail,
+  regime,
   locale,
   t,
 }: {
   entry: TaxSummaryHolder;
   detail: TaxYearDetail | null;
+  regime: "DE" | "ID";
   locale: string;
   t: TaxTranslator;
 }) {
-  const { holder, year, currency, allowanceUsage: u, harvestSuggestions, distribution } = entry;
+  const { holder, year } = entry;
+  // ID mode formats every figure with the trade log's own display currency (`detail`
+  // always carries the real one, unlike `entry.currency` which is an inert IDR/base
+  // placeholder on the synthetic ID holder stub — see loadNetworthTax).
+  const currency = regime === "ID" ? (detail?.currency ?? entry.currency) : entry.currency;
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
+
+  return (
+    <section className="space-y-4">
+      {/* Holder header */}
+      <div className="flex items-center gap-2">
+        <Landmark className="size-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">
+          {holder.name || t("defaultHolderName")} — {year}
+        </h2>
+      </div>
+
+      {regime === "ID" ? (
+        <TaxHolderSectionId detail={detail} money={money} year={year} t={t} />
+      ) : (
+        <TaxHolderSectionDe entry={entry} detail={detail} money={money} locale={locale} t={t} />
+      )}
+    </section>
+  );
+}
+
+/** Indonesian final-tax branch: recomputes over the same disposals/dividendRows
+ *  `loadTaxYearDetail` already assembles for the German path, via
+ *  `indonesianFinalTax` — no new API endpoint, no German-only sections rendered. */
+function TaxHolderSectionId({
+  detail,
+  money,
+  year,
+  t,
+}: {
+  detail: TaxYearDetail | null;
+  money: (n: string | number) => string;
+  year: number;
+  t: TaxTranslator;
+}) {
+  const idTax = indonesianFinalTax({
+    disposals: (detail?.disposals ?? []).map((d) => ({
+      symbol: d.symbol,
+      when: d.when,
+      proceeds: d.proceeds,
+    })),
+    dividends: (detail?.dividendRows ?? []).map((d) => ({
+      symbol: d.symbol,
+      currency: d.currency,
+      gross: d.gross,
+    })),
+    byYear: detail?.idByYear ?? [],
+  });
+
+  return (
+    <>
+      {/* Hero row: estimated tax (withheld at source) + sales tax + dividend tax */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <EstimatedTaxHero
+          tone="green"
+          label={t("id.hero.estimatedTax", { year })}
+          value={money(idTax.estimatedTax)}
+          description={t("id.hero.estimatedTaxDesc")}
+        />
+        <StatCard
+          label={t("id.hero.salesTax")}
+          value={money(idTax.totalSalesTax)}
+          delta={t("id.hero.salesTaxDesc", { amount: money(idTax.totalProceeds) })}
+        />
+        <StatCard
+          label={t("id.hero.dividendTax")}
+          value={money(idTax.totalDividendTax)}
+          delta={t("id.hero.dividendTaxDesc", { amount: money(idTax.totalDividendGross) })}
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <IdSalesTable
+          rows={idTax.disposals}
+          totalProceeds={idTax.totalProceeds}
+          totalSalesTax={idTax.totalSalesTax}
+          money={money}
+          t={t}
+        />
+        <IdDividendsTable
+          rows={idTax.dividends}
+          totalDividendGross={idTax.totalDividendGross}
+          totalDividendTax={idTax.totalDividendTax}
+          totalDividendNet={idTax.totalDividendNet}
+          money={money}
+          t={t}
+        />
+      </div>
+
+      <IdByYearTable rows={idTax.byYear} money={money} t={t} />
+
+      <p className="text-xs text-muted-foreground leading-relaxed">{t("id.footnote")}</p>
+    </>
+  );
+}
+
+/** German Abgeltungsteuer branch — unchanged from before the regime toggle existed. */
+function TaxHolderSectionDe({
+  entry,
+  detail,
+  money,
+  locale,
+  t,
+}: {
+  entry: TaxSummaryHolder;
+  detail: TaxYearDetail | null;
+  money: (n: string | number) => string;
+  locale: string;
+  t: TaxTranslator;
+}) {
+  const { allowanceUsage: u, harvestSuggestions, distribution } = entry;
   const pct = parseFloat(u.remaining) / parseFloat(u.allowanceAnnual);
   const usedPct = Math.round((1 - Math.max(0, Math.min(1, pct))) * 100);
   const hasForecast = Number(u.forecastIncomeRestOfYear) > 0;
@@ -100,19 +249,11 @@ function TaxHolderSection({
   const ratePct = (taxRate * 100).toLocaleString(locale, { maximumFractionDigits: 3 });
 
   return (
-    <section className="space-y-4">
-      {/* Holder header */}
-      <div className="flex items-center gap-2">
-        <Landmark className="size-5 text-muted-foreground" />
-        <h2 className="text-lg font-semibold">
-          {holder.name} — {year}
-        </h2>
-      </div>
-
+    <>
       {/* Hero row: estimated tax + realized gains YTD + dividends YTD */}
       <div className="grid gap-4 sm:grid-cols-3">
         <EstimatedTaxHero
-          label={t("hero.estimatedTax", { year })}
+          label={t("hero.estimatedTax", { year: entry.year })}
           value={money(estimatedTax)}
           description={t("hero.estimatedTaxDesc", { rate: ratePct, taxable: money(taxable) })}
         />
@@ -229,6 +370,6 @@ function TaxHolderSection({
       <p className="text-xs text-muted-foreground leading-relaxed">
         {t("footnote", { rate: ratePct, allowance: money(u.allowanceAnnual) })}
       </p>
-    </section>
+    </>
   );
 }

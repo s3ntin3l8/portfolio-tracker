@@ -14,6 +14,7 @@ import { StatCard } from "@/components/stat-card";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
 import type { TaxCurrencyTotal, TaxDisposalRow, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
+import type { IdDisposalTax, IdDividendTax, IdYearTax } from "@portfolio/core";
 import { formatMoney } from "@/lib/utils";
 
 /** Loosely-typed next-intl translator scoped to the `Tax` namespace — the same shape as
@@ -21,19 +22,29 @@ import { formatMoney } from "@/lib/utils";
  *  as a prop rather than re-derived in each subcomponent. */
 export type TaxTranslator = (key: string, values?: Record<string, string | number>) => string;
 
-/** The "Estimated tax" hero stat — purple-gradient card, distinct from the plain
- *  `StatCard` tiles beside it (the design's one visually-emphasized headline figure). */
+/** The "Estimated tax" hero stat — gradient card, distinct from the plain `StatCard`
+ *  tiles beside it (the design's one visually-emphasized headline figure). `tone`
+ *  matches the regime: violet for German (Abgeltungsteuer), green for Indonesian
+ *  (final tax) — exactly `TaxScreen.dc.html`'s two hero gradients. */
 export function EstimatedTaxHero({
   label,
   value,
   description,
+  tone = "violet",
 }: {
   label: string;
   value: string;
   description: string;
+  tone?: "violet" | "green";
 }) {
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 p-5 text-white shadow-sm">
+    <div
+      className={
+        tone === "green"
+          ? "rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-sm"
+          : "rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 p-5 text-white shadow-sm"
+      }
+    >
       <p className="text-xs font-semibold text-white/80">{label}</p>
       <p className="tabular mt-1 text-2xl font-extrabold">{value}</p>
       <p className="mt-1 text-xs font-medium text-white/80">{description}</p>
@@ -414,5 +425,193 @@ export function HarvestRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Indonesian final-tax components — mirror the German tables above, but priced on
+// PROCEEDS/GROSS at flat 0.1%/10% rates (no allowance, no Teilfreistellung, no
+// harvesting). Labels come from the "id.*" keys under the shared "Tax" namespace so
+// both regimes' strings live side by side (see TaxScreen.dc.html's ID branch).
+// ---------------------------------------------------------------------------
+
+/** "Share sales · 0.1% final" table — one row per disposal, tax = proceeds × 0.1%. */
+export function IdSalesTable({
+  rows,
+  totalProceeds,
+  totalSalesTax,
+  money,
+  t,
+}: {
+  rows: IdDisposalTax[];
+  totalProceeds: string;
+  totalSalesTax: string;
+  money: (n: string | number) => string;
+  t: TaxTranslator;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("id.sales.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pt-0">
+        {rows.length === 0 ? (
+          <p className="px-6 text-sm text-muted-foreground">{t("id.sales.empty")}</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("id.sales.disposal")}</TableHead>
+                <TableHead className="text-right">{t("id.sales.proceeds")}</TableHead>
+                <TableHead className="text-right">{t("id.sales.tax")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r, i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <span className="font-medium">{r.symbol}</span>{" "}
+                    <span className="text-xs text-muted-foreground">{r.when}</span>
+                  </TableCell>
+                  <TableCell className="tabular text-right text-muted-foreground">
+                    {money(r.proceeds)}
+                  </TableCell>
+                  <TableCell className="tabular text-right font-semibold">{money(r.tax)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell className="font-semibold">{t("id.sales.total")}</TableCell>
+                <TableCell className="tabular text-right font-semibold text-muted-foreground">
+                  {money(totalProceeds)}
+                </TableCell>
+                <TableCell className="tabular text-right font-semibold">
+                  {money(totalSalesTax)}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** "Dividends & coupons · 10% final" table — tax/net computed as a flat 10% of gross
+ *  (not the broker-recorded withholding — see `indonesianFinalTax`'s doc comment). */
+export function IdDividendsTable({
+  rows,
+  totalDividendGross,
+  totalDividendTax,
+  totalDividendNet,
+  money,
+  t,
+}: {
+  rows: IdDividendTax[];
+  totalDividendGross: string;
+  totalDividendTax: string;
+  totalDividendNet: string;
+  money: (n: string | number) => string;
+  t: TaxTranslator;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("id.dividendsTable.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pt-0">
+        {rows.length === 0 ? (
+          <p className="px-6 text-sm text-muted-foreground">{t("id.dividendsTable.empty")}</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("id.dividendsTable.source")}</TableHead>
+                <TableHead className="text-right">{t("id.dividendsTable.gross")}</TableHead>
+                <TableHead className="text-right">{t("id.dividendsTable.tax")}</TableHead>
+                <TableHead className="text-right">{t("id.dividendsTable.net")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r, i) => (
+                <TableRow key={i}>
+                  <TableCell className="font-medium">{r.symbol}</TableCell>
+                  <TableCell className="tabular text-right text-muted-foreground">
+                    {money(r.gross)}
+                  </TableCell>
+                  <TableCell className="tabular text-right font-semibold">{money(r.tax)}</TableCell>
+                  <TableCell className="tabular text-right text-emerald-600 dark:text-emerald-400">
+                    {money(r.net)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell className="font-semibold">{t("id.dividendsTable.total")}</TableCell>
+                <TableCell className="tabular text-right font-semibold text-muted-foreground">
+                  {money(totalDividendGross)}
+                </TableCell>
+                <TableCell className="tabular text-right font-semibold">
+                  {money(totalDividendTax)}
+                </TableCell>
+                <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                  {money(totalDividendNet)}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** "By year" table for the Indonesian view — Est. tax is real for every year (proceeds
+ *  × 0.1% + dividend gross × 10%), unlike the German table which only has a precise
+ *  figure for the selected year (see `loadTaxYearDetail`'s idByYear rollup). */
+export function IdByYearTable({
+  rows,
+  money,
+  t,
+}: {
+  rows: IdYearTax[];
+  money: (n: string | number) => string;
+  t: TaxTranslator;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("id.byYear.title")}</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0 pt-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("id.byYear.year")}</TableHead>
+              <TableHead className="text-right">{t("id.byYear.realized")}</TableHead>
+              <TableHead className="text-right">{t("id.byYear.dividends")}</TableHead>
+              <TableHead className="text-right">{t("id.byYear.tax")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((y) => (
+              <TableRow key={y.year}>
+                <TableCell className="font-semibold">{y.year}</TableCell>
+                <TableCell className="tabular text-right font-medium text-emerald-600 dark:text-emerald-400">
+                  {money(y.realized)}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">
+                  {money(y.dividends)}
+                </TableCell>
+                <TableCell className="tabular text-right font-semibold">{money(y.tax)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

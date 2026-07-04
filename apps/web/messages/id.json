@@ -94,7 +94,11 @@
       "trend": "{pct}% keringanan terpakai",
       "caption": "Keringanan terpakai tahun ini",
       "metricRealized": "Laba terealisasi YTD",
-      "metricIncome": "Dividen YTD"
+      "metricIncome": "Dividen YTD",
+      "idTrend": "Dipotong di sumber",
+      "idCaption": "Estimasi pajak final tahun ini",
+      "idMetricSales": "Penjualan saham YTD",
+      "idMetricDividends": "Dividen & kupon YTD"
     }
   },
   "Insights": {
@@ -885,10 +889,14 @@
     "navDataSub": "Token, sumber & impor",
     "navPortfoliosCount": "{portfolios, plural, other {# portofolio}} · {holders, plural, other {# pemilik}}",
     "investingCostBasisLabel": "Basis biaya",
-    "investingCostBasisNote": "Cara biaya P&L dihitung — Total dibayar termasuk biaya. Saat ini diatur per layar melalui pengalih di Holdings, Instrumen, dan Trades; belum ada bawaan global yang tersimpan.",
-    "investingTaxLabel": "Profil pajak",
-    "investingTaxNote": "Domisili pajak, tarif capital gains, dan alokasi Sparerpauschbetrag dikonfigurasi per pemilik akun, bukan secara global.",
-    "investingTaxLink": "Kelola pemilik akun",
+    "investingCostBasisNote": "Cara biaya P&L dihitung — Total dibayar termasuk biaya.",
+    "costBasisPurchasePrice": "Harga beli",
+    "costBasisTotalPaid": "Total dibayar",
+    "investingTaxLabel": "Kode pajak",
+    "taxCodeGermany": "Jerman",
+    "taxCodeIndonesia": "Indonesia",
+    "investingTaxNoteDe": "Pelacakan keringanan Sparerpauschbetrag, estimasi Abgeltungsteuer, dan saran panen rugi di layar Pajak.",
+    "investingTaxNoteId": "Pajak final 0,1% atas penjualan saham dan 10% atas dividen, keduanya dipotong di sumber — lihat layar Pajak.",
     "portfoliosLabel": "Portofolio",
     "dataSourcesLabel": "Sumber terhubung",
     "dataSourceImport": "Impor tangkapan layar & CSV",
@@ -913,8 +921,6 @@
     "total": "Total",
     "cash": "Kas",
     "exportCsv": "Ekspor CSV",
-    "costBasisPurchasePrice": "Harga beli",
-    "costBasisTotalPaid": "Total dibayar",
     "hero": {
       "label": "Total nilai portofolio",
       "periodPast": "{range} terakhir",
@@ -1380,6 +1386,7 @@
   "Tax": {
     "title": "Optimasi Pajak",
     "subtitle": "Sisa Sparerpauschbetrag dan saran panen bebas pajak. Khusus pajak Jerman.",
+    "defaultHolderName": "Semua portofolio",
     "empty": {
       "title": "Alokasi FSA belum dikonfigurasi",
       "description": "Tambahkan alokasi Freistellungsauftrag (FSA) pada setidaknya satu portofolio di pengaturannya untuk melihat sisa batas dan saran panen."
@@ -1464,7 +1471,48 @@
       "dividends": "Dividen",
       "tax": "Abgeltungsteuer"
     },
-    "footnote": "Jerman mengenakan pajak penghasilan investasi sebesar {rate}% flat (Abgeltungsteuer + Solidaritätszuschlag). Sparer-Pauschbetrag {allowance} Anda diterapkan lebih dulu, lalu kerugian mengimbangi keuntungan dalam tahun yang sama. Hanya perkiraan, bukan nasihat pajak."
+    "footnote": "Jerman mengenakan pajak penghasilan investasi sebesar {rate}% flat (Abgeltungsteuer + Solidaritätszuschlag). Sparer-Pauschbetrag {allowance} Anda diterapkan lebih dulu, lalu kerugian mengimbangi keuntungan dalam tahun yang sama. Hanya perkiraan, bukan nasihat pajak.",
+    "regime": {
+      "label": "Rezim pajak · berlaku di mana saja, juga di Pengaturan",
+      "de": "Jerman",
+      "id": "Indonesia"
+    },
+    "id": {
+      "subtitle": "Pajak final Indonesia · {year}",
+      "hero": {
+        "estimatedTax": "Estimasi pajak · {year}",
+        "estimatedTaxDesc": "Dipotong di sumber — tidak perlu dilaporkan",
+        "salesTax": "Pajak penjualan · 0,1%",
+        "salesTaxDesc": "atas {amount} penjualan saham",
+        "dividendTax": "Pajak dividen · 10%",
+        "dividendTaxDesc": "atas {amount} penghasilan"
+      },
+      "sales": {
+        "title": "Penjualan saham · final 0,1%",
+        "disposal": "Transaksi",
+        "proceeds": "Hasil",
+        "tax": "Pajak",
+        "total": "Total",
+        "empty": "Tidak ada penjualan di {year}."
+      },
+      "dividendsTable": {
+        "title": "Dividen & kupon · final 10%",
+        "source": "Sumber",
+        "gross": "Bruto",
+        "tax": "Pajak",
+        "net": "Neto",
+        "total": "Total",
+        "empty": "Tidak ada penghasilan dividen/kupon di {year}."
+      },
+      "byYear": {
+        "title": "Per tahun",
+        "year": "Tahun",
+        "realized": "Keuntungan terealisasi",
+        "dividends": "Dividen",
+        "tax": "Est. pajak"
+      },
+      "footnote": "Indonesia mengenakan pajak final 0,1% atas penjualan saham tercatat dan 10% atas dividen, keduanya dipotong di sumber — jadi tidak ada yang perlu dilaporkan lagi, dan tidak ada kerugian untuk dipanen. Ini hanya perkiraan, bukan nasihat pajak."
+    }
   },
   "Anomalies": {
     "bannerError": "Ditemukan {count, plural, one {# kesalahan data} other {# kesalahan data}}",

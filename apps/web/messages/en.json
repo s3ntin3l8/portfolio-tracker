@@ -94,7 +94,11 @@
       "trend": "{pct}% allowance used",
       "caption": "Allowance used this year",
       "metricRealized": "Realized gains YTD",
-      "metricIncome": "Dividends YTD"
+      "metricIncome": "Dividends YTD",
+      "idTrend": "Withheld at source",
+      "idCaption": "Estimated final tax this year",
+      "idMetricSales": "Share sales YTD",
+      "idMetricDividends": "Dividends & coupons YTD"
     }
   },
   "Insights": {
@@ -887,10 +891,14 @@
     "navDataSub": "Tokens, sources & imports",
     "navPortfoliosCount": "{portfolios, plural, one {# portfolio} other {# portfolios}} · {holders, plural, one {# holder} other {# holders}}",
     "investingCostBasisLabel": "Cost basis",
-    "investingCostBasisNote": "How P&L cost is calculated — Total paid includes fees. This is currently set per screen via the toggle on Holdings, Instrument and Trades; there's no stored global default yet.",
-    "investingTaxLabel": "Tax profile",
-    "investingTaxNote": "Tax residence, the capital-gains rate and the Sparerpauschbetrag allowance are configured per account holder, not globally.",
-    "investingTaxLink": "Manage account holders",
+    "investingCostBasisNote": "How P&L cost is calculated — Total paid includes fees.",
+    "costBasisPurchasePrice": "Purchase price",
+    "costBasisTotalPaid": "Total paid",
+    "investingTaxLabel": "Tax code",
+    "taxCodeGermany": "Germany",
+    "taxCodeIndonesia": "Indonesia",
+    "investingTaxNoteDe": "Sparerpauschbetrag allowance tracking, Abgeltungsteuer estimates and harvest suggestions on the Tax screen.",
+    "investingTaxNoteId": "Flat 0.1% tax on share sales and 10% on dividends, both withheld at source — see the Tax screen.",
     "portfoliosLabel": "Portfolios",
     "dataSourcesLabel": "Connected sources",
     "dataSourceImport": "Screenshot & CSV import",
@@ -915,8 +923,6 @@
     "total": "Total",
     "cash": "Cash",
     "exportCsv": "Export CSV",
-    "costBasisPurchasePrice": "Purchase price",
-    "costBasisTotalPaid": "Total paid",
     "hero": {
       "label": "Total portfolio value",
       "periodPast": "past {range}",
@@ -1382,6 +1388,7 @@
   "Tax": {
     "title": "Tax Optimization",
     "subtitle": "Sparerpauschbetrag headroom and tax-free harvest suggestions. German tax only.",
+    "defaultHolderName": "All portfolios",
     "empty": {
       "title": "No FSA allocation configured",
       "description": "Add a Freistellungsauftrag (FSA) allocation to at least one portfolio in its settings to see headroom and harvest suggestions."
@@ -1466,7 +1473,48 @@
       "dividends": "Dividends",
       "tax": "Abgeltungsteuer"
     },
-    "footnote": "Germany taxes investment income at a flat {rate}% (Abgeltungsteuer + Solidaritätszuschlag). Your {allowance} Sparer-Pauschbetrag is applied first, then losses offset gains within the same year. Estimate only, not tax advice."
+    "footnote": "Germany taxes investment income at a flat {rate}% (Abgeltungsteuer + Solidaritätszuschlag). Your {allowance} Sparer-Pauschbetrag is applied first, then losses offset gains within the same year. Estimate only, not tax advice.",
+    "regime": {
+      "label": "Tax regime · applies everywhere, also in Settings",
+      "de": "Germany",
+      "id": "Indonesia"
+    },
+    "id": {
+      "subtitle": "Indonesian final tax · {year}",
+      "hero": {
+        "estimatedTax": "Estimated tax · {year}",
+        "estimatedTaxDesc": "Withheld at source — nothing to file",
+        "salesTax": "Sales tax · 0.1%",
+        "salesTaxDesc": "on {amount} of share sales",
+        "dividendTax": "Dividend tax · 10%",
+        "dividendTaxDesc": "on {amount} of income"
+      },
+      "sales": {
+        "title": "Share sales · 0.1% final",
+        "disposal": "Disposal",
+        "proceeds": "Proceeds",
+        "tax": "Tax",
+        "total": "Total",
+        "empty": "No disposals in {year}."
+      },
+      "dividendsTable": {
+        "title": "Dividends & coupons · 10% final",
+        "source": "Source",
+        "gross": "Gross",
+        "tax": "Tax",
+        "net": "Net",
+        "total": "Total",
+        "empty": "No dividend/coupon income in {year}."
+      },
+      "byYear": {
+        "title": "By year",
+        "year": "Year",
+        "realized": "Realized gains",
+        "dividends": "Dividends",
+        "tax": "Est. tax"
+      },
+      "footnote": "Indonesia applies a final 0.1% tax on listed-share sales and 10% on dividends, both withheld at source — so there's nothing extra to file, and no losses to harvest. This is an estimate, not tax advice."
+    }
   },
   "Anomalies": {
     "bannerError": "{count, plural, one {# data error} other {# data errors}} found",

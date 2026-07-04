@@ -115,6 +115,19 @@ export {
   type HarvestSuggestionsInput,
 } from "./tax.js";
 export {
+  indonesianFinalTax,
+  ID_SALES_TAX_RATE,
+  ID_DIVIDEND_TAX_RATE,
+  type IndonesianFinalTax,
+  type IndonesianFinalTaxInput,
+  type IdDisposalInput,
+  type IdDisposalTax,
+  type IdDividendInput,
+  type IdDividendTax,
+  type IdYearInput,
+  type IdYearTax,
+} from "./tax-id.js";
+export {
   detectAnomalies,
   type Anomaly,
   type AnomalyCode,

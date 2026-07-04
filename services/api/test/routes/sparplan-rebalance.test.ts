@@ -89,6 +89,9 @@ describe("sparplan rebalancing (Phase B)", () => {
         "RB-PHD-VWCE1": "100.00",
         "RB-PHD-VWCE2": "100.00",
         "RB-PHD-EIMI2": "100.00",
+        // Phase D — Indonesian regime symbols.
+        "RB-PHD-ID-VWCE1": "100.00",
+        "RB-PHD-ID-EIMI1": "100.00",
       })]),
     );
   });
@@ -472,6 +475,94 @@ describe("sparplan rebalancing (Phase B)", () => {
     expect(Number(body.allowanceUsed)).toBeGreaterThan(0);
 
     // drift and contributionSplit still present.
+    expect(body.drift).toBeDefined();
+    expect(body.contributionSplit).toBeDefined();
+  });
+
+  it("GET /portfolios/:id/sparplan?includeSales=true returns uncapped sells under the Indonesian regime with no FSA configured", async () => {
+    const t = await token("rb-phd-id-1");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+
+    // Flip the global tax regime to Indonesian — no account holder / FSA is created
+    // for this user at all, mirroring the normal ID user (no German allowance concept).
+    const prefsRes = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { taxRegime: "ID" },
+    });
+    expect(prefsRes.statusCode).toBe(200);
+    expect(prefsRes.json().taxRegime).toBe("ID");
+
+    const pf = await createPortfolio(t, "PhaseD ID Regime");
+
+    const [vwce] = await app.db
+      .insert(instruments)
+      .values({ symbol: "RB-PHD-ID-VWCE1", market: "IDX", assetClass: "etf", currency: "IDR", name: "Rebal FTSE All-World ID1" })
+      .returning();
+    const [eimi] = await app.db
+      .insert(instruments)
+      .values({ symbol: "RB-PHD-ID-EIMI1", market: "IDX", assetClass: "etf", currency: "IDR", name: "Rebal EM IMI ID1" })
+      .returning();
+
+    // Same imbalance as the German test above: VWCE 90% actual vs 70% target (over),
+    // EIMI 10% actual vs 30% target (under) — so a sell recommendation is expected.
+    const months = ["2025-01-05", "2025-02-05"];
+    for (const d of months) {
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${pf}/transactions`,
+        headers: auth(t),
+        payload: { type: "buy", instrumentId: vwce.id, quantity: "4.5", price: "80.00", currency: "IDR", executedAt: d },
+      });
+    }
+    for (const d of months) {
+      await app.inject({
+        method: "POST",
+        url: `/portfolios/${pf}/transactions`,
+        headers: auth(t),
+        payload: { type: "buy", instrumentId: eimi.id, quantity: "0.5", price: "80.00", currency: "IDR", executedAt: d },
+      });
+    }
+
+    await app.inject({
+      method: "PUT",
+      url: `/portfolios/${pf}/targets`,
+      headers: auth(t),
+      payload: {
+        dimension: "instrument",
+        targets: [
+          { key: vwce.id, targetPct: 70 },
+          { key: eimi.id, targetPct: 30 },
+        ],
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pf}/sparplan?includeSales=true`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // The ID regime is echoed back; no German-only fields leak through.
+    expect(body.taxRegime).toBe("ID");
+    expect(body.taxUnavailable).toBeUndefined();
+    expect(body.allowanceUsed).toBeUndefined();
+    expect(body.remainingAllowance).toBeUndefined();
+
+    // Trade actions are present and UNCAPPED (no FSA/harvest cap under ID).
+    expect(body.tradeActions).toBeDefined();
+    const sell = body.tradeActions.find((a: { side: string }) => a.side === "sell");
+    expect(sell).toBeDefined();
+    // Uncapped sell = |70%×1000 − 900| = 200 (same setup as the German test, but here
+    // nothing caps it down to the harvestable ~180 the German path produces).
+    expect(Number(sell.deltaValue)).toBeCloseTo(200, 0);
+
+    const buys = body.tradeActions.filter((a: { side: string }) => a.side === "buy");
+    expect(buys.length).toBeGreaterThan(0);
+
     expect(body.drift).toBeDefined();
     expect(body.contributionSplit).toBeDefined();
   });

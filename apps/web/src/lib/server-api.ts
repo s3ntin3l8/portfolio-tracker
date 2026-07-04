@@ -32,10 +32,13 @@ import {
   type AdminStorageResponse,
   type TaxSummaryHolder,
   type PortfolioTaxSummary,
+  type AllowanceUsage,
+  type TaxDistribution,
   type UserPreferences,
   type Anomaly,
   type ApiToken,
 } from "@portfolio/api-client";
+import type { IdYearInput } from "@portfolio/core";
 import { auth } from "@/auth";
 import {
   SELECTED_PORTFOLIO_COOKIE,
@@ -890,7 +893,20 @@ export async function loadPortfolio<T>(
  * Single-portfolio results are normalized into a one-element array where the
  * holder stub is derived from the portfolio's own data.
  */
-export async function loadNetworthTax(year?: number): Promise<TaxSummaryHolder[]> {
+/**
+ * Sentinel `holder.id` used for the Indonesian regime's "all portfolios" aggregate
+ * bucket (no holder-scope cookie active). Indonesian final tax has no per-person
+ * allowance to allocate, so — unlike German mode, which always groups the aggregate
+ * view per account holder — there's no need to split it per holder; one bucket
+ * covering every portfolio in scope is both simpler and correct. Recognized by
+ * {@link loadTaxYearDetail}'s portfolio-resolution below.
+ */
+const ID_ALL_PORTFOLIOS_ID = "__id_all_portfolios__";
+
+export async function loadNetworthTax(
+  year?: number,
+  taxRegime: "DE" | "ID" = "DE",
+): Promise<TaxSummaryHolder[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {
@@ -899,6 +915,87 @@ export async function loadNetworthTax(year?: number): Promise<TaxSummaryHolder[]
 
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
+    const targetYear = year ?? new Date().getUTCFullYear();
+
+    if (taxRegime === "ID") {
+      // Indonesian final tax (0.1% on sale proceeds, 10% on dividends) has no
+      // allowance/FSA concept, so — unlike the German path below — it must never be
+      // gated behind a configured `taxAllowanceAnnual` (an ID user will almost never
+      // have one; both `getPortfolioTax` and `getNetworthTax` 422/skip without it).
+      // Build a normalized holder stub directly from the portfolio list instead of
+      // calling those FSA-gated endpoints. The German-shaped `allowanceUsage`/
+      // `distribution` fields below are inert placeholders never rendered in ID mode
+      // (see tax/page.tsx's regime branch) — they exist only to satisfy the shared
+      // `TaxSummaryHolder` shape that {@link loadTaxYearDetail} needs to run at all.
+      const zeroAllowance: AllowanceUsage = {
+        year: targetYear,
+        allowanceAnnual: "0",
+        realizedGainsAdjusted: "0",
+        incomeYtd: "0",
+        usedYtd: "0",
+        remaining: "0",
+        taxRate: "0",
+        taxSavingAvailable: "0",
+        currency: selected?.baseCurrency ?? "IDR",
+        forecastIncomeRestOfYear: "0",
+        projectedUsedFullYear: "0",
+        projectedRemaining: "0",
+        projectedTaxSavingAvailable: "0",
+      };
+      const zeroDistribution: TaxDistribution = {
+        holderAllowanceCap: "0",
+        totalAllocated: "0",
+        remainingToDistribute: "0",
+        overAllocated: false,
+      };
+
+      if (selected) {
+        return [
+          {
+            holder: {
+              id: selected.accountHolderId ?? selected.id,
+              name: selected.accountHolder ?? selected.name,
+              taxAllowanceAnnual: selected.taxAllowanceAnnual,
+              capitalGainsTaxRate: null,
+              churchTax: null,
+              taxResidence: null,
+            },
+            year: targetYear,
+            currency: zeroAllowance.currency,
+            allowanceUsage: zeroAllowance,
+            harvestSuggestions: [],
+            distribution: zeroDistribution,
+          },
+        ];
+      }
+
+      // Aggregate scope: one bucket for the active holder-scope (if any), else one
+      // bucket for every portfolio the user has — see ID_ALL_PORTFOLIOS_ID above.
+      const holderId = await resolveHolderScope(portfolios);
+      let holderName = "";
+      if (holderId) {
+        const holders = await api.listAccountHolders();
+        holderName = holders.find((h) => h.id === holderId)?.name ?? "";
+      }
+
+      return [
+        {
+          holder: {
+            id: holderId ?? ID_ALL_PORTFOLIOS_ID,
+            name: holderName,
+            taxAllowanceAnnual: null,
+            capitalGainsTaxRate: null,
+            churchTax: null,
+            taxResidence: null,
+          },
+          year: targetYear,
+          currency: zeroAllowance.currency,
+          allowanceUsage: zeroAllowance,
+          harvestSuggestions: [],
+          distribution: zeroDistribution,
+        },
+      ];
+    }
 
     if (selected) {
       // Single-portfolio scope: use the per-depot FSA endpoint.
@@ -983,6 +1080,15 @@ export interface TaxYearDetail {
    *  currency, the way `CashOnHandCard` joins multi-currency balances). */
   dividendTotalsByCurrency: TaxCurrencyTotal[];
   byYear: TaxYearRow[];
+  /**
+   * Per-year totals (proceeds, gross dividends, realized gain) across EVERY year the
+   * trade log covers — not just the selected year. Computed regardless of tax regime
+   * (cheap), but only consumed by the Indonesian tax view: unlike the German
+   * `byYear` above (which only tracks realized GAIN), Indonesian final tax is levied
+   * on sale PROCEEDS and dividend GROSS, which this rollup carries per year so
+   * `indonesianFinalTax`'s "By year" table is correct for prior years too.
+   */
+  idByYear: IdYearInput[];
 }
 
 /**
@@ -1025,7 +1131,14 @@ export async function loadTaxYearDetail(
   await Promise.all(
     holders.map(async (entry) => {
       const holderId = entry.holder.id;
-      const pfs = selected ? [selected] : portfolios.filter((p) => p.accountHolderId === holderId);
+      // ID_ALL_PORTFOLIOS_ID (see loadNetworthTax) means "every portfolio in scope,
+      // not grouped by account holder" — the Indonesian aggregate bucket.
+      const pfs =
+        selected
+          ? [selected]
+          : holderId === ID_ALL_PORTFOLIOS_ID
+            ? portfolios
+            : portfolios.filter((p) => p.accountHolderId === holderId);
       if (pfs.length === 0) return;
 
       try {
@@ -1145,6 +1258,36 @@ export async function loadTaxYearDetail(
           };
         });
 
+        // Indonesian "By year" rollup: per-year sale PROCEEDS (not gain) across every
+        // year the trade log covers, plus per-year dividend GROSS — both needed by
+        // `indonesianFinalTax`'s multi-year table (see TaxYearDetail.idByYear's doc
+        // comment). Computed unconditionally (cheap); only consumed under ID.
+        const proceedsByYearMap = new Map<number, number>();
+        for (const t of tradeLog.trades) {
+          for (const l of t.legs) {
+            proceedsByYearMap.set(
+              l.taxYear,
+              (proceedsByYearMap.get(l.taxYear) ?? 0) + Number(l.proceeds),
+            );
+          }
+        }
+        const idYears = new Set<number>([
+          ...proceedsByYearMap.keys(),
+          ...tradeLog.dividendsByYear.map((d) => d.year),
+          ...tradeLog.realizedByYear.map((r) => r.year),
+        ]);
+        const idByYear: IdYearInput[] = [...idYears].map((y) => {
+          const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
+          const dividendGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
+          const realized = tradeLog.realizedByYear.find((r) => r.year === y)?.amount ?? "0";
+          return {
+            year: y,
+            proceeds: (proceedsByYearMap.get(y) ?? 0).toFixed(2),
+            dividendGross: dividendGross.toFixed(2),
+            realized,
+          };
+        });
+
         result.set(holderId, {
           currency: tradeLog.displayCurrency,
           disposals: legs.map(({ symbol, when, proceeds, gain }) => ({ symbol, when, proceeds, gain })),
@@ -1153,6 +1296,7 @@ export async function loadTaxYearDetail(
           dividendRows,
           dividendTotalsByCurrency,
           byYear,
+          idByYear,
         });
       } catch {
         // Best-effort per holder — omit the new sections for this holder on failure,

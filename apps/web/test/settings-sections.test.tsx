@@ -1,13 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type * as React from "react";
 import messages from "../messages/en.json";
 
+const refresh = vi.fn();
+const putPreferences = vi.fn(async (body: unknown) => body);
+
 // DataConnectionsSection embeds the real `ApiTokens` wrapper, which pulls a session-aware
 // api-client via `useApiClient` — stub it so this test doesn't need a SessionProvider.
+// InvestingSection's chip rows use the same hook to persist preferences.
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({}),
+  useApiClient: () => ({ putPreferences }),
 }));
 
 vi.mock("@/i18n/navigation", () => ({
@@ -24,6 +28,7 @@ vi.mock("@/i18n/navigation", () => ({
       {children}
     </a>
   ),
+  useRouter: () => ({ refresh }),
 }));
 
 // Identity translator: Settings/TradeRepublic/InteractiveBrokers messages aren't loaded,
@@ -43,14 +48,36 @@ const { DataConnectionsSection } = await import(
 );
 
 describe("InvestingSection", () => {
-  it("is informational only — no chips, no stored global preference implied", async () => {
-    const element = await InvestingSection();
+  it("defaults to German / purchase_price chips active when no prefs row exists", async () => {
+    const element = await InvestingSection({ prefs: null });
     render(element as React.ReactElement);
+    expect(screen.getByRole("button", { name: "Settings.taxCodeGermany" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "Settings.costBasisPurchasePrice" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Settings.investingTaxNoteDe")).toBeInTheDocument();
     expect(screen.getByText("Settings.investingCostBasisNote")).toBeInTheDocument();
-    expect(screen.getByText("Settings.investingTaxNote")).toBeInTheDocument();
-    // Links out to where the tax profile is actually configured (per-holder).
-    const link = screen.getByRole("link");
-    expect(link).toHaveAttribute("href", "/settings/portfolios");
+  });
+
+  it("reflects a stored ID/total_paid preference and persists a chip change", async () => {
+    const element = await InvestingSection({
+      prefs: { dashboardPeriod: "max", dashboardKpis: null, taxRegime: "ID", costBasisMode: "total_paid" },
+    });
+    render(element as React.ReactElement);
+    expect(screen.getByRole("button", { name: "Settings.taxCodeIndonesia" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("Settings.investingTaxNoteId")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings.costBasisPurchasePrice" }));
+    await waitFor(() =>
+      expect(putPreferences).toHaveBeenCalledWith({ costBasisMode: "purchase_price" }),
+    );
+    expect(refresh).toHaveBeenCalled();
   });
 });
 

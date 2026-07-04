@@ -16,6 +16,7 @@ import {
   transactionSources,
   trConnections,
   trResolvedEvents,
+  userPreferences,
   users,
 } from "@portfolio/db";
 import {
@@ -1770,6 +1771,30 @@ export async function transactionsRoute(app: FastifyInstance) {
         return { ...stats, drift, contributionSplit: split };
       }
 
+      // The global tax regime decides whether the German FSA/harvest-cap logic below
+      // even applies. Read it BEFORE the `taxAllowanceAnnual` guard — an Indonesian
+      // user will almost never have an FSA configured, so if that guard ran first
+      // (as it originally did) it would always early-return `taxUnavailable: true`
+      // and the ID branch below would never execute.
+      const [prefsRow] = await app.db
+        .select({ taxRegime: userPreferences.taxRegime })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, id))
+        .limit(1);
+      const taxRegime = prefsRow?.taxRegime ?? "DE";
+
+      if (taxRegime === "ID") {
+        // Indonesian final tax has no allowance/FSA concept to cap sells against —
+        // emit uncapped trade recommendations straight from the drift, skip the
+        // FSA-required check entirely, and don't return `allowanceUsed`/
+        // `taxUnavailable` (the frontend gates those German-only figures on their
+        // absence).
+        const tradeActions: TradeAction[] = rebalancingTrades(drift, String(targetedTotal), {
+          mode: "trade",
+        });
+        return { ...stats, drift, contributionSplit: split, tradeActions, taxRegime };
+      }
+
       // Fetch the portfolio's holder tax profile for the personal tax rate.
       // The FSA slice (Freistellungsauftrag allocation) lives on the portfolio itself.
       const holderId = portfolio.accountHolderId;
@@ -1786,7 +1811,7 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       if (!portfolio.taxAllowanceAnnual) {
         // FSA not configured for this portfolio — return existing data with taxUnavailable flag.
-        return { ...stats, drift, contributionSplit: split, taxUnavailable: true };
+        return { ...stats, drift, contributionSplit: split, taxUnavailable: true, taxRegime };
       }
 
       // Compute harvest suggestions using FIFO trade log.
@@ -1832,6 +1857,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         tradeActions,
         allowanceUsed,
         remainingAllowance: usage.remaining,
+        taxRegime,
       };
     },
   );

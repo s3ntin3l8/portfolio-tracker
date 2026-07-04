@@ -8,9 +8,12 @@ import {
   loadTrades,
   loadContributions,
   loadNetworthTax,
+  loadTaxYearDetail,
+  loadPreferences,
 } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 import type { TrendTone } from "@/components/reports/trend-chip";
+import { indonesianFinalTax } from "@portfolio/core";
 
 const ICONS = {
   income: { icon: Coins, bg: "rgba(14,159,110,.12)", fg: "#0E9F6E" },
@@ -30,12 +33,25 @@ export default async function ReportsPage({
   const te = await getTranslations("Empty");
   const openLabel = t("open");
 
+  const prefs = await loadPreferences();
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
+  const taxRegime = prefs?.taxRegime ?? "DE";
+
   const [income, trades, contributions, taxHolders] = await Promise.all([
     loadIncomeStats(),
-    loadTrades(),
+    // Cost basis is a single global preference — thread it in so this tile's
+    // realized-P&L figures agree with Trades/Holdings.
+    loadTrades(undefined, costBasis),
     loadContributions(),
-    loadNetworthTax(),
+    loadNetworthTax(undefined, taxRegime),
   ]);
+  // Indonesian final tax needs the same disposals/dividendRows the Tax page itself
+  // recomputes over (see tax/page.tsx) — only fetched when relevant, and only when
+  // there's something to compute over.
+  const idDetailByHolder =
+    taxRegime === "ID" && taxHolders.length > 0
+      ? await loadTaxYearDetail(taxHolders)
+      : null;
 
   const cards: React.ReactNode[] = [];
 
@@ -189,9 +205,50 @@ export default async function ReportsPage({
     );
   }
 
-  // ── Tax (German Sparerpauschbetrag only — headline mirrors tax/page.tsx's own
-  // fields, no derived tax-owed math invented here) ───────────────────────
-  if (taxHolders.length > 0) {
+  // ── Tax ──────────────────────────────────────────────────────────────────
+  if (taxRegime === "ID" && idDetailByHolder) {
+    // Indonesian final tax: 0.1% on sale proceeds + 10% on dividend/coupon gross,
+    // withheld at source — no Sparerpauschbetrag/Abgeltungsteuer headline here.
+    // Same recompute-over-the-same-disposals approach as tax/page.tsx's ID branch.
+    const currency = taxHolders[0]?.currency ?? "IDR";
+    const m = (n: number) => formatMoney(n, currency, locale);
+    let totalTax = 0;
+    let totalProceeds = 0;
+    let totalDividendGross = 0;
+    for (const entry of taxHolders) {
+      const detail = idDetailByHolder.get(entry.holder.id);
+      if (!detail) continue;
+      const idTax = indonesianFinalTax({
+        disposals: detail.disposals.map((d) => ({ symbol: d.symbol, when: d.when, proceeds: d.proceeds })),
+        dividends: detail.dividendRows.map((d) => ({ symbol: d.symbol, currency: d.currency, gross: d.gross })),
+        byYear: [],
+      });
+      totalTax += Number(idTax.estimatedTax);
+      totalProceeds += Number(idTax.totalProceeds);
+      totalDividendGross += Number(idTax.totalDividendGross);
+    }
+
+    cards.push(
+      <ReportCard
+        key="tax"
+        icon={ICONS.tax.icon}
+        iconBg={ICONS.tax.bg}
+        iconFg={ICONS.tax.fg}
+        title={t("tax.title")}
+        trend={{ label: t("tax.idTrend"), tone: "neutral" }}
+        value={m(totalTax)}
+        caption={t("tax.idCaption")}
+        metrics={[
+          { label: t("tax.idMetricSales"), value: m(totalProceeds) },
+          { label: t("tax.idMetricDividends"), value: m(totalDividendGross) },
+        ]}
+        href="/tax"
+        openLabel={openLabel}
+      />,
+    );
+  } else if (taxHolders.length > 0) {
+    // German Sparerpauschbetrag only — headline mirrors tax/page.tsx's own fields,
+    // no derived tax-owed math invented here.
     const currency = taxHolders[0].currency;
     const m = (n: number) => formatMoney(n, currency, locale);
     const sum = (f: (h: (typeof taxHolders)[number]) => number) =>

@@ -1,0 +1,2 @@
+ALTER TABLE "user_preferences" ADD COLUMN "cost_basis_mode" text DEFAULT 'purchase_price' NOT NULL;--> statement-breakpoint
+ALTER TABLE "user_preferences" ADD COLUMN "tax_regime" text DEFAULT 'DE' NOT NULL;

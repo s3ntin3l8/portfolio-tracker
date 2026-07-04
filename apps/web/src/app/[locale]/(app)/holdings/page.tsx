@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { HoldingsTable } from "@/components/holdings-table";
-import { CostBasisToggle } from "@/components/cost-basis-toggle";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { HeroGlanceCard } from "@/components/holdings/hero-glance-card";
@@ -16,6 +15,7 @@ import {
   loadAnomalies,
   loadNetWorth,
   loadNetWorthHistory,
+  loadPreferences,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
 import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
@@ -30,19 +30,15 @@ const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "cryp
  */
 const HERO_INITIAL_RANGE = "1y";
 
-type CostBasisMode = "purchase_price" | "total_paid";
-
 export default async function HoldingsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ costBasis?: string; portfolio?: string }>;
+  searchParams: Promise<{ portfolio?: string }>;
 }) {
   const { locale } = await params;
-  const { costBasis: costBasisParam, portfolio: portfolioParam } = await searchParams;
-  const costBasis: CostBasisMode =
-    costBasisParam === "total_paid" ? "total_paid" : "purchase_price";
+  const { portfolio: portfolioParam } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("Holdings");
   const ta = await getTranslations("Anomalies");
@@ -51,10 +47,17 @@ export default async function HoldingsPage({
   const te = await getTranslations("Empty");
   const tf = await getTranslations("PortfolioForm");
 
+  // Cost basis is a single global preference (Settings → Investing), not a per-page
+  // toggle — threaded into every cost-basis-sensitive loader below, including
+  // loadNetWorth (previously called with no costBasis at all, silently defaulting to
+  // purchase_price and disagreeing with the holdings table).
+  const prefs = await loadPreferences();
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
+
   const [result, anomalies, netWorthResult, history, selectedId] = await Promise.all([
     loadHoldings(costBasis, portfolioParam),
     loadAnomalies(portfolioParam),
-    loadNetWorth(),
+    loadNetWorth(costBasis),
     loadNetWorthHistory(HERO_INITIAL_RANGE),
     getSelectedPortfolioId(),
   ]);
@@ -128,11 +131,6 @@ export default async function HoldingsPage({
       </div>
       {result.status === "ok" && (
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <CostBasisToggle
-            current={costBasis}
-            labelPurchase={t("costBasisPurchasePrice")}
-            labelTotal={t("costBasisTotalPaid")}
-          />
           {holdings.length > 0 && (
             <ExportCsvButton
               filename="holdings.csv"

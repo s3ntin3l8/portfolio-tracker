@@ -1,41 +1,64 @@
 import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "@/i18n/navigation";
+import { PreferenceChips } from "@/components/preference-chips";
+import type { UserPreferences } from "@portfolio/api-client";
 
 /**
- * The Settings "Investing" section. Scoped down from the design's tax-code/cost-basis
- * chips: neither is backed by a stored global user preference today — cost basis is a
- * per-view `?costBasis=` query toggle (Holdings/Instrument/Trades) and the tax profile
- * (residence, capital-gains rate, Sparerpauschbetrag) lives per account holder, not on
- * the user. Rather than inventing new preference-storage for this visual PR, this
- * section is informational and links to where each is actually configured.
+ * The Settings "Investing" section — real chip controls (`ProfileSettings.dc.html`'s
+ * `taxChips`/`cbChips`) backed by the global `user_preferences.taxRegime`/
+ * `costBasisMode` columns. The "Tax code" chip here and the Tax page's DE/ID toggle
+ * write the exact same preference (`PreferenceChips`), so flipping either one updates
+ * both — see the Tax page's "Tax regime · applies everywhere, also in Settings" label.
  */
-export async function InvestingSection() {
+export async function InvestingSection({
+  prefs,
+}: {
+  prefs: UserPreferences | null;
+}) {
   const t = await getTranslations("Settings");
+  const taxRegime = prefs?.taxRegime ?? "DE";
+  const costBasisMode = prefs?.costBasisMode ?? "purchase_price";
 
   return (
     <div className="space-y-4">
       <div>
         <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          {t("investingCostBasisLabel")}
+          {t("investingTaxLabel")}
         </p>
         <Card>
-          <CardContent className="p-5 text-sm text-muted-foreground">
-            {t("investingCostBasisNote")}
+          <CardContent className="p-4">
+            <PreferenceChips
+              prefKey="taxRegime"
+              current={taxRegime}
+              options={[
+                { value: "DE", label: t("taxCodeGermany") },
+                { value: "ID", label: t("taxCodeIndonesia") },
+              ]}
+            />
+            <p className="mt-2.5 px-0.5 text-xs text-muted-foreground">
+              {taxRegime === "ID" ? t("investingTaxNoteId") : t("investingTaxNoteDe")}
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <div>
         <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          {t("investingTaxLabel")}
+          {t("investingCostBasisLabel")}
         </p>
         <Card>
-          <CardContent className="space-y-2 p-5 text-sm text-muted-foreground">
-            <p>{t("investingTaxNote")}</p>
-            <Link href="/settings/portfolios" className="inline-block text-sm font-bold text-primary">
-              {t("investingTaxLink")} ›
-            </Link>
+          <CardContent className="p-4">
+            <PreferenceChips
+              prefKey="costBasisMode"
+              current={costBasisMode}
+              options={[
+                { value: "purchase_price", label: t("costBasisPurchasePrice") },
+                { value: "total_paid", label: t("costBasisTotalPaid") },
+              ]}
+            />
+            <p className="mt-2.5 px-0.5 text-xs text-muted-foreground">
+              {t("investingCostBasisNote")}
+            </p>
           </CardContent>
         </Card>
       </div>

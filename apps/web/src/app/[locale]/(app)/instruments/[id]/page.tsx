@@ -16,6 +16,7 @@ import {
   loadInstrumentScope,
   loadAnomalies,
   loadIncomeStats,
+  loadPreferences,
 } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 import { lastPriceInfo } from "@/lib/instrument-price";
@@ -31,9 +32,16 @@ export default async function InstrumentPage({
   const ta = await getTranslations("Anomalies");
   const tc = await getTranslations("AssetClass");
 
+  // Cost basis is a single global preference — thread it into loadInstrumentScope,
+  // which previously silently defaulted to purchase_price regardless of the user's
+  // choice on Holdings (a real correctness gap: instrument P&L could disagree with
+  // holdings P&L on cost basis).
+  const prefs = await loadPreferences();
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
+
   const [data, scope, allAnomalies, incomeStatsResult] = await Promise.all([
     loadInstrument(id),
-    loadInstrumentScope(id),
+    loadInstrumentScope(id, costBasis),
     loadAnomalies(),
     loadIncomeStats(),
   ]);

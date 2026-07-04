@@ -10,6 +10,9 @@ import {
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
+  IdSalesTable,
+  IdDividendsTable,
+  IdByYearTable,
   type TaxTranslator,
 } from "../src/components/tax/tax-cards";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
@@ -270,6 +273,102 @@ describe("HarvestSummaryNote", () => {
         t={t}
       />,
     );
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Indonesian final-tax components
+// ---------------------------------------------------------------------------
+
+describe("IdSalesTable", () => {
+  it("renders one row per disposal (proceeds + 0.1% tax) plus a total row", () => {
+    render(
+      <IdSalesTable
+        rows={[
+          { symbol: "BBNI", when: "2026-05-18", proceeds: "1640000", tax: "1640.00" },
+          { symbol: "TLKM", when: "2026-06-24", proceeds: "602000", tax: "602.00" },
+        ]}
+        totalProceeds="2242000"
+        totalSalesTax="2242.00"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("BBNI")).toBeInTheDocument();
+    expect(screen.getByText("2026-05-18")).toBeInTheDocument();
+    expect(screen.getByText("Rp 1,640,000")).toBeInTheDocument();
+    expect(screen.getByText("Rp 1,640")).toBeInTheDocument();
+    expect(screen.getByText("Total")).toBeInTheDocument();
+    expect(screen.getByText("Rp 2,242,000")).toBeInTheDocument();
+    expect(screen.getByText("Rp 2,242")).toBeInTheDocument();
+    // Design-fidelity: labeled "Share sales · 0.1% final", not the German title.
+    expect(screen.getByText("Share sales · 0.1% final")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when there are no disposals", () => {
+    render(<IdSalesTable rows={[]} totalProceeds="0" totalSalesTax="0" money={money} t={t} />);
+    expect(screen.getByText(/No disposals/)).toBeInTheDocument();
+    expect(screen.queryByText("Total")).not.toBeInTheDocument();
+  });
+});
+
+describe("IdDividendsTable", () => {
+  it("renders gross/tax(10%)/net per source plus a total row", () => {
+    render(
+      <IdDividendsTable
+        rows={[
+          { symbol: "BBCA", currency: "IDR", gross: "420000", tax: "42000.00", net: "378000.00" },
+        ]}
+        totalDividendGross="420000"
+        totalDividendTax="42000.00"
+        totalDividendNet="378000.00"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("BBCA")).toBeInTheDocument();
+    expect(screen.getAllByText("Rp 420,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rp 42,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rp 378,000").length).toBeGreaterThan(0);
+    expect(screen.getByText("Dividends & coupons · 10% final")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when there's no dividend/coupon income", () => {
+    render(
+      <IdDividendsTable
+        rows={[]}
+        totalDividendGross="0"
+        totalDividendTax="0"
+        totalDividendNet="0"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText(/No dividend\/coupon income/)).toBeInTheDocument();
+  });
+});
+
+describe("IdByYearTable", () => {
+  it("renders every year's Est. tax column, not just the current year", () => {
+    render(
+      <IdByYearTable
+        rows={[
+          { year: 2026, realized: "324000", dividends: "1284000", tax: "128724.00" },
+          { year: 2025, realized: "1940000", dividends: "2110000", tax: "212940.00" },
+        ]}
+        money={money}
+        t={t}
+      />,
+    );
+    const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
+    expect(years).toEqual(["2026", "2025"]);
+    expect(screen.getByText("Rp 128,724")).toBeInTheDocument();
+    expect(screen.getByText("Rp 212,940")).toBeInTheDocument();
+  });
+
+  it("renders nothing when there are no years", () => {
+    const { container } = render(<IdByYearTable rows={[]} money={money} t={t} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
