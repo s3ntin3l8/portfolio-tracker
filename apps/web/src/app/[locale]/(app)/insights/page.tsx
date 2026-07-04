@@ -1,15 +1,18 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { PieChart, Scale, ChevronRight } from "lucide-react";
-import { Link } from "@/i18n/navigation";
-import { Card } from "@/components/ui/card";
-
-// Insights hub (Pocket 5-tab IA). The full screen — XIRR hero, rebalancing drift editor,
-// concentration and best/worst performers — is composed in a follow-up from existing
-// allocation/target components. For now this routes to where that analysis lives today.
-const SECTIONS = [
-  { href: "/holdings", key: "allocation", icon: PieChart },
-  { href: "/savings", key: "rebalancing", icon: Scale },
-] as const;
+import { Scale } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { StatCard } from "@/components/stat-card";
+import { RebalancingCard } from "@/components/insights/rebalancing-card";
+import { BestWorstCard } from "@/components/insights/best-worst-card";
+import {
+  loadNetWorth,
+  loadNetWorthHistory,
+  loadHoldings,
+  getSelectedPortfolioId,
+} from "@/lib/server-api";
+import { bestAndWorst } from "@/lib/movers";
+import { formatPercent } from "@/lib/utils";
+import { isIntradayPoint } from "@portfolio/api-client";
 
 export default async function InsightsPage({
   params,
@@ -19,6 +22,53 @@ export default async function InsightsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Insights");
+  const td = await getTranslations("Dashboard");
+  const tc = await getTranslations("AssetClass");
+  const te = await getTranslations("Empty");
+
+  const [result, history, holdingsView, selectedId] = await Promise.all([
+    loadNetWorth(),
+    loadNetWorthHistory("all"),
+    loadHoldings(),
+    getSelectedPortfolioId(),
+  ]);
+
+  if (result.status !== "ok") {
+    return (
+      <div className="space-y-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-extrabold tracking-tight">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        </header>
+        <EmptyState
+          icon={Scale}
+          title={result.status === "empty" ? te("noPortfolioTitle") : te("unavailableTitle")}
+          description={result.status === "empty" ? te("noPortfolioBody") : te("unavailableBody")}
+        />
+      </div>
+    );
+  }
+
+  const summary = result.data;
+  const allocation = summary.allocation;
+
+  // "since Jan {year}" — the earliest inception-scoped snapshot's year (range="all" is
+  // always day-grained, so every point here carries `.date`, never intraday `.at`).
+  const firstPoint = history.find((p) => !isIntradayPoint(p));
+  const sinceYear = firstPoint ? Number((firstPoint as { date: string }).date.slice(0, 4)) : new Date().getUTCFullYear();
+
+  const filteredClasses = allocation?.byAssetClass.filter((s) => Number(s.value) > 0) ?? [];
+  const assetClassSlices = filteredClasses.map((s) => ({
+    key: s.key,
+    label: s.key === "cash" ? tc("cash") : tc(s.key),
+    actualPct: s.pct,
+  }));
+  const topClass = filteredClasses.length > 0 ? [...filteredClasses].sort((a, b) => b.pct - a.pct)[0] : null;
+  const marketCount = allocation?.byRegion.filter((s) => Number(s.value) > 0).length ?? 0;
+
+  const movers = bestAndWorst(
+    holdingsView.status === "ok" ? holdingsView.holdings.filter((h) => Number(h.quantity) !== 0) : [],
+  );
 
   return (
     <div className="space-y-6">
@@ -27,21 +77,75 @@ export default async function InsightsPage({
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {SECTIONS.map(({ href, key, icon: Icon }) => (
-          <Link key={key} href={href} className="group">
-            <Card className="flex items-center gap-4 p-5 transition-colors hover:border-primary/40">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Icon className="size-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold">{t(`${key}.title`)}</div>
-                <div className="text-sm text-muted-foreground">{t(`${key}.desc`)}</div>
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-4">
+          {/* XIRR hero */}
+          <div
+            className="rounded-[20px] p-6 text-white shadow-lg"
+            style={{ background: "linear-gradient(135deg,#11211a,#1d3a2c)" }}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white/78">{t("xirr.label")}</p>
+                <p className="tabular mt-1 text-4xl font-extrabold">
+                  {summary.xirr !== null ? formatPercent(summary.xirr, locale) : "—"}
+                </p>
               </div>
-              <ChevronRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </Card>
-          </Link>
-        ))}
+              <p className="max-w-xs border-white/20 text-sm text-white/70 sm:border-l sm:pl-4">
+                {t("xirr.caption", { year: sinceYear })}
+              </p>
+            </div>
+          </div>
+
+          <RebalancingCard
+            portfolioId={selectedId ?? undefined}
+            slices={assetClassSlices}
+            drift={summary.drift?.asset_class}
+          />
+        </div>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            {allocation && (
+              <StatCard
+                label={t("concentration.label")}
+                value={`${allocation.concentration.top1Pct.toFixed(0)}%`}
+                caption={
+                  topClass
+                    ? t("concentration.top", {
+                        label: topClass.key === "cash" ? tc("cash") : tc(topClass.key),
+                        tone: td(
+                          allocation.concentration.label === "diversified"
+                            ? "concentrationDiversified"
+                            : allocation.concentration.label === "moderate"
+                              ? "concentrationModerate"
+                              : "concentrationConcentrated",
+                        ).toLowerCase(),
+                      })
+                    : undefined
+                }
+              />
+            )}
+            {allocation && (
+              <StatCard
+                label={t("diversification.label")}
+                value={String(assetClassSlices.length)}
+                caption={t("diversification.caption", { markets: marketCount })}
+              />
+            )}
+          </div>
+
+          {movers && (
+            <BestWorstCard
+              best={movers.best}
+              worst={movers.worst}
+              title={t("bestWorst.title")}
+              bestLabel={t("bestWorst.best")}
+              worstLabel={t("bestWorst.worst")}
+              locale={locale}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
