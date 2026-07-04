@@ -58,8 +58,10 @@ function sum(rows: { targetPct: number }[]): number {
 
 interface TradeActionsProps {
   tradeActions: TradeAction[];
-  allowanceUsed: string;
-  remainingAllowance: string;
+  /** null under the Indonesian regime (no allowance concept) — the footnote line is
+   *  suppressed rather than showing a nonsense German figure. */
+  allowanceUsed: string | null;
+  remainingAllowance: string | null;
   currency: string;
   labelByKey: Map<string, string>;
 }
@@ -114,7 +116,7 @@ function TradeActionsSection({
           ))}
         </div>
       )}
-      {sells.length > 0 && (
+      {sells.length > 0 && allowanceUsed !== null && remainingAllowance !== null && (
         <p className="text-xs text-muted-foreground border-t pt-2">
           {t("allowanceUsed", {
             used: formatMoney(Number(allowanceUsed), currency, "en"),
@@ -192,7 +194,11 @@ export function RebalanceDialog({
     }
   }, [api, portfolioId, plans, t]);
 
-  // Fetch trade recommendations when the toggle is turned on.
+  // Fetch trade recommendations when the toggle is turned on. Under the Indonesian
+  // regime the backend never sets `taxUnavailable` (no allowance/FSA concept to
+  // require) and omits `allowanceUsed`/`remainingAllowance` — those fields simply stay
+  // null so the footnote line above is suppressed instead of showing a nonsense
+  // German figure, while the sell/buy recommendations themselves still render.
   const fetchTradeRecommendations = useCallback(async () => {
     setSalesLoading(true);
     setSalesError(null);
@@ -383,17 +389,19 @@ export function RebalanceDialog({
           </div>
         )}
 
-        {/* Phase D: Trade recommendations (tax-aware sales mode) */}
-        {!loading && includeSales && !salesLoading && tradeActions && tradeActions.length > 0 &&
-          allowanceUsed !== null && remainingAllowance !== null && (
-            <TradeActionsSection
-              tradeActions={tradeActions}
-              allowanceUsed={allowanceUsed}
-              remainingAllowance={remainingAllowance}
-              currency={currency}
-              labelByKey={labelByKey}
-            />
-          )}
+        {/* Phase D: Trade recommendations (tax-aware sales mode). Under the Indonesian
+            regime allowanceUsed/remainingAllowance are null (no allowance concept) —
+            the sell/buy list still renders; only the allowance footnote is
+            suppressed (inside TradeActionsSection). */}
+        {!loading && includeSales && !salesLoading && tradeActions && tradeActions.length > 0 && (
+          <TradeActionsSection
+            tradeActions={tradeActions}
+            allowanceUsed={allowanceUsed}
+            remainingAllowance={remainingAllowance}
+            currency={currency}
+            labelByKey={labelByKey}
+          />
+        )}
 
         {/* No trade actions when all instruments are on-target */}
         {!loading && includeSales && !salesLoading && tradeActions && tradeActions.length === 0 && (
