@@ -289,7 +289,13 @@
     "cost": "Biaya",
     "currencyTitle": "Pendapatan per mata uang",
     "native": "Asli",
-    "normalized": "Dinormalkan"
+    "normalized": "Dinormalkan",
+    "tooltipReceived": "Diterima",
+    "tooltipProjected": "Proyeksi",
+    "tooltipTotal": "Total",
+    "tooltipForecast": "Perkiraan",
+    "heatmapDefaultSubtitle": "Ketuk sebuah sel untuk melihat pendapatan bulan itu",
+    "heatmapCellSubtitle": "{month} · {amount}"
   },
   "Savings": {
     "title": "Tabungan",

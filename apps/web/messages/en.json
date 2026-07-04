@@ -289,7 +289,13 @@
     "cost": "Cost",
     "currencyTitle": "Income by currency",
     "native": "Native",
-    "normalized": "Normalized"
+    "normalized": "Normalized",
+    "tooltipReceived": "Received",
+    "tooltipProjected": "Projected",
+    "tooltipTotal": "Total",
+    "tooltipForecast": "Forecast",
+    "heatmapDefaultSubtitle": "Tap a cell to see the month's income",
+    "heatmapCellSubtitle": "{month} · {amount}"
   },
   "Savings": {
     "title": "Savings",
