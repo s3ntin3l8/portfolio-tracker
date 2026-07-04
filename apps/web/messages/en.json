@@ -1297,7 +1297,27 @@
     "withholding": "Tax withheld",
     "emptyTitle": "No trades yet",
     "emptyBody": "Buy an instrument and your positions will show up here as trades.",
-    "taxDisclaimer": "Indicative figures for your own tracking — not an official tax statement. Foreign-currency amounts are converted at the latest rate, not each transaction's date."
+    "taxDisclaimer": "Indicative figures for your own tracking — not an official tax statement. Foreign-currency amounts are converted at the latest rate, not each transaction's date.",
+    "detail": {
+      "closed": "Closed {date}",
+      "held": "held",
+      "realizedPnl": "Realized P&L",
+      "breakdown": "Breakdown",
+      "proceeds": "Proceeds",
+      "costBasis": "Cost basis",
+      "realizedPnlRow": "Realized P&L",
+      "tradeDetails": "Trade details",
+      "quantity": "Quantity",
+      "avgBuyPrice": "Avg buy price",
+      "avgSellPrice": "Avg sell price",
+      "bought": "Bought",
+      "sold": "Sold",
+      "holdingPeriod": "Holding period",
+      "return": "Return",
+      "incomeWhileHeld": "Income while held",
+      "dividendsCollected": "Dividends collected",
+      "totalReturnIncome": "Total return incl. income"
+    }
   },
   "TargetDialog": {
     "trigger": "Set targets",

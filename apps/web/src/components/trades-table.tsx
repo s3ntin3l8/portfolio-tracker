@@ -14,6 +14,7 @@ import {
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "@/i18n/navigation";
+import { TradeDetailSheet } from "@/components/trade-detail-sheet";
 import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 
@@ -49,6 +50,9 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
   const { sortKey, sortDir, toggle, sort } = useTableSort<Trade>(COLS);
   const [filter, setFilter] = useState<Filter>("all");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Closed trades open the detail sheet (matches the design); open positions have no
+  // exit date/price, so they keep the inline leg-expansion below instead.
+  const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
 
   const heldLabel = (days: number) =>
     days >= 365 ? `${(days / 365).toFixed(1)}${t("yearsAbbr")}` : `${days}${t("daysAbbr")}`;
@@ -69,6 +73,11 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
       else next.add(key);
       return next;
     });
+
+  const handleRowClick = (tr: Trade, key: string) => {
+    if (tr.status === "closed") setDetailTrade(tr);
+    else if (tr.legs.length > 0) toggleRow(key);
+  };
 
   const FILTERS: Filter[] = ["all", "open", "closed"];
 
@@ -125,17 +134,19 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                   <Fragment key={key}>
                     <TableRow
                       className="cursor-pointer"
-                      onClick={() => tr.legs.length > 0 && toggleRow(key)}
+                      onClick={() => handleRowClick(tr, key)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          <ChevronRight
-                            className={cn(
-                              "size-3.5 text-muted-foreground transition-transform",
-                              tr.legs.length === 0 && "opacity-0",
-                              isOpen && "rotate-90",
-                            )}
-                          />
+                          {tr.status === "open" && (
+                            <ChevronRight
+                              className={cn(
+                                "size-3.5 text-muted-foreground transition-transform",
+                                tr.legs.length === 0 && "opacity-0",
+                                isOpen && "rotate-90",
+                              )}
+                            />
+                          )}
                           <div>
                             <Link
                               href={`/instruments/${tr.instrumentId}`}
@@ -241,7 +252,14 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
           {visible.map((tr) => {
             const ret = Number(tr.totalReturn);
             return (
-              <div key={tradeKey(tr)} className="flex items-start justify-between gap-3 p-4">
+              <div
+                key={tradeKey(tr)}
+                className={cn(
+                  "flex items-start justify-between gap-3 p-4",
+                  tr.status === "closed" && "cursor-pointer",
+                )}
+                onClick={() => tr.status === "closed" && setDetailTrade(tr)}
+              >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Link
@@ -272,6 +290,13 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
           })}
         </div>
       </div>
+
+      <TradeDetailSheet
+        trade={detailTrade}
+        currency={currency}
+        open={detailTrade !== null}
+        onOpenChange={(o) => !o && setDetailTrade(null)}
+      />
     </div>
   );
 }

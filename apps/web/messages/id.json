@@ -1295,7 +1295,27 @@
     "withholding": "Pajak dipotong",
     "emptyTitle": "Belum ada transaksi",
     "emptyBody": "Beli sebuah instrumen dan posisi Anda akan muncul di sini sebagai transaksi.",
-    "taxDisclaimer": "Angka indikatif untuk pelacakan pribadi — bukan laporan pajak resmi. Jumlah mata uang asing dikonversi pada kurs terkini, bukan tanggal tiap transaksi."
+    "taxDisclaimer": "Angka indikatif untuk pelacakan pribadi — bukan laporan pajak resmi. Jumlah mata uang asing dikonversi pada kurs terkini, bukan tanggal tiap transaksi.",
+    "detail": {
+      "closed": "Ditutup {date}",
+      "held": "ditahan",
+      "realizedPnl": "Laba/rugi terealisasi",
+      "breakdown": "Rincian",
+      "proceeds": "Hasil penjualan",
+      "costBasis": "Modal",
+      "realizedPnlRow": "Laba/rugi terealisasi",
+      "tradeDetails": "Detail transaksi",
+      "quantity": "Jumlah",
+      "avgBuyPrice": "Harga beli rata-rata",
+      "avgSellPrice": "Harga jual rata-rata",
+      "bought": "Dibeli",
+      "sold": "Dijual",
+      "holdingPeriod": "Periode kepemilikan",
+      "return": "Imbal hasil",
+      "incomeWhileHeld": "Pendapatan selama ditahan",
+      "dividendsCollected": "Dividen diterima",
+      "totalReturnIncome": "Total imbal hasil termasuk pendapatan"
+    }
   },
   "TargetDialog": {
     "trigger": "Atur target",

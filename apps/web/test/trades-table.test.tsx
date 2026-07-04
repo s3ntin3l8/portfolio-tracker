@@ -67,7 +67,21 @@ const open: Trade = {
   totalReturn: "2600",
   totalReturnPct: 0.0578,
   annualizedPct: null,
-  legs: [],
+  // An interim partial sell before the position fully closed — still an "open" trade,
+  // but it carries a leg (used to exercise the inline row-expansion below).
+  legs: [
+    {
+      acqDate: "2021-02-01",
+      sellDate: "2021-03-01",
+      quantity: "2",
+      cost: "400",
+      proceeds: "500",
+      gain: "100",
+      holdingDays: 28,
+      longTerm: false,
+      taxYear: 2021,
+    },
+  ],
   instrument: { symbol: "BBCA", name: "BCA", assetClass: "equity", unit: "shares", market: "IDX", sector: null, sectorWeights: null, countryWeights: null },
 };
 
@@ -95,19 +109,19 @@ describe("TradesTable", () => {
     expect(screen.getAllByText("TLKM").length).toBeGreaterThan(0);
   });
 
-  it("expands a trade to reveal its matched legs", () => {
-    renderTable([closed]);
+  it("expands an open trade to reveal its matched legs", () => {
+    renderTable([open]);
     // Leg detail is hidden until the row is expanded.
-    expect(screen.queryByText("2021-01-01 → 2021-06-01")).toBeNull();
-    fireEvent.click(screen.getAllByText("Telkom")[0]);
-    expect(screen.getByText("2021-01-01 → 2021-06-01")).toBeTruthy();
+    expect(screen.queryByText("2021-02-01 → 2021-03-01")).toBeNull();
+    fireEvent.click(screen.getAllByText("BCA")[0]);
+    expect(screen.getByText("2021-02-01 → 2021-03-01")).toBeTruthy();
   });
 
   it("aligns leg detail cells with their corresponding header columns", () => {
-    renderTable([closed]);
-    fireEvent.click(screen.getAllByText("Telkom")[0]);
+    renderTable([open]);
+    fireEvent.click(screen.getAllByText("BCA")[0]);
 
-    const legRow = screen.getByText("2021-01-01 → 2021-06-01").closest("tr");
+    const legRow = screen.getByText("2021-02-01 → 2021-03-01").closest("tr");
     expect(legRow).toBeTruthy();
 
     // 9 cells: dates(colSpan=2) + exitDate(1) + held(1) + quantity(1) + invested(1) + realized(1) + dividends(1) + totalReturn(1) + annualized(1) = 10 columns
@@ -115,9 +129,28 @@ describe("TradesTable", () => {
     expect(legCells.length).toBe(9);
 
     // Verify key values are present in the leg row
-    expect(legRow!.textContent).toContain("151d");
-    expect(legRow!.textContent).toContain("€1,000");
-    expect(legRow!.textContent).toContain("€1,300");
-    expect(legRow!.textContent).toContain("€300");
+    expect(legRow!.textContent).toContain("28d");
+    expect(legRow!.textContent).toContain("€400");
+    expect(legRow!.textContent).toContain("€500");
+    expect(legRow!.textContent).toContain("€100");
+  });
+
+  it("opens the trade detail sheet when a closed row is clicked, instead of expanding inline", () => {
+    renderTable([closed]);
+    expect(screen.queryByText("2021-01-01 → 2021-06-01")).toBeNull();
+    fireEvent.click(screen.getAllByText("Telkom")[0]);
+    // No inline leg expansion for closed rows...
+    expect(screen.queryByText("2021-01-01 → 2021-06-01")).toBeNull();
+    // ...the detail sheet opens instead (unique header title).
+    expect(screen.getByText(/Closed 2021-06-01/)).toBeInTheDocument();
+  });
+
+  it("opens the trade detail sheet from the mobile card for a closed trade", () => {
+    renderTable([closed]);
+    // Both the desktop table and mobile list render in jsdom (Tailwind's responsive
+    // classes don't hide elements without real CSS) — the mobile occurrence is the
+    // second "TLKM" link, and clicking it bubbles to the card's onClick.
+    fireEvent.click(screen.getAllByText("TLKM")[1]);
+    expect(screen.getByText(/Closed 2021-06-01/)).toBeInTheDocument();
   });
 });
