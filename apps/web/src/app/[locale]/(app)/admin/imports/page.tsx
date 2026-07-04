@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ChevronLeft } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { AdminImportSettings } from "@/components/admin-import-settings";
-import { Link } from "@/i18n/navigation";
+import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminImportSettings } from "@/lib/server-api";
 
 export default async function AdminImportsPage({
@@ -21,21 +20,11 @@ export default async function AdminImportsPage({
   const result = await loadAdminImportSettings();
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" />
-        {t("title")}
-      </Link>
-
+    <>
+      <SectionHeader title={t("importStrategy")} backHref="/admin" />
+      <p className="mb-4 text-sm text-muted-foreground">{t("importStrategyHint")}</p>
       <Card>
-        <CardHeader>
-          <CardTitle>{t("importStrategy")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("importStrategyHint")}</p>
+        <CardContent className="p-5">
           {result.status === "ok" ? (
             <AdminImportSettings initialStrategy={result.strategy} />
           ) : (
@@ -43,6 +32,6 @@ export default async function AdminImportsPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

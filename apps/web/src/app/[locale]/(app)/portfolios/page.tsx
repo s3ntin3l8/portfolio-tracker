@@ -1,7 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Briefcase, Coins, EyeOff, FolderCheck, Plus, ShieldCheck } from "lucide-react";
+import { Briefcase, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
@@ -71,22 +70,41 @@ export default async function PortfoliosPage({
           description={te("unavailableBody")}
         />
       ) : result.portfolios.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {result.portfolios.map(({ portfolio, netWorth }) => {
             const isTrBound = portfolio.id === trPortfolioId;
             const isTrConnected = isTrBound && connection?.status === "connected";
             const isIbkrBound = portfolio.id === ibkrPortfolioId;
             const isIbkrConnected = isIbkrBound && ibkrConn?.status === "connected";
+            const isSyncing =
+              (isTrBound && connection?.syncing) || (isIbkrBound && ibkrConn?.syncing);
+            const statusLabel = isTrBound
+              ? connection && ttr(`status.${connection.status}`)
+              : isIbkrBound
+                ? ibkrConn && tibkr(`status.${ibkrConn.status}`)
+                : null;
+
+            const flags: string[] = [];
+            if (portfolio.cashCounted) flags.push(t("cashIn"));
+            if (portfolio.documentRetention) flags.push(t("docsKept"));
+            if (portfolio.taxAllowanceAnnual != null) {
+              flags.push(`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`);
+            }
+            if (!portfolio.includeInAggregate) flags.push(t("excluded"));
+
             return (
-              <Card key={portfolio.id} className="relative flex flex-col transition-colors hover:bg-accent/50">
+              <Card
+                key={portfolio.id}
+                className="relative flex flex-col rounded-[18px] border-border shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)] transition-colors hover:bg-accent/50"
+              >
                 {/* Overlay button — sets the pf cookie and navigates to /holdings */}
                 <PortfolioCardLink portfolioId={portfolio.id} name={portfolio.name} />
-                <CardContent className="flex flex-1 flex-col p-5">
+                <CardContent className="flex flex-1 flex-col p-[17px]">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <BrokerageIcon brokerage={portfolio.brokerage} />
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{portfolio.name}</p>
+                        <p className="truncate text-[15px] font-bold">{portfolio.name}</p>
                         {portfolio.accountHolder && (
                           <p className="truncate text-xs text-muted-foreground">
                             {portfolio.accountHolder}
@@ -103,57 +121,41 @@ export default async function PortfoliosPage({
                       />
                     </div>
                   </div>
-                  {isTrBound && connection && (
-                    <div className="mt-2">
-                      <Badge variant="outline">
-                        {ttr(`status.${connection.status}`)}
-                      </Badge>
+                  {statusLabel && (
+                    <div className="mt-2.5">
+                      <span
+                        className={
+                          "inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[10px] font-bold " +
+                          (isSyncing ? "bg-warning/15 text-warning" : "bg-success/15 text-success")
+                        }
+                      >
+                        <span
+                          className={
+                            "size-1.5 shrink-0 rounded-full " +
+                            (isSyncing ? "bg-warning" : "bg-success")
+                          }
+                        />
+                        {statusLabel}
+                      </span>
                     </div>
                   )}
-                  {isIbkrBound && ibkrConn && (
-                    <div className="mt-2">
-                      <Badge variant="outline">
-                        {tibkr(`status.${ibkrConn.status}`)}
-                      </Badge>
-                    </div>
-                  )}
-                  <p className="tabular mt-3 text-xl font-semibold">
+                  <p className="tabular mt-4 text-[22px] font-extrabold">
                     {formatMoney(Number(netWorth), portfolio.baseCurrency, locale)}
                   </p>
-                  <p className="text-xs text-muted-foreground">{t("value")}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-muted-foreground">
+                    {t("value")}
+                  </p>
                   {/* Footer flag strip — only rendered when at least one non-default flag is set */}
-                  {(portfolio.cashCounted ||
-                    portfolio.documentRetention ||
-                    portfolio.taxAllowanceAnnual != null ||
-                    !portfolio.includeInAggregate) && (
+                  {flags.length > 0 && (
                     <>
-                      {/* flex-1 pushes footer to card bottom; min-h-3 keeps a minimum gap */}
-                      <div className="min-h-3 flex-1" />
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
-                        {portfolio.cashCounted && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Coins className="size-3.5 shrink-0" />
-                            {t("cashIn")}
+                      {/* flex-1 pushes footer to card bottom; min-h-2.5 keeps a minimum gap */}
+                      <div className="min-h-2.5 flex-1" />
+                      <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 border-t border-border pt-2.5">
+                        {flags.map((flag) => (
+                          <span key={flag} className="text-[11px] font-medium text-muted-foreground">
+                            {flag}
                           </span>
-                        )}
-                        {portfolio.documentRetention && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <FolderCheck className="size-3.5 shrink-0" />
-                            {t("docsKept")}
-                          </span>
-                        )}
-                        {portfolio.taxAllowanceAnnual != null && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <ShieldCheck className="size-3.5 shrink-0" />
-                            {`FSA €${Math.round(Number(portfolio.taxAllowanceAnnual))}`}
-                          </span>
-                        )}
-                        {!portfolio.includeInAggregate && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <EyeOff className="size-3.5 shrink-0" />
-                            {t("excluded")}
-                          </span>
-                        )}
+                        ))}
                       </div>
                     </>
                   )}
@@ -161,6 +163,22 @@ export default async function PortfoliosPage({
               </Card>
             );
           })}
+
+          <PortfolioFormDialog
+            mode="create"
+            trigger={
+              <button
+                type="button"
+                className="flex min-h-[170px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-[1.5px] border-dashed border-border p-[18px] text-center text-muted-foreground transition-colors hover:bg-accent/40"
+              >
+                <span className="flex size-[42px] items-center justify-center rounded-[13px] bg-success/15 text-success">
+                  <Plus className="size-[22px]" />
+                </span>
+                <span className="text-sm font-bold text-foreground">{tf("new")}</span>
+                <span className="text-xs text-muted-foreground">{t("newPortfolioHint")}</span>
+              </button>
+            }
+          />
         </div>
       ) : (
         <EmptyState

@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ChevronLeft } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { AdminJobs } from "@/components/admin-jobs";
 import { UnmappedTypesAlert } from "@/components/unmapped-types-alert";
-import { Link } from "@/i18n/navigation";
+import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminJobs, loadUnmappedEventTypes } from "@/lib/server-api";
 
 export default async function AdminJobsPage({
@@ -22,23 +21,14 @@ export default async function AdminJobsPage({
   const [result, unmappedTypes] = await Promise.all([loadAdminJobs(), loadUnmappedEventTypes()]);
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" />
-        {t("title")}
-      </Link>
+    <>
+      <SectionHeader title={t("jobs")} backHref="/admin" />
+      <p className="mb-4 text-sm text-muted-foreground">{t("jobsHint")}</p>
 
       <UnmappedTypesAlert types={unmappedTypes} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("jobs")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("jobsHint")}</p>
+      <Card className="mt-4">
+        <CardContent className="p-5">
           {result.status === "ok" ? (
             <AdminJobs
               initialJobs={result.jobs}
@@ -49,6 +39,6 @@ export default async function AdminJobsPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
