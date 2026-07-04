@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ChevronLeft } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { AdminProviders } from "@/components/admin-providers";
-import { Link } from "@/i18n/navigation";
+import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminProviders } from "@/lib/server-api";
 
 export default async function AdminProvidersPage({
@@ -21,21 +20,11 @@ export default async function AdminProvidersPage({
   const result = await loadAdminProviders();
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" />
-        {t("title")}
-      </Link>
-
+    <>
+      <SectionHeader title={t("providers")} backHref="/admin" />
+      <p className="mb-4 text-sm text-muted-foreground">{t("providersHint")}</p>
       <Card>
-        <CardHeader>
-          <CardTitle>{t("providers")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("providersHint")}</p>
+        <CardContent className="p-5">
           {result.status === "ok" ? (
             <AdminProviders
               initialProviders={result.providers}
@@ -46,6 +35,6 @@ export default async function AdminProvidersPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

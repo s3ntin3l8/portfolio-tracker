@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ChevronLeft } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { AdminStorageForm } from "@/components/admin-storage-form";
-import { Link } from "@/i18n/navigation";
+import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminStorageProviders } from "@/lib/server-api";
 
 export default async function AdminStoragePage({
@@ -21,21 +20,11 @@ export default async function AdminStoragePage({
   const result = await loadAdminStorageProviders();
 
   return (
-    <div className="space-y-4">
-      <Link
-        href="/admin"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" />
-        {t("title")}
-      </Link>
-
+    <>
+      <SectionHeader title={t("storage")} backHref="/admin" />
+      <p className="mb-4 text-sm text-muted-foreground">{t("storageHint")}</p>
       <Card>
-        <CardHeader>
-          <CardTitle>{t("storage")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{t("storageHint")}</p>
+        <CardContent className="p-5">
           {result.status === "ok" ? (
             <AdminStorageForm initial={result.storage} />
           ) : (
@@ -43,6 +32,6 @@ export default async function AdminStoragePage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

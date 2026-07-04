@@ -1,15 +1,13 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Briefcase, ShieldCheck, ChevronRight } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Link } from "@/i18n/navigation";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { LocaleSwitcher } from "@/components/locale-switcher";
-import { SignOutButton } from "@/components/sign-out-button";
-import { UpdateProfile } from "@/components/update-profile";
-import { ApiTokens } from "@/components/api-tokens";
-import { loadMe, loadApiTokens } from "@/lib/server-api";
+import { setRequestLocale } from "next-intl/server";
+import { AccountSection } from "@/components/settings-sections/account-section";
+import { loadMe } from "@/lib/server-api";
 
+/**
+ * `/settings` index. On mobile the shared `SettingsShell` shows the landing menu here
+ * instead of this content; on desktop this is the rail's default section (mirrors the
+ * design's `activeSection = section || "account"`) — identical content to
+ * `/settings/account`, the mobile drill-in route for the same section.
+ */
 export default async function SettingsPage({
   params,
 }: {
@@ -17,102 +15,6 @@ export default async function SettingsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations("Settings");
-
   const me = await loadMe();
-  const apiTokens = await loadApiTokens();
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("account")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {me ? (
-            <>
-              <div className="flex items-center justify-between py-2 text-sm">
-                <span className="text-muted-foreground">{t("email")}</span>
-                <span className="font-medium">{me.email}</span>
-              </div>
-              <Separator className="my-4" />
-              <UpdateProfile
-                initialName={me.name ?? ""}
-                initialCurrency={me.displayCurrency}
-              />
-            </>
-          ) : null}
-          <p className="mt-4 text-xs text-muted-foreground">{t("authVia")}</p>
-          <Separator className="my-4" />
-          <SignOutButton />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("manage")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          <Link
-            href="/portfolios"
-            className="group flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Briefcase className="size-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{t("portfoliosLink")}</div>
-              <div className="text-xs text-muted-foreground">{t("portfoliosDesc")}</div>
-            </div>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-          </Link>
-          {me?.isAdmin && (
-            <Link
-              href="/admin"
-              className="group flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <ShieldCheck className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{t("adminLink")}</div>
-                <div className="text-xs text-muted-foreground">{t("adminDesc")}</div>
-              </div>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-            </Link>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("tokens")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ApiTokens initialTokens={apiTokens} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("preferences")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{t("appearance")}</span>
-            <ThemeToggle />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{t("language")}</span>
-            <LocaleSwitcher />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <AccountSection me={me} />;
 }
