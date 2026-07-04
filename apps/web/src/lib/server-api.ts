@@ -948,6 +948,17 @@ export interface TaxDisposalRow {
 
 export interface TaxDividendRow {
   symbol: string;
+  /** The transaction's own currency (dividend/coupon/interest amounts are NOT FX-converted
+   *  here, unlike every other figure on this screen — see {@link loadTaxYearDetail}'s doc
+   *  comment). Render each row in this currency, not the holder's display currency. */
+  currency: string;
+  gross: string;
+  tax: string;
+  net: string;
+}
+
+export interface TaxCurrencyTotal {
+  currency: string;
   gross: string;
   tax: string;
   net: string;
@@ -966,9 +977,11 @@ export interface TaxYearDetail {
   totalProceeds: string;
   totalGain: string;
   dividendRows: TaxDividendRow[];
-  totalGross: string;
-  totalTax: string;
-  totalNet: string;
+  /** Per-currency totals (see {@link TaxDividendRow.currency} — dividend rows aren't
+   *  FX-converted, so a single cross-currency sum would be wrong whenever a holder's
+   *  positions pay dividends in more than one currency; render these joined, one per
+   *  currency, the way `CashOnHandCard` joins multi-currency balances). */
+  dividendTotalsByCurrency: TaxCurrencyTotal[];
   byYear: TaxYearRow[];
 }
 
@@ -1042,6 +1055,13 @@ export async function loadTaxYearDetail(
         // doesn't break out by instrument). `price` already follows the app's
         // net-of-withholding convention for income rows (see core's `cashFlow()`), so
         // gross = net + withheld tax, not qty × price.
+        //
+        // NOT FX-converted (unlike every other figure here, which comes straight from the
+        // backend's already-display-currency trade log): a transaction's own `currency`
+        // has no client-side FX path (no rate endpoint on the API client), so each row is
+        // grouped and rendered in ITS OWN currency rather than mislabeled with the
+        // holder's display currency — see `TaxDividendRow.currency` and
+        // `dividendTotalsByCurrency`.
         const incomeTxns = txLists
           .flat()
           .filter(
@@ -1051,26 +1071,43 @@ export async function loadTaxYearDetail(
               t.status !== "draft" &&
               new Date(t.executedAt).getUTCFullYear() === targetYear,
           );
-        const byInstrument = new Map<string, { symbol: string; net: number; tax: number }>();
+        const byInstrument = new Map<
+          string,
+          { symbol: string; currency: string; net: number; tax: number }
+        >();
         for (const t of incomeTxns) {
           const qty = Number(t.quantity);
           const net = (qty > 0 ? qty * Number(t.price) : Number(t.price)) - Number(t.fees ?? 0);
-          const key = t.instrumentId ?? t.description ?? t.type;
+          const key = `${t.instrumentId ?? t.description ?? t.type}:${t.currency}`;
           const symbol = t.instrument?.symbol ?? t.description ?? t.type;
-          const bucket = byInstrument.get(key) ?? { symbol, net: 0, tax: 0 };
+          const bucket = byInstrument.get(key) ?? { symbol, currency: t.currency, net: 0, tax: 0 };
           bucket.net += net;
           bucket.tax += Number(t.tax ?? 0);
           byInstrument.set(key, bucket);
         }
         const dividendRows: TaxDividendRow[] = [...byInstrument.values()].map((b) => ({
           symbol: b.symbol,
+          currency: b.currency,
           gross: (b.net + b.tax).toFixed(2),
           tax: b.tax.toFixed(2),
           net: b.net.toFixed(2),
         }));
-        const totalGross = dividendRows.reduce((s, r) => s + Number(r.gross), 0);
-        const totalTax = dividendRows.reduce((s, r) => s + Number(r.tax), 0);
-        const totalNet = dividendRows.reduce((s, r) => s + Number(r.net), 0);
+        const totalsByCurrencyMap = new Map<string, { gross: number; tax: number; net: number }>();
+        for (const r of dividendRows) {
+          const t = totalsByCurrencyMap.get(r.currency) ?? { gross: 0, tax: 0, net: 0 };
+          t.gross += Number(r.gross);
+          t.tax += Number(r.tax);
+          t.net += Number(r.net);
+          totalsByCurrencyMap.set(r.currency, t);
+        }
+        const dividendTotalsByCurrency: TaxCurrencyTotal[] = [...totalsByCurrencyMap.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([currency, t]) => ({
+            currency,
+            gross: t.gross.toFixed(2),
+            tax: t.tax.toFixed(2),
+            net: t.net.toFixed(2),
+          }));
 
         // By year: union of years with realized gains or dividend/interest income, newest
         // first. See the doc comment above for the estimate's known limits.
@@ -1114,9 +1151,7 @@ export async function loadTaxYearDetail(
           totalProceeds: totalProceeds.toFixed(2),
           totalGain: totalGain.toFixed(2),
           dividendRows,
-          totalGross: totalGross.toFixed(2),
-          totalTax: totalTax.toFixed(2),
-          totalNet: totalNet.toFixed(2),
+          dividendTotalsByCurrency,
           byYear,
         });
       } catch {

@@ -72,6 +72,8 @@ describe("DisposalTable", () => {
     expect(screen.getByText("Total")).toBeInTheDocument();
     expect(screen.getByText("Rp 2,220")).toBeInTheDocument();
     expect(screen.getByText("Rp 700")).toBeInTheDocument();
+    // Flags that this table is gross/pre-Teilfreistellung, unlike the Tf-adjusted hero card.
+    expect(screen.getByText(/before Teilfreistellung/)).toBeInTheDocument();
   });
 
   it("renders the empty state when there are no disposals", () => {
@@ -82,27 +84,45 @@ describe("DisposalTable", () => {
 });
 
 describe("DividendsTable", () => {
-  it("renders gross/tax/net per source plus a total row", () => {
+  it("renders gross/tax/net per source, in the source's own currency, plus a total row", () => {
     render(
       <DividendsTable
-        rows={[{ symbol: "SAP", gross: "168", tax: "35", net: "133" }]}
-        totalGross="168"
-        totalTax="35"
-        totalNet="133"
-        money={money}
+        rows={[{ symbol: "SAP", currency: "EUR", gross: "168", tax: "35", net: "133" }]}
+        totalsByCurrency={[{ currency: "EUR", gross: "168", tax: "35", net: "133" }]}
+        locale="en"
         t={t}
       />,
     );
     expect(screen.getByText("SAP")).toBeInTheDocument();
-    expect(screen.getAllByText("Rp 168").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rp 35").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rp 133").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("€168.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("€35.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("€133.00").length).toBeGreaterThan(0);
+  });
+
+  it("joins multi-currency totals instead of summing across currencies", () => {
+    render(
+      <DividendsTable
+        rows={[
+          { symbol: "SAP", currency: "EUR", gross: "168", tax: "35", net: "133" },
+          { symbol: "NVDA", currency: "USD", gross: "100", tax: "20", net: "80" },
+        ]}
+        totalsByCurrency={[
+          { currency: "EUR", gross: "168", tax: "35", net: "133" },
+          { currency: "USD", gross: "100", tax: "20", net: "80" },
+        ]}
+        locale="en"
+        t={t}
+      />,
+    );
+    // Each row renders in its OWN currency, not a shared/converted one.
+    expect(screen.getByText("€168.00")).toBeInTheDocument();
+    expect(screen.getByText("$100.00")).toBeInTheDocument();
+    // The total row joins per-currency amounts rather than summing raw numbers.
+    expect(screen.getByText("€168.00 · $100.00")).toBeInTheDocument();
   });
 
   it("renders the empty state when there's no dividend income", () => {
-    render(
-      <DividendsTable rows={[]} totalGross="0" totalTax="0" totalNet="0" money={money} t={t} />,
-    );
+    render(<DividendsTable rows={[]} totalsByCurrency={[]} locale="en" t={t} />);
     expect(screen.getByText(/No dividend\/interest income/)).toBeInTheDocument();
   });
 });
@@ -130,13 +150,14 @@ describe("ByYearTable", () => {
 });
 
 describe("AllowanceSummaryBoxes", () => {
-  it("shows the allowance-left progress and taxable-gains figures", () => {
+  it("shows the allowance-left progress, its tax-saving-available figure, and taxable-gains", () => {
     render(
       <AllowanceSummaryBoxes
         usedPct={41}
         allowanceAnnual="1000"
         usedYtd="408"
         remaining="592"
+        taxSavingAvailable="148"
         taxable="0"
         estimatedTax="0"
         money={money}
@@ -147,6 +168,9 @@ describe("AllowanceSummaryBoxes", () => {
     expect(screen.getByText("Rp 592")).toBeInTheDocument();
     expect(screen.getByText("Taxable gains YTD")).toBeInTheDocument();
     expect(screen.getByText(/Rp 408 of Rp 1,000 used/)).toBeInTheDocument();
+    // The "Tax saving available" figure — carried over from the old 3-up StatCard row so
+    // it isn't lost by the 2-box relayout.
+    expect(screen.getByText(/Tax saving available: Rp 148/)).toBeInTheDocument();
   });
 });
 

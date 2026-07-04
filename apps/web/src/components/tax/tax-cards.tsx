@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
-import type { TaxDisposalRow, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
+import type { TaxCurrencyTotal, TaxDisposalRow, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
+import { formatMoney } from "@/lib/utils";
 
 /** Loosely-typed next-intl translator scoped to the `Tax` namespace — the same shape as
  *  `getTranslations("Tax")` (server) or `useTranslations("Tax")` (client), threaded down
@@ -59,6 +60,7 @@ export function DisposalTable({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{t("disposals.title")}</CardTitle>
+        <p className="text-xs text-muted-foreground">{t("disposals.subtitle")}</p>
       </CardHeader>
       <CardContent className="px-0 pt-0">
         {rows.length === 0 ? (
@@ -107,22 +109,28 @@ export function DisposalTable({
 }
 
 /** "Dividends · {rate}% withheld" table — per-instrument gross/tax/net for the tax year,
- *  aggregated from raw dividend/coupon/interest transactions (their `tax` field). */
+ *  aggregated from raw dividend/coupon/interest transactions (their `tax` field).
+ *
+ * Unlike every other number on this screen, these amounts are NOT FX-converted (no rate
+ * lookup is available from the web tier) — each row renders in its OWN currency
+ * (`r.currency`), and the total row joins one amount per currency present (the same
+ * "don't sum across currencies" pattern `CashOnHandCard` uses), rather than mislabeling
+ * everything with the holder's display currency. */
 export function DividendsTable({
   rows,
-  totalGross,
-  totalTax,
-  totalNet,
-  money,
+  totalsByCurrency,
+  locale,
   t,
 }: {
   rows: TaxDividendRow[];
-  totalGross: string;
-  totalTax: string;
-  totalNet: string;
-  money: (n: string | number) => string;
+  totalsByCurrency: TaxCurrencyTotal[];
+  locale: string;
   t: TaxTranslator;
 }) {
+  const fmt = (n: string | number, currency: string) => formatMoney(Number(n), currency, locale);
+  const joinTotals = (field: "gross" | "tax" | "net") =>
+    totalsByCurrency.map((tc) => fmt(tc[field], tc.currency)).join(" · ");
+
   return (
     <Card>
       <CardHeader>
@@ -146,11 +154,13 @@ export function DividendsTable({
                 <TableRow key={i}>
                   <TableCell className="font-medium">{r.symbol}</TableCell>
                   <TableCell className="tabular text-right text-muted-foreground">
-                    {money(r.gross)}
+                    {fmt(r.gross, r.currency)}
                   </TableCell>
-                  <TableCell className="tabular text-right font-semibold">{money(r.tax)}</TableCell>
+                  <TableCell className="tabular text-right font-semibold">
+                    {fmt(r.tax, r.currency)}
+                  </TableCell>
                   <TableCell className="tabular text-right text-emerald-600 dark:text-emerald-400">
-                    {money(r.net)}
+                    {fmt(r.net, r.currency)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -158,10 +168,10 @@ export function DividendsTable({
             <TableFooter>
               <TableRow>
                 <TableCell className="font-semibold">{t("dividendsTable.total")}</TableCell>
-                <TableCell className="tabular text-right font-semibold">{money(totalGross)}</TableCell>
-                <TableCell className="tabular text-right font-semibold">{money(totalTax)}</TableCell>
+                <TableCell className="tabular text-right font-semibold">{joinTotals("gross")}</TableCell>
+                <TableCell className="tabular text-right font-semibold">{joinTotals("tax")}</TableCell>
                 <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                  {money(totalNet)}
+                  {joinTotals("net")}
                 </TableCell>
               </TableRow>
             </TableFooter>
@@ -226,6 +236,7 @@ export function AllowanceSummaryBoxes({
   allowanceAnnual,
   usedYtd,
   remaining,
+  taxSavingAvailable,
   taxable,
   estimatedTax,
   money,
@@ -235,6 +246,10 @@ export function AllowanceSummaryBoxes({
   allowanceAnnual: string;
   usedYtd: string;
   remaining: string;
+  /** Tax that using up the *remaining* allowance would save (`allowanceUsage.taxSavingAvailable`)
+   *  — distinct from `estimatedTax` below (tax owed on gains ALREADY past the allowance).
+   *  Carried over from the old 3-up StatCard row's "Remaining" delta so this figure isn't lost. */
+  taxSavingAvailable: string;
   taxable: string;
   estimatedTax: string;
   money: (n: string | number) => string;
@@ -257,6 +272,9 @@ export function AllowanceSummaryBoxes({
         </div>
         <p className="mt-1.5 text-xs text-muted-foreground">
           {t("allowanceBoxes.leftDesc", { used: money(usedYtd), annual: money(allowanceAnnual) })}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("allowance.taxSaving")}: {money(taxSavingAvailable)}
         </p>
       </div>
       <div className="rounded-xl border bg-muted/40 p-4">

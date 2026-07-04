@@ -1409,12 +1409,13 @@
       "estimatedTax": "Estimated tax · {year}",
       "estimatedTaxDesc": "Abgeltungsteuer {rate}% on {taxable}",
       "realizedGains": "Realized gains · YTD",
-      "realizedGainsDesc": "{count} disposals",
+      "realizedGainsDesc": "{count} disposals · Tf-adjusted",
       "dividendsYtd": "Dividends · YTD",
       "dividendsYtdDesc": "gross · {allowance} allowance applied"
     },
     "disposals": {
       "title": "Realized gains · Abgeltungsteuer",
+      "subtitle": "Gross figures, before Teilfreistellung — the hero card above is Tf-adjusted.",
       "disposal": "Disposal",
       "proceeds": "Proceeds",
       "gain": "Gain",

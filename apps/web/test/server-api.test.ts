@@ -674,6 +674,7 @@ describe("loadTaxYearDetail", () => {
               price: "133",
               fees: "0",
               tax: "35",
+              currency: "EUR",
               executedAt: "2026-05-01",
               status: "normal",
             },
@@ -715,13 +716,14 @@ describe("loadTaxYearDetail", () => {
     expect(detail!.totalGain).toBe("240.00");
 
     // Dividend: price=133 net-credited (qty=0 → lump-sum branch), tax=35 withheld →
-    // gross = net + tax, not qty × price.
+    // gross = net + tax, not qty × price. Rendered in the transaction's OWN currency
+    // (EUR) — these amounts are NOT FX-converted to the holder's display currency (IDR).
     expect(detail!.dividendRows).toEqual([
-      { symbol: "SAP", gross: "168.00", tax: "35.00", net: "133.00" },
+      { symbol: "SAP", currency: "EUR", gross: "168.00", tax: "35.00", net: "133.00" },
     ]);
-    expect(detail!.totalGross).toBe("168.00");
-    expect(detail!.totalTax).toBe("35.00");
-    expect(detail!.totalNet).toBe("133.00");
+    expect(detail!.dividendTotalsByCurrency).toEqual([
+      { currency: "EUR", gross: "168.00", tax: "35.00", net: "133.00" },
+    ]);
 
     // By year, newest first. The selected year (2026) ties out to the already-loaded
     // allowanceUsage figures: taxable = max(0, 240 + 168 − 408) = 0 → tax "0.00".
@@ -730,6 +732,68 @@ describe("loadTaxYearDetail", () => {
       // 2025 uses the plain (non-TF-adjusted) trade-log figures and applies the
       // *current* allowance uniformly: taxable = max(0, 100 + 227 − 1000) = 0.
       { year: 2025, realized: "100", dividends: "227.00", tax: "0.00" },
+    ]);
+  });
+
+  it("groups dividend rows per currency instead of mislabeling/summing across currencies", async () => {
+    // No client-side FX path exists for these raw transaction amounts (unlike every
+    // other figure on the page, which comes pre-converted from the backend trade log),
+    // so a holder with dividends in two currencies must get two distinct rows/totals —
+    // never a single sum mislabeled with the display currency.
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    h.client.getTrades = async () => ({
+      displayCurrency: "IDR",
+      trades: [],
+      realizedByYear: [],
+      dividendsByYear: [],
+    });
+    h.client.listTransactions = async () => [
+      {
+        id: "t1",
+        portfolioId: "p1",
+        type: "dividend",
+        instrumentId: "i-sap",
+        instrument: { symbol: "SAP" },
+        quantity: "0",
+        price: "133",
+        fees: "0",
+        tax: "35",
+        currency: "EUR",
+        executedAt: "2026-05-01",
+        status: "normal",
+      },
+      {
+        id: "t2",
+        portfolioId: "p1",
+        type: "dividend",
+        instrumentId: "i-nvda",
+        instrument: { symbol: "NVDA" },
+        quantity: "0",
+        price: "80",
+        fees: "0",
+        tax: "20",
+        currency: "USD",
+        executedAt: "2026-06-01",
+        status: "normal",
+      },
+    ];
+
+    const holders = [
+      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+
+    const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;
+    expect(detail.dividendRows).toEqual(
+      expect.arrayContaining([
+        { symbol: "SAP", currency: "EUR", gross: "168.00", tax: "35.00", net: "133.00" },
+        { symbol: "NVDA", currency: "USD", gross: "100.00", tax: "20.00", net: "80.00" },
+      ]),
+    );
+    // Two separate per-currency totals — NOT one combined "268" sum across EUR + USD.
+    expect(detail.dividendTotalsByCurrency).toEqual([
+      { currency: "EUR", gross: "168.00", tax: "35.00", net: "133.00" },
+      { currency: "USD", gross: "100.00", tax: "20.00", net: "80.00" },
     ]);
   });
 

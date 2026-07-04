@@ -1407,12 +1407,13 @@
       "estimatedTax": "Perkiraan pajak · {year}",
       "estimatedTaxDesc": "Abgeltungsteuer {rate}% dari {taxable}",
       "realizedGains": "Keuntungan terealisasi · YTD",
-      "realizedGainsDesc": "{count} pelepasan",
+      "realizedGainsDesc": "{count} pelepasan · disesuaikan Tf",
       "dividendsYtd": "Dividen · YTD",
       "dividendsYtdDesc": "kotor · batas {allowance} diterapkan"
     },
     "disposals": {
       "title": "Keuntungan terealisasi · Abgeltungsteuer",
+      "subtitle": "Angka kotor, sebelum Teilfreistellung — kartu di atas sudah disesuaikan Tf.",
       "disposal": "Pelepasan",
       "proceeds": "Hasil",
       "gain": "Untung",

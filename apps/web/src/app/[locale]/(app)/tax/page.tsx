@@ -145,10 +145,8 @@ function TaxHolderSection({
           />
           <DividendsTable
             rows={detail.dividendRows}
-            totalGross={detail.totalGross}
-            totalTax={detail.totalTax}
-            totalNet={detail.totalNet}
-            money={money}
+            totalsByCurrency={detail.dividendTotalsByCurrency}
+            locale={locale}
             t={t}
           />
         </div>
@@ -201,6 +199,7 @@ function TaxHolderSection({
             allowanceAnnual={u.allowanceAnnual}
             usedYtd={u.usedYtd}
             remaining={u.remaining}
+            taxSavingAvailable={u.taxSavingAvailable}
             taxable={taxable.toString()}
             estimatedTax={estimatedTax.toString()}
             money={money}
