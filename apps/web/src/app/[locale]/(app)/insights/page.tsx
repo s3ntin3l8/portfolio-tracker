@@ -8,6 +8,7 @@ import {
   loadNetWorth,
   loadNetWorthHistory,
   loadHoldings,
+  loadPreferences,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
 import { bestAndWorst } from "@/lib/movers";
@@ -26,8 +27,16 @@ export default async function InsightsPage({
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
 
+  // Cost basis is a single global preference — thread it into loadNetWorth so this
+  // page's summary agrees with Holdings on P&L cost basis (it previously silently
+  // defaulted to purchase_price regardless of the user's choice elsewhere).
+  // loadHoldings() below only feeds the day-change "Best & worst" movers, which are
+  // priced off today's move, not cost basis — no threading needed there.
+  const prefs = await loadPreferences();
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
+
   const [result, history, holdingsView, selectedId] = await Promise.all([
-    loadNetWorth(),
+    loadNetWorth(costBasis),
     loadNetWorthHistory("all"),
     loadHoldings(),
     getSelectedPortfolioId(),

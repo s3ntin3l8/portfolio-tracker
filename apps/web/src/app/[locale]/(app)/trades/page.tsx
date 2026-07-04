@@ -5,7 +5,7 @@ import { StatCard } from "@/components/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradesTable } from "@/components/trades-table";
 import { TradeMethodToggle } from "@/components/trade-method-toggle";
-import { loadTrades } from "@/lib/server-api";
+import { loadTrades, loadPreferences } from "@/lib/server-api";
 import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 
 type Method = "average" | "fifo";
@@ -15,16 +15,20 @@ export default async function TradesPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ method?: string; costBasis?: string }>;
+  searchParams: Promise<{ method?: string }>;
 }) {
   const { locale } = await params;
-  const { method: methodParam, costBasis: costBasisParam } = await searchParams;
+  const { method: methodParam } = await searchParams;
   const method: Method = methodParam === "fifo" ? "fifo" : "average";
-  const costBasis =
-    costBasisParam === "total_paid" ? "total_paid" : undefined;
   setRequestLocale(locale);
   const t = await getTranslations("Trades");
   const te = await getTranslations("Empty");
+
+  // Cost basis is a single global preference (Settings → Investing) — there was
+  // never a visible toggle here (only `?costBasis=` reachable by hand-editing the
+  // URL), so switching the source has near-zero UX cost.
+  const prefs = await loadPreferences();
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
   const result = await loadTrades(method, costBasis);
   const log = result.status === "ok" ? result.data : null;
