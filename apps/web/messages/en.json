@@ -733,6 +733,8 @@
   "Instrument": {
     "priceHistory": "Price history",
     "noHistory": "No price history yet — it appears with a configured market-data source.",
+    "lastPriceLabel": "Last price",
+    "dayChangeToday": "{change} · {pct} today",
     "corporateActions": "Corporate actions",
     "noCorporateActions": "None recorded.",
     "ratio": "Ratio",
@@ -752,7 +754,21 @@
     "lotAcquired": "Acquired",
     "lotQty": "Qty",
     "lotPrice": "Price",
-    "lotCost": "Cost"
+    "lotCost": "Cost",
+    "marketValueLabel": "Market value",
+    "portfolioWeightLabel": "Portfolio weight",
+    "incomeCardTitle": "Income from this position",
+    "incomeReceivedCaption": "received · lifetime",
+    "incomeEmpty": "No income recorded for this position yet.",
+    "yieldOnCostLabel": "Yield on cost",
+    "yieldOnCostCaption": "vs current market yield",
+    "priceRange": {
+      "label": "Price range",
+      "1m": "1M",
+      "6m": "6M",
+      "1y": "1Y",
+      "all": "All"
+    }
   },
   "CorpAction": {
     "title": "Record a corporate action",
@@ -967,6 +983,34 @@
       "success": "{count, plural, one {Moved # transaction} other {Moved # transactions}}.",
       "successWithSkips": "Moved {moved}; skipped {skipped} already in the target.",
       "none": "Nothing moved — already in the target portfolio."
+    },
+    "banners": {
+      "invested": "Invested",
+      "proceeds": "Proceeds",
+      "incomeYtd": "Income · YTD",
+      "buysCount": "{count, plural, one {# buy} other {# buys}}",
+      "sellsCount": "{count, plural, one {# sell} other {# sells}}",
+      "vsLastYear": "{pct} vs last year",
+      "buys": "Buys",
+      "sells": "Sells",
+      "income": "Income",
+      "cashFlowMix": "Cash flow mix",
+      "receivedYtd": "Received · YTD",
+      "projected12mo": "Projected · 12mo",
+      "perMonth": "≈ {amount}/mo",
+      "newIncome": "New",
+      "bySource": "By source",
+      "dividends": "Dividends",
+      "couponsInterest": "Coupons & interest",
+      "otherIncome": "Other income",
+      "investedAllTime": "Invested · all time",
+      "proceedsAllTime": "Proceeds · all time",
+      "ordersCount": "{count, plural, one {# order} other {# orders}}",
+      "averageOrder": "Average order",
+      "capitalDeployed": "capital deployed",
+      "capitalReturned": "capital returned",
+      "mostBought": "Most bought",
+      "mostSold": "Most sold"
     }
   },
   "Manage": {
@@ -1341,11 +1385,14 @@
       "missing_transfer_basis": "Missing cost basis: transfer-in price is 0 — set the carried cost",
       "zero_price": "Zero price: buy or sell recorded at €0",
       "reconciliation_gap": "Cash reconciliation gap vs. broker ({currency}: reported {reported}, derived {derived})",
+      "reconciliation_drift": "New cash reconciliation drift vs. broker ({currency}: reported {reported}, derived {derived})",
       "position_gap": "Position reconciliation gap vs. broker ({isin}: reported {reported}, derived {derived})"
     },
     "noneTitle": "No data issues found",
     "noneBody": "All transactions are consistent.",
-    "dismiss": "Dismiss warning"
+    "dismiss": "Dismiss warning",
+    "reconciliationTitle": "Cash doesn't reconcile",
+    "portfolioTag": "Portfolio"
   },
   "PeriodSelector": {
     "ytd": "YTD",

@@ -816,4 +816,64 @@ describe("TransactionsTable", () => {
       expect(flag).toHaveAttribute("title", expect.stringContaining("-€0.98"));
     });
   });
+
+  describe("filter-scoped summary banners", () => {
+    const b = messages.Transactions.banners;
+
+    it("shows the All banner (Invested/Proceeds/Income tiles) by default", () => {
+      renderFilterTable();
+      expect(screen.getByText(b.invested)).toBeInTheDocument();
+      expect(screen.getByText(b.proceeds)).toBeInTheDocument();
+      expect(screen.getByText(b.cashFlowMix)).toBeInTheDocument();
+    });
+
+    it("does not render the All banner when there are no rows", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[]} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.queryByText(b.invested)).toBeNull();
+    });
+
+    it("switches to the Income banner when an income sub-type is selected", () => {
+      renderFilterTable();
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      fireEvent.change(typeSelect, { target: { value: "dividend" } });
+      expect(screen.queryByText(b.invested)).toBeNull();
+      expect(screen.getByText(b.receivedYtd)).toBeInTheDocument();
+      expect(screen.getByText(b.bySource)).toBeInTheDocument();
+    });
+
+    it("switches to the Buys banner when the buy type is selected", () => {
+      renderFilterTable();
+      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
+      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      expect(screen.queryByText(b.invested)).toBeNull();
+      expect(screen.getByText(b.investedAllTime)).toBeInTheDocument();
+      expect(screen.getByText(b.mostBought)).toBeInTheDocument();
+    });
+
+    it("shows the reconciliation banner for a portfolio-scoped anomaly, independent of Show flagged", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable
+            rows={FILTER_ROWS}
+            anomalies={[
+              {
+                code: "reconciliation_gap",
+                severity: "warning",
+                scope: "portfolio",
+                meta: { currency: "EUR", reported: "100", derived: "98" },
+              },
+            ]}
+          />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByText(messages.Anomalies.reconciliationTitle)).toBeInTheDocument();
+      expect(screen.getByText(messages.Anomalies.portfolioTag)).toBeInTheDocument();
+      // No transaction-scoped anomaly → no "Show flagged" toggle, yet the recon banner shows.
+      expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
+    });
+  });
 });

@@ -638,6 +638,7 @@ export type AnomalyCode =
   | "missing_transfer_basis"
   | "zero_price"
   | "reconciliation_gap"
+  | "reconciliation_drift"
   | "position_gap";
 
 export interface Anomaly {

@@ -6,12 +6,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
-import { PriceChart } from "@/components/charts/price-chart";
+import { InstrumentPriceCard } from "@/components/instrument-price-card";
+import { InstrumentIncomeCard } from "@/components/instrument-income-card";
 import { CorporateActionsManager } from "@/components/corporate-actions-manager";
 import { TransactionsTable } from "@/components/transactions-table";
 import { InstrumentLotsTable } from "@/components/instrument-lots-table";
-import { loadInstrument, loadInstrumentScope, loadAnomalies } from "@/lib/server-api";
+import {
+  loadInstrument,
+  loadInstrumentScope,
+  loadAnomalies,
+  loadIncomeStats,
+} from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
+import { lastPriceInfo } from "@/lib/instrument-price";
 
 export default async function InstrumentPage({
   params,
@@ -24,15 +31,23 @@ export default async function InstrumentPage({
   const ta = await getTranslations("Anomalies");
   const tc = await getTranslations("AssetClass");
 
-  const [data, scope, allAnomalies] = await Promise.all([
+  const [data, scope, allAnomalies, incomeStatsResult] = await Promise.all([
     loadInstrument(id),
     loadInstrumentScope(id),
     loadAnomalies(),
+    loadIncomeStats(),
   ]);
   // Filter anomalies to those affecting this specific instrument.
   const instrumentAnomalies = (allAnomalies ?? []).filter(
     (a) => a.instrumentId === id || a.scope === "portfolio",
   );
+
+  // This instrument's slice of the existing income analytics — reused as-is (same
+  // lifetime `byInstrument` total and trailing `yields` the Income screen's YieldsTable
+  // already renders), not a new aggregation.
+  const incomeStats = incomeStatsResult.status === "ok" ? incomeStatsResult.data : null;
+  const instrumentIncome = incomeStats?.byInstrument.find((i) => i.instrumentId === id) ?? null;
+  const instrumentYield = incomeStats?.yields.find((y) => y.instrumentId === id) ?? null;
 
   const back = (
     <Button variant="ghost" size="icon" asChild aria-label={t("priceHistory")}>
@@ -73,6 +88,20 @@ export default async function InstrumentPage({
   const lots = holding?.lots ?? [];
   const lotCurrency = holding?.currency ?? instrument.currency;
 
+  // This position's market value ÷ the total market value of every holding in the active
+  // scope — reuses `loadInstrumentScope`'s already-fetched holdings list (no new fetch).
+  const marketValueDisplay =
+    holding?.marketValueDisplay != null ? Number(holding.marketValueDisplay) : null;
+  const portfolioWeight =
+    marketValueDisplay !== null && scope.totalMarketValueDisplay
+      ? marketValueDisplay / scope.totalMarketValueDisplay
+      : null;
+
+  // The price hero's "Last price · today's change" headline — derived once from the initial
+  // (1Y) candle window loaded above, independent of `HoldingValuation.dayChange` so it works
+  // the same whether or not the instrument is currently held.
+  const lastPrice = lastPriceInfo(history, instrument.currency);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -95,15 +124,12 @@ export default async function InstrumentPage({
           <CardTitle>{t("priceHistory")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {history.length > 0 ? (
-            <PriceChart data={history} currency={history[0]?.currency ?? instrument.currency} />
-          ) : (
-            <EmptyState
-              icon={LineChart}
-              title={t("priceHistory")}
-              description={t("noHistory")}
-            />
-          )}
+          <InstrumentPriceCard
+            instrumentId={id}
+            initialHistory={history}
+            currency={instrument.currency}
+            lastPrice={lastPrice}
+          />
         </CardContent>
       </Card>
 
@@ -113,7 +139,15 @@ export default async function InstrumentPage({
         </CardHeader>
         <CardContent>
           {hasPosition && holding ? (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <StatCard
+                label={t("marketValueLabel")}
+                value={
+                  marketValueDisplay !== null
+                    ? formatMoney(marketValueDisplay, scope.displayCurrency, locale)
+                    : "—"
+                }
+              />
               <StatCard
                 label={t("quantityLabel")}
                 value={qtyFmt.format(Number(holding.quantity))}
@@ -142,6 +176,10 @@ export default async function InstrumentPage({
                       : "down"
                 }
               />
+              <StatCard
+                label={t("portfolioWeightLabel")}
+                value={portfolioWeight !== null ? `${(portfolioWeight * 100).toFixed(1)}%` : "—"}
+              />
             </div>
           ) : (
             <EmptyState
@@ -153,16 +191,35 @@ export default async function InstrumentPage({
         </CardContent>
       </Card>
 
-      {lots.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("openLots")}</CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <InstrumentLotsTable lots={lots} currency={lotCurrency} />
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
+        {lots.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("openLots")}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              <InstrumentLotsTable lots={lots} currency={lotCurrency} />
+            </CardContent>
+          </Card>
+        )}
+        <InstrumentIncomeCard
+          title={t("incomeCardTitle")}
+          dividendsReceived={
+            instrumentIncome
+              ? formatMoney(Number(instrumentIncome.total), incomeStats?.displayCurrency ?? scope.displayCurrency, locale)
+              : null
+          }
+          receivedCaption={t("incomeReceivedCaption")}
+          emptyMessage={t("incomeEmpty")}
+          yieldOnCost={
+            instrumentYield?.yieldOnCost != null
+              ? formatPercent(Number(instrumentYield.yieldOnCost), locale)
+              : null
+          }
+          yieldTitle={t("yieldOnCostLabel")}
+          yieldCaption={t("yieldOnCostCaption")}
+        />
+      </div>
 
       <Card>
         <CardHeader>
@@ -195,6 +252,7 @@ export default async function InstrumentPage({
               rows={scope.transactions}
               showPortfolio={scope.aggregate}
               anomalies={instrumentAnomalies}
+              showFilterBanners={false}
             />
           ) : (
             <EmptyState

@@ -45,6 +45,18 @@ import type { SourceSummary, Anomaly, TransactionStatus } from "@portfolio/api-c
 import { TransactionStatusButton } from "@/components/transaction-status-button";
 import { ReassignDialog } from "@/components/reassign-dialog";
 import type { PickablePortfolio } from "@/components/portfolio-picker";
+import {
+  AllFilterBanner,
+  IncomeFilterBanner,
+  TradeFilterBanner,
+  ReconciliationBanner,
+} from "@/components/transactions/activity-banners";
+import {
+  computeAllBanner,
+  computeIncomeBanner,
+  computeTradeBanner,
+  ACTIVITY_INCOME_TYPES,
+} from "@/lib/transaction-banners";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
   screenshot: ScanLine,
@@ -168,6 +180,7 @@ export function TransactionsTable({
   defaultInvestmentsOnly = false,
   anomalies = [],
   portfolios = [],
+  showFilterBanners = true,
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
@@ -177,6 +190,11 @@ export function TransactionsTable({
   /** All of the user's portfolios — enables the "Reassign…" action (hidden when fewer
    *  than two are available, since there's nowhere to move rows to). */
   portfolios?: PickablePortfolio[];
+  /** The Activity screen's filter-scoped summary banners (All/Income/Buys/Sells + the
+   *  reconciliation banner). Only the top-level `/transactions` list wants these; the
+   *  Instrument-detail page embeds this same table for its own "Transactions" section,
+   *  which the design shows as a plain list with no banners. */
+  showFilterBanners?: boolean;
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -284,6 +302,76 @@ export function TransactionsTable({
     );
   }, [rows, showFlagged, anomalyByTxId, draftFilter, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
 
+  // Which filter-scoped summary banner (if any) to show above the list. Keyed off the same
+  // `typeFilter` the type dropdown already drives — "Buys"/"Sells"/"Income" group the
+  // individual income sub-types (dividend/coupon/interest/bonus) the dropdown lists
+  // separately, so picking any one of them still surfaces the combined Income banner.
+  const tBanner = useTranslations("Transactions.banners");
+  const activeBannerMode: "all" | "income" | "buy" | "sell" | null = useMemo(() => {
+    if (typeFilter === "all") return "all";
+    if (typeFilter === "buy") return "buy";
+    if (typeFilter === "sell") return "sell";
+    if (ACTIVITY_INCOME_TYPES.has(typeFilter)) return "income";
+    return null;
+  }, [typeFilter]);
+
+  // Banners are computed from the full (unfiltered-by-other-pickers) `rows` — they answer
+  // "how much have I invested/received, all time / YTD", not "how much is in the current
+  // table view" — mirroring the source design, whose equivalent aggregates ignore the other
+  // filters too.
+  const allBanner = useMemo(
+    () =>
+      activeBannerMode === "all"
+        ? computeAllBanner(rows, locale, {
+            invested: tBanner("invested"),
+            proceeds: tBanner("proceeds"),
+            incomeYtd: tBanner("incomeYtd"),
+            buysCount: (n) => tBanner("buysCount", { count: n }),
+            sellsCount: (n) => tBanner("sellsCount", { count: n }),
+            vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
+            buys: tBanner("buys"),
+            sells: tBanner("sells"),
+            income: tBanner("income"),
+          })
+        : null,
+    [activeBannerMode, rows, locale, tBanner],
+  );
+  const incomeBanner = useMemo(
+    () =>
+      activeBannerMode === "income"
+        ? computeIncomeBanner(rows, locale, {
+            vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
+            new: tBanner("newIncome"),
+            perMonth: (amount) => tBanner("perMonth", { amount }),
+            dividends: tBanner("dividends"),
+            couponsInterest: tBanner("couponsInterest"),
+            other: tBanner("otherIncome"),
+          })
+        : null,
+    [activeBannerMode, rows, locale, tBanner],
+  );
+  const tradeBanner = useMemo(
+    () =>
+      activeBannerMode === "buy" || activeBannerMode === "sell"
+        ? computeTradeBanner(rows, activeBannerMode, locale)
+        : null,
+    [activeBannerMode, rows, locale],
+  );
+
+  // Cash/position reconciliation-gap anomalies are portfolio-scoped (no transactionId), so
+  // they never drive the row-level "Show flagged" toggle above — surfaced here instead,
+  // independent of any filter.
+  const portfolioAnomaly = useMemo(
+    () =>
+      anomalies.find(
+        (a) =>
+          a.scope === "portfolio" &&
+          (a.code === "reconciliation_gap" ||
+            a.code === "reconciliation_drift" ||
+            a.code === "position_gap"),
+      ) ?? null,
+    [anomalies],
+  );
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
@@ -537,6 +625,35 @@ export function TransactionsTable({
           )}
         </div>
       </div>
+
+      {showFilterBanners && allBanner && (
+        <AllFilterBanner data={allBanner} cashFlowMixLabel={tBanner("cashFlowMix")} />
+      )}
+      {showFilterBanners && incomeBanner && (
+        <IncomeFilterBanner
+          data={incomeBanner}
+          receivedLabel={tBanner("receivedYtd")}
+          projectedLabel={tBanner("projected12mo")}
+          bySourceLabel={tBanner("bySource")}
+        />
+      )}
+      {showFilterBanners && tradeBanner && (activeBannerMode === "buy" || activeBannerMode === "sell") && (
+        <TradeFilterBanner
+          data={tradeBanner}
+          totalLabel={tBanner(activeBannerMode === "buy" ? "investedAllTime" : "proceedsAllTime")}
+          ordersNote={tBanner("ordersCount", { count: tradeBanner.count })}
+          averageLabel={tBanner("averageOrder")}
+          averageNote={tBanner(activeBannerMode === "buy" ? "capitalDeployed" : "capitalReturned")}
+          headingLabel={tBanner(activeBannerMode === "buy" ? "mostBought" : "mostSold")}
+        />
+      )}
+      {showFilterBanners && portfolioAnomaly && (
+        <ReconciliationBanner
+          title={ta("reconciliationTitle")}
+          detail={anomalyLabel(portfolioAnomaly, ta as AnomalyTranslator, locale)}
+          tag={ta("portfolioTag")}
+        />
+      )}
 
       {selected.size > 0 && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card/60 px-4 py-2 text-sm">

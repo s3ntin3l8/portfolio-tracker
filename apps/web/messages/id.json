@@ -731,6 +731,8 @@
   "Instrument": {
     "priceHistory": "Riwayat harga",
     "noHistory": "Belum ada riwayat harga — muncul dengan sumber data pasar yang dikonfigurasi.",
+    "lastPriceLabel": "Harga terakhir",
+    "dayChangeToday": "{change} · {pct} hari ini",
     "corporateActions": "Aksi korporasi",
     "noCorporateActions": "Belum ada.",
     "ratio": "Rasio",
@@ -750,7 +752,21 @@
     "lotAcquired": "Diperoleh",
     "lotQty": "Jumlah",
     "lotPrice": "Harga",
-    "lotCost": "Biaya"
+    "lotCost": "Biaya",
+    "marketValueLabel": "Nilai pasar",
+    "portfolioWeightLabel": "Bobot portofolio",
+    "incomeCardTitle": "Pendapatan dari posisi ini",
+    "incomeReceivedCaption": "diterima · sepanjang waktu",
+    "incomeEmpty": "Belum ada pendapatan tercatat untuk posisi ini.",
+    "yieldOnCostLabel": "Yield atas biaya",
+    "yieldOnCostCaption": "vs yield pasar saat ini",
+    "priceRange": {
+      "label": "Rentang harga",
+      "1m": "1B",
+      "6m": "6B",
+      "1y": "1T",
+      "all": "Semua"
+    }
   },
   "CorpAction": {
     "title": "Catat aksi korporasi",
@@ -965,6 +981,34 @@
       "success": "{count, plural, one {# transaksi dipindahkan} other {# transaksi dipindahkan}}.",
       "successWithSkips": "{moved} dipindahkan; {skipped} dilewati karena sudah ada di tujuan.",
       "none": "Tidak ada yang dipindahkan — sudah ada di portofolio tujuan."
+    },
+    "banners": {
+      "invested": "Diinvestasikan",
+      "proceeds": "Hasil penjualan",
+      "incomeYtd": "Pendapatan · YTD",
+      "buysCount": "{count, plural, other {# beli}}",
+      "sellsCount": "{count, plural, other {# jual}}",
+      "vsLastYear": "{pct} vs tahun lalu",
+      "buys": "Beli",
+      "sells": "Jual",
+      "income": "Pendapatan",
+      "cashFlowMix": "Komposisi arus kas",
+      "receivedYtd": "Diterima · YTD",
+      "projected12mo": "Proyeksi · 12bln",
+      "perMonth": "≈ {amount}/bln",
+      "newIncome": "Baru",
+      "bySource": "Menurut sumber",
+      "dividends": "Dividen",
+      "couponsInterest": "Kupon & bunga",
+      "otherIncome": "Pendapatan lain",
+      "investedAllTime": "Diinvestasikan · sepanjang waktu",
+      "proceedsAllTime": "Hasil penjualan · sepanjang waktu",
+      "ordersCount": "{count, plural, other {# transaksi}}",
+      "averageOrder": "Rata-rata transaksi",
+      "capitalDeployed": "modal dialokasikan",
+      "capitalReturned": "modal dikembalikan",
+      "mostBought": "Paling banyak dibeli",
+      "mostSold": "Paling banyak dijual"
     }
   },
   "Manage": {
@@ -1339,11 +1383,14 @@
       "missing_transfer_basis": "Basis biaya tidak ada: harga transfer masuk adalah 0 — tetapkan biaya yang dibawa",
       "zero_price": "Harga nol: beli atau jual dicatat dengan harga Rp0",
       "reconciliation_gap": "Selisih rekonsiliasi kas vs. broker ({currency}: dilaporkan {reported}, dihitung {derived})",
+      "reconciliation_drift": "Selisih rekonsiliasi kas baru vs. broker ({currency}: dilaporkan {reported}, dihitung {derived})",
       "position_gap": "Selisih rekonsiliasi posisi vs. broker ({isin}: dilaporkan {reported}, dihitung {derived})"
     },
     "noneTitle": "Tidak ada masalah data",
     "noneBody": "Semua transaksi konsisten.",
-    "dismiss": "Tutup peringatan"
+    "dismiss": "Tutup peringatan",
+    "reconciliationTitle": "Kas tidak sesuai",
+    "portfolioTag": "Portofolio"
   },
   "PeriodSelector": {
     "ytd": "YTD",
