@@ -46,9 +46,10 @@ export function NetWorthHistoryChart({
   /** "hero" renders a minimal (axis-less, white-on-brand) sparkline for the Holdings
    *  glance card: no mode toggle (always Value), and only 1D/7D/1M/1Y/ALL chips. */
   variant?: "card" | "hero";
-  /** The range `initial` was fetched with. Defaults to "1y" (card) / "7d" (hero) — pass
-   *  this explicitly when the caller fetched `initial` with a different range so the
-   *  chip selection and the displayed series agree from first paint. */
+  /** The range `initial` was fetched with. Defaults to "1y" for both variants (a
+   *  day-grained range with reliable data, even for "hero" — see the state default
+   *  below) — pass this explicitly when the caller fetched `initial` with a different
+   *  range so the chip selection and the displayed series agree from first paint. */
   initialRange?: ChartRange;
   /** Fired whenever the rendered series (or range) changes — lets a "hero" caller derive
    *  its own period delta/pct pill from the same data the chart is already showing. */
@@ -59,7 +60,11 @@ export function NetWorthHistoryChart({
   const locale = useLocale();
   const api = useApiClient();
   const isHero = variant === "hero";
-  const [range, setRange] = useState<ChartRange>(initialRange ?? (isHero ? "7d" : "1y"));
+  // Default to a day-grained range even for the hero variant: intraday (1D/7D) snapshots
+  // only backfill over time (PR #386), so defaulting to one would show the "collecting"
+  // placeholder on a fresh install. Callers that already have reliable intraday data can
+  // still open on 1D/7D via `initialRange`.
+  const [range, setRange] = useState<ChartRange>(initialRange ?? "1y");
   const [mode, setMode] = useState<ChartMode>("performance");
   const [data, setData] = useState<HistoryPoint[]>(initial);
   const [loading, setLoading] = useState(false);

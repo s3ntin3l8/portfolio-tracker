@@ -22,8 +22,13 @@ import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto"] as const;
 
-/** The range the Holdings hero chart initially loads (matches HeroGlanceCard's default). */
-const HERO_INITIAL_RANGE = "7d";
+/**
+ * The range the Holdings hero chart initially loads. Deliberately a day-grained range
+ * (not 1D/7D): intraday snapshots are brand new (PR #386) and only backfill over time,
+ * so defaulting to an intraday range would show "Collecting intraday data…" as the
+ * landing state on every fresh install/portfolio. 1D/7D stay one tap away as chips.
+ */
+const HERO_INITIAL_RANGE = "1y";
 
 type CostBasisMode = "purchase_price" | "total_paid";
 
