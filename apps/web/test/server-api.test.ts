@@ -24,6 +24,7 @@ vi.mock("@/auth", () => ({ auth: async () => h.session }));
 vi.mock("@portfolio/api-client", () => ({ createApiClient: () => h.client }));
 
 import * as api from "../src/lib/server-api";
+import type { TaxSummaryHolder } from "@portfolio/api-client";
 
 const PF = [
   { id: "p1", name: "Main", baseCurrency: "IDR" },
@@ -588,6 +589,209 @@ describe("loadHarvestPrefill", () => {
   it("returns null when not signed in", async () => {
     h.session = null;
     expect(await api.loadHarvestPrefill("i1")).toBeNull();
+  });
+});
+
+describe("loadTaxYearDetail", () => {
+  const baseUsage = {
+    year: 2026,
+    allowanceAnnual: "1000",
+    realizedGainsAdjusted: "0",
+    incomeYtd: "0",
+    usedYtd: "0",
+    remaining: "1000",
+    taxRate: "0.25",
+    taxSavingAvailable: "250",
+    currency: "IDR",
+    forecastIncomeRestOfYear: "0",
+    projectedUsedFullYear: "0",
+    projectedRemaining: "1000",
+    projectedTaxSavingAvailable: "250",
+  };
+
+  it("returns an empty map without calling the API when there are no holders", async () => {
+    const map = await api.loadTaxYearDetail([], 2026);
+    expect(map.size).toBe(0);
+  });
+
+  it("single-portfolio scope: fetches the FIFO trade log + transactions for that portfolio only", async () => {
+    h.client.listPortfolios = async () => PF; // p1 (IDR), p2 (EUR)
+    h.cookies = { pf: "p1" };
+
+    const getTrades = vi.fn(async () => ({
+      displayCurrency: "IDR",
+      trades: [
+        {
+          instrumentId: "i1",
+          instrument: { symbol: "NVDA", name: "NVIDIA", assetClass: "equity", market: "US" },
+          legs: [
+            {
+              acqDate: "2025-01-01",
+              sellDate: "2026-03-12",
+              quantity: "10",
+              cost: "1000",
+              proceeds: "1240",
+              gain: "240",
+              holdingDays: 100,
+              longTerm: false,
+              taxYear: 2026,
+            },
+            {
+              acqDate: "2024-01-01",
+              sellDate: "2025-06-01",
+              quantity: "5",
+              cost: "400",
+              proceeds: "500",
+              gain: "100",
+              holdingDays: 200,
+              longTerm: true,
+              taxYear: 2025,
+            },
+          ],
+        },
+      ],
+      realizedByYear: [
+        { year: 2025, amount: "100" },
+        { year: 2026, amount: "240" },
+      ],
+      dividendsByYear: [
+        { year: 2025, amount: "180", tax: "47" },
+        { year: 2026, amount: "133", tax: "35" },
+      ],
+    }));
+    h.client.getTrades = getTrades;
+
+    const listTransactions = vi.fn(async (id: string) =>
+      id === "p1"
+        ? [
+            {
+              id: "t1",
+              portfolioId: "p1",
+              type: "dividend",
+              instrumentId: "i2",
+              instrument: { symbol: "SAP" },
+              quantity: "0",
+              price: "133",
+              fees: "0",
+              tax: "35",
+              executedAt: "2026-05-01",
+              status: "normal",
+            },
+          ]
+        : [],
+    );
+    h.client.listTransactions = listTransactions;
+
+    const holders = [
+      {
+        holder: { id: "p1" },
+        year: 2026,
+        currency: "IDR",
+        allowanceUsage: {
+          ...baseUsage,
+          realizedGainsAdjusted: "240",
+          incomeYtd: "168",
+          usedYtd: "408",
+          remaining: "592",
+        },
+        harvestSuggestions: [],
+        distribution: {},
+      },
+    ] as unknown as TaxSummaryHolder[];
+
+    const map = await api.loadTaxYearDetail(holders, 2026);
+    expect(getTrades).toHaveBeenCalledWith("p1", "fifo");
+    expect(listTransactions).toHaveBeenCalledWith("p1");
+    expect(listTransactions).not.toHaveBeenCalledWith("p2");
+
+    const detail = map.get("p1");
+    expect(detail).toBeDefined();
+    // Only the 2026 leg — the 2025 leg is excluded from the disposal table (scoped to
+    // the selected tax year), but still folds into the by-year rollup below.
+    expect(detail!.disposals).toEqual([
+      { symbol: "NVDA", when: "2026-03-12", proceeds: "1240", gain: "240" },
+    ]);
+    expect(detail!.totalProceeds).toBe("1240.00");
+    expect(detail!.totalGain).toBe("240.00");
+
+    // Dividend: price=133 net-credited (qty=0 → lump-sum branch), tax=35 withheld →
+    // gross = net + tax, not qty × price.
+    expect(detail!.dividendRows).toEqual([
+      { symbol: "SAP", gross: "168.00", tax: "35.00", net: "133.00" },
+    ]);
+    expect(detail!.totalGross).toBe("168.00");
+    expect(detail!.totalTax).toBe("35.00");
+    expect(detail!.totalNet).toBe("133.00");
+
+    // By year, newest first. The selected year (2026) ties out to the already-loaded
+    // allowanceUsage figures: taxable = max(0, 240 + 168 − 408) = 0 → tax "0.00".
+    expect(detail!.byYear).toEqual([
+      { year: 2026, realized: "240", dividends: "168", tax: "0.00" },
+      // 2025 uses the plain (non-TF-adjusted) trade-log figures and applies the
+      // *current* allowance uniformly: taxable = max(0, 100 + 227 − 1000) = 0.
+      { year: 2025, realized: "100", dividends: "227.00", tax: "0.00" },
+    ]);
+  });
+
+  it("holder scope: fetches one FIFO trade log per holder via getNetWorthTrades", async () => {
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "h1" },
+      { id: "p2", name: "B", baseCurrency: "EUR", accountHolderId: "h2" },
+    ];
+    h.cookies = {}; // aggregate — no single portfolio selected
+
+    const getNetWorthTrades = vi.fn(async () => ({
+      displayCurrency: "IDR",
+      trades: [],
+      realizedByYear: [],
+      dividendsByYear: [],
+    }));
+    h.client.getNetWorthTrades = getNetWorthTrades;
+    h.client.listTransactions = async () => [];
+
+    const holders = [
+      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      { holder: { id: "h2" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+
+    const map = await api.loadTaxYearDetail(holders, 2026);
+    expect(map.size).toBe(2);
+    expect(getNetWorthTrades).toHaveBeenCalledWith("fifo", undefined, "h1");
+    expect(getNetWorthTrades).toHaveBeenCalledWith("fifo", undefined, "h2");
+  });
+
+  it("isolates a per-holder failure — one holder's fetch throwing doesn't drop the others", async () => {
+    h.client.listPortfolios = async () => [
+      { id: "p1", name: "A", baseCurrency: "IDR", accountHolderId: "h1" },
+      { id: "p2", name: "B", baseCurrency: "EUR", accountHolderId: "h2" },
+    ];
+    h.cookies = {};
+    h.client.getNetWorthTrades = async (
+      _method: string,
+      _costBasis: string | undefined,
+      holderId: string,
+    ) => {
+      if (holderId === "h1") throw new Error("boom");
+      return { displayCurrency: "EUR", trades: [], realizedByYear: [], dividendsByYear: [] };
+    };
+    h.client.listTransactions = async () => [];
+
+    const holders = [
+      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      { holder: { id: "h2" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+
+    const map = await api.loadTaxYearDetail(holders, 2026);
+    expect(map.has("h1")).toBe(false);
+    expect(map.has("h2")).toBe(true);
+  });
+
+  it("returns an empty map when not signed in", async () => {
+    h.session = null;
+    const holders = [
+      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+    expect((await api.loadTaxYearDetail(holders, 2026)).size).toBe(0);
   });
 });
 

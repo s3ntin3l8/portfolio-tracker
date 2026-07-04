@@ -4,12 +4,17 @@ import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  EstimatedTaxHero,
+  DisposalTable,
+  DividendsTable,
+  ByYearTable,
+  AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
   type TaxTranslator,
 } from "@/components/tax/tax-cards";
-import { loadNetworthTax } from "@/lib/server-api";
+import { loadNetworthTax, loadTaxYearDetail, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
 
@@ -27,6 +32,7 @@ export default async function TaxPage({
   const t = await getTranslations("Tax");
 
   const holders = await loadNetworthTax(year);
+  const detailByHolder = await loadTaxYearDetail(holders, year);
 
   const Heading = (
     <div>
@@ -52,7 +58,13 @@ export default async function TaxPage({
     <div className="space-y-8">
       {Heading}
       {holders.map((entry) => (
-        <TaxHolderSection key={entry.holder.id} entry={entry} locale={locale} t={t} />
+        <TaxHolderSection
+          key={entry.holder.id}
+          entry={entry}
+          detail={detailByHolder.get(entry.holder.id) ?? null}
+          locale={locale}
+          t={t}
+        />
       ))}
     </div>
   );
@@ -60,10 +72,12 @@ export default async function TaxPage({
 
 function TaxHolderSection({
   entry,
+  detail,
   locale,
   t,
 }: {
   entry: TaxSummaryHolder;
+  detail: TaxYearDetail | null;
   locale: string;
   t: TaxTranslator;
 }) {
@@ -72,6 +86,18 @@ function TaxHolderSection({
   const pct = parseFloat(u.remaining) / parseFloat(u.allowanceAnnual);
   const usedPct = Math.round((1 - Math.max(0, Math.min(1, pct))) * 100);
   const hasForecast = Number(u.forecastIncomeRestOfYear) > 0;
+
+  // Taxable gains after allowance, and the estimated tax owed on them at the holder's
+  // real capital-gains rate (`u.taxRate` — already `holder.capitalGainsTaxRate ?? 0.25`
+  // from the backend, never hardcoded here). Shared by the hero card and the
+  // "Taxable gains YTD" allowance box so both agree.
+  const taxRate = Number(u.taxRate);
+  const taxable = Math.max(
+    0,
+    Number(u.realizedGainsAdjusted) + Number(u.incomeYtd) - Number(u.usedYtd),
+  );
+  const estimatedTax = taxable * taxRate;
+  const ratePct = (taxRate * 100).toLocaleString(locale, { maximumFractionDigits: 3 });
 
   return (
     <section className="space-y-4">
@@ -83,22 +109,22 @@ function TaxHolderSection({
         </h2>
       </div>
 
-      {/* Realized allowance summary cards */}
+      {/* Hero row: estimated tax + realized gains YTD + dividends YTD */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard
-          label={t("allowance.annual")}
-          value={money(u.allowanceAnnual)}
-          delta={t("allowance.annualDesc")}
+        <EstimatedTaxHero
+          label={t("hero.estimatedTax", { year })}
+          value={money(estimatedTax)}
+          description={t("hero.estimatedTaxDesc", { rate: ratePct, taxable: money(taxable) })}
         />
         <StatCard
-          label={t("allowance.used")}
-          value={money(u.usedYtd)}
-          delta={t("allowance.usedDesc")}
+          label={t("hero.realizedGains")}
+          value={money(u.realizedGainsAdjusted)}
+          delta={t("hero.realizedGainsDesc", { count: detail?.disposals.length ?? 0 })}
         />
         <StatCard
-          label={t("allowance.remaining")}
-          value={money(u.remaining)}
-          delta={`${t("allowance.taxSaving")}: ${money(u.taxSavingAvailable)}`}
+          label={t("hero.dividendsYtd")}
+          value={money(u.incomeYtd)}
+          delta={t("hero.dividendsYtdDesc", { allowance: money(u.allowanceAnnual) })}
         />
       </div>
 
@@ -107,25 +133,26 @@ function TaxHolderSection({
         <DistributionCard distribution={distribution} money={money} t={t} />
       )}
 
-      {/* Progress bar */}
-      <Card>
-        <CardContent className="pt-6 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">{t("allowance.usedPct", { pct: usedPct })}</span>
-            <span className="text-muted-foreground">
-              {money(u.realizedGainsAdjusted)} {t("allowance.gains")} +{" "}
-              {money(u.incomeYtd)} {t("allowance.income")}
-            </span>
-          </div>
-          {/* Simple inline progress bar (no external component needed) */}
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${Math.min(100, usedPct)}%` }}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Realized gains disposal table + dividends withheld table */}
+      {detail && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DisposalTable
+            rows={detail.disposals}
+            totalProceeds={detail.totalProceeds}
+            totalGain={detail.totalGain}
+            money={money}
+            t={t}
+          />
+          <DividendsTable
+            rows={detail.dividendRows}
+            totalGross={detail.totalGross}
+            totalTax={detail.totalTax}
+            totalNet={detail.totalNet}
+            money={money}
+            t={t}
+          />
+        </div>
+      )}
 
       {/* Rest-of-year forecast block (only when there's a non-zero projection) */}
       {hasForecast && (
@@ -159,28 +186,50 @@ function TaxHolderSection({
         </Card>
       )}
 
-      {/* Harvest suggestions (sized against projected remaining when forecast is available) */}
-      {harvestSuggestions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <TrendingUp className="size-4" />
-              {t("harvest.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              {hasForecast ? t("harvest.subtitle") : t("harvest.subtitleNoForecast")}
-            </p>
-            <div className="divide-y">
-              {harvestSuggestions.map((s) => (
-                <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />
-              ))}
+      {/* Tax-loss harvesting: always shows the allowance summary; the position list and
+          summary note only when there's something harvestable. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingUp className="size-4" />
+            {t("harvest.title")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AllowanceSummaryBoxes
+            usedPct={usedPct}
+            allowanceAnnual={u.allowanceAnnual}
+            usedYtd={u.usedYtd}
+            remaining={u.remaining}
+            taxable={taxable.toString()}
+            estimatedTax={estimatedTax.toString()}
+            money={money}
+            t={t}
+          />
+          {harvestSuggestions.length > 0 ? (
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">
+                {hasForecast ? t("harvest.subtitle") : t("harvest.subtitleNoForecast")}
+              </p>
+              <div className="divide-y">
+                {harvestSuggestions.map((s) => (
+                  <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />
+                ))}
+              </div>
+              <HarvestSummaryNote suggestions={harvestSuggestions} money={money} t={t} />
             </div>
-            <HarvestSummaryNote suggestions={harvestSuggestions} money={money} t={t} />
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("harvest.none")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* By year */}
+      {detail && <ByYearTable rows={detail.byYear} money={money} t={t} />}
+
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        {t("footnote", { rate: ratePct, allowance: money(u.allowanceAnnual) })}
+      </p>
     </section>
   );
 }

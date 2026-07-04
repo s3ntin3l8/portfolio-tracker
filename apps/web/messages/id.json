@@ -1400,8 +1400,48 @@
       "taxSaving": "Penghematan pajak",
       "tfApplied": "TF {pct}% diterapkan",
       "button": "Panen",
-      "summary": "Panen semua {count} untuk mengimbangi {offset} keuntungan terealisasi — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera."
-    }
+      "summary": "Panen semua {count} untuk mengimbangi {offset} keuntungan terealisasi — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
+      "none": "Belum ada kerugian yang bisa dipanen saat ini."
+    },
+    "hero": {
+      "estimatedTax": "Perkiraan pajak · {year}",
+      "estimatedTaxDesc": "Abgeltungsteuer {rate}% dari {taxable}",
+      "realizedGains": "Keuntungan terealisasi · YTD",
+      "realizedGainsDesc": "{count} pelepasan",
+      "dividendsYtd": "Dividen · YTD",
+      "dividendsYtdDesc": "kotor · batas {allowance} diterapkan"
+    },
+    "disposals": {
+      "title": "Keuntungan terealisasi · Abgeltungsteuer",
+      "disposal": "Pelepasan",
+      "proceeds": "Hasil",
+      "gain": "Untung",
+      "total": "Total",
+      "empty": "Tidak ada pelepasan di {year}."
+    },
+    "dividendsTable": {
+      "title": "Dividen dipotong pajak",
+      "source": "Sumber",
+      "gross": "Kotor",
+      "tax": "Pajak",
+      "net": "Bersih",
+      "total": "Total",
+      "empty": "Tidak ada pendapatan dividen/bunga di {year}."
+    },
+    "allowanceBoxes": {
+      "left": "Sisa batas bebas pajak",
+      "leftDesc": "Sparer-Pauschbetrag · {used} dari {annual} terpakai",
+      "taxableGains": "Keuntungan kena pajak YTD",
+      "taxableGainsDesc": "setelah batas bebas pajak · ~{tax} pajak jika tidak dipanen"
+    },
+    "byYear": {
+      "title": "Per tahun",
+      "year": "Tahun",
+      "realized": "Keuntungan terealisasi",
+      "dividends": "Dividen",
+      "tax": "Abgeltungsteuer"
+    },
+    "footnote": "Jerman mengenakan pajak penghasilan investasi sebesar {rate}% flat (Abgeltungsteuer + Solidaritätszuschlag). Sparer-Pauschbetrag {allowance} Anda diterapkan lebih dulu, lalu kerugian mengimbangi keuntungan dalam tahun yang sama. Hanya perkiraan, bukan nasihat pajak."
   },
   "Anomalies": {
     "bannerError": "Ditemukan {count, plural, one {# kesalahan data} other {# kesalahan data}}",

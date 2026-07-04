@@ -1402,8 +1402,48 @@
       "taxSaving": "Tax saving",
       "tfApplied": "TF {pct}% applied",
       "button": "Harvest",
-      "summary": "Harvest all {count} to offset {offset} of realized gains — about ~{saving} saved. Germany has no 30-day wash-sale rule, so you can buy back immediately."
-    }
+      "summary": "Harvest all {count} to offset {offset} of realized gains — about ~{saving} saved. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
+      "none": "No harvestable losses right now."
+    },
+    "hero": {
+      "estimatedTax": "Estimated tax · {year}",
+      "estimatedTaxDesc": "Abgeltungsteuer {rate}% on {taxable}",
+      "realizedGains": "Realized gains · YTD",
+      "realizedGainsDesc": "{count} disposals",
+      "dividendsYtd": "Dividends · YTD",
+      "dividendsYtdDesc": "gross · {allowance} allowance applied"
+    },
+    "disposals": {
+      "title": "Realized gains · Abgeltungsteuer",
+      "disposal": "Disposal",
+      "proceeds": "Proceeds",
+      "gain": "Gain",
+      "total": "Total",
+      "empty": "No disposals in {year}."
+    },
+    "dividendsTable": {
+      "title": "Dividends withheld",
+      "source": "Source",
+      "gross": "Gross",
+      "tax": "Tax",
+      "net": "Net",
+      "total": "Total",
+      "empty": "No dividend/interest income in {year}."
+    },
+    "allowanceBoxes": {
+      "left": "Allowance left",
+      "leftDesc": "Sparer-Pauschbetrag · {used} of {annual} used",
+      "taxableGains": "Taxable gains YTD",
+      "taxableGainsDesc": "after allowance · ~{tax} tax if unharvested"
+    },
+    "byYear": {
+      "title": "By year",
+      "year": "Year",
+      "realized": "Realized gains",
+      "dividends": "Dividends",
+      "tax": "Abgeltungsteuer"
+    },
+    "footnote": "Germany taxes investment income at a flat {rate}% (Abgeltungsteuer + Solidaritätszuschlag). Your {allowance} Sparer-Pauschbetrag is applied first, then losses offset gains within the same year. Estimate only, not tax advice."
   },
   "Anomalies": {
     "bannerError": "{count, plural, one {# data error} other {# data errors}} found",

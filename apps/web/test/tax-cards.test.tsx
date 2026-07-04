@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import messages from "../messages/en.json";
 import {
+  EstimatedTaxHero,
+  DisposalTable,
+  DividendsTable,
+  ByYearTable,
+  AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
@@ -30,6 +35,120 @@ function makeT(): TaxTranslator {
 
 const money = (n: string | number) => `Rp ${Number(n).toLocaleString("en")}`;
 const t = makeT();
+
+describe("EstimatedTaxHero", () => {
+  it("renders the label, value, and description", () => {
+    render(
+      <EstimatedTaxHero
+        label="Estimated tax · 2026"
+        value="Rp 140,580"
+        description="Abgeltungsteuer 25% on Rp 562,320"
+      />,
+    );
+    expect(screen.getByText("Estimated tax · 2026")).toBeInTheDocument();
+    expect(screen.getByText("Rp 140,580")).toBeInTheDocument();
+    expect(screen.getByText("Abgeltungsteuer 25% on Rp 562,320")).toBeInTheDocument();
+  });
+});
+
+describe("DisposalTable", () => {
+  it("renders one row per disposal plus a total row", () => {
+    render(
+      <DisposalTable
+        rows={[
+          { symbol: "NVDA", when: "2026-03-12", proceeds: "1240", gain: "430" },
+          { symbol: "SAP", when: "2026-06-19", proceeds: "980", gain: "270" },
+        ]}
+        totalProceeds="2220"
+        totalGain="700"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("NVDA")).toBeInTheDocument();
+    expect(screen.getByText("2026-03-12")).toBeInTheDocument();
+    expect(screen.getByText("Rp 1,240")).toBeInTheDocument();
+    expect(screen.getByText("SAP")).toBeInTheDocument();
+    expect(screen.getByText("Total")).toBeInTheDocument();
+    expect(screen.getByText("Rp 2,220")).toBeInTheDocument();
+    expect(screen.getByText("Rp 700")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when there are no disposals", () => {
+    render(<DisposalTable rows={[]} totalProceeds="0" totalGain="0" money={money} t={t} />);
+    expect(screen.getByText(/No disposals/)).toBeInTheDocument();
+    expect(screen.queryByText("Total")).not.toBeInTheDocument();
+  });
+});
+
+describe("DividendsTable", () => {
+  it("renders gross/tax/net per source plus a total row", () => {
+    render(
+      <DividendsTable
+        rows={[{ symbol: "SAP", gross: "168", tax: "35", net: "133" }]}
+        totalGross="168"
+        totalTax="35"
+        totalNet="133"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("SAP")).toBeInTheDocument();
+    expect(screen.getAllByText("Rp 168").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rp 35").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rp 133").length).toBeGreaterThan(0);
+  });
+
+  it("renders the empty state when there's no dividend income", () => {
+    render(
+      <DividendsTable rows={[]} totalGross="0" totalTax="0" totalNet="0" money={money} t={t} />,
+    );
+    expect(screen.getByText(/No dividend\/interest income/)).toBeInTheDocument();
+  });
+});
+
+describe("ByYearTable", () => {
+  it("renders newest-first rows with realized/dividends/tax columns", () => {
+    render(
+      <ByYearTable
+        rows={[
+          { year: 2026, realized: "240", dividends: "168", tax: "0.00" },
+          { year: 2025, realized: "100", dividends: "227", tax: "0.00" },
+        ]}
+        money={money}
+        t={t}
+      />,
+    );
+    const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
+    expect(years).toEqual(["2026", "2025"]);
+  });
+
+  it("renders nothing when there are no years", () => {
+    const { container } = render(<ByYearTable rows={[]} money={money} t={t} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("AllowanceSummaryBoxes", () => {
+  it("shows the allowance-left progress and taxable-gains figures", () => {
+    render(
+      <AllowanceSummaryBoxes
+        usedPct={41}
+        allowanceAnnual="1000"
+        usedYtd="408"
+        remaining="592"
+        taxable="0"
+        estimatedTax="0"
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Allowance left")).toBeInTheDocument();
+    expect(screen.getByText("Rp 592")).toBeInTheDocument();
+    expect(screen.getByText("Taxable gains YTD")).toBeInTheDocument();
+    expect(screen.getByText(/Rp 408 of Rp 1,000 used/)).toBeInTheDocument();
+  });
+});
 
 describe("DistributionCard", () => {
   const distribution: TaxDistribution = {

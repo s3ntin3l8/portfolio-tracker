@@ -938,3 +938,193 @@ export async function loadNetworthTax(year?: number): Promise<TaxSummaryHolder[]
     return [];
   }
 }
+
+export interface TaxDisposalRow {
+  symbol: string;
+  when: string; // YYYY-MM-DD
+  proceeds: string;
+  gain: string;
+}
+
+export interface TaxDividendRow {
+  symbol: string;
+  gross: string;
+  tax: string;
+  net: string;
+}
+
+export interface TaxYearRow {
+  year: number;
+  realized: string;
+  dividends: string;
+  tax: string;
+}
+
+export interface TaxYearDetail {
+  currency: string;
+  disposals: TaxDisposalRow[];
+  totalProceeds: string;
+  totalGain: string;
+  dividendRows: TaxDividendRow[];
+  totalGross: string;
+  totalTax: string;
+  totalNet: string;
+  byYear: TaxYearRow[];
+}
+
+/**
+ * Per-holder assembly of the `/tax` screen's disposal table, dividends-withheld table, and
+ * by-year breakdown — all derived from data the backend already computes (the FIFO trade
+ * log that already backs `allowanceUsage`/harvest suggestions, plus raw transaction
+ * fields), no new backend endpoint. Keyed by `TaxSummaryHolder.holder.id` (mirrors
+ * {@link loadNetworthTax}'s branching so the single-portfolio fallback id lines up).
+ *
+ * Caveat (documented, not silently swallowed): the backend computes `allowanceUsage` with
+ * Teilfreistellung (ETF partial tax exemption) rates from `tfRatesFor()`, which is
+ * server-only and not exposed via the API client. So the by-year table's realized figures
+ * for years OTHER than the selected one are plain (not TF-adjusted), and their tax applies
+ * the CURRENT Sparerpauschbetrag uniformly across history (no historical allowance amounts
+ * are stored) — a genuinely-new-backend gap if a filing-grade number were needed. The
+ * selected year's own row is special-cased to the already-computed, precise
+ * `allowanceUsage` figures so it ties out to the hero card. This matches the screen's own
+ * "estimate only, not tax advice" footnote — a summary, not a filing document.
+ */
+export async function loadTaxYearDetail(
+  holders: TaxSummaryHolder[],
+  year?: number,
+): Promise<Map<string, TaxYearDetail>> {
+  const result = new Map<string, TaxYearDetail>();
+  if (holders.length === 0) return result;
+  const api = await getServerApi();
+  if (!api) return result;
+  const targetYear = year ?? new Date().getUTCFullYear();
+
+  let portfolios: Portfolio[];
+  let selected: Portfolio | undefined;
+  try {
+    portfolios = await api.listPortfolios();
+    const wanted = await getSelectedPortfolioId();
+    selected = portfolios.find((p) => p.id === wanted);
+  } catch {
+    return result;
+  }
+
+  await Promise.all(
+    holders.map(async (entry) => {
+      const holderId = entry.holder.id;
+      const pfs = selected ? [selected] : portfolios.filter((p) => p.accountHolderId === holderId);
+      if (pfs.length === 0) return;
+
+      try {
+        const [tradeLog, txLists] = await Promise.all([
+          selected
+            ? api.getTrades(selected.id, "fifo")
+            : api.getNetWorthTrades("fifo", undefined, holderId),
+          Promise.all(pfs.map((p) => api.listTransactions(p.id))),
+        ]);
+
+        // Disposals: FIFO legs closed in the target year.
+        const legs = tradeLog.trades.flatMap((t) =>
+          t.legs
+            .filter((l) => l.taxYear === targetYear)
+            .map((l) => ({
+              symbol: t.instrument?.symbol ?? t.instrumentId.slice(0, 8),
+              when: l.sellDate,
+              proceeds: l.proceeds,
+              gain: l.gain,
+            })),
+        );
+        const totalProceeds = legs.reduce((s, l) => s + Number(l.proceeds), 0);
+        const totalGain = legs.reduce((s, l) => s + Number(l.gain), 0);
+
+        // Dividends withheld, per instrument, for the target year — from raw transactions
+        // (dividend/coupon/interest carry a `tax` field the trade log's yearly rollup
+        // doesn't break out by instrument). `price` already follows the app's
+        // net-of-withholding convention for income rows (see core's `cashFlow()`), so
+        // gross = net + withheld tax, not qty × price.
+        const incomeTxns = txLists
+          .flat()
+          .filter(
+            (t) =>
+              (t.type === "dividend" || t.type === "coupon" || t.type === "interest") &&
+              t.status !== "archived" &&
+              t.status !== "draft" &&
+              new Date(t.executedAt).getUTCFullYear() === targetYear,
+          );
+        const byInstrument = new Map<string, { symbol: string; net: number; tax: number }>();
+        for (const t of incomeTxns) {
+          const qty = Number(t.quantity);
+          const net = (qty > 0 ? qty * Number(t.price) : Number(t.price)) - Number(t.fees ?? 0);
+          const key = t.instrumentId ?? t.description ?? t.type;
+          const symbol = t.instrument?.symbol ?? t.description ?? t.type;
+          const bucket = byInstrument.get(key) ?? { symbol, net: 0, tax: 0 };
+          bucket.net += net;
+          bucket.tax += Number(t.tax ?? 0);
+          byInstrument.set(key, bucket);
+        }
+        const dividendRows: TaxDividendRow[] = [...byInstrument.values()].map((b) => ({
+          symbol: b.symbol,
+          gross: (b.net + b.tax).toFixed(2),
+          tax: b.tax.toFixed(2),
+          net: b.net.toFixed(2),
+        }));
+        const totalGross = dividendRows.reduce((s, r) => s + Number(r.gross), 0);
+        const totalTax = dividendRows.reduce((s, r) => s + Number(r.tax), 0);
+        const totalNet = dividendRows.reduce((s, r) => s + Number(r.net), 0);
+
+        // By year: union of years with realized gains or dividend/interest income, newest
+        // first. See the doc comment above for the estimate's known limits.
+        const taxRate = Number(entry.allowanceUsage.taxRate);
+        const allowanceAnnual = Number(entry.allowanceUsage.allowanceAnnual);
+        const years = new Set<number>([
+          ...tradeLog.realizedByYear.map((r) => r.year),
+          ...tradeLog.dividendsByYear.map((d) => d.year),
+        ]);
+        const byYear: TaxYearRow[] = [...years].sort((a, b) => b - a).map((y) => {
+          if (y === entry.year) {
+            // Ties out to the hero card / allowanceUsage figures already on screen.
+            const u = entry.allowanceUsage;
+            const taxable = Math.max(
+              0,
+              Number(u.realizedGainsAdjusted) + Number(u.incomeYtd) - Number(u.usedYtd),
+            );
+            return {
+              year: y,
+              realized: u.realizedGainsAdjusted,
+              dividends: u.incomeYtd,
+              tax: (taxable * taxRate).toFixed(2),
+            };
+          }
+
+          const realized = tradeLog.realizedByYear.find((r) => r.year === y)?.amount ?? "0";
+          const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
+          const dividendsGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
+          const taxable = Math.max(0, Number(realized) + dividendsGross - allowanceAnnual);
+          return {
+            year: y,
+            realized,
+            dividends: dividendsGross.toFixed(2),
+            tax: (taxable * taxRate).toFixed(2),
+          };
+        });
+
+        result.set(holderId, {
+          currency: tradeLog.displayCurrency,
+          disposals: legs.map(({ symbol, when, proceeds, gain }) => ({ symbol, when, proceeds, gain })),
+          totalProceeds: totalProceeds.toFixed(2),
+          totalGain: totalGain.toFixed(2),
+          dividendRows,
+          totalGross: totalGross.toFixed(2),
+          totalTax: totalTax.toFixed(2),
+          totalNet: totalNet.toFixed(2),
+          byYear,
+        });
+      } catch {
+        // Best-effort per holder — omit the new sections for this holder on failure,
+        // the rest of the tax page (allowanceUsage, harvest suggestions) is unaffected.
+      }
+    }),
+  );
+
+  return result;
+}
