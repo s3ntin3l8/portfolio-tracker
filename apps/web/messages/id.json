@@ -341,7 +341,13 @@
     "sourceHeuristic": "Terdeteksi",
     "firstSince": "Sejak {date}",
     "executionCount": "{count, plural, other {# eksekusi}}",
-    "stoppedPlans": "{count, plural, other {# rencana dihentikan}}"
+    "stoppedPlans": "{count, plural, other {# rencana dihentikan}}",
+    "scenariosLabel": "Perbandingan skenario",
+    "cashOnHandTitle": "Kas tersedia",
+    "cashOnHandSubtitle": "Saldo menganggur per mata uang",
+    "cashMeta": "Saldo kas belum diinvestasikan",
+    "cashNudgeLead": "{amount} sedang menganggur.",
+    "cashNudgeSuggestion": "Reksa dana pasar uang dengan imbal hasil ~{rate} p.a. akan menghasilkan sekitar {amount}/thn."
   },
   "Portfolios": {
     "title": "Portofolio",

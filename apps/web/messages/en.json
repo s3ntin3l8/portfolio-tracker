@@ -341,7 +341,13 @@
     "sourceHeuristic": "Detected",
     "firstSince": "Since {date}",
     "executionCount": "{count, plural, one {execution} other {executions}}",
-    "stoppedPlans": "{count, plural, one {# stopped plan} other {# stopped plans}}"
+    "stoppedPlans": "{count, plural, one {# stopped plan} other {# stopped plans}}",
+    "scenariosLabel": "Scenario comparison",
+    "cashOnHandTitle": "Cash on hand",
+    "cashOnHandSubtitle": "Idle balances by currency",
+    "cashMeta": "Uninvested cash balance",
+    "cashNudgeLead": "{amount} is sitting idle.",
+    "cashNudgeSuggestion": "A money-market fund at ~{rate} p.a. would earn about {amount}/yr."
   },
   "Portfolios": {
     "title": "Portfolios",

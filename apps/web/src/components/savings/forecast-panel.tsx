@@ -66,6 +66,31 @@ export function ForecastPanel({
     [currentValue, monthly, returnPct, years],
   );
 
+  // Three scenario chips at rate−3pp / current rate / rate+3pp (clamped to the
+  // slider's 0–15 range, deduped at the extremes so e.g. rate=0 yields 2 chips,
+  // not 3 with a duplicate). Each re-runs the same client-side projection at that
+  // rate for the current monthly top-up + horizon.
+  const scenarios = useMemo(() => {
+    const rates = [...new Set([
+      Math.max(0, Math.round((returnPct - 3) * 2) / 2),
+      returnPct,
+      Math.min(15, Math.round((returnPct + 3) * 2) / 2),
+    ])];
+    return rates.map((rate) => {
+      const scenarioSeries = forecastSeries({
+        presentValue: currentValue,
+        monthlyContribution: String(monthly),
+        annualReturnRate: String(rate / 100),
+        horizonMonths: years * 12,
+      });
+      return {
+        rate,
+        value: Number(scenarioSeries[scenarioSeries.length - 1].value),
+        active: rate === returnPct,
+      };
+    });
+  }, [currentValue, monthly, returnPct, years]);
+
   const last = series[series.length - 1];
   const contributed = Number(last.contributed);
   const value = Number(last.value);
@@ -172,6 +197,30 @@ export function ForecastPanel({
         </div>
 
         <ForecastChart series={series} presentValue={currentValue} currency={currency} />
+
+        <div
+          className="grid gap-2 sm:grid-cols-3"
+          role="group"
+          aria-label={t("scenariosLabel")}
+        >
+          {scenarios.map((s) => (
+            <div
+              key={s.rate}
+              data-testid="scenario-chip"
+              data-active={s.active}
+              className={
+                s.active
+                  ? "rounded-xl border border-primary/50 bg-primary/10 p-3"
+                  : "rounded-xl border border-border bg-muted/40 p-3"
+              }
+            >
+              <p className="text-[10px] font-semibold text-muted-foreground">
+                {formatPercent(s.rate / 100, locale)}
+              </p>
+              <p className="tabular mt-0.5 text-sm font-extrabold">{m(s.value)}</p>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

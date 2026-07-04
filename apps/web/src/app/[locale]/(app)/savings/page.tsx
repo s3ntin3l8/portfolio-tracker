@@ -10,8 +10,9 @@ import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
 import { ForecastPanel } from "@/components/savings/forecast-panel";
 import { SparplanSection } from "@/components/savings/sparplan-section";
+import { CashOnHandCard } from "@/components/savings/cash-on-hand-card";
 import { EmptyState } from "@/components/empty-state";
-import { loadContributions, loadSparplan } from "@/lib/server-api";
+import { loadContributions, loadSparplan, loadHoldings } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 export default async function SavingsPage({
@@ -30,6 +31,11 @@ export default async function SavingsPage({
   // Sparplan detection is fetched independently so it renders even when
   // totalContributed === 0 (e.g. cash-outside portfolio with only plan buys).
   const sparplanResult = await loadSparplan();
+  // Cash-on-hand card needs the same per-currency cash balances the Holdings
+  // screen pins — only meaningful (cashTracked) for cash-inside-boundary
+  // portfolios; absent entirely for cash-outside scope, which is correct (there's
+  // nothing "idle" to nudge when cash isn't part of the portfolio's boundary).
+  const holdingsResult = await loadHoldings();
 
   const heading = (
     <div>
@@ -131,6 +137,10 @@ export default async function SavingsPage({
         birthYear={c.birthYear}
         portfolioType={c.portfolioType}
       />
+
+      {holdingsResult.status === "ok" && holdingsResult.cashTracked && (
+        <CashOnHandCard cash={holdingsResult.cash} locale={locale} />
+      )}
     </div>
   );
 }

@@ -76,6 +76,48 @@ describe("ForecastPanel", () => {
     expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
   });
 
+  describe("scenario chips", () => {
+    it("renders three chips at rate−3/rate/rate+3 with the current rate active", () => {
+      // seedAnnualReturn=0.08 → returnPct=8 → chips at 5%, 8%, 11%.
+      renderPanel({ seedAnnualReturn: "0.08" });
+      const chips = screen.getAllByTestId("scenario-chip");
+      expect(chips).toHaveLength(3);
+      expect(chips.map((c) => c.textContent)).toEqual([
+        expect.stringContaining("5"),
+        expect.stringContaining("8"),
+        expect.stringContaining("11"),
+      ]);
+      // The middle chip (current rate) is the active one.
+      expect(chips[0]).toHaveAttribute("data-active", "false");
+      expect(chips[1]).toHaveAttribute("data-active", "true");
+      expect(chips[2]).toHaveAttribute("data-active", "false");
+    });
+
+    it("dedupes to two chips at the low clamp (rate=0)", () => {
+      renderPanel({ seedAnnualReturn: "0" });
+      const chips = screen.getAllByTestId("scenario-chip");
+      // max(0, 0-3)=0 collides with rate=0 itself → deduped to [0, 3].
+      expect(chips).toHaveLength(2);
+      expect(chips[0]).toHaveAttribute("data-active", "true");
+    });
+
+    it("dedupes to two chips at the high clamp (rate=15)", () => {
+      renderPanel({ seedAnnualReturn: "0.15" });
+      const chips = screen.getAllByTestId("scenario-chip");
+      // min(15, 15+3)=15 collides with rate=15 itself → deduped to [12, 15].
+      expect(chips).toHaveLength(2);
+      expect(chips[1]).toHaveAttribute("data-active", "true");
+    });
+
+    it("updates chip values when the horizon changes", () => {
+      renderPanel({ currentValue: "0", monthlyAverage: "100", seedAnnualReturn: "0" });
+      const before = screen.getAllByTestId("scenario-chip")[0].textContent;
+      fireEvent.change(screen.getByLabelText(/Horizon/), { target: { value: "20" } });
+      const after = screen.getAllByTestId("scenario-chip")[0].textContent;
+      expect(after).not.toEqual(before);
+    });
+  });
+
   it("accounts for historical contributions and growth in the metrics and subtitles", () => {
     // Starting value: €10,000, of which €8,000 is net contributed (so €2,000 is historical growth).
     // Future projection: 10 years at €100/mo, 0% return.
