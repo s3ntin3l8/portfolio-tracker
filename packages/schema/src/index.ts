@@ -592,8 +592,15 @@ export const KPI_KEYS = [
 ] as const;
 export type KpiKey = (typeof KPI_KEYS)[number];
 
+export const taxRegimeSchema = z.enum(["DE", "ID"]);
+export type TaxRegime = z.infer<typeof taxRegimeSchema>;
+
 export const userPreferencesSchema = z.object({
   dashboardPeriod: dashboardPeriodSchema.optional(),
   dashboardKpis: z.array(z.enum(KPI_KEYS)).max(8).optional(),
+  // Reuses the existing `costBasisModeSchema` (already used for the per-query
+  // costBasis param elsewhere) rather than redeclaring it.
+  costBasisMode: costBasisModeSchema.optional(),
+  taxRegime: taxRegimeSchema.optional(),
 });
 export type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;

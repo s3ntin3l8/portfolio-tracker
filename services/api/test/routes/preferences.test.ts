@@ -52,6 +52,55 @@ describe("preferences", () => {
     const body = res.json();
     expect(body.dashboardPeriod).toBe("max");
     expect(body.dashboardKpis).toBeNull();
+    // No-op safety: a user with no prefs row at all must see the exact same defaults
+    // as before this change — German tax + purchase_price cost basis, unchanged.
+    expect(body.costBasisMode).toBe("purchase_price");
+    expect(body.taxRegime).toBe("DE");
+  });
+
+  it("PUT /me/preferences upserts costBasisMode and taxRegime independently", async () => {
+    const t = await token("prefs-user-investing-1");
+
+    const put1 = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { taxRegime: "ID" },
+    });
+    expect(put1.statusCode).toBe(200);
+    expect(put1.json().taxRegime).toBe("ID");
+    // Unspecified costBasisMode falls back to the default, not clobbered/undefined.
+    expect(put1.json().costBasisMode).toBe("purchase_price");
+
+    const put2 = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { costBasisMode: "total_paid" },
+    });
+    expect(put2.statusCode).toBe(200);
+    expect(put2.json().costBasisMode).toBe("total_paid");
+    // taxRegime from the first PUT must survive this second, unrelated PUT.
+    expect(put2.json().taxRegime).toBe("ID");
+
+    const get = await app.inject({
+      method: "GET",
+      url: "/me/preferences",
+      headers: auth(t),
+    });
+    expect(get.json().costBasisMode).toBe("total_paid");
+    expect(get.json().taxRegime).toBe("ID");
+  });
+
+  it("PUT /me/preferences rejects an invalid taxRegime", async () => {
+    const t = await token("prefs-user-bad-regime");
+    const res = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { taxRegime: "US" },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it("PUT /me/preferences upserts and GET returns updated values", async () => {

@@ -980,11 +980,21 @@ export const allocationTargets = pgTable(
   ],
 );
 
-// User dashboard preferences (period selector, KPI layout).
+// User dashboard preferences (period selector, KPI layout) + global investing prefs
+// (cost-basis method, tax regime — see the Settings "Investing" section and the Tax
+// screen's DE/ID toggle, which both read/write these same two columns).
 export const userPreferences = pgTable("user_preferences", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   dashboardPeriod: text("dashboard_period").notNull().default("max"),
   dashboardKpis: jsonb("dashboard_kpis").$type<string[]>(),
+  // 'purchase_price' | 'total_paid' — how P&L cost basis is computed everywhere
+  // (holdings, trades, net worth, instrument pages). Replaces the old per-page
+  // `?costBasis=` toggle.
+  costBasisMode: text("cost_basis_mode").notNull().default("purchase_price"),
+  // 'DE' | 'ID' — which tax regime the Tax screen renders and the sparplan
+  // harvest-cap gate uses. Default 'DE' preserves existing behavior for accounts
+  // with no row yet.
+  taxRegime: text("tax_regime").notNull().default("DE"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

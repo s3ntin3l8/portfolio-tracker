@@ -761,6 +761,10 @@ export interface NetWorth {
 export interface UserPreferences {
   dashboardPeriod: "ytd" | "1y" | "5y" | "max";
   dashboardKpis: string[] | null;
+  /** Global cost-basis method — replaces the old per-page `?costBasis=` toggle. */
+  costBasisMode: "purchase_price" | "total_paid";
+  /** Global tax regime — drives the Tax screen (DE/ID) and the sparplan harvest gate. */
+  taxRegime: "DE" | "ID";
 }
 
 /** A personal access token's metadata (never the secret). */
@@ -1080,8 +1084,15 @@ export interface SparplanStats {
   /**
    * True when `?includeSales=true` was requested but the portfolio's holder has no
    * `taxAllowanceAnnual` configured — the toggle should be disabled in the UI.
+   * Never set under the Indonesian regime (no allowance concept to require).
    */
   taxUnavailable?: boolean;
+  /**
+   * The user's global tax regime, echoed back so the frontend can gate German-only
+   * labels (allowance/harvest) without a separate preferences fetch. Only present
+   * when `tradeActions` is present (i.e. `?includeSales=true`).
+   */
+  taxRegime?: "DE" | "ID";
 }
 
 export type TradeMethod = "average" | "fifo";
@@ -1678,8 +1689,14 @@ export function createApiClient(config: ApiClientConfig) {
     },
 
     getPreferences: () => request<UserPreferences>("GET", "/me/preferences"),
-    putPreferences: (prefs: Partial<{ dashboardPeriod: string; dashboardKpis: string[] }>) =>
-      request<UserPreferences>("PUT", "/me/preferences", prefs),
+    putPreferences: (
+      prefs: Partial<{
+        dashboardPeriod: string;
+        dashboardKpis: string[];
+        costBasisMode: "purchase_price" | "total_paid";
+        taxRegime: "DE" | "ID";
+      }>,
+    ) => request<UserPreferences>("PUT", "/me/preferences", prefs),
     getIncome: (holderId?: string) =>
       request<IncomeStats>(
         "GET",
