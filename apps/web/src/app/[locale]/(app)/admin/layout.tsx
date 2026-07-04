@@ -31,7 +31,7 @@ export default async function AdminLayout({
     {
       key: "providers",
       href: "/admin/providers",
-      icon: LineChart,
+      icon: <LineChart />,
       title: t("providers"),
       subtitle: t("providersHint"),
       color: "#0E9F6E",
@@ -40,7 +40,7 @@ export default async function AdminLayout({
     {
       key: "vision",
       href: "/admin/vision",
-      icon: Eye,
+      icon: <Eye />,
       title: t("visionProviders"),
       subtitle: t("visionProvidersHint"),
       color: "#7C5CFC",
@@ -49,7 +49,7 @@ export default async function AdminLayout({
     {
       key: "imports",
       href: "/admin/imports",
-      icon: ArrowDownUp,
+      icon: <ArrowDownUp />,
       title: t("importStrategy"),
       subtitle: t("importStrategyHint"),
       color: "#0D9488",
@@ -58,7 +58,7 @@ export default async function AdminLayout({
     {
       key: "storage",
       href: "/admin/storage",
-      icon: HardDrive,
+      icon: <HardDrive />,
       title: t("storage"),
       subtitle: t("storageHint"),
       color: "#2A6FDB",
@@ -67,7 +67,7 @@ export default async function AdminLayout({
     {
       key: "database",
       href: "/admin/database",
-      icon: Database,
+      icon: <Database />,
       title: t("stats"),
       subtitle: t("statsHint"),
       color: "var(--gold-fg)",
@@ -76,7 +76,7 @@ export default async function AdminLayout({
     {
       key: "jobs",
       href: "/admin/jobs",
-      icon: Clock,
+      icon: <Clock />,
       title: t("jobs"),
       subtitle: t("jobsHint"),
       color: "#E5484D",

@@ -1,6 +1,5 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -8,7 +7,10 @@ import { cn } from "@/lib/utils";
 export interface ShellNavItem {
   key: string;
   href: string;
-  icon: LucideIcon;
+  /** A rendered icon element (e.g. `<UserRound />`), not a component reference —
+   *  these items cross a server/client boundary and bare component references
+   *  aren't serializable across it. Sized via the wrapper spans below. */
+  icon: React.ReactNode;
   title: string;
   /** Shown under the title in the mobile landing row; omitted on the desktop rail. */
   subtitle?: string;
@@ -75,10 +77,10 @@ export function SettingsShell({
                 )}
               >
                 <span
-                  className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px]"
+                  className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] [&>svg]:size-4"
                   style={{ background: item.bg, color: item.color }}
                 >
-                  <item.icon className="size-4" />
+                  {item.icon}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
                 {item.badge && (
@@ -109,10 +111,10 @@ export function SettingsShell({
                     className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/50"
                   >
                     <span
-                      className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                      className="flex size-9 shrink-0 items-center justify-center rounded-xl [&>svg]:size-[18px]"
                       style={{ background: item.bg, color: item.color }}
                     >
-                      <item.icon className="size-[18px]" />
+                      {item.icon}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">

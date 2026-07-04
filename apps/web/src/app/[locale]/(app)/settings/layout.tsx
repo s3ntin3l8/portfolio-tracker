@@ -32,7 +32,7 @@ export default async function SettingsLayout({
     {
       key: "account",
       href: "/settings/account",
-      icon: UserRound,
+      icon: <UserRound />,
       title: t("navAccount"),
       subtitle: t("navAccountSub"),
       color: "#0E9F6E",
@@ -41,7 +41,7 @@ export default async function SettingsLayout({
     {
       key: "investing",
       href: "/settings/investing",
-      icon: TrendingUp,
+      icon: <TrendingUp />,
       title: t("navInvesting"),
       subtitle: t("navInvestingSub"),
       color: "#0D9488",
@@ -50,7 +50,7 @@ export default async function SettingsLayout({
     {
       key: "portfolios",
       href: "/settings/portfolios",
-      icon: Briefcase,
+      icon: <Briefcase />,
       title: t("portfoliosLink"),
       subtitle: t("navPortfoliosCount", {
         portfolios: portfoliosResult.portfolios.length,
@@ -62,7 +62,7 @@ export default async function SettingsLayout({
     {
       key: "data",
       href: "/settings/connections",
-      icon: KeyRound,
+      icon: <KeyRound />,
       title: t("navData"),
       subtitle: t("navDataSub"),
       color: "var(--gold-fg)",
@@ -76,7 +76,7 @@ export default async function SettingsLayout({
     navItems.push({
       key: "admin",
       href: "/admin",
-      icon: ShieldCheck,
+      icon: <ShieldCheck />,
       title: t("adminLink"),
       subtitle: t("adminDesc"),
       color: "#2A6FDB",

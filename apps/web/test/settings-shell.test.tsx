@@ -27,7 +27,7 @@ const NAV_ITEMS: ShellNavItem[] = [
   {
     key: "account",
     href: "/settings/account",
-    icon: UserRound,
+    icon: <UserRound />,
     title: "Account",
     subtitle: "Currency, language & appearance",
     color: "#0E9F6E",
@@ -36,7 +36,7 @@ const NAV_ITEMS: ShellNavItem[] = [
   {
     key: "portfolios",
     href: "/settings/portfolios",
-    icon: Briefcase,
+    icon: <Briefcase />,
     title: "Portfolios & holders",
     subtitle: "2 portfolios · 1 holder",
     color: "#7C5CFC",
