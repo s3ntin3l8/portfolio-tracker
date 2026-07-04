@@ -61,27 +61,45 @@
   },
   "Reports": {
     "title": "Laporan",
-    "subtitle": "Ringkasan pendapatan, laba, tabungan, dan pajak.",
+    "subtitle": "Pernyataan yang dapat dibuka dan diekspor",
+    "open": "Buka",
     "income": {
       "title": "Pendapatan",
-      "desc": "Dividen, kupon & distribusi."
+      "desc": "Dividen, kupon & distribusi.",
+      "trendVsLastYear": "{pct} dari tahun lalu",
+      "caption": "Tahun ini",
+      "metricTtm": "TTM",
+      "metricLifetime": "Sepanjang masa"
     },
     "trades": {
       "title": "Laba/Rugi Terealisasi",
-      "desc": "Transaksi tertutup & kinerja."
+      "desc": "Transaksi tertutup & kinerja.",
+      "trend": "{pct} tingkat menang",
+      "caption": "Terealisasi tahun ini",
+      "metricAvgHold": "Rata-rata tahan",
+      "metricClosed": "Transaksi tertutup",
+      "days": "{count}h"
     },
     "savings": {
       "title": "Tabungan",
-      "desc": "Kontribusi, rencana & proyeksi."
+      "desc": "Kontribusi, rencana & proyeksi.",
+      "trend": "{pct} XIRR",
+      "caption": "Nilai saat ini",
+      "metricMonthly": "Rata-rata bulanan",
+      "metricReturn": "Total imbal hasil"
     },
     "tax": {
       "title": "Pajak",
-      "desc": "Estimasi pajak, keringanan & panen rugi."
+      "desc": "Estimasi pajak, keringanan & panen rugi.",
+      "trend": "{pct}% keringanan terpakai",
+      "caption": "Keringanan terpakai tahun ini",
+      "metricRealized": "Laba terealisasi YTD",
+      "metricIncome": "Dividen YTD"
     }
   },
   "Insights": {
     "title": "Wawasan",
-    "subtitle": "Kinerja, alokasi, dan penyeimbangan.",
+    "subtitle": "Bagaimana kekayaan Anda bekerja",
     "allocation": {
       "title": "Alokasi & konsentrasi",
       "desc": "Sebaran modal Anda di seluruh kelas aset, wilayah, dan mata uang."
@@ -89,6 +107,35 @@
     "rebalancing": {
       "title": "Penyeimbangan & target",
       "desc": "Penyimpangan dari target dan ke mana mengarahkan setoran berikutnya."
+    },
+    "xirr": {
+      "label": "Imbal hasil tahunan · XIRR",
+      "caption": "Berbobot uang, bersih dari biaya · sejak Jan {year}"
+    },
+    "rebalancingCard": {
+      "title": "Penyeimbangan",
+      "edit": "Ubah",
+      "drift": "Penyimpangan {pct}%",
+      "subtitle": "Bobot saat ini vs. target · {status}",
+      "statusOnTarget": "sesuai target",
+      "statusDrifting": "menyimpang",
+      "noTargets": "Belum ada target untuk cakupan ini.",
+      "note": "Penyimpangan membandingkan bobot Anda saat ini dengan target tersimpan — arahkan kontribusi baru ke kelas yang paling kurang bobot agar konvergen seiring waktu.",
+      "reset": "Kembalikan ke default"
+    },
+    "concentration": {
+      "label": "Konsentrasi",
+      "top": "Teratas: {label} · {tone}"
+    },
+    "diversification": {
+      "label": "Diversifikasi",
+      "caption": "kelas · {markets} pasar"
+    },
+    "bestWorst": {
+      "title": "Terbaik & terburuk",
+      "best": "Kinerja terbaik",
+      "worst": "Kinerja terburuk",
+      "empty": "Data perubahan harian belum cukup."
     }
   },
   "Admin": {
@@ -803,7 +850,9 @@
   },
   "Holdings": {
     "title": "Kepemilikan",
+    "titleMobile": "Portofolio",
     "subtitle": "Setiap posisi di seluruh portofolio Anda.",
+    "subtitleCount": "{count} posisi terbuka · harga IDX langsung",
     "instrument": "Instrumen",
     "quantity": "Jumlah",
     "avgCost": "Rata-rata biaya",
@@ -815,7 +864,22 @@
     "cash": "Kas",
     "exportCsv": "Ekspor CSV",
     "costBasisPurchasePrice": "Harga beli",
-    "costBasisTotalPaid": "Total dibayar"
+    "costBasisTotalPaid": "Total dibayar",
+    "hero": {
+      "label": "Total nilai portofolio",
+      "periodPast": "{range} terakhir",
+      "periodAllTime": "sepanjang masa"
+    },
+    "allocation": {
+      "title": "Alokasi",
+      "totalLabel": "Total nilai",
+      "allTimeLabel": "Sepanjang masa",
+      "todayLabel": "Hari ini"
+    },
+    "byRegion": "Berdasarkan wilayah",
+    "byCurrency": "Berdasarkan mata uang",
+    "positionsSectionMobile": "Kepemilikan",
+    "positionsSectionDesktop": "Posisi"
   },
   "Chart": {
     "modeLabel": "Mode grafik",

@@ -17,65 +17,101 @@ export function PriceChart({
   data,
   currency,
   unit = "currency",
+  theme = "default",
+  minimal = false,
+  height = 280,
 }: {
   data: Candle[];
   currency: string;
   unit?: "currency" | "percent";
+  /** "inverse" = white line/fill/tooltip for use inside a dark/brand-colored hero card. */
+  theme?: "default" | "inverse";
+  /** Hide axes/grid — just the area+line, for a compact sparkline (e.g. the Holdings hero). */
+  minimal?: boolean;
+  height?: number;
 }) {
   const locale = useLocale();
   const points = data.map((d) => ({ date: d.date, close: Number(d.close) }));
+  const gradientId = theme === "inverse" ? "price-fill-inverse" : "price-fill";
+  const lineColor = theme === "inverse" ? "#ffffff" : "var(--color-primary)";
+
+  const formatValue = (v: number) =>
+    unit === "percent"
+      ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`
+      : formatMoney(v, currency, locale);
 
   return (
-    <div className="h-[280px] w-full">
+    <div style={{ height }} className="w-full">
       <ResponsiveContainer
         width="100%"
         height="100%"
-        initialDimension={{ width: 1, height: 280 }}
+        initialDimension={{ width: 1, height }}
       >
-        <AreaChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <AreaChart
+          data={points}
+          margin={
+            minimal ? { top: 4, right: 0, left: 0, bottom: 0 } : { top: 8, right: 8, left: 0, bottom: 0 }
+          }
+        >
           <defs>
-            <linearGradient id="price-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={lineColor} stopOpacity={theme === "inverse" ? 0.42 : 0.35} />
+              <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            tickLine={false}
-            minTickGap={32}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-            tickLine={false}
-            axisLine={false}
-            width={72}
-            tickFormatter={(v: number) =>
-              unit === "percent"
-                ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`
-                : formatMoney(v, currency, locale)
-            }
-          />
+          {!minimal && (
+            <>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                tickLine={false}
+                minTickGap={32}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                tickLine={false}
+                axisLine={false}
+                width={72}
+                tickFormatter={formatValue}
+              />
+            </>
+          )}
           <Tooltip
-            formatter={(v) =>
-              unit === "percent"
-                ? `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(2)}%`
-                : formatMoney(Number(v), currency, locale)
+            formatter={(v) => formatValue(Number(v))}
+            cursor={
+              theme === "inverse"
+                ? { stroke: "rgba(255,255,255,.55)", strokeDasharray: "4 4" }
+                : { stroke: "var(--color-border)", strokeDasharray: "4 4" }
             }
-            contentStyle={{
-              background: "var(--color-card)",
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
+            contentStyle={
+              theme === "inverse"
+                ? {
+                    background: "#0f1b14",
+                    border: "none",
+                    borderRadius: 10,
+                    color: "#fff",
+                    fontSize: 12,
+                  }
+                : {
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }
+            }
           />
           <Area
             type="monotone"
             dataKey="close"
-            stroke="var(--color-primary)"
-            strokeWidth={2}
-            fill="url(#price-fill)"
+            stroke={lineColor}
+            strokeWidth={2.4}
+            fill={`url(#${gradientId})`}
+            activeDot={
+              theme === "inverse"
+                ? { r: 5, fill: "#fff", stroke: "#0B7D58", strokeWidth: 2.5 }
+                : { r: 4 }
+            }
           />
         </AreaChart>
       </ResponsiveContainer>

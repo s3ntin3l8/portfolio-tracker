@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { LineChart } from "lucide-react";
 import type { HistoryPoint, PerformancePoint } from "@portfolio/api-client";
@@ -23,20 +23,43 @@ function isIntradayRange(range: ChartRange): boolean {
   return range === "1d" || range === "7d";
 }
 
+/** Ranges shown as chips inside the compact "hero" variant (Holdings glance card). */
+const HERO_RANGES: ChartRange[] = ["1d", "7d", "1m", "1y", "all"];
+
+/** A resolved chart point — same numeric shape regardless of source range. */
+export interface ChartSeriesPoint {
+  date: string;
+  close: number;
+}
+
 export function NetWorthHistoryChart({
   initial,
   currency,
   selectedId = null,
+  variant = "card",
+  initialRange,
+  onSeriesChange,
 }: {
   initial: HistoryPoint[];
   currency: string;
   selectedId?: string | null;
+  /** "hero" renders a minimal (axis-less, white-on-brand) sparkline for the Holdings
+   *  glance card: no mode toggle (always Value), and only 1D/7D/1M/1Y/ALL chips. */
+  variant?: "card" | "hero";
+  /** The range `initial` was fetched with. Defaults to "1y" (card) / "7d" (hero) — pass
+   *  this explicitly when the caller fetched `initial` with a different range so the
+   *  chip selection and the displayed series agree from first paint. */
+  initialRange?: ChartRange;
+  /** Fired whenever the rendered series (or range) changes — lets a "hero" caller derive
+   *  its own period delta/pct pill from the same data the chart is already showing. */
+  onSeriesChange?: (points: ChartSeriesPoint[], range: ChartRange) => void;
 }) {
   const te = useTranslations("Empty");
   const t = useTranslations("Chart");
   const locale = useLocale();
   const api = useApiClient();
-  const [range, setRange] = useState<ChartRange>("1y");
+  const isHero = variant === "hero";
+  const [range, setRange] = useState<ChartRange>(initialRange ?? (isHero ? "7d" : "1y"));
   const [mode, setMode] = useState<ChartMode>("performance");
   const [data, setData] = useState<HistoryPoint[]>(initial);
   const [loading, setLoading] = useState(false);
@@ -60,8 +83,9 @@ export function NetWorthHistoryChart({
 
   const intraday = isIntradayRange(range);
   // No TWR pct/index on intraday points — the Performance toggle only applies to
-  // the day-grained ranges, so intraday always renders as a Value chart.
-  const effectiveMode: ChartMode = intraday ? "value" : mode;
+  // the day-grained ranges, so intraday always renders as a Value chart. The hero
+  // variant has no mode toggle at all — it always shows the raw value sparkline.
+  const effectiveMode: ChartMode = isHero || intraday ? "value" : mode;
 
   const intradayLabelFmt = new Intl.DateTimeFormat(
     locale,
@@ -80,6 +104,61 @@ export function NetWorthHistoryChart({
             .filter(isDailyPoint)
             .map((p) => ({ date: p.date, close: p.marketValue ?? p.netWorth }))
         : data.filter(isDailyPoint).map((p) => ({ date: p.date, close: p.netWorth }));
+
+  // Let a "hero" caller (e.g. the Holdings glance card) derive its own period
+  // delta/pct pill from exactly the series this chart is rendering.
+  useEffect(() => {
+    onSeriesChange?.(
+      chartData.map((p) => ({ date: p.date, close: Number(p.close) })),
+      range,
+    );
+    // chartData is a pure function of [data, range, effectiveMode, selectedId] — depending
+    // on those (rather than the freshly-allocated chartData array) avoids an extra re-run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, range, effectiveMode, selectedId, onSeriesChange]);
+
+  const collectingNote = (
+    <p
+      className={cn(
+        "py-8 text-center text-sm",
+        isHero ? "text-white/80" : "text-muted-foreground",
+      )}
+    >
+      {t("collectingIntraday")}
+    </p>
+  );
+
+  const chart = (
+    <PriceChart
+      data={chartData}
+      currency={currency}
+      unit={effectiveMode === "performance" ? "percent" : "currency"}
+      theme={isHero ? "inverse" : "default"}
+      minimal={isHero}
+      height={isHero ? 72 : 280}
+    />
+  );
+
+  if (isHero) {
+    return (
+      <div className="space-y-2.5">
+        {intraday && data.length < 2 ? (
+          collectingNote
+        ) : data.length > 1 ? (
+          chart
+        ) : (
+          <p className="py-8 text-center text-sm text-white/80">{te("historyTitle")}</p>
+        )}
+        <RangeToggle
+          value={range}
+          onChange={pick}
+          disabled={loading}
+          ranges={HERO_RANGES}
+          theme="inverse"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -111,15 +190,9 @@ export function NetWorthHistoryChart({
         <RangeToggle value={range} onChange={pick} disabled={loading} />
       </div>
       {intraday && data.length < 2 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {t("collectingIntraday")}
-        </p>
+        collectingNote
       ) : data.length > 1 ? (
-        <PriceChart
-          data={chartData}
-          currency={currency}
-          unit={effectiveMode === "performance" ? "percent" : "currency"}
-        />
+        chart
       ) : (
         <EmptyState
           icon={LineChart}

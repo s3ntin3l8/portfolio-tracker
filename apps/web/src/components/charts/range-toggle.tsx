@@ -15,15 +15,21 @@ export function RangeToggle({
   value,
   onChange,
   disabled,
+  ranges = RANGES,
+  theme = "default",
 }: {
   value: ChartRange;
   onChange: (range: ChartRange) => void;
   disabled?: boolean;
+  /** Subset of ranges to render as chips (e.g. the hero card only shows 1D/7D/1M/1Y/ALL). */
+  ranges?: readonly ChartRange[];
+  /** "inverse" = white-on-green pills for use inside a dark/brand-colored hero card. */
+  theme?: "default" | "inverse";
 }) {
   const t = useTranslations("Chart.range");
   return (
     <div className="flex gap-1" role="group" aria-label={t("label")}>
-      {RANGES.map((r) => (
+      {ranges.map((r) => (
         <button
           key={r}
           type="button"
@@ -31,10 +37,17 @@ export function RangeToggle({
           onClick={() => onChange(r)}
           aria-pressed={value === r}
           className={cn(
-            "rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-            value === r
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent",
+            "rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50",
+            theme === "inverse"
+              ? value === r
+                ? "bg-white text-[#0B7D58]"
+                : "bg-transparent text-white/85 hover:bg-white/10"
+              : cn(
+                  "rounded-md",
+                  value === r
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent",
+                ),
           )}
         >
           {t(r)}

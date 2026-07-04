@@ -6,11 +6,15 @@ export function StatCard({
   value,
   delta,
   deltaTone = "neutral",
+  caption,
 }: {
   label: string;
   value: string;
   delta?: string;
   deltaTone?: "up" | "down" | "neutral";
+  /** A short muted line under the value/delta — e.g. "Top: Gold · moderate". No trend
+   *  semantics (unlike `delta`); used for tiles that describe rather than compare. */
+  caption?: string;
 }) {
   return (
     <Card>
@@ -29,6 +33,7 @@ export function StatCard({
             {delta}
           </p>
         )}
+        {caption && <p className="mt-1 text-xs text-muted-foreground">{caption}</p>}
       </CardContent>
     </Card>
   );

@@ -102,4 +102,71 @@ describe("NetWorthHistoryChart", () => {
     const perfButton = screen.getByRole("button", { name: "Performance" });
     expect(perfButton).toBeDisabled();
   });
+
+  describe("hero variant", () => {
+    it("renders real intraday values (not the collecting note) once ≥2 points exist, with no mode toggle and only the 5 hero range chips", async () => {
+      const intradayPoints: IntradayPoint[] = [
+        { at: "2026-06-01T02:00:00.000Z", netWorth: "1000", marketValue: "1000" },
+        { at: "2026-06-01T03:00:00.000Z", netWorth: "1050", marketValue: "1050" },
+        { at: "2026-06-01T04:00:00.000Z", netWorth: "1020", marketValue: "1020" },
+      ];
+      getNetWorthHistory.mockResolvedValueOnce(intradayPoints);
+      const onSeriesChange = vi.fn();
+
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <NetWorthHistoryChart
+            initial={initial}
+            currency="IDR"
+            variant="hero"
+            onSeriesChange={onSeriesChange}
+          />
+        </NextIntlClientProvider>,
+      );
+
+      // Hero has no Performance/Value mode toggle.
+      expect(screen.queryByRole("button", { name: "Performance" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Value" })).not.toBeInTheDocument();
+
+      // Only the 5 hero chips render (no 3M/YTD).
+      expect(screen.getByRole("button", { name: "1D" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "7D" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "1M" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "1Y" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "3M" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "YTD" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "1D" }));
+      await waitFor(() => expect(getNetWorthHistory).toHaveBeenCalledWith("1d"));
+
+      expect(await screen.findByTestId("chart")).toBeInTheDocument();
+      expect(screen.queryByText(/Collecting intraday data/i)).not.toBeInTheDocument();
+
+      // The caller-visible series carries the real fetched values, not a placeholder.
+      await waitFor(() => {
+        const lastCall = onSeriesChange.mock.calls.at(-1);
+        expect(lastCall?.[1]).toBe("1d");
+        expect(lastCall?.[0]).toEqual([
+          { date: expect.any(String), close: 1000 },
+          { date: expect.any(String), close: 1050 },
+          { date: expect.any(String), close: 1020 },
+        ]);
+      });
+    });
+
+    it("shows the collecting note (not a broken chart) when fewer than 2 intraday points exist", async () => {
+      getNetWorthHistory.mockResolvedValueOnce([]);
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <NetWorthHistoryChart initial={initial} currency="IDR" variant="hero" />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "1D" }));
+      await waitFor(() =>
+        expect(screen.getByText(/Collecting intraday data/i)).toBeInTheDocument(),
+      );
+      expect(screen.queryByTestId("chart")).not.toBeInTheDocument();
+    });
+  });
 });

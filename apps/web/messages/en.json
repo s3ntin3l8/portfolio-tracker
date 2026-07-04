@@ -61,27 +61,45 @@
   },
   "Reports": {
     "title": "Reports",
-    "subtitle": "Statements across income, gains, savings and tax.",
+    "subtitle": "Statements you can open and export",
+    "open": "Open",
     "income": {
       "title": "Income",
-      "desc": "Dividends, coupons & distributions."
+      "desc": "Dividends, coupons & distributions.",
+      "trendVsLastYear": "{pct} vs last year",
+      "caption": "This year",
+      "metricTtm": "TTM",
+      "metricLifetime": "Lifetime"
     },
     "trades": {
       "title": "Realized P&L",
-      "desc": "Closed trades & performance."
+      "desc": "Closed trades & performance.",
+      "trend": "{pct} win rate",
+      "caption": "Realized this year",
+      "metricAvgHold": "Avg hold",
+      "metricClosed": "Closed trades",
+      "days": "{count}d"
     },
     "savings": {
       "title": "Savings",
-      "desc": "Contributions, plans & forecast."
+      "desc": "Contributions, plans & forecast.",
+      "trend": "{pct} XIRR",
+      "caption": "Current value",
+      "metricMonthly": "Monthly avg",
+      "metricReturn": "Total return"
     },
     "tax": {
       "title": "Tax",
-      "desc": "Estimated tax, allowances & harvesting."
+      "desc": "Estimated tax, allowances & harvesting.",
+      "trend": "{pct}% allowance used",
+      "caption": "Allowance used this year",
+      "metricRealized": "Realized gains YTD",
+      "metricIncome": "Dividends YTD"
     }
   },
   "Insights": {
     "title": "Insights",
-    "subtitle": "Performance, allocation and rebalancing.",
+    "subtitle": "How your wealth is working",
     "allocation": {
       "title": "Allocation & concentration",
       "desc": "How your capital is spread across asset classes, regions and currencies."
@@ -89,6 +107,35 @@
     "rebalancing": {
       "title": "Rebalancing & targets",
       "desc": "Drift from your target mix and where to direct your next top-up."
+    },
+    "xirr": {
+      "label": "Annualised return · XIRR",
+      "caption": "Money-weighted, net of fees · since Jan {year}"
+    },
+    "rebalancingCard": {
+      "title": "Rebalancing",
+      "edit": "Edit",
+      "drift": "Drift {pct}%",
+      "subtitle": "Current vs. target weights · {status}",
+      "statusOnTarget": "on target",
+      "statusDrifting": "drifting",
+      "noTargets": "No targets set for this scope yet.",
+      "note": "Drift compares your current weights to your saved targets — direct new contributions toward the most under-weight class to converge over time.",
+      "reset": "Reset to default"
+    },
+    "concentration": {
+      "label": "Concentration",
+      "top": "Top: {label} · {tone}"
+    },
+    "diversification": {
+      "label": "Diversification",
+      "caption": "classes · {markets} markets"
+    },
+    "bestWorst": {
+      "title": "Best & worst",
+      "best": "Best performer",
+      "worst": "Worst performer",
+      "empty": "Not enough day-change data yet."
     }
   },
   "Admin": {
@@ -805,7 +852,9 @@
   },
   "Holdings": {
     "title": "Holdings",
+    "titleMobile": "Portfolio",
     "subtitle": "Every position across your portfolios.",
+    "subtitleCount": "{count} open positions · live IDX prices",
     "instrument": "Instrument",
     "quantity": "Quantity",
     "avgCost": "Avg cost",
@@ -817,7 +866,22 @@
     "cash": "Cash",
     "exportCsv": "Export CSV",
     "costBasisPurchasePrice": "Purchase price",
-    "costBasisTotalPaid": "Total paid"
+    "costBasisTotalPaid": "Total paid",
+    "hero": {
+      "label": "Total portfolio value",
+      "periodPast": "past {range}",
+      "periodAllTime": "all-time"
+    },
+    "allocation": {
+      "title": "Allocation",
+      "totalLabel": "Total value",
+      "allTimeLabel": "All-time",
+      "todayLabel": "Today"
+    },
+    "byRegion": "By region",
+    "byCurrency": "By currency",
+    "positionsSectionMobile": "Holdings",
+    "positionsSectionDesktop": "Positions"
   },
   "Chart": {
     "modeLabel": "Chart mode",
