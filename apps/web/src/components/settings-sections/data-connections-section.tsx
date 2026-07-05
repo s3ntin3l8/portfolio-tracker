@@ -63,7 +63,6 @@ export async function DataConnectionsSection({
         </p>
         <Card>
           <CardContent className="p-5">
-            <p className="mb-4 text-sm text-muted-foreground">{t("tokensHint")}</p>
             <ApiTokens initialTokens={apiTokens} />
           </CardContent>
         </Card>
