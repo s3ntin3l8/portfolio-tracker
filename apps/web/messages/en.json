@@ -353,7 +353,7 @@
     "growthSoFar": "incl. {amount} growth so far",
     "emptyTitle": "No contributions yet",
     "emptyBody": "Record deposits or savings-plan purchases and your saving progress appears here.",
-    "sparplanTitle": "Recurring investment plans",
+    "sparplanTitle": "Savings plans",
     "detectedMonthly": "Active monthly total",
     "nowPct": "{pct}% now",
     "activeCount": "{count, plural, one {# active} other {# active}}",

@@ -353,7 +353,7 @@
     "growthSoFar": "termasuk {amount} pertumbuhan sejauh ini",
     "emptyTitle": "Belum ada setoran",
     "emptyBody": "Catat setoran atau pembelian rencana tabungan, dan kemajuan menabung Anda muncul di sini.",
-    "sparplanTitle": "Rencana investasi rutin",
+    "sparplanTitle": "Rencana tabungan",
     "detectedMonthly": "Total bulanan aktif",
     "nowPct": "{pct}% sekarang",
     "activeCount": "{count, plural, other {# aktif}}",
