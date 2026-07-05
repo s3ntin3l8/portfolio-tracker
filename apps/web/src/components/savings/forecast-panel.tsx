@@ -102,17 +102,21 @@ export function ForecastPanel({
   const growthPct = value > 0 ? (totalGrowth / value) * 100 : 0;
   const m = (n: number) => formatMoney(n, currency, locale);
 
+  const returnLabel = `${formatPercent(returnPct / 100, locale)} p.a.`;
+
   return (
     <div
-      className="rounded-[26px] p-5 pb-4 text-white shadow-[0_12px_30px_rgba(14,159,110,.30)] sm:rounded-[20px]"
+      className="rounded-[20px] p-[22px] text-white shadow-[0_12px_30px_rgba(14,159,110,.28)]"
       style={{ background: "linear-gradient(160deg,#0E9F6E,#0B7D58)" }}
     >
-      <p className="text-[15px] font-bold">{t("forecastTitle")}</p>
-      <p className="text-xs text-white/70">{t("forecastSubtitle")}</p>
+      <p className="text-base font-bold">{t("forecastTitle")}</p>
+      <p className="mt-px text-xs font-medium text-white/80">{t("forecastSubtitle")}</p>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="forecast-monthly" className="text-xs font-semibold text-white/78">
+      {/* Levers — stacked translucent pills (reference), not a grid. */}
+      <div className="mt-4 space-y-2.5">
+        {/* Monthly top-up: label left, white-filled numeric input right. */}
+        <div className="flex items-center justify-between gap-2.5 rounded-[13px] bg-white/12 px-[13px] py-[11px]">
+          <Label htmlFor="forecast-monthly" className="text-[11px] font-semibold text-white/82">
             {t("monthlyAmount")}
           </Label>
           <input
@@ -122,14 +126,18 @@ export function ForecastPanel({
             inputMode="numeric"
             value={monthly}
             onChange={(e) => setMonthly(num(e.target.value, 0, 1_000_000))}
-            className="tabular w-full rounded-full border-none bg-white/15 px-3.5 py-1.5 text-right font-bold text-white placeholder:text-white/50 focus:bg-white/20 focus:outline-none"
+            className="tabular h-[30px] w-[134px] rounded-lg border-none bg-white/[.92] px-2.5 text-right text-[13px] font-extrabold text-[#0B3A2A] focus:outline-none"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="forecast-return" className="text-xs font-semibold text-white/78">
-            {t("annualReturn")}: {formatPercent(returnPct / 100, locale)}
-          </Label>
+        {/* Expected return: label + bold value on one row, slider below. */}
+        <div className="rounded-[13px] bg-white/12 px-[13px] py-[11px]">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <Label htmlFor="forecast-return" className="text-[11px] font-semibold text-white/82">
+              {t("annualReturn")}
+            </Label>
+            <span className="tabular text-[13px] font-extrabold">{returnLabel}</span>
+          </div>
           <input
             id="forecast-return"
             type="range"
@@ -138,26 +146,30 @@ export function ForecastPanel({
             step={0.5}
             value={returnPct}
             onChange={(e) => setReturnPct(num(e.target.value, 0, 15))}
-            className="h-9 w-full accent-white"
+            className="h-[22px] w-full accent-white"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="forecast-years" className="text-xs font-semibold text-white/78">
-              {t("horizonYears")}: {t("years", { count: years })}
-            </Label>
-            {yearsToEighteen !== null && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-xs text-white hover:bg-white/15 hover:text-white"
-                onClick={() => setYears(yearsToEighteen)}
-              >
-                {t("toAge18")}
-              </Button>
-            )}
+        {/* Horizon: label (+ optional age-18 preset) + bold value, slider below. */}
+        <div className="rounded-[13px] bg-white/12 px-[13px] py-[11px]">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="forecast-years" className="text-[11px] font-semibold text-white/82">
+                {t("horizonYears")}
+              </Label>
+              {yearsToEighteen !== null && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 px-1.5 text-[10px] text-white hover:bg-white/15 hover:text-white"
+                  onClick={() => setYears(yearsToEighteen)}
+                >
+                  {t("toAge18")}
+                </Button>
+              )}
+            </div>
+            <span className="tabular text-[13px] font-extrabold">{t("years", { count: years })}</span>
           </div>
           <input
             id="forecast-years"
@@ -167,30 +179,34 @@ export function ForecastPanel({
             step={1}
             value={years}
             onChange={(e) => setYears(num(e.target.value, 1, 50))}
-            className="h-9 w-full accent-white"
+            className="h-[22px] w-full accent-white"
           />
         </div>
       </div>
 
-      <div className="mt-5">
-        <p className="text-xs font-semibold text-white/70">
+      {/* Hero projected figure + assumptions subtitle. */}
+      <div className="mt-[18px]">
+        <p className="text-xs font-semibold text-white/80">
           {t("projectedInYears", { count: years })}
         </p>
-        <p className="tabular mt-1 text-[34px] font-extrabold leading-tight" data-testid="projected-value">
+        <p className="tabular mt-0.5 text-[34px] font-extrabold leading-tight" data-testid="projected-value">
           {m(value)}
+        </p>
+        <p className="mt-1 text-xs font-medium text-white/82">
+          {t("forecastAssumptions", { amount: m(monthly), rate: returnLabel })}
         </p>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3.5">
         <ForecastChart series={series} presentValue={currentValue} currency={currency} />
       </div>
 
-      {/* Contributed / growth split — same visual language as the split bars on Reports. */}
-      <div className="mt-4">
-        <div className="flex h-1.5 overflow-hidden rounded-full bg-white/15">
-          <div className="h-full bg-white" style={{ width: `${100 - growthPct}%` }} />
+      {/* Contributed / growth split — reference: thick track, translucent fill. */}
+      <div className="mb-2 mt-3">
+        <div className="flex h-[11px] overflow-hidden rounded-md bg-white/[.22]">
+          <div className="h-full bg-white/60" style={{ width: `${100 - growthPct}%` }} />
         </div>
-        <div className="mt-2 flex items-center justify-between text-xs font-semibold text-white/85">
+        <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-white/85">
           <span data-testid="projected-contributed">
             {t("projectedContributed")} {m(totalContributed)}
           </span>
@@ -201,7 +217,7 @@ export function ForecastPanel({
       </div>
 
       <div
-        className="mt-4 grid gap-2 sm:grid-cols-3"
+        className="mt-[18px] grid grid-cols-3 gap-2"
         role="group"
         aria-label={t("scenariosLabel")}
       >
@@ -212,16 +228,14 @@ export function ForecastPanel({
             data-active={s.active}
             className={
               s.active
-                ? "rounded-xl bg-white p-3 text-[#0B7D58]"
-                : "rounded-xl bg-white/12 p-3"
+                ? "rounded-[13px] border border-white/55 bg-white/24 px-3 py-[11px]"
+                : "rounded-[13px] border border-transparent bg-white/12 px-3 py-[11px]"
             }
           >
-            <p
-              className={`text-[10px] font-semibold ${s.active ? "text-[#0B7D58]/70" : "text-white/70"}`}
-            >
+            <p className="text-[10px] font-semibold text-white/75">
               {formatPercent(s.rate / 100, locale)}
             </p>
-            <p className="tabular mt-0.5 text-sm font-extrabold">{m(s.value)}</p>
+            <p className="tabular mt-0.5 text-[15px] font-extrabold">{m(s.value)}</p>
           </div>
         ))}
       </div>

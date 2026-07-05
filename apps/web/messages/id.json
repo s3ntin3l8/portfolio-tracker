@@ -373,7 +373,8 @@
     "cadenceQuarterlyLabel": "Kuartalan",
     "cadenceSemiAnnualLabel": "Semi-tahunan",
     "cadenceAnnualLabel": "Tahunan",
-    "driftOnTarget": "Sesuai target"
+    "driftOnTarget": "Sesuai target",
+    "forecastAssumptions": "jika terus menambah {amount}/bln pada {rate} p.a."
   },
   "Portfolios": {
     "title": "Portofolio",

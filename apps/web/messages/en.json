@@ -373,7 +373,8 @@
     "cadenceQuarterlyLabel": "Quarterly",
     "cadenceSemiAnnualLabel": "Semi-annual",
     "cadenceAnnualLabel": "Annual",
-    "driftOnTarget": "On target"
+    "driftOnTarget": "On target",
+    "forecastAssumptions": "if you keep adding {amount}/mo at {rate} p.a."
   },
   "Portfolios": {
     "title": "Portfolios",
