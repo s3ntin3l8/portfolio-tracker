@@ -40,9 +40,7 @@ describe("UpdateProfileForm", () => {
     const onSuccess = renderForm(client);
 
     // Only change the currency; name is untouched.
-    fireEvent.change(screen.getByLabelText(messages.Settings.displayCurrency), {
-      target: { value: "USD" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "USD" }));
     fireEvent.click(screen.getByRole("button", { name: messages.Settings.save }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());

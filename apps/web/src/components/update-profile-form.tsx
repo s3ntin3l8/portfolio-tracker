@@ -7,7 +7,7 @@ import type { ApiClient } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type UpdateProfileClient = Pick<ApiClient, "updateMe">;
@@ -87,21 +87,32 @@ export function UpdateProfileForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="profile-currency">{t("displayCurrency")}</Label>
-        <Select
-          id="profile-currency"
-          value={currency}
-          onChange={(e) => {
-            setCurrency(e.target.value);
-            setSaved(false);
-          }}
+        <Label id="profile-currency-label">{t("displayCurrency")}</Label>
+        <div
+          role="group"
+          aria-labelledby="profile-currency-label"
+          className="inline-flex items-center gap-1 rounded-[12px] border border-border bg-card p-[3px] shadow-card"
         >
           {CURRENCIES.map((c) => (
-            <option key={c} value={c}>
+            <button
+              key={c}
+              type="button"
+              onClick={() => {
+                setCurrency(c);
+                setSaved(false);
+              }}
+              aria-pressed={currency === c}
+              className={cn(
+                "rounded-[9px] px-3.5 py-1.5 text-xs font-bold transition-colors",
+                currency === c
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
               {c}
-            </option>
+            </button>
           ))}
-        </Select>
+        </div>
         <p className="text-xs text-muted-foreground">{t("displayCurrencyHint")}</p>
       </div>
 
