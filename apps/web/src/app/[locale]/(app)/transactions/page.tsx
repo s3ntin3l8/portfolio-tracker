@@ -38,9 +38,6 @@ export default async function TransactionsPage({
 
   let status: "ok" | "empty" | "unavailable";
   let rows: TxRow[] = [];
-  // For a single cash-outside portfolio, default the list to "Investments only" so the
-  // cash/spending noise is hidden; aggregate and cash-inside views default to "All".
-  let defaultInvestmentsOnly = false;
   let singlePortfolio: { id: string; name: string; documentRetention: boolean } | null = null;
   let anomalies: Anomaly[] | null = null;
 
@@ -57,7 +54,6 @@ export default async function TransactionsPage({
     rows = txResult.status === "ok" ? txResult.data : [];
     anomalies = anomalyResult;
     if (txResult.status === "ok") {
-      defaultInvestmentsOnly = !txResult.portfolio.cashCounted;
       singlePortfolio = {
         id: txResult.portfolio.id,
         name: txResult.portfolio.name,
@@ -186,7 +182,6 @@ export default async function TransactionsPage({
       <TransactionsTable
         rows={rows}
         showPortfolio={aggregate}
-        defaultInvestmentsOnly={defaultInvestmentsOnly}
         anomalies={anomalies ?? []}
         portfolios={portfolioList}
       />

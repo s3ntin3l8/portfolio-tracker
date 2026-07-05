@@ -159,11 +159,9 @@ describe("TransactionsTable", () => {
         <TransactionsTable rows={ROWS} showPortfolio portfolios={PORTFOLIOS} />
       </NextIntlClientProvider>,
     );
-    // Open the row's Reassign action (first row is portfolio p1).
-    const reassignButtons = screen.getAllByRole("button", {
-      name: messages.Manage.reassign,
-    });
-    fireEvent.click(reassignButtons[0]);
+    // Single-row actions live in the detail sheet (opened by clicking the row), not inline.
+    fireEvent.click(screen.getByText("Bank Central Asia")); // t1 (portfolio p1)
+    fireEvent.click(screen.getByRole("button", { name: messages.Manage.reassign }));
 
     // The dialog shows; p1 is excluded so the only target is DKB (p2) — confirm the move.
     fireEvent.click(
@@ -180,6 +178,8 @@ describe("TransactionsTable", () => {
         <TransactionsTable rows={ROWS} portfolios={[PORTFOLIOS[0]]} />
       </NextIntlClientProvider>,
     );
+    // Open the detail sheet — with a single portfolio there's nowhere to reassign to.
+    fireEvent.click(screen.getByText("Bank Central Asia"));
     expect(
       screen.queryByRole("button", { name: messages.Manage.reassign }),
     ).toBeNull();
@@ -381,8 +381,9 @@ describe("TransactionsTable", () => {
       expect(screen.getByText(messages.Manage.status.badgeCashNeutral)).toBeInTheDocument();
     });
 
-    it("exposes a per-row status control", () => {
+    it("exposes a per-row status control in the detail sheet", () => {
       renderSingleRow({ ...ROWS[0], status: "normal" });
+      fireEvent.click(screen.getByText("Bank Central Asia"));
       expect(
         screen.getByRole("button", { name: messages.Manage.status.label }),
       ).toBeInTheDocument();
@@ -442,6 +443,7 @@ describe("TransactionsTable", () => {
     it("confirming a draft row calls resolveDraftTransactions with action=confirm", async () => {
       resolveDraftTransactions.mockClear();
       renderSingleRow({ ...ROWS[0], status: "draft" });
+      fireEvent.click(screen.getByText("Bank Central Asia")); // open the detail sheet
       fireEvent.click(screen.getByRole("button", { name: md.confirmDraft }));
       await waitFor(() =>
         expect(resolveDraftTransactions).toHaveBeenCalledWith("p1", ["t1"], "confirm"),
@@ -451,6 +453,7 @@ describe("TransactionsTable", () => {
     it("discarding a draft row calls resolveDraftTransactions with action=discard", async () => {
       resolveDraftTransactions.mockClear();
       renderSingleRow({ ...ROWS[0], status: "draft" });
+      fireEvent.click(screen.getByText("Bank Central Asia")); // open the detail sheet
       fireEvent.click(screen.getByRole("button", { name: md.discardDraft }));
       await waitFor(() =>
         expect(resolveDraftTransactions).toHaveBeenCalledWith("p1", ["t1"], "discard"),
@@ -537,16 +540,6 @@ describe("TransactionsTable", () => {
       expect(rows.length).toBe(2);
       expect(rows.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
       expect(rows.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
-    });
-
-    it("filtering by instrument shows only matching rows", () => {
-      renderFilterTable();
-      const instSelect = screen.getByRole("combobox", { name: messages.Transactions.filterInstrument });
-      // Select "BBCA" — f1 and f2 match; f3 (AAPL) should be gone
-      fireEvent.change(instSelect, { target: { value: "BBCA" } });
-      const rows = screen.getAllByRole("row").slice(1);
-      expect(rows.length).toBe(2);
-      expect(rows.every((r) => r.textContent?.includes("BBCA"))).toBe(true);
     });
 
     it("filtering by year shows only matching rows", () => {

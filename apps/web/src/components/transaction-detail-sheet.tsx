@@ -2,17 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { AlertCircle, AlertTriangle, Download } from "lucide-react";
+import { AlertCircle, AlertTriangle, Check, Download, FolderInput, Loader2, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
+import { TransactionStatusButton } from "@/components/transaction-status-button";
 import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { formatMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
 import { txAmount, txNetAmount, SOURCE_ICON } from "@/components/transactions-table";
 import type { TxRow } from "@/components/transactions-table";
+import type { PickablePortfolio } from "@/components/portfolio-picker";
 import type { Anomaly } from "@portfolio/api-client";
 
 const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
@@ -27,6 +29,16 @@ interface TransactionDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted: () => void;
+  /** All of the user's portfolios — enables the "Reassign…" action (shown only when at
+   *  least two exist). The reference has no inline row actions; single-row edit/delete/
+   *  reassign/draft-resolve all live here, opened by clicking the row. */
+  portfolios?: PickablePortfolio[];
+  /** Queue this transaction for reassignment (opens the table's ReassignDialog). */
+  onReassign?: (tx: TxRow) => void;
+  /** Confirm/discard this transaction when it is a draft. */
+  onResolve?: (tx: TxRow, action: "confirm" | "discard") => void;
+  /** True while this row's draft is being confirmed/discarded (spinner + disable). */
+  resolving?: boolean;
 }
 
 export function TransactionDetailSheet({
@@ -35,6 +47,10 @@ export function TransactionDetailSheet({
   open,
   onOpenChange,
   onDeleted,
+  portfolios = [],
+  onReassign,
+  onResolve,
+  resolving = false,
 }: TransactionDetailSheetProps) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -56,6 +72,8 @@ export function TransactionDetailSheet({
   const amount = txAmount(tx);
   const netAmount = txNetAmount(tx);
   const Icon = SOURCE_ICON[tx.source] ?? null;
+  const status = tx.status ?? "normal";
+  const canReassign = portfolios.length > 1;
 
   const dismissAnomaly = async () => {
     if (!anomaly) return;
@@ -223,8 +241,35 @@ export function TransactionDetailSheet({
             </div>
           )}
 
-          {/* Actions footer */}
+          {/* Actions footer — the reference has no inline row actions, so every single-row
+              action for the row you clicked lives here. */}
           <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+            {status === "draft" && onResolve && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={resolving}
+                  onClick={() => onResolve(tx, "confirm")}
+                >
+                  {resolving ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Check className="size-3.5" />
+                  )}
+                  {tm("status.confirmDraft")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={resolving}
+                  onClick={() => onResolve(tx, "discard")}
+                >
+                  <X className="size-3.5" />
+                  {tm("status.discardDraft")}
+                </Button>
+              </>
+            )}
             {tx.hasDocument && !tx.sources?.some((s) => s.hasDocument) && (
               <Button
                 variant="outline"
@@ -248,6 +293,23 @@ export function TransactionDetailSheet({
             <Button variant="outline" size="sm" asChild>
               <Link href={`/transactions/${tx.id}/edit`}>{tm("edit")}</Link>
             </Button>
+            {canReassign && onReassign && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onReassign(tx)}
+              >
+                <FolderInput className="size-3.5" />
+                {tm("reassign")}
+              </Button>
+            )}
+            {status !== "draft" && (
+              <TransactionStatusButton
+                portfolioId={tx.portfolioId}
+                txId={tx.id}
+                status={status}
+              />
+            )}
             <DeleteTransactionButton
               portfolioId={tx.portfolioId}
               txId={tx.id}
