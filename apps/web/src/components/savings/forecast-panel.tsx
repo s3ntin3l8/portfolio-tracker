@@ -6,7 +6,7 @@ import { forecastSeries } from "@portfolio/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ForecastChart } from "@/components/charts/forecast-chart";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatMoneyCompact, formatPercent } from "@/lib/utils";
 
 /** Parse a numeric input, treating blank/invalid as 0 and clamping to a range. */
 function num(v: string, min: number, max: number): number {
@@ -101,6 +101,8 @@ export function ForecastPanel({
   const totalGrowth = Math.max(0, value - totalContributed);
   const growthPct = value > 0 ? (totalGrowth / value) * 100 : 0;
   const m = (n: number) => formatMoney(n, currency, locale);
+  // Scenario chips are only ~1/3 of the card wide — abbreviate 7-figure values.
+  const mc = (n: number) => formatMoneyCompact(n, currency, locale);
 
   const returnLabel = `${formatPercent(returnPct / 100, locale)} p.a.`;
 
@@ -235,7 +237,7 @@ export function ForecastPanel({
             <p className="text-[10px] font-semibold text-white/75">
               {formatPercent(s.rate / 100, locale)}
             </p>
-            <p className="tabular mt-0.5 text-[15px] font-extrabold">{m(s.value)}</p>
+            <p className="tabular mt-0.5 text-[15px] font-extrabold">{mc(s.value)}</p>
           </div>
         ))}
       </div>
