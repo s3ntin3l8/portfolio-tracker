@@ -20,7 +20,7 @@ export function ReportHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-1 flex items-center gap-3">
+    <div className="mb-6 flex items-center gap-3">
       <Link
         href={backHref}
         aria-label="Back"
