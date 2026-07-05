@@ -159,8 +159,8 @@ function PlanRow({
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-[13px] font-bold">{label}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-[13px] font-bold">{label}</span>
           <StepHint plan={plan} locale={locale} t={t} />
           {driftRow && <DriftBadge driftRow={driftRow} t={t} td={td} />}
           {plan.source === "heuristic" && (
