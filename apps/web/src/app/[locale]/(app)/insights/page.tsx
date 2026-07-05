@@ -1,7 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Scale } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { StatCard } from "@/components/stat-card";
 import { RebalancingCard } from "@/components/insights/rebalancing-card";
 import { BestWorstCard } from "@/components/insights/best-worst-card";
 import {
@@ -74,6 +73,7 @@ export default async function InsightsPage({
   }));
   const topClass = filteredClasses.length > 0 ? [...filteredClasses].sort((a, b) => b.pct - a.pct)[0] : null;
   const marketCount = allocation?.byRegion.filter((s) => Number(s.value) > 0).length ?? 0;
+  const currencyCount = allocation?.byCurrency.filter((s) => Number(s.value) > 0).length ?? 0;
 
   const movers = bestAndWorst(
     holdingsView.status === "ok" ? holdingsView.holdings.filter((h) => Number(h.quantity) !== 0) : [],
@@ -88,22 +88,18 @@ export default async function InsightsPage({
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          {/* XIRR hero */}
+          {/* XIRR hero — reference stacks label → figure → caption with tight 4px gaps. */}
           <div
             className="rounded-[20px] p-6 text-white"
             style={{ background: "linear-gradient(135deg,#11211a,#1d3a2c)" }}
           >
-            <div className="flex flex-wrap items-baseline justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold text-white/70">{t("xirr.label")}</p>
-                <p className="tabular mt-1 text-[40px] font-extrabold">
-                  {summary.xirr !== null ? formatPercent(summary.xirr, locale) : "—"}
-                </p>
-              </div>
-              <p className="max-w-xs border-white/[.18] text-xs font-medium leading-[1.5] text-white/70 sm:border-l sm:pl-6">
-                {t("xirr.caption", { year: sinceYear })}
-              </p>
-            </div>
+            <p className="text-xs font-semibold text-white/70">{t("xirr.label")}</p>
+            <p className="tabular mt-1 text-[36px] font-extrabold leading-none sm:text-[40px]">
+              {summary.xirr !== null ? formatPercent(summary.xirr, locale) : "—"}
+            </p>
+            <p className="mt-1 text-xs font-medium leading-[1.5] text-white/70">
+              {t("xirr.caption", { year: sinceYear })}
+            </p>
           </div>
 
           <RebalancingCard
@@ -114,35 +110,42 @@ export default async function InsightsPage({
         </div>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            {allocation && (
-              <StatCard
-                label={t("concentration.label")}
-                value={`${allocation.concentration.top1Pct.toFixed(0)}%`}
-                caption={
-                  topClass
-                    ? t("concentration.top", {
-                        label: topClass.key === "cash" ? tc("cash") : tc(topClass.key),
-                        tone: td(
-                          allocation.concentration.label === "diversified"
-                            ? "concentrationDiversified"
-                            : allocation.concentration.label === "moderate"
-                              ? "concentrationModerate"
-                              : "concentrationConcentrated",
-                        ).toLowerCase(),
-                      })
-                    : undefined
-                }
-              />
-            )}
-            {allocation && (
-              <StatCard
-                label={t("diversification.label")}
-                value={String(assetClassSlices.length)}
-                caption={t("diversification.caption", { markets: marketCount })}
-              />
-            )}
-          </div>
+          {allocation && (
+            <div className="grid grid-cols-2 gap-4">
+              {/* Concentration — reference: big 22px figure + "Top: … · tone" subtext. */}
+              <div className="rounded-[20px] bg-card p-4 shadow-card">
+                <p className="text-xs font-semibold text-text-2">{t("concentration.label")}</p>
+                <p className="tabular mt-1 text-[22px] font-extrabold leading-none">
+                  {allocation.concentration.top1Pct.toFixed(0)}%
+                </p>
+                {topClass && (
+                  <p className="mt-1 text-xs font-medium text-text-2">
+                    {t("concentration.top", {
+                      label: topClass.key === "cash" ? tc("cash") : tc(topClass.key),
+                      tone: td(
+                        allocation.concentration.label === "diversified"
+                          ? "concentrationDiversified"
+                          : allocation.concentration.label === "moderate"
+                            ? "concentrationModerate"
+                            : "concentrationConcentrated",
+                      ).toLowerCase(),
+                    })}
+                  </p>
+                )}
+              </div>
+
+              {/* Diversification — reference: "{n} classes" big, "{x} markets · {y} currencies". */}
+              <div className="rounded-[20px] bg-card p-4 shadow-card">
+                <p className="text-xs font-semibold text-text-2">{t("diversification.label")}</p>
+                <p className="mt-1 text-[22px] font-extrabold leading-none">
+                  {t("diversification.value", { count: assetClassSlices.length })}
+                </p>
+                <p className="mt-1 text-xs font-medium text-text-2">
+                  {t("diversification.caption", { markets: marketCount, currencies: currencyCount })}
+                </p>
+              </div>
+            </div>
+          )}
 
           {movers && (
             <BestWorstCard

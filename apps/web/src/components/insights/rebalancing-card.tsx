@@ -131,7 +131,7 @@ export function RebalancingCard({
         <h2 className="text-base font-bold">{t("title")}</h2>
         <div className="flex items-center gap-2">
           {hasTargets && !editing && (
-            <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-bold text-warning">
+            <span className="rounded-lg bg-warning/15 px-[9px] py-1 text-[11px] font-bold text-warning">
               {t("drift", { pct: maxAbsDrift.toFixed(1) })}
             </span>
           )}

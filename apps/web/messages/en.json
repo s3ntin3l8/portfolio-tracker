@@ -135,7 +135,8 @@
     },
     "diversification": {
       "label": "Diversification",
-      "caption": "classes · {markets} markets"
+      "caption": "{markets, plural, one {# market} other {# markets}} · {currencies, plural, one {# currency} other {# currencies}}",
+      "value": "{count, plural, one {# class} other {# classes}}"
     },
     "bestWorst": {
       "title": "Best & worst",

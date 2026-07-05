@@ -135,7 +135,8 @@
     },
     "diversification": {
       "label": "Diversifikasi",
-      "caption": "kelas · {markets} pasar"
+      "caption": "{markets} pasar · {currencies} mata uang",
+      "value": "{count} kelas"
     },
     "bestWorst": {
       "title": "Terbaik & terburuk",
