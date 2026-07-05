@@ -271,27 +271,38 @@ describe("TransactionsTable", () => {
     expect(th).toHaveAttribute("aria-sort", "descending");
   });
 
-  it("renders new column headers for fees, tax, and net amount", () => {
+  it("renders the reference column headers (Transaction, Price, Source, Amount)", () => {
     renderTable();
-    expect(screen.getByRole("button", { name: /fees/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /tax/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /net amount/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: messages.Transactions.transactionCol }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /price/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /source/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /amount/i })).toBeInTheDocument();
   });
 
-  it("shows dash for zero fees and null tax, renders tax value when set", () => {
-    renderTable();
-    // t1 has fees "5" (non-zero → shows formatted), t2 has fees "0" → dash
-    // t1 has tax null → dash, t2 has tax "10" → shows formatted
-    // The cells are hidden on small screens but still in DOM; test by checking text content
+  it("shows a dash in the price column for qty-less cash rows", () => {
+    const cashRow: TxRow = {
+      id: "cash1",
+      portfolioId: "p1",
+      type: "deposit",
+      quantity: "0",
+      price: "500",
+      fees: "0",
+      tax: null,
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+      source: "manual",
+      instrument: null,
+    };
+    renderSingleRow(cashRow);
     const cells = screen.getAllByRole("cell");
     const cellTexts = cells.map((c) => c.textContent ?? "");
-    // t2 tax cell should show a dollar-formatted value (USD 10)
-    expect(cellTexts.some((t) => t.includes("10"))).toBe(true);
-    // tax for t1 (null) should render as —
     expect(cellTexts.some((t) => t === "—")).toBe(true);
   });
 
-  it("shows GROSS amount (price + tax) for dividend rows; net amount stays separate", () => {
+  it("shows the net cash amount for dividend rows", () => {
     // Normal dividend: price=0.07 (net), tax=0.03 (withheld) → Amount should show gross 0.10.
     const dividendRow: TxRow = {
       id: "div1",
@@ -308,13 +319,10 @@ describe("TransactionsTable", () => {
       instrument: { symbol: "O", name: "Realty Income" },
     };
     renderSingleRow(dividendRow);
-    // Amount column = gross = 0.07 + 0.03 = 0.10
-    // Net Amount column = cashFlow = 0.07
-    // Both are formatted as EUR; check both values appear and 0.07 appears at least once (net)
+    // Reference table shows one Amount column = the NET cash movement (0.07).
     const cells = screen.getAllByRole("cell");
     const texts = cells.map((c) => c.textContent ?? "");
-    // Gross (0.10) appears in the Amount cell
-    expect(texts.some((t) => t.includes("0.10") || t.includes("0,10"))).toBe(true);
+    expect(texts.some((t) => t.includes("0.07") || t.includes("0,07"))).toBe(true);
   });
 
   it("shows negative amount and net amount for a dividend reversal", () => {
@@ -333,10 +341,10 @@ describe("TransactionsTable", () => {
       instrument: { symbol: "O", name: "Realty Income" },
     };
     renderSingleRow(reversalRow);
-    // gross = -0.07 + (-0.03) = -0.10 → Amount is negative
+    // net = -0.07 → Amount is negative
     const cells = screen.getAllByRole("cell");
     const texts = cells.map((c) => c.textContent ?? "");
-    expect(texts.some((t) => t.includes("-") && (t.includes("0.10") || t.includes("0,10")))).toBe(true);
+    expect(texts.some((t) => t.includes("-") && (t.includes("0.07") || t.includes("0,07")))).toBe(true);
   });
 
   it("renders bonus_cash rows with the Bonus type badge", () => {
@@ -509,21 +517,22 @@ describe("TransactionsTable", () => {
   });
 
   describe("list filters", () => {
-    it("type select is rendered and shows options for types present in the data", () => {
+    it("renders the reference filter chips (All / Buys / Sells / Income)", () => {
       renderFilterTable();
-      // FILTER_ROWS has "buy" and "dividend" — both should appear as options
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      expect(typeSelect).toBeInTheDocument();
-      // buy and dividend options (via TxType labels) should be in the DOM
-      expect(screen.getByRole("option", { name: messages.TxType.buy })).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: messages.TxType.dividend })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: messages.Transactions.banners.chipSells }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: messages.Transactions.banners.chipIncome }),
+      ).toBeInTheDocument();
     });
 
-    it("filtering by type shows only matching rows", () => {
+    it("filtering by the Buys chip shows only matching rows", () => {
       renderFilterTable();
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      // Select "buy" — only f1 and f3 (both buy) should remain; f2 (dividend) should be gone
-      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
       const rows = screen.getAllByRole("row").slice(1); // skip header
       expect(rows.length).toBe(2);
       expect(rows.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
@@ -550,23 +559,21 @@ describe("TransactionsTable", () => {
       expect(rows[0]).toHaveTextContent("BBCA");
     });
 
-    it("composes type and year filters", () => {
+    it("composes the Buys chip and year filters", () => {
       renderFilterTable();
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
       const yearSelect = screen.getByRole("combobox", { name: messages.Transactions.filterYear });
       // buy AND 2026: only f3 (AAPL, 2026-04)
-      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
       fireEvent.change(yearSelect, { target: { value: "2026" } });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("AAPL");
     });
 
-    it("resetting type filter to 'all' restores all rows", () => {
+    it("resetting to the All chip restores all rows", () => {
       renderFilterTable();
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      fireEvent.change(typeSelect, { target: { value: "buy" } });
-      fireEvent.change(typeSelect, { target: { value: "all" } });
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.filterAll }));
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(FILTER_ROWS.length);
     });
@@ -782,11 +789,10 @@ describe("TransactionsTable", () => {
       expect((input as HTMLInputElement).value).toBe("");
     });
 
-    it("composes text search with the type dropdown filter", () => {
+    it("composes text search with the Buys chip filter", () => {
       renderFilterTable();
-      // Type filter = buy; then search for AAPL → only f3 matches
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      // Buys chip; then search for AAPL → only f3 matches
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
       fireEvent.change(getSearchInput(), { target: { value: "AAPL" } });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
@@ -836,19 +842,17 @@ describe("TransactionsTable", () => {
       expect(screen.queryByText(b.invested)).toBeNull();
     });
 
-    it("switches to the Income banner when an income sub-type is selected", () => {
+    it("switches to the Income banner when the Income chip is selected", () => {
       renderFilterTable();
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      fireEvent.change(typeSelect, { target: { value: "dividend" } });
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipIncome }));
       expect(screen.queryByText(b.invested)).toBeNull();
       expect(screen.getByText(b.receivedYtd)).toBeInTheDocument();
       expect(screen.getByText(b.bySource)).toBeInTheDocument();
     });
 
-    it("switches to the Buys banner when the buy type is selected", () => {
+    it("switches to the Buys banner when the Buys chip is selected", () => {
       renderFilterTable();
-      const typeSelect = screen.getByRole("combobox", { name: messages.Transactions.filterType });
-      fireEvent.change(typeSelect, { target: { value: "buy" } });
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
       expect(screen.queryByText(b.invested)).toBeNull();
       expect(screen.getByText(b.investedAllTime)).toBeInTheDocument();
       expect(screen.getByText(b.mostBought)).toBeInTheDocument();

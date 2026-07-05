@@ -970,7 +970,7 @@
     "collectingIntraday": "Mengumpulkan data intraday — cek lagi setelah pasar buka."
   },
   "Transactions": {
-    "title": "Transaksi",
+    "title": "Aktivitas",
     "subtitle": "Setiap beli, jual, dividen, dan arus kas.",
     "filterScope": "Cakupan",
     "filterAll": "Semua aktivitas",
@@ -1064,8 +1064,15 @@
       "capitalDeployed": "modal dialokasikan",
       "capitalReturned": "modal dikembalikan",
       "mostBought": "Paling banyak dibeli",
-      "mostSold": "Paling banyak dijual"
-    }
+      "mostSold": "Paling banyak dijual",
+      "chipBuys": "Beli",
+      "chipSells": "Jual",
+      "chipIncome": "Pendapatan",
+      "chipIssues": "Perlu ditinjau · {count}"
+    },
+    "subtitleCount": "{count} transaksi · diimpor dari tangkapan layar, CSV & manual",
+    "transactionCol": "Transaksi",
+    "price": "Harga"
   },
   "Manage": {
     "addTransaction": "Tambah transaksi",

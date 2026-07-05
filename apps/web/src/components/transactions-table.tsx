@@ -46,7 +46,7 @@ import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cashFlow } from "@portfolio/core";
-import { formatMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
+import { formatMoney, anomalyLabel, cn, type AnomalyTranslator } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
@@ -75,11 +75,6 @@ export const SOURCE_ICON: Record<string, LucideIcon> = {
   pytr: Landmark,
   pdf: FileSpreadsheet,
   ibkr: Landmark,
-};
-
-const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
-  buy: "success",
-  sell: "destructive",
 };
 
 /** Per-kind icon + tint, matching the reference's `TYPE` map (buy/sell arrows, a coin for
@@ -206,25 +201,10 @@ export function txAmount(tx: TxRow): number {
  */
 const TX_COLS: ColDef<TxRow>[] = [
   { key: "date", get: (r) => r.executedAt, type: "date" },
-  { key: "type", get: (r) => r.type, type: "text" },
-  { key: "instrument", get: (r) => r.instrument?.symbol ?? "", type: "text" },
+  { key: "instrument", get: (r) => r.instrument?.symbol ?? r.type, type: "text" },
   { key: "portfolio", get: (r) => r.portfolioName ?? "", type: "text" },
   { key: "quantity", get: (r) => r.quantity, type: "numeric" },
-  {
-    key: "amount",
-    get: (r) => {
-      const qty = Number(r.quantity);
-      const price = Number(r.price);
-      if (qty > 0) return qty * price; // trade: notional (qty×price)
-      // Income (dividend/coupon/interest/bonus_cash) and deposits/withdrawals:
-      // show GROSS = net price + withheld tax. For trades-with-tax or deposit/withdrawal
-      // (where tax is null) this is just price. For dividend reversals both are negative.
-      return price + (r.tax ? Number(r.tax) : 0);
-    },
-    type: "numeric",
-  },
-  { key: "fees", get: (r) => Number(r.fees), type: "numeric" },
-  { key: "tax", get: (r) => (r.tax ? Number(r.tax) : 0), type: "numeric" },
+  { key: "price", get: (r) => Number(r.price), type: "numeric" },
   { key: "netAmount", get: (r) => txNetAmount(r), type: "numeric" },
   { key: "source", get: (r) => r.source, type: "text" },
 ];
@@ -297,7 +277,8 @@ export function TransactionsTable({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [investmentsOnly, setInvestmentsOnly] = useState(defaultInvestmentsOnly);
-  const [typeFilter, setTypeFilter] = useState("all");
+  // Reference filter chips: All / Buys / Sells / Income (+ "Needs review · N").
+  const [chipFilter, setChipFilter] = useState<"all" | "buy" | "sell" | "income" | "issues">("all");
   const [instrumentFilter, setInstrumentFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
   const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
@@ -324,10 +305,6 @@ export function TransactionsTable({
   }
 
   // Derive distinct options from `rows` so selects only show values present in the data.
-  const typeOptions = useMemo(
-    () => [...new Set(rows.map((r) => r.type))].sort(),
-    [rows],
-  );
   const instrumentOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const r of rows) {
@@ -353,7 +330,11 @@ export function TransactionsTable({
         (!showFlagged || anomalyByTxId.has(r.id)) &&
         (draftFilter === "all" || r.status === "draft") &&
         (!investmentsOnly || !NON_INVESTMENT_TYPES.has(r.type)) &&
-        (typeFilter === "all" || r.type === typeFilter) &&
+        (chipFilter === "all" ||
+          (chipFilter === "buy" && (r.type === "buy" || r.type === "savings_plan")) ||
+          (chipFilter === "sell" && r.type === "sell") ||
+          (chipFilter === "income" && ACTIVITY_INCOME_TYPES.has(r.type)) ||
+          (chipFilter === "issues" && anomalyByTxId.has(r.id))) &&
         (instrumentFilter === "all" ||
           (r.instrument?.symbol ?? r.instrument?.name ?? "") === instrumentFilter) &&
         (yearFilter === "all" ||
@@ -368,20 +349,13 @@ export function TransactionsTable({
           (r.portfolioName ?? "").toLowerCase().includes(q) ||
           r.source.toLowerCase().includes(q)),
     );
-  }, [rows, showFlagged, anomalyByTxId, draftFilter, investmentsOnly, typeFilter, instrumentFilter, yearFilter, query, tt]);
+  }, [rows, showFlagged, anomalyByTxId, draftFilter, investmentsOnly, chipFilter, instrumentFilter, yearFilter, query, tt]);
 
-  // Which filter-scoped summary banner (if any) to show above the list. Keyed off the same
-  // `typeFilter` the type dropdown already drives — "Buys"/"Sells"/"Income" group the
-  // individual income sub-types (dividend/coupon/interest/bonus) the dropdown lists
-  // separately, so picking any one of them still surfaces the combined Income banner.
+  // Which filter-scoped summary banner (if any) to show above the list — keyed directly
+  // off the reference-style chip filter (All/Buys/Sells/Income).
   const tBanner = useTranslations("Transactions.banners");
-  const activeBannerMode: "all" | "income" | "buy" | "sell" | null = useMemo(() => {
-    if (typeFilter === "all") return "all";
-    if (typeFilter === "buy") return "buy";
-    if (typeFilter === "sell") return "sell";
-    if (ACTIVITY_INCOME_TYPES.has(typeFilter)) return "income";
-    return null;
-  }, [typeFilter]);
+  const activeBannerMode: "all" | "income" | "buy" | "sell" | null =
+    chipFilter === "issues" ? null : chipFilter;
 
   // Banners are computed from the full (unfiltered-by-other-pickers) `rows` — they answer
   // "how much have I invested/received, all time / YTD", not "how much is in the current
@@ -607,36 +581,61 @@ export function TransactionsTable({
     <div className="space-y-3">
       {anomalyBanner}
       <div className="flex flex-wrap items-center gap-2 text-sm">
+        {/* Reference tChips: rounded-full pills, active = white on var(--pill),
+            inactive = 600 on card bg with a border; "Needs review · N" is tinted. */}
+        {(
+          [
+            ["all", t("filterAll")],
+            ["buy", tBanner("chipBuys")],
+            ["sell", tBanner("chipSells")],
+            ["income", tBanner("chipIncome")],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setChipFilter(key)}
+            aria-pressed={chipFilter === key}
+            className={cn(
+              "whitespace-nowrap rounded-full px-3.5 py-[7px] text-xs",
+              chipFilter === key
+                ? "bg-pill font-bold text-white"
+                : "border border-border bg-card font-semibold text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+        {anomalyByTxId.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setChipFilter(chipFilter === "issues" ? "all" : "issues")}
+            aria-pressed={chipFilter === "issues"}
+            className={cn(
+              "whitespace-nowrap rounded-full border px-3 py-[7px] text-xs font-bold",
+              chipFilter === "issues"
+                ? "border-[var(--gold-fg)] bg-[var(--gold-fg)] text-white"
+                : "border-[rgba(224,165,58,.34)] bg-[rgba(224,165,58,.12)] text-[var(--gold-fg)]",
+            )}
+          >
+            {tBanner("chipIssues", { count: anomalyByTxId.size })}
+          </button>
+        )}
         <select
           aria-label={t("filterScope")}
           value={investmentsOnly ? "investments" : "all"}
           onChange={(e) => setInvestmentsOnly(e.target.value === "investments")}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         >
           <option value="all">{t("filterAll")}</option>
           <option value="investments">{t("filterInvestments")}</option>
         </select>
-        {typeOptions.length > 1 && (
-          <select
-            aria-label={t("filterType")}
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="all">{t("allTypes")}</option>
-            {typeOptions.map((tp) => (
-              <option key={tp} value={tp}>
-                {tt(tp as Parameters<typeof tt>[0])}
-              </option>
-            ))}
-          </select>
-        )}
         {instrumentOptions.length > 1 && (
           <select
             aria-label={t("filterInstrument")}
             value={instrumentFilter}
             onChange={(e) => setInstrumentFilter(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="all">{t("allInstruments")}</option>
             {instrumentOptions.map(([key, label]) => (
@@ -651,7 +650,7 @@ export function TransactionsTable({
             aria-label={t("filterYear")}
             value={yearFilter}
             onChange={(e) => setYearFilter(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="all">{t("allYears")}</option>
             {yearOptions.map((y) => (
@@ -666,7 +665,7 @@ export function TransactionsTable({
             aria-label={t("filterDraftLabel")}
             value={draftFilter}
             onChange={(e) => setDraftFilter(e.target.value as "all" | "drafts")}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             <option value="all">{t("draftShowAll")}</option>
             <option value="drafts">{t("draftOnly", { count: draftCount })}</option>
@@ -829,15 +828,12 @@ export function TransactionsTable({
                 />
               </TableHead>
               <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("date")}</SortableTableHead>
-              <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("type")}</SortableTableHead>
-              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("instrument")}</SortableTableHead>
+              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("transactionCol")}</SortableTableHead>
               {showPortfolio && <SortableTableHead colKey="portfolio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("portfolio")}</SortableTableHead>}
               <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("quantity")}</SortableTableHead>
-              <SortableTableHead colKey="amount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("amount")}</SortableTableHead>
-              <SortableTableHead colKey="fees" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden text-right sm:table-cell">{t("fees")}</SortableTableHead>
-              <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("tax")}</SortableTableHead>
-              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("netAmount")}</SortableTableHead>
+              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("price")}</SortableTableHead>
               <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden sm:table-cell">{t("source")}</SortableTableHead>
+              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("amount")}</SortableTableHead>
               <TableHead className="text-right">
                 <span className="sr-only">{tm("actions")}</span>
               </TableHead>
@@ -845,7 +841,6 @@ export function TransactionsTable({
           </TableHeader>
           <TableBody>
             {sort(visibleRows).map((tx) => {
-              const amount = txAmount(tx);
               const netAmount = txNetAmount(tx);
               const isSelected = selected.has(tx.id);
               const anomaly = anomalyByTxId.get(tx.id);
@@ -873,80 +868,68 @@ export function TransactionsTable({
                   <TableCell className="tabular whitespace-nowrap text-xs font-semibold text-text-2">
                     {df.format(new Date(tx.executedAt))}
                   </TableCell>
+                  {/* Reference "Transaction" column: 36px kind chip + "Buy · SYM"
+                      700 14px title + instrument name 500 12px text-2; status badges
+                      and anomaly tags ride inline next to the title. */}
                   <TableCell>
-                    <span className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex min-w-0 items-center gap-3">
                       <TypeIconChip type={tx.type} />
-                      <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
-                        {tt(tx.type)}
-                      </Badge>
-                      {status === "draft" && (
-                        <Badge
-                          variant="outline"
-                          className="border-amber-400/50 text-amber-600 dark:text-amber-400"
-                        >
-                          {tm("status.badgeDraft")}
-                        </Badge>
-                      )}
-                      {status === "draft" && tx.needsReview && (
-                        <span
-                          className="inline-flex items-center"
-                          title={tm("status.needsReview")}
-                          aria-label={tm("status.needsReview")}
-                        >
-                          <AlertTriangle className="size-3.5 text-amber-500" />
-                        </span>
-                      )}
-                      {status === "archived" && (
-                        <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
-                      )}
-                      {status === "cash_neutral" && (
-                        <Badge variant="outline">{tm("status.badgeCashNeutral")}</Badge>
-                      )}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      {anomaly && (
-                        <span
-                          title={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
-                          aria-label={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
-                        >
-                          {anomaly.severity === "error" ? (
-                            <AlertCircle className="size-3.5 shrink-0 text-destructive" />
-                          ) : (
-                            <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-[7px]">
+                          <span className="truncate text-sm font-bold">
+                            {tt(tx.type)}
+                            {tx.instrument?.symbol ? ` · ${tx.instrument.symbol}` : ""}
+                          </span>
+                          {anomaly && (
+                            <span
+                              title={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                              aria-label={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                            >
+                              {anomaly.severity === "error" ? (
+                                <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                              ) : (
+                                <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                              )}
+                            </span>
                           )}
-                        </span>
-                      )}
-                      <div>
-                        <div className="text-sm font-bold">{tx.instrument?.symbol ?? "—"}</div>
-                        {tx.instrument?.name && (
-                          <div className="text-xs font-medium text-text-2">
-                            {tx.instrument.name}
-                          </div>
-                        )}
+                          {status === "draft" && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-400/50 text-amber-600 dark:text-amber-400"
+                            >
+                              {tm("status.badgeDraft")}
+                            </Badge>
+                          )}
+                          {status === "draft" && tx.needsReview && (
+                            <span
+                              className="inline-flex items-center"
+                              title={tm("status.needsReview")}
+                              aria-label={tm("status.needsReview")}
+                            >
+                              <AlertTriangle className="size-3.5 text-amber-500" />
+                            </span>
+                          )}
+                          {status === "archived" && (
+                            <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
+                          )}
+                          {status === "cash_neutral" && (
+                            <Badge variant="outline">{tm("status.badgeCashNeutral")}</Badge>
+                          )}
+                        </div>
+                        <div className="truncate text-xs font-medium text-text-2">
+                          {tx.instrument?.name ?? t(`sources.${tx.source}`)}
+                        </div>
                       </div>
                     </div>
                   </TableCell>
                   {showPortfolio && (
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-xs font-medium text-text-2">
                       {tx.portfolioName ?? "—"}
                     </TableCell>
                   )}
                   <TableCell className="tabular text-right text-[13px] font-semibold text-text-2">{Number(tx.quantity) || "—"}</TableCell>
                   <TableCell className="tabular text-right text-[13px] font-semibold">
-                    {m(amount, tx.currency)}
-                  </TableCell>
-                  <TableCell className="tabular hidden text-right sm:table-cell">
-                    {Number(tx.fees) !== 0 ? m(Number(tx.fees), tx.currency) : "—"}
-                  </TableCell>
-                  <TableCell className="tabular text-right">
-                    {tx.tax && Number(tx.tax) !== 0 ? m(Number(tx.tax), tx.currency) : "—"}
-                  </TableCell>
-                  <TableCell
-                    className={`tabular text-right text-sm font-bold ${netAmount > 0 ? "text-success" : ""}`}
-                  >
-                    {m(netAmount, tx.currency)}
+                    {Number(tx.quantity) > 0 ? m(Number(tx.price), tx.currency) : "—"}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     <span
@@ -955,6 +938,11 @@ export function TransactionsTable({
                     >
                       {t(`sources.${tx.source}`)}
                     </span>
+                  </TableCell>
+                  <TableCell
+                    className={`tabular text-right text-sm font-bold ${netAmount > 0 ? "text-success" : ""}`}
+                  >
+                    {m(netAmount, tx.currency)}
                   </TableCell>
                   <TableCell className="text-right">
                     <div

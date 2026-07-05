@@ -972,7 +972,7 @@
     "collectingIntraday": "Collecting intraday data — check back after markets are open."
   },
   "Transactions": {
-    "title": "Transactions",
+    "title": "Activity",
     "subtitle": "Every buy, sell, dividend and cash flow.",
     "filterScope": "Scope",
     "filterAll": "All activity",
@@ -1066,8 +1066,15 @@
       "capitalDeployed": "capital deployed",
       "capitalReturned": "capital returned",
       "mostBought": "Most bought",
-      "mostSold": "Most sold"
-    }
+      "mostSold": "Most sold",
+      "chipBuys": "Buys",
+      "chipSells": "Sells",
+      "chipIncome": "Income",
+      "chipIssues": "Needs review · {count}"
+    },
+    "subtitleCount": "{count} transactions · imported from screenshots, CSV & manual",
+    "transactionCol": "Transaction",
+    "price": "Price"
   },
   "Manage": {
     "addTransaction": "Add transaction",

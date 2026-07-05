@@ -127,10 +127,12 @@ export default async function TransactionsPage({
   );
 
   const heading = (action?: React.ReactNode) => (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex items-end justify-between gap-4">
       <div>
         <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+        <p className="mt-0.5 text-sm font-medium text-text-2">
+          {rows.length > 0 ? t("subtitleCount", { count: rows.length }) : t("subtitle")}
+        </p>
       </div>
       {action}
     </div>
