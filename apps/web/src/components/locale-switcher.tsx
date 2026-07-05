@@ -15,7 +15,7 @@ export function LocaleSwitcher() {
   const t = useTranslations("Settings");
 
   return (
-    <div className="flex w-full max-w-sm gap-[7px]">
+    <div className="flex w-full gap-[7px]">
       {LOCALES.map((l) => (
         <button
           key={l}

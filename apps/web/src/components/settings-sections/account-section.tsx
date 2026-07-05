@@ -1,17 +1,25 @@
 import { getTranslations } from "next-intl/server";
 import { ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
+import { DisplayCurrency } from "@/components/display-currency";
 import { UpdateProfile } from "@/components/update-profile";
+
+/** Small uppercase section label above each settings card. */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-[.04em] text-text-3">
+      {children}
+    </p>
+  );
+}
 
 /**
  * The Settings "Account" section content — reused verbatim by both `/settings` (the
  * index route's desktop default) and `/settings/account` (the mobile drill-in target).
- * Composes existing components as-is per the Phase-2E brief: `UpdateProfile` (name +
- * display currency, an editable form — the design's static currency/name display isn't
- * reused since our app already has a working save flow), `ThemeToggle`, `LocaleSwitcher`.
+ * Each preference gets its own labelled box (matching the reference): the name form,
+ * Display currency, Language, and Appearance.
  */
 export async function AccountSection({
   me,
@@ -24,24 +32,35 @@ export async function AccountSection({
     <div className="space-y-4">
       <Card>
         <CardContent className="p-5">
-          {me && <UpdateProfile initialName={me.name ?? ""} initialCurrency={me.displayCurrency} />}
+          {me && <UpdateProfile initialName={me.name ?? ""} />}
         </CardContent>
       </Card>
 
       <div>
-        <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-[.04em] text-text-3">
-          {t("preferences")}
-        </p>
+        <SectionLabel>{t("displayCurrency")}</SectionLabel>
+        <Card>
+          <CardContent className="p-5">
+            {me && <DisplayCurrency current={me.displayCurrency} />}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <SectionLabel>{t("language")}</SectionLabel>
+        <Card>
+          <CardContent className="p-5">
+            <LocaleSwitcher />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <SectionLabel>{t("appearance")}</SectionLabel>
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between py-1">
               <span className="text-sm font-medium">{t("appearance")}</span>
               <ThemeToggle />
-            </div>
-            <Separator className="my-3" />
-            <div className="flex items-center justify-between py-1">
-              <span className="text-sm font-medium">{t("language")}</span>
-              <LocaleSwitcher />
             </div>
           </CardContent>
         </Card>

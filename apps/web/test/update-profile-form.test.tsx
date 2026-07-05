@@ -9,7 +9,7 @@ import messages from "../messages/en.json";
 
 function renderForm(
   client: UpdateProfileClient,
-  initial = { initialName: "Björn", initialCurrency: "IDR" },
+  initial = { initialName: "Björn" },
   onSuccess = vi.fn(),
 ) {
   render(
@@ -17,7 +17,6 @@ function renderForm(
       <UpdateProfileForm
         client={client}
         initialName={initial.initialName}
-        initialCurrency={initial.initialCurrency}
         onSuccess={onSuccess}
       />
     </NextIntlClientProvider>,
@@ -26,27 +25,6 @@ function renderForm(
 }
 
 describe("UpdateProfileForm", () => {
-  it("saves only the changed fields", async () => {
-    const client: UpdateProfileClient = {
-      updateMe: vi.fn(async () => ({
-        id: "u1",
-        authSub: "sub",
-        email: "a@b.c",
-        name: "Björn",
-        displayCurrency: "USD",
-        isAdmin: false,
-      })),
-    };
-    const onSuccess = renderForm(client);
-
-    // Only change the currency; name is untouched.
-    fireEvent.click(screen.getByRole("button", { name: "USD" }));
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.save }));
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-    expect(client.updateMe).toHaveBeenCalledWith({ displayCurrency: "USD" });
-  });
-
   it("disables save until something changes, then shows saved", async () => {
     const client: UpdateProfileClient = {
       updateMe: vi.fn(async () => ({

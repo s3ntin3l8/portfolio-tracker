@@ -7,36 +7,29 @@ import type { ApiClient } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type UpdateProfileClient = Pick<ApiClient, "updateMe">;
 
-const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
-
 export function UpdateProfileForm({
   client,
   initialName,
-  initialCurrency,
   onSuccess,
 }: {
   client: UpdateProfileClient;
   initialName: string;
-  initialCurrency: string;
   onSuccess?: () => void;
 }) {
   const t = useTranslations("Settings");
   const [name, setName] = useState(initialName);
-  const [currency, setCurrency] = useState(initialCurrency);
   // Baseline the form diffs against; advances on a successful save so the button
   // re-disables and "Saved" shows without waiting for the server-data refresh.
   const [baseName, setBaseName] = useState(initialName);
-  const [baseCurrency, setBaseCurrency] = useState(initialCurrency);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const dirty = name.trim() !== baseName.trim() || currency !== baseCurrency;
+  const dirty = name.trim() !== baseName.trim();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,14 +38,10 @@ export function UpdateProfileForm({
     setError(false);
     setSaved(false);
     try {
-      // Only send changed fields; an empty/blank name is treated as "no change".
+      // A blank name is treated as "no change" (never overwrite the name with empty).
       const nextName = name.trim();
-      await client.updateMe({
-        ...(nextName && nextName !== baseName.trim() ? { name: nextName } : {}),
-        ...(currency !== baseCurrency ? { displayCurrency: currency } : {}),
-      });
+      await client.updateMe(nextName ? { name: nextName } : {});
       setBaseName(nextName || baseName);
-      setBaseCurrency(currency);
       setSaved(true);
       onSuccess?.();
     } catch {
@@ -84,36 +73,6 @@ export function UpdateProfileForm({
             setSaved(false);
           }}
         />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label id="profile-currency-label">{t("displayCurrency")}</Label>
-        <div
-          role="group"
-          aria-labelledby="profile-currency-label"
-          className="flex w-full max-w-sm gap-[7px]"
-        >
-          {CURRENCIES.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                setCurrency(c);
-                setSaved(false);
-              }}
-              aria-pressed={currency === c}
-              className={cn(
-                "flex-1 rounded-[11px] py-[9px] text-center text-[13px] transition-colors",
-                currency === c
-                  ? "bg-pill font-bold text-white"
-                  : "bg-background font-semibold text-foreground",
-              )}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">{t("displayCurrencyHint")}</p>
       </div>
 
       <div className="flex items-center gap-3">
