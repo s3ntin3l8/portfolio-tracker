@@ -64,7 +64,7 @@ describe("AccountHoldersManager", () => {
     fireEvent.click(screen.getByRole("button", { name: m.add }));
 
     fireEvent.change(screen.getByLabelText(mf.holderName), { target: { value: "Luca" } });
-    fireEvent.change(screen.getByLabelText(mf.holderType), { target: { value: "child" } });
+    fireEvent.click(screen.getByRole("radio", { name: mf.holderTypeChild }));
     fireEvent.change(screen.getByLabelText(mf.birthYear), { target: { value: "2019" } });
     // The dialog's submit button is the only one labelled with the add text.
     fireEvent.click(screen.getAllByRole("button", { name: m.add }).at(-1)!);
@@ -83,11 +83,46 @@ describe("AccountHoldersManager", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
-  it("deletes a holder only after the two-step confirm", async () => {
+  it("edits a holder via the ⋯ menu", async () => {
     renderManager([emma]);
-    fireEvent.click(screen.getByRole("button", { name: mf.edit }));
+    // Radix opens its menu on keyboard/pointer, not a synthetic click.
+    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: m.edit }));
 
+    // The edit form opens prefilled; change the name and save.
+    fireEvent.change(screen.getByLabelText(mf.holderName), { target: { value: "Emma R." } });
+    fireEvent.click(screen.getByRole("button", { name: mf.save }));
+
+    await waitFor(() =>
+      expect(updateAccountHolder).toHaveBeenCalledWith(
+        "h1",
+        expect.objectContaining({ name: "Emma R." }),
+      ),
+    );
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("removes a holder from the edit modal after the two-step confirm", async () => {
+    renderManager([emma]);
+    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: m.edit }));
+
+    // The edit sheet carries its own "Delete holder" action (mirrors the portfolio sheet).
     fireEvent.click(screen.getByRole("button", { name: m.delete }));
+    expect(deleteAccountHolder).not.toHaveBeenCalled();
+    expect(screen.getByText(m.deleteWarning)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: m.confirmDelete }));
+    await waitFor(() => expect(deleteAccountHolder).toHaveBeenCalledWith("h1"));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("deletes a holder only after confirming in the modal", async () => {
+    renderManager([emma]);
+    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitem", { name: m.delete }));
+
+    // The confirm modal is shown; nothing is deleted until the user confirms.
     expect(deleteAccountHolder).not.toHaveBeenCalled();
     expect(screen.getByText(m.deleteWarning)).toBeInTheDocument();
 

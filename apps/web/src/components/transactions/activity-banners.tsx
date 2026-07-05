@@ -25,10 +25,10 @@ function StatBlock({
   bordered?: boolean;
 }) {
   return (
-    <div className={bordered ? "border-l border-line pl-4 lg:pl-6" : ""}>
-      <p className="text-xs font-semibold text-text-2">{label}</p>
-      <p className="tabular mt-1 text-lg font-extrabold sm:text-xl lg:text-[26px]">{value}</p>
-      {sub && <p className={cn("tabular mt-0.5 text-xs font-bold", TONE_CLASS[tone])}>{sub}</p>}
+    <div className={bordered ? "border-l border-line pl-2.5 sm:pl-4 lg:pl-6" : ""}>
+      <p className="truncate text-[11px] font-semibold text-text-2 sm:text-xs">{label}</p>
+      <p className="tabular mt-1 text-base font-extrabold sm:text-xl lg:text-[26px]">{value}</p>
+      {sub && <p className={cn("tabular mt-0.5 text-[11px] font-bold sm:text-xs", TONE_CLASS[tone])}>{sub}</p>}
     </div>
   );
 }
@@ -52,7 +52,9 @@ export function AllFilterBanner({
 }) {
   return (
     <div className={CARD}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:items-center">
+      {/* Invested / Proceeds / Income stay on one line even on mobile (3 columns); the
+          cash-flow-mix breakdown wraps to a full-width row below. */}
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-5 lg:items-center">
         {data.tiles.map((t, i) => (
           <StatBlock key={i} label={t.label} value={t.value} sub={t.sub} tone={t.tone} bordered={i > 0} />
         ))}
@@ -80,7 +82,7 @@ export function IncomeFilterBanner({
 }) {
   return (
     <div className={CARD}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-center">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
         <StatBlock label={receivedLabel} value={data.ytd} sub={data.trendLabel} tone={data.trendTone} />
         <StatBlock label={projectedLabel} value={data.projected} sub={data.projectedNote} tone="neutral" bordered />
         <Breakdown label={bySourceLabel}>
@@ -113,7 +115,7 @@ export function TradeFilterBanner({
 }) {
   return (
     <div className={CARD}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-center">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
         <StatBlock label={totalLabel} value={data.total} sub={ordersNote} tone="neutral" />
         <StatBlock label={averageLabel} value={data.avg} sub={averageNote} tone="neutral" bordered />
         <Breakdown label={headingLabel}>

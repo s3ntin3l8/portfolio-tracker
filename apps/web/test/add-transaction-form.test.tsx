@@ -69,6 +69,12 @@ const EDIT_INITIAL = {
   executedAt: "2026-02-03T00:00:00.000Z",
 };
 
+// The type picker is a collapsible chip palette: open it, then click the type chip.
+function selectType(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: m.type }));
+  fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
 describe("AddTransactionForm", () => {
   it("creates a new instrument and records a buy", async () => {
     const client = makeClient();
@@ -215,9 +221,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), {
-      target: { value: "deposit" },
-    });
+    selectType(messages.TxType.deposit);
     // Instrument section is hidden for cash types.
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
 
@@ -358,9 +362,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), {
-      target: { value: "coupon" },
-    });
+    selectType(messages.TxType.coupon);
     // Coupon is instrument income, not cash — the instrument section stays.
     fireEvent.change(screen.getByLabelText(m.symbol), {
       target: { value: "sr021" },
@@ -449,7 +451,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "deposit" } });
+    selectType(messages.TxType.deposit);
     // Tax field should not appear (isTrade is false for deposit).
     expect(screen.queryByLabelText(m.tax)).toBeNull();
 
@@ -472,7 +474,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "savings_plan" } });
+    selectType(messages.TxType.savings_plan);
     expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
     expect(screen.getByLabelText(m.price)).toBeInTheDocument();
     expect(screen.getByLabelText(m.fees)).toBeInTheDocument();
@@ -483,7 +485,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "bonus" } });
+    selectType(messages.TxType.bonus);
     expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
     expect(screen.getByLabelText(m.price)).toBeInTheDocument();
     expect(screen.queryByLabelText(m.fees)).toBeNull();
@@ -494,7 +496,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "dividend" } });
+    selectType(messages.TxType.dividend);
     // Instrument section present (income, not cash).
     expect(screen.getByLabelText(m.search)).toBeInTheDocument();
     // No quantity or fees.
@@ -508,7 +510,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "interest" } });
+    selectType(messages.TxType.interest);
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
     expect(screen.queryByLabelText(m.search)).toBeNull();
     expect(screen.queryByLabelText(m.quantity)).toBeNull();
@@ -518,7 +520,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "bonus_cash" } });
+    selectType(messages.TxType.bonus_cash);
     expect(screen.queryByLabelText(m.search)).toBeNull();
     expect(screen.queryByLabelText(m.quantity)).toBeNull();
   });
@@ -562,7 +564,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    fireEvent.change(screen.getByLabelText(m.type), { target: { value: "savings_plan" } });
+    selectType(messages.TxType.savings_plan);
     fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "MSFT" } });
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Microsoft" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "2" } });
@@ -653,8 +655,8 @@ describe("TransactionSourcesSection (edit mode, #230)", () => {
     renderEditForm([SOURCE_WITH_DOC], true);
 
     expect(screen.getByText(ms.title)).toBeInTheDocument();
-    // sourceType rendered capitalised
-    expect(screen.getByText("pdf")).toBeInTheDocument();
+    // Clean localized source-type label (not the raw "pdf")
+    expect(screen.getByText(messages.Transactions.sources.pdf)).toBeInTheDocument();
     // Imported date + filename replaces the internal externalId fingerprint
     expect(screen.getByText(/Imported.*settlement\.pdf/)).toBeInTheDocument();
     expect(screen.queryByText("tr:exec:abc-123")).toBeNull();

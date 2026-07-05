@@ -7,8 +7,8 @@
     "more": "+{count} more"
   },
   "Install": {
-    "title": "Add Portfolio to your home screen",
-    "cta": "Install app",
+    "title": "Add Pocket to your home screen",
+    "cta": "Install Pocket",
     "dismiss": "Dismiss",
     "iosHint": "To install: tap Share, then “Add to Home Screen”."
   },
@@ -251,7 +251,7 @@
   },
   "Income": {
     "title": "Income",
-    "subtitle": "Dividends and bond coupons across your portfolios.",
+    "subtitle": "Dividends, coupons & distributions",
     "date": "Date",
     "type": "Type",
     "instrument": "Instrument",
@@ -310,7 +310,7 @@
   },
   "Savings": {
     "title": "Savings",
-    "subtitle": "How much you put in over time, and where it's headed.",
+    "subtitle": "Contributions, plans & forecast",
     "totalContributed": "Total contributed",
     "monthlyAverage": "Average per month",
     "monthsActive": "{count, plural, one {# month} other {# months}}",
@@ -322,8 +322,8 @@
     "xirr": "Annualised return",
     "xirrYoungHint": "* annualised from under a year — may overstate",
     "contributionsOverTime": "Contributions over time",
-    "chartContributions": "Contributions",
-    "chartValue": "Portfolio value",
+    "chartContributions": "Contributed",
+    "chartValue": "Value",
     "chartValueUnavailable": "Value history not yet available — run a backfill from Admin → Jobs.",
     "footerInvested": "Invested",
     "footerGain": "Gain",
@@ -397,7 +397,9 @@
     "taxAllowanceHint": "The per-person legal ceiling: €1,000 for single filers; €2,000 for jointly-assessed couples. The actual allocation per depot is set in each portfolio's settings.",
     "capitalGainsTaxRate": "Capital gains tax rate",
     "capitalGainsTaxRateHint": "0.25 (25% KapSt) or 0.26375 incl. Soli. Adjust for your marginal rate.",
-    "churchTax": "Church tax surcharge (Kirchensteuer)"
+    "churchTax": "Church tax surcharge (Kirchensteuer)",
+    "deleteTitle": "Delete “{name}”?",
+    "edit": "Edit holder"
   },
   "PortfolioSwitcher": {
     "label": "Portfolio",
@@ -445,13 +447,13 @@
     "confirmDelete": "Delete",
     "cancel": "Cancel",
     "includeInAggregate": "Include in net-worth aggregate",
-    "includeInAggregateHint": "Uncheck to exclude this portfolio from total net-worth calculations.",
+    "includeInAggregateHint": "Count this portfolio toward your total net worth.",
     "cashCounted": "Cash is part of this portfolio",
-    "cashCountedHint": "Check for a savings/deposit account (Tagesgeld, Festgeld, a child's savings depot): cash counts as money saved and is included in net worth. Leave unchecked for a brokerage or mixed/checking account: only invested capital counts and idle cash is excluded — the right default for accounts where cash is just passing through.",
+    "cashCountedHint": "Count idle cash toward net worth — for savings/deposit accounts, not brokerage or checking.",
     "allowNegativeCash": "Allow transient negative cash",
-    "allowNegativeCashHint": "Check this if a buy regularly posts before its funding deposit clears, so the cash balance briefly dips below zero. It stops the negative-cash data-integrity warning from flagging those self-correcting dips. Only relevant when cash is part of this portfolio.",
+    "allowNegativeCashHint": "Silence the warning when a buy briefly posts before its funding deposit clears.",
     "documentRetention": "Keep source documents",
-    "documentRetentionHint": "When enabled, uploaded PDFs and screenshots are retained after confirmation so you can download them later. Off by default — documents are discarded after parsing to protect your privacy.",
+    "documentRetentionHint": "Keep uploaded PDFs and screenshots after parsing so you can re-download them.",
     "taxAllowanceAnnual": "Freistellungsauftrag (FSA)",
     "taxAllowanceAnnualPlaceholder": "e.g. 1000",
     "taxAllowanceAnnualHint": "Optional. The amount of your Sparerpauschbetrag allocated to this depot. Kapitalertragsteuer is withheld only once this amount is used up.",
@@ -461,7 +463,11 @@
     "trConnectAfterSave": "Save the portfolio first to set up the Trade Republic connection.",
     "trChildUnsupported": "Trade Republic can't sync child accounts (Kinderdepot) yet — import via CSV or PDF instead.",
     "trLoading": "Loading connection…",
-    "done": "Done"
+    "done": "Done",
+    "sectionBasics": "Basics",
+    "sectionOwnership": "Ownership",
+    "sectionAccount": "Account",
+    "sectionAccounting": "Accounting options"
   },
   "Import": {
     "title": "Import transactions",
@@ -978,7 +984,7 @@
     "title": "Activity",
     "subtitle": "Every buy, sell, dividend and cash flow.",
     "filterScope": "Scope",
-    "filterAll": "All activity",
+    "filterAll": "All",
     "filterInvestments": "Investments only",
     "filterType": "Type",
     "filterInstrument": "Instrument",
@@ -1075,9 +1081,12 @@
       "chipIncome": "Income",
       "chipIssues": "Needs review · {count}"
     },
-    "subtitleCount": "{count} transactions · imported from screenshots, CSV & manual",
+    "subtitleCount": "{count} transactions",
     "transactionCol": "Transaction",
-    "price": "Price"
+    "price": "Price",
+    "breakdown": "Breakdown",
+    "details": "Details",
+    "currency": "Currency"
   },
   "Manage": {
     "addTransaction": "Add transaction",
@@ -1186,7 +1195,12 @@
       "subTypeNone": "(none)",
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Round-up",
-      "subTypeMerger": "Merger"
+      "subTypeMerger": "Merger",
+      "groupTrade": "Trade",
+      "groupShareReceipt": "Share receipt",
+      "groupTransfer": "Transfer",
+      "groupIncome": "Income",
+      "groupCash": "Cash"
     },
     "reassign": "Reassign"
   },
@@ -1323,8 +1337,8 @@
     }
   },
   "Trades": {
-    "title": "Trade Log",
-    "subtitle": "Every position and its performance, dividends included.",
+    "title": "Realized P&L",
+    "subtitle": "Closed trades & performance",
     "methodAverage": "Average cost",
     "methodFifo": "FIFO",
     "filter_all": "All",
@@ -1429,8 +1443,8 @@
     "loadSalesError": "Could not load trade recommendations."
   },
   "Tax": {
-    "title": "Tax Optimization",
-    "subtitle": "Sparerpauschbetrag headroom and tax-free harvest suggestions. German tax only.",
+    "title": "Tax",
+    "subtitle": "Capital gains & tax-free harvest suggestions",
     "defaultHolderName": "All portfolios",
     "empty": {
       "title": "No FSA allocation configured",

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, TriangleAlert } from "lucide-react";
+import { AlertCircle, ChevronDown, Loader2, TriangleAlert } from "lucide-react";
 import type {
   AccountHolder,
   AccountHolderType,
@@ -14,15 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { HolderTypeChips } from "@/components/holder-type-chips";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 import { deletePortfolioWithCleanup } from "@/lib/delete-portfolio";
@@ -73,6 +73,7 @@ export function PortfolioFormDialog({
   const te = useTranslations("Empty");
   const api = useApiClient();
   const router = useRouter();
+  const subtitleId = useId();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(portfolio?.name ?? "");
@@ -344,23 +345,29 @@ export function PortfolioFormDialog({
         : trConnection;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      {/* Don't dismiss on outside interaction: this form often holds pasted broker
-          credentials, and a click elsewhere (or the window losing focus when you
-          switch tabs to copy a password) must not throw the work away. Closes only
-          via Save/Done, the X button, or Escape. */}
-      <DialogContent
-        className="max-h-[90dvh] overflow-y-auto"
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetTrigger asChild>{trigger}</SheetTrigger>
+      {/* Reference bottom-sheet (Pocket Prototype): pinned to the bottom, 28px top radius,
+          drag handle + card-bg close button (from SheetContent). Don't dismiss on outside
+          interaction: this form often holds pasted broker credentials, and a click elsewhere
+          (or the window losing focus when you switch tabs to copy a password) must not throw
+          the work away. Closes only via Save/Done, the X button, or Escape. */}
+      <SheetContent
+        aria-describedby={subtitleId}
         onInteractOutside={(e) => e.preventDefault()}
+        // Also keep the sheet open when focus leaves the window (switching apps/tabs to copy
+        // a password) — that blur fires focusOutside, which onInteractOutside doesn't cover.
+        onFocusOutside={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>{mode === "edit" ? t("editTitle") : t("createTitle")}</DialogTitle>
-          <DialogDescription>{t("subtitle")}</DialogDescription>
-        </DialogHeader>
+        <SheetHeader className="pb-0">
+          <SheetTitle>{mode === "edit" ? t("editTitle") : t("createTitle")}</SheetTitle>
+          <p id={subtitleId} className="text-xs font-medium text-text-2">
+            {t("subtitle")}
+          </p>
+        </SheetHeader>
 
         {/* Portfolio fields — the submit button lives inside this form. */}
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-4 p-6 pt-4">
           {error && (
             <div
               role="alert"
@@ -370,6 +377,8 @@ export function PortfolioFormDialog({
               {t("error")}
             </div>
           )}
+
+          <Eyebrow>{t("sectionBasics")}</Eyebrow>
 
           <div className="space-y-1.5">
             <Label htmlFor="portfolio-name">{t("name")}</Label>
@@ -410,6 +419,8 @@ export function PortfolioFormDialog({
             )}
           </div>
 
+          <Eyebrow>{t("sectionOwnership")}</Eyebrow>
+
           <div className="space-y-1.5">
             <Label htmlFor="portfolio-account-holder">{t("accountHolder")}</Label>
             <Select
@@ -441,16 +452,12 @@ export function PortfolioFormDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-holder-type">{t("holderType")}</Label>
-                  <Select
-                    id="new-holder-type"
+                  <Label id="new-holder-type-label">{t("holderType")}</Label>
+                  <HolderTypeChips
                     value={newHolderType}
-                    onChange={(e) => setNewHolderType(e.target.value as AccountHolderType)}
-                  >
-                    <option value="self">{t("holderTypeSelf")}</option>
-                    <option value="child">{t("holderTypeChild")}</option>
-                    <option value="other">{t("holderTypeOther")}</option>
-                  </Select>
+                    onChange={setNewHolderType}
+                    labelledBy="new-holder-type-label"
+                  />
                 </div>
                 {newHolderType === "child" && (
                   <div className="space-y-1.5">
@@ -469,6 +476,8 @@ export function PortfolioFormDialog({
               </div>
             )}
           </div>
+
+          <Eyebrow>{t("sectionAccount")}</Eyebrow>
 
           <div className="space-y-1.5">
             <Label htmlFor="portfolio-account-number">{t("accountNumber")}</Label>
@@ -490,153 +499,116 @@ export function PortfolioFormDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-currency">{t("currency")}</Label>
-            <Select
-              id="portfolio-currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {/* Per-depot Freistellungsauftrag (FSA) allocation */}
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-fsa">{t("taxAllowanceAnnual")}</Label>
-            <Input
-              id="portfolio-fsa"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step={1}
-              value={taxAllowanceAnnual}
-              onChange={(e) => setTaxAllowanceAnnual(e.target.value)}
-              placeholder={t("taxAllowanceAnnualPlaceholder")}
-            />
-            {showFsaHelper && !fsaOverAllocated && (
-              <p className="text-xs text-muted-foreground">
-                {t("taxAllowanceHelper", {
-                  allocated: totalAllocated.toFixed(0),
-                  cap: holderAllowanceCap.toFixed(0),
-                  remaining: fsaRemainingForHolder.toFixed(0),
-                  holder: selectedHolderObj?.name ?? "",
-                })}
-              </p>
-            )}
-            {showFsaHelper && fsaOverAllocated && (
-              <div className="flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-300">
-                <TriangleAlert className="size-3.5 mt-0.5 shrink-0" />
-                <span>{t("taxAllowanceOverAllocated", { cap: holderAllowanceCap.toFixed(0) })}</span>
-              </div>
-            )}
-            {!showFsaHelper && (
-              <p className="text-xs text-muted-foreground">{t("taxAllowanceAnnualHint")}</p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              id="portfolio-cash-counted"
-              type="checkbox"
-              checked={cashCounted}
-              onChange={(e) => setCashCounted(e.target.checked)}
-              className="size-4 rounded border-input accent-primary"
-            />
-            <div>
-              <Label htmlFor="portfolio-cash-counted">{t("cashCounted")}</Label>
-              <p className="text-xs text-muted-foreground">{t("cashCountedHint")}</p>
+          {/* Base currency + per-depot Freistellungsauftrag (FSA) allocation share one row. */}
+          <div className="flex items-start gap-3">
+            <div className="w-[130px] shrink-0 space-y-1.5">
+              <Label htmlFor="portfolio-currency">{t("currency")}</Label>
+              <Select
+                id="portfolio-currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
             </div>
-          </div>
 
-          {/* Only meaningful when cash is inside the boundary — the guard runs only then. */}
-          {cashCounted && (
-            <div className="flex items-center gap-3">
-              <input
-                id="portfolio-allow-negative-cash"
-                type="checkbox"
-                checked={allowNegativeCash}
-                onChange={(e) => setAllowNegativeCash(e.target.checked)}
-                className="size-4 rounded border-input accent-primary"
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="portfolio-fsa">{t("taxAllowanceAnnual")}</Label>
+              <Input
+                id="portfolio-fsa"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step={1}
+                value={taxAllowanceAnnual}
+                onChange={(e) => setTaxAllowanceAnnual(e.target.value)}
+                placeholder={t("taxAllowanceAnnualPlaceholder")}
               />
-              <div>
-                <Label htmlFor="portfolio-allow-negative-cash">{t("allowNegativeCash")}</Label>
-                <p className="text-xs text-muted-foreground">{t("allowNegativeCashHint")}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <input
-              id="portfolio-document-retention"
-              type="checkbox"
-              checked={documentRetention}
-              onChange={(e) => setDocumentRetention(e.target.checked)}
-              className="size-4 rounded border-input accent-primary"
-            />
-            <div>
-              <Label htmlFor="portfolio-document-retention">{t("documentRetention")}</Label>
-              <p className="text-xs text-muted-foreground">{t("documentRetentionHint")}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <input
-              id="portfolio-include-in-aggregate"
-              type="checkbox"
-              checked={includeInAggregate}
-              onChange={(e) => setIncludeInAggregate(e.target.checked)}
-              className="size-4 rounded border-input accent-primary"
-            />
-            <div>
-              <Label htmlFor="portfolio-include-in-aggregate">
-                {t("includeInAggregate")}
-              </Label>
-              <p className="text-xs text-muted-foreground">{t("includeInAggregateHint")}</p>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-2">
-            {mode === "edit" &&
-              (confirmDelete ? (
-                <div className="mr-auto flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <p className="text-xs text-muted-foreground">
-                    {t("deleteWarning", { count: portfolio?.transactionCount ?? 0 })}{" "}
-                    {t("deleteRelatedNote")}
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={onDelete}
-                    disabled={busy}
-                  >
-                    {busy && <Loader2 className="size-3.5 animate-spin" />}
-                    {t("confirmDelete")}
-                  </Button>
+              {showFsaHelper && !fsaOverAllocated && (
+                <p className="text-xs text-muted-foreground">
+                  {t("taxAllowanceHelper", {
+                    allocated: totalAllocated.toFixed(0),
+                    cap: holderAllowanceCap.toFixed(0),
+                    remaining: fsaRemainingForHolder.toFixed(0),
+                    holder: selectedHolderObj?.name ?? "",
+                  })}
+                </p>
+              )}
+              {showFsaHelper && fsaOverAllocated && (
+                <div className="flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-300">
+                  <TriangleAlert className="size-3.5 mt-0.5 shrink-0" />
+                  <span>{t("taxAllowanceOverAllocated", { cap: holderAllowanceCap.toFixed(0) })}</span>
                 </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mr-auto text-destructive hover:text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                  disabled={busy}
-                >
-                  {t("delete")}
-                </Button>
-              ))}
+              )}
+              {!showFsaHelper && (
+                <p className="text-xs text-muted-foreground">{t("taxAllowanceAnnualHint")}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Advanced accounting options — collapsed by default to keep the sheet short. */}
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-0.5 py-1 [&::-webkit-details-marker]:hidden">
+              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-text-3">
+                {t("sectionAccounting")}
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-text-3 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-1">
+              <ToggleRow
+                id="portfolio-cash-counted"
+                checked={cashCounted}
+                onCheckedChange={setCashCounted}
+                title={t("cashCounted")}
+                hint={t("cashCountedHint")}
+              />
+              {/* Only meaningful when cash is inside the boundary — the guard runs only then. */}
+              {cashCounted && (
+                <ToggleRow
+                  id="portfolio-allow-negative-cash"
+                  checked={allowNegativeCash}
+                  onCheckedChange={setAllowNegativeCash}
+                  title={t("allowNegativeCash")}
+                  hint={t("allowNegativeCashHint")}
+                />
+              )}
+              <ToggleRow
+                id="portfolio-document-retention"
+                checked={documentRetention}
+                onCheckedChange={setDocumentRetention}
+                title={t("documentRetention")}
+                hint={t("documentRetentionHint")}
+              />
+              <ToggleRow
+                id="portfolio-include-in-aggregate"
+                checked={includeInAggregate}
+                onCheckedChange={setIncludeInAggregate}
+                title={t("includeInAggregate")}
+                hint={t("includeInAggregateHint")}
+              />
+            </div>
+          </details>
+
+          <div className="pt-2">
             {/* After a TR/IBKR create the portfolio is saved; swap the create button for Done. */}
             {mode === "create" && createdPortfolio ? (
-              <Button type="button" onClick={() => setOpen(false)}>
+              <Button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+              >
                 {t("done")}
               </Button>
             ) : (
-              <Button type="submit" disabled={busy || !name.trim()}>
+              <Button
+                type="submit"
+                disabled={busy || !name.trim()}
+                className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+              >
                 {busy && <Loader2 className="size-4 animate-spin" />}
                 {busy
                   ? mode === "edit"
@@ -647,13 +619,43 @@ export function PortfolioFormDialog({
                     : t("create")}
               </Button>
             )}
-          </DialogFooter>
+
+            {/* Edit mode: full-width red delete text → two-step confirm (solid red + caption),
+                mirroring the reference's footer delete + delete-confirm sheet. */}
+            {mode === "edit" &&
+              (confirmDelete ? (
+                <>
+                  <Button
+                    type="button"
+                    onClick={onDelete}
+                    disabled={busy}
+                    className="mt-2.5 h-auto w-full rounded-[15px] bg-[#E5484D] py-[15px] text-[15px] font-bold text-white hover:bg-[#E5484D]/90"
+                  >
+                    {busy && <Loader2 className="size-4 animate-spin" />}
+                    {t("confirmDelete")}
+                  </Button>
+                  <p className="mt-1.5 text-center text-[11px] font-medium text-text-3">
+                    {t("deleteWarning", { count: portfolio?.transactionCount ?? 0 })}{" "}
+                    {t("deleteRelatedNote")}
+                  </p>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={busy}
+                  className="mt-2.5 w-full py-3 text-sm font-bold text-[#E5484D]"
+                >
+                  {t("delete")}
+                </button>
+              ))}
+          </div>
         </form>
 
         {/* TR connection section — rendered outside the form to avoid nested <form> issues.
             Appears after the portfolio exists (edit always, create after first save). */}
         {showTrSection && (
-          <div className="border-t pt-4">
+          <div className="border-t border-line px-6 pb-6 pt-4">
             <p className="mb-3 text-sm font-medium">{t("trSectionTitle")}</p>
             {trConnection === null ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -689,7 +691,7 @@ export function PortfolioFormDialog({
 
         {/* IBKR connection section — same pattern as TR but simpler (no 2FA phase). */}
         {showIbkrSection && (
-          <div className="border-t pt-4">
+          <div className="border-t border-line px-6 pb-6 pt-4">
             <p className="mb-3 text-sm font-medium">{tibkr("sectionTitle")}</p>
             {ibkrConnection === null ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -711,7 +713,44 @@ export function PortfolioFormDialog({
             )}
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/** Uppercase section eyebrow used to group the sheet's fields (reference: 11px/700/upper). */
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-text-3">
+      {children}
+    </p>
+  );
+}
+
+/** A settings toggle row (label + hint on the left, Switch on the right), stacked with
+ *  hairline dividers between rows — the reference "Accounting options" list. */
+function ToggleRow({
+  id,
+  checked,
+  onCheckedChange,
+  title,
+  hint,
+}: {
+  id: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-t border-line py-3 first:border-t-0">
+      <div className="min-w-0">
+        <Label htmlFor={id} className="text-[13px] font-semibold text-foreground">
+          {title}
+        </Label>
+        <p className="mt-0.5 text-[11px] font-medium text-text-3">{hint}</p>
+      </div>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} className="shrink-0" />
+    </div>
   );
 }

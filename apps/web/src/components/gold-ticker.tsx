@@ -54,7 +54,7 @@ export function GoldTicker({ currency }: { currency: string }) {
     <Card>
       <CardContent className="flex items-center justify-between p-5">
         <div className="flex items-center gap-3">
-          <span className="rounded-full bg-amber-500/15 p-2 text-amber-600 dark:text-amber-400">
+          <span className="rounded-[10px] bg-amber-500/15 p-2 text-amber-600 dark:text-amber-400">
             <Coins className="size-5" />
           </span>
           <div>

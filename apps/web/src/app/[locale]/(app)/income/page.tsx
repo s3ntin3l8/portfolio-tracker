@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
 import { IncomeBarChart } from "@/components/charts/income-bar-chart";
 import { IncomeHeatmap } from "@/components/charts/income-heatmap";
+import { ReportHeader } from "@/components/report-header";
 import { YieldsTable } from "@/components/income/yields-table";
 import { ByCurrencyTable } from "@/components/income/by-currency-table";
 import { IncomeEventsTable, type IncomeEventRow } from "@/components/income/income-events-table";
@@ -71,12 +72,7 @@ export default async function IncomePage({
   // loadIncomeStats() reads it automatically.
   const result = await loadIncomeStats();
 
-  const heading = (
-    <div>
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-    </div>
-  );
+  const heading = <ReportHeader title={t("title")} subtitle={t("subtitle")} />;
 
   if (result.status !== "ok") {
     return (
@@ -181,7 +177,7 @@ export default async function IncomePage({
     <div className="space-y-8">
       {heading}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-5">
         <StatCard
           label={t("thisYear")}
           value={m(thisFullYear)}
@@ -213,10 +209,12 @@ export default async function IncomePage({
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* Desktop: these summary cards arrange in a two-column grid (reference). */}
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         {s.monthly.length > 0 && (
-          <Card className="lg:col-span-2">
-            <CardHeader>
+          <Card>
+            {/* Tight header so the heatmap's dynamic subtitle sits right under the title. */}
+            <CardHeader className="pb-2">
               <CardTitle>{t("seasonalityTitle")}</CardTitle>
             </CardHeader>
             <CardContent>
@@ -234,61 +232,62 @@ export default async function IncomePage({
             </CardContent>
           </Card>
         )}
-      </div>
-
-      {s.byInstrument.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("topContributorsTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {s.byInstrument.slice(0, 8).map((c) => (
-              <div key={c.instrumentId ?? c.symbol ?? "—"} className="space-y-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="font-medium">{c.symbol ?? "—"}</span>
-                    {c.name && (
-                      <span className="ml-2 truncate text-xs text-muted-foreground">
-                        {c.name}
+        {s.byInstrument.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("topContributorsTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {s.byInstrument.slice(0, 8).map((c) => (
+                <div key={c.instrumentId ?? c.symbol ?? "—"} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="font-medium">{c.symbol ?? "—"}</span>
+                      {c.name && (
+                        <span className="ml-2 truncate text-xs text-muted-foreground">
+                          {c.name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="tabular shrink-0 text-sm">
+                      {m(Number(c.total))}{" "}
+                      <span className="text-muted-foreground">
+                        ({formatPercent(c.pct, locale)})
                       </span>
-                    )}
-                  </div>
-                  <span className="tabular shrink-0 text-sm">
-                    {m(Number(c.total))}{" "}
-                    <span className="text-muted-foreground">
-                      ({formatPercent(c.pct, locale)})
                     </span>
-                  </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.max(2, c.pct * 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${Math.max(2, c.pct * 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {s.yields.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">{t("yieldTitle")}</h2>
-          <div className="rounded-xl bg-card shadow-card">
-            <YieldsTable rows={s.yields} />
-          </div>
-        </section>
-      )}
-
-      {s.byCurrency.length > 1 && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">{t("currencyTitle")}</h2>
-          <div className="rounded-xl bg-card shadow-card">
-            <ByCurrencyTable rows={s.byCurrency} displayCurrency={currency} />
-          </div>
-        </section>
-      )}
+              ))}
+            </CardContent>
+          </Card>
+        )}
+        {s.yields.length > 0 && (
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle>{t("yieldTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+              <YieldsTable rows={s.yields} />
+            </CardContent>
+          </Card>
+        )}
+        {s.byCurrency.length > 1 && (
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle>{t("currencyTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 pb-0">
+              <ByCurrencyTable rows={s.byCurrency} displayCurrency={currency} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {nextYearRows.length > 0 && (
         <CollapsibleYearSection

@@ -824,7 +824,7 @@ export function ImportFlow({
                 : "hover:border-primary/50 hover:bg-card",
             )}
           >
-            <span className="flex size-12 items-center justify-center rounded-full bg-secondary">
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-secondary">
               <Upload className="size-6 text-primary" />
             </span>
             {dragActive ? (

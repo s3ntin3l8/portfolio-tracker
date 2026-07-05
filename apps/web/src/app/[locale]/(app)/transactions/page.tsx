@@ -117,20 +117,23 @@ export default async function TransactionsPage({
           portfolioId={singlePortfolio.id}
           portfolioName={singlePortfolio.name}
           label={t("exportDocuments")}
+          iconOnly
         />
       )}
     </div>
   );
 
+  // Title + (icon-only) actions share the top line; the subtitle spans the full width
+  // below it — so on narrow screens the count isn't squeezed against the buttons.
   const heading = (action?: React.ReactNode) => (
-    <div className="flex items-end justify-between gap-4">
-      <div>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p className="mt-0.5 text-sm font-medium text-text-2">
-          {rows.length > 0 ? t("subtitleCount", { count: rows.length }) : t("subtitle")}
-        </p>
+        {action}
       </div>
-      {action}
+      <p className="text-sm font-medium text-text-2">
+        {rows.length > 0 ? t("subtitleCount", { count: rows.length }) : t("subtitle")}
+      </p>
     </div>
   );
 

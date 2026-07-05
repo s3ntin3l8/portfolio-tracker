@@ -207,7 +207,7 @@ describe("PortfolioFormDialog", () => {
     // Default type is "self" → no birth year yet.
     expect(screen.queryByLabelText(m.birthYear)).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(m.holderType), { target: { value: "child" } });
+    fireEvent.click(screen.getByRole("radio", { name: m.holderTypeChild }));
     expect(screen.getByLabelText(m.birthYear)).toBeInTheDocument();
   });
 
@@ -218,7 +218,7 @@ describe("PortfolioFormDialog", () => {
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Kid" } });
     fireEvent.change(screen.getByLabelText(m.accountHolder), { target: { value: "__new__" } });
     fireEvent.change(screen.getByLabelText(m.holderName), { target: { value: "Luca" } });
-    fireEvent.change(screen.getByLabelText(m.holderType), { target: { value: "child" } });
+    fireEvent.click(screen.getByRole("radio", { name: m.holderTypeChild }));
     fireEvent.change(screen.getByLabelText(m.birthYear), { target: { value: "2017" } });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 
@@ -25,6 +25,10 @@ vi.mock("@/lib/api", () => ({
     setTransactionStatus,
     resolveDraftTransactions,
     reassignTransactions,
+    // Needed once the in-place EditTransactionSheet mounts its AddTransactionForm.
+    getGoldSources: vi.fn(async () => []),
+    searchInstruments: vi.fn(async () => []),
+    lookupInstruments: vi.fn(async () => []),
   }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
@@ -138,6 +142,19 @@ function renderSingleRow(row: TxRow) {
 
 const tb = messages.Transactions.batch;
 
+/** Batch-select checkboxes are hidden until a long-press enters selection mode. Simulate
+ *  the press-and-hold (450ms) on a row to reveal them. */
+function enterSelectionMode(rowLabel = "Bank Central Asia") {
+  const row = screen.getByText(rowLabel).closest("tr")!;
+  vi.useFakeTimers();
+  fireEvent.pointerDown(row);
+  act(() => {
+    vi.advanceTimersByTime(500);
+  });
+  fireEvent.pointerUp(row);
+  vi.useRealTimers();
+}
+
 function renderTable(showPortfolio = false) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -161,7 +178,11 @@ describe("TransactionsTable", () => {
     );
     // Single-row actions live in the detail sheet (opened by clicking the row), not inline.
     fireEvent.click(screen.getByText("Bank Central Asia")); // t1 (portfolio p1)
-    fireEvent.click(screen.getByRole("button", { name: messages.Manage.reassign }));
+    // Secondary actions live in the header "⋯" overflow menu now.
+    fireEvent.keyDown(screen.getByRole("button", { name: messages.Manage.actions }), {
+      key: "Enter",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: messages.Manage.reassign }));
 
     // The dialog shows; p1 is excluded so the only target is DKB (p2) — confirm the move.
     fireEvent.click(
@@ -172,6 +193,18 @@ describe("TransactionsTable", () => {
     );
   });
 
+  it("opens the edit sheet in place when Edit is clicked in the detail sheet", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <TransactionsTable rows={ROWS} showPortfolio portfolios={PORTFOLIOS} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByText("Bank Central Asia")); // open the detail sheet
+    fireEvent.click(screen.getByRole("button", { name: messages.Manage.edit }));
+    // The edit sheet opens in place (no navigation) with its "Edit transaction" title.
+    expect(screen.getByText(messages.Manage.tx.editTitle)).toBeInTheDocument();
+  });
+
   it("hides the reassign action when only one portfolio exists", () => {
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -180,8 +213,12 @@ describe("TransactionsTable", () => {
     );
     // Open the detail sheet — with a single portfolio there's nowhere to reassign to.
     fireEvent.click(screen.getByText("Bank Central Asia"));
+    // The overflow menu still opens (status control), but Reassign isn't offered.
+    fireEvent.keyDown(screen.getByRole("button", { name: messages.Manage.actions }), {
+      key: "Enter",
+    });
     expect(
-      screen.queryByRole("button", { name: messages.Manage.reassign }),
+      screen.queryByRole("menuitem", { name: messages.Manage.reassign }),
     ).toBeNull();
   });
 
@@ -199,7 +236,8 @@ describe("TransactionsTable", () => {
 
   it("batch-deletes selected rows grouped by portfolio", async () => {
     renderTable(true);
-    // Select all, then delete (two-step confirm).
+    // Long-press to enter selection mode, then select all and delete (two-step confirm).
+    enterSelectionMode();
     fireEvent.click(screen.getByLabelText(tb.selectAll));
     fireEvent.click(screen.getByRole("button", { name: new RegExp(tb.delete) }));
     fireEvent.click(screen.getByRole("button", { name: tb.confirm }));
@@ -364,7 +402,8 @@ describe("TransactionsTable", () => {
     };
     renderSingleRow(bonusRow);
     // The TxType.bonus_cash label ("Bonus") should appear in the badge.
-    expect(screen.getByText(messages.TxType.bonus_cash)).toBeInTheDocument();
+    // Title appears in both the desktop table and the mobile card list.
+    expect(screen.getAllByText(messages.TxType.bonus_cash).length).toBeGreaterThan(0);
   });
 
   describe("transaction status", () => {
@@ -384,8 +423,12 @@ describe("TransactionsTable", () => {
     it("exposes a per-row status control in the detail sheet", () => {
       renderSingleRow({ ...ROWS[0], status: "normal" });
       fireEvent.click(screen.getByText("Bank Central Asia"));
+      // Status options live in the header "⋯" overflow menu.
+      fireEvent.keyDown(screen.getByRole("button", { name: messages.Manage.actions }), {
+        key: "Enter",
+      });
       expect(
-        screen.getByRole("button", { name: messages.Manage.status.label }),
+        screen.getByRole("menuitem", { name: messages.Manage.status.archived }),
       ).toBeInTheDocument();
     });
   });
@@ -509,6 +552,7 @@ describe("TransactionsTable", () => {
         </NextIntlClientProvider>,
       );
       // Select all (one normal, one draft), then confirm — only the draft is resolved.
+      enterSelectionMode();
       fireEvent.click(screen.getByLabelText(tb.selectAll));
       fireEvent.click(
         screen.getByRole("button", { name: new RegExp(tb.confirmDrafts) }),
@@ -542,11 +586,19 @@ describe("TransactionsTable", () => {
       expect(rows.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
     });
 
+    // The year filter is a Radix dropdown (opens on keyboard/pointer, not a change event).
+    function selectYear(year: string) {
+      fireEvent.keyDown(
+        screen.getByRole("button", { name: messages.Transactions.filterYear }),
+        { key: "Enter" },
+      );
+      fireEvent.click(screen.getByRole("menuitem", { name: year }));
+    }
+
     it("filtering by year shows only matching rows", () => {
       renderFilterTable();
-      const yearSelect = screen.getByRole("combobox", { name: messages.Transactions.filterYear });
       // Select "2025" — only f1 should remain
-      fireEvent.change(yearSelect, { target: { value: "2025" } });
+      selectYear("2025");
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("BBCA");
@@ -554,10 +606,9 @@ describe("TransactionsTable", () => {
 
     it("composes the Buys chip and year filters", () => {
       renderFilterTable();
-      const yearSelect = screen.getByRole("combobox", { name: messages.Transactions.filterYear });
       // buy AND 2026: only f3 (AAPL, 2026-04)
       fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
-      fireEvent.change(yearSelect, { target: { value: "2026" } });
+      selectYear("2026");
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("AAPL");
@@ -756,7 +807,8 @@ describe("TransactionsTable", () => {
     it("shows noResults message when search matches nothing", () => {
       renderFilterTable();
       fireEvent.change(getSearchInput(), { target: { value: "xyznonexistent" } });
-      expect(screen.getByText(messages.Transactions.noResults)).toBeInTheDocument();
+      // Empty message renders in both the desktop table and the mobile list.
+      expect(screen.getAllByText(messages.Transactions.noResults).length).toBeGreaterThan(0);
     });
 
     it("shows empty (not noResults) when the full row set is empty and there is no query", () => {
@@ -765,7 +817,7 @@ describe("TransactionsTable", () => {
           <TransactionsTable rows={[]} />
         </NextIntlClientProvider>,
       );
-      expect(screen.getByText(messages.Transactions.empty)).toBeInTheDocument();
+      expect(screen.getAllByText(messages.Transactions.empty).length).toBeGreaterThan(0);
       expect(screen.queryByText(messages.Transactions.noResults)).toBeNull();
     });
 
@@ -811,7 +863,8 @@ describe("TransactionsTable", () => {
           />
         </NextIntlClientProvider>,
       );
-      const flag = screen.getByLabelText(/Negative cash balance/);
+      // The flag renders in both the desktop table and the mobile list.
+      const flag = screen.getAllByLabelText(/Negative cash balance/)[0];
       expect(flag).toHaveAttribute("title", expect.stringContaining("-€0.98"));
     });
   });

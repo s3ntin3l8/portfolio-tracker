@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Receipt, TrendingUp, Landmark, CalendarClock } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { ReportHeader } from "@/components/report-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
@@ -48,25 +49,25 @@ export default async function TaxPage({
   const detailByHolder = await loadTaxYearDetail(holders, year);
 
   const Heading = (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {regime === "ID" ? t("id.subtitle", { year: year ?? new Date().getUTCFullYear() }) : t("subtitle")}
-        </p>
-      </div>
-      <div className="flex flex-col items-start gap-1">
-        <PreferenceChips
-          prefKey="taxRegime"
-          current={regime}
-          options={[
-            { value: "DE", label: t("regime.de") },
-            { value: "ID", label: t("regime.id") },
-          ]}
-        />
-        <span className="px-0.5 text-[11px] text-muted-foreground">{t("regime.label")}</span>
-      </div>
-    </div>
+    <ReportHeader
+      title={t("title")}
+      subtitle={
+        regime === "ID" ? t("id.subtitle", { year: year ?? new Date().getUTCFullYear() }) : t("subtitle")
+      }
+      action={
+        <div className="flex flex-col items-end gap-1">
+          <PreferenceChips
+            prefKey="taxRegime"
+            current={regime}
+            options={[
+              { value: "DE", label: t("regime.de") },
+              { value: "ID", label: t("regime.id") },
+            ]}
+          />
+          <span className="px-0.5 text-[11px] text-muted-foreground">{t("regime.label")}</span>
+        </div>
+      }
+    />
   );
 
   if (holders.length === 0) {
@@ -173,7 +174,7 @@ function TaxHolderSectionId({
   return (
     <>
       {/* Hero row: estimated tax (withheld at source) + sales tax + dividend tax */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
         <EstimatedTaxHero
           tone="green"
           label={t("id.hero.estimatedTax", { year })}
@@ -252,7 +253,7 @@ function TaxHolderSectionDe({
   return (
     <>
       {/* Hero row: estimated tax + realized gains YTD + dividends YTD */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
         <EstimatedTaxHero
           label={t("hero.estimatedTax", { year: entry.year })}
           value={money(estimatedTax)}
@@ -306,7 +307,7 @@ function TaxHolderSectionDe({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">{t("forecast.disclaimer")}</p>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
               <StatCard
                 label={t("forecast.label")}
                 value={money(u.forecastIncomeRestOfYear)}

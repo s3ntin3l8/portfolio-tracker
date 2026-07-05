@@ -75,10 +75,17 @@ describe("RecentImportsSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("auto-expands when a pending draft needs review", () => {
+  it("stays collapsed by default even when a pending draft exists", () => {
     renderSection([record({ id: "draft1", status: "draft" })]);
 
-    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    // Collapsed by default: the toggle is not expanded and the draft's review link is hidden.
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: messages.ImportHistory.review }),
+    ).not.toBeInTheDocument();
+
+    // Expands on demand, surfacing the review link.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(
       screen.getByRole("link", { name: messages.ImportHistory.review }),
     ).toHaveAttribute("href", "/transactions/import/draft1");

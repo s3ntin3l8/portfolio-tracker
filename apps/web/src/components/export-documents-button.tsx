@@ -16,10 +16,13 @@ export function ExportDocumentsButton({
   portfolioId,
   portfolioName,
   label,
+  iconOnly = false,
 }: {
   portfolioId: string;
   portfolioName: string;
   label: string;
+  /** Render as a plain icon button; `label` stays the accessible name + native tooltip. */
+  iconOnly?: boolean;
 }) {
   const api = useApiClient();
   const [loading, setLoading] = useState(false);
@@ -41,6 +44,21 @@ export function ExportDocumentsButton({
     } finally {
       setLoading(false);
     }
+  }
+
+  if (iconOnly) {
+    return (
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={handleExport}
+        disabled={loading}
+        aria-label={label}
+        title={label}
+      >
+        <Archive className="size-4" />
+      </Button>
+    );
   }
 
   return (

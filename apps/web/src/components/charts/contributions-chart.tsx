@@ -71,18 +71,7 @@ export function ContributionsChart({
 
     return (
       <div className="space-y-3">
-        {/* Legend — reference shows this in the card header, top-right. */}
-        <div className="flex items-center justify-end gap-4 text-xs font-semibold text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="h-[2px] w-3.5 rounded-full bg-success" />
-            {t("chartValue")}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-0 w-3.5 border-t-[1.5px] border-dashed border-muted-foreground" />
-            {t("chartContributions")}
-          </span>
-        </div>
-
+        {/* Legend lives in the card header (right of the title) — see the Savings page. */}
         <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart

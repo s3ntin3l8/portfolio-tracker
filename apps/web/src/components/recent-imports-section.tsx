@@ -21,11 +21,9 @@ export function RecentImportsSection({
   portfolios?: PickablePortfolio[];
 }) {
   const t = useTranslations("ImportHistory");
-  // Open by default when there's an actionable draft to review (a TR sync, a partial
-  // confirm, a shared screenshot); a confirmed/discarded-only audit trail stays collapsed.
-  const [open, setOpen] = useState(() =>
-    items.some((i) => i.status === "draft"),
-  );
+  // Collapsed by default — the import history is a secondary audit trail; the user opens
+  // it on demand. (Drafts also surface inline in the transactions list as draft rows.)
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="space-y-3">

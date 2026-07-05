@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, Loader2, Sparkles, X } from "lucide-react";
+import { AlertCircle, ChevronDown, Loader2, Sparkles, X } from "lucide-react";
 import type {
   ApiClient,
   GoldSource,
@@ -10,10 +10,12 @@ import type {
   InstrumentSearchResult,
 } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
+import { MonogramBadge } from "@/components/monogram-badge";
 import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type AddTransactionClient = Pick<
@@ -74,15 +76,13 @@ const CASH_TYPES = ["deposit", "withdrawal", "fee", "tax", "interest", "bonus_ca
 // First-class transfer types (depot-to-depot, PR #309). Cash-neutral; price = carried basis.
 const TRANSFER_TYPES = ["transfer_in", "transfer_out"] as const;
 
-/** Types the user can freely select. Loan types are excluded. */
-const SELECTABLE_TYPES = [
-  ...ACQUISITION_TYPES,
-  ...SHARE_RECEIPT_TYPES,
-  ...TRANSFER_TYPES,
-  ...INCOME_TYPES,
-  ...CASH_TYPES,
-] as const;
-type SelectableType = (typeof SELECTABLE_TYPES)[number];
+/** Types the user can freely select (the chip palette groups). Loan types are excluded. */
+type SelectableType =
+  | (typeof ACQUISITION_TYPES)[number]
+  | (typeof SHARE_RECEIPT_TYPES)[number]
+  | (typeof TRANSFER_TYPES)[number]
+  | (typeof INCOME_TYPES)[number]
+  | (typeof CASH_TYPES)[number];
 
 /** All recognised types (superset; covers loan rows already in the DB). */
 type TxType = SelectableType | "loan_drawdown" | "loan_repayment";
@@ -144,6 +144,8 @@ export function AddTransactionForm({
 
   const isEdit = Boolean(transactionId);
   const [type, setType] = useState<TxType>(() => (initial?.type as TxType) ?? "buy");
+  // Type is chosen from a grouped chip palette (reference), collapsed behind a trigger.
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [kind, setKind] = useState(() => initial?.kind ?? "");
   const [currency, setCurrency] = useState(() => initial?.currency ?? "IDR");
   const [date, setDate] = useState(() => initial?.executedAt?.slice(0, 10) ?? "");
@@ -193,14 +195,26 @@ export function AddTransactionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Grouped type chips for the picker palette (reference: Trade / Share receipt /
+  // Transfer / Income / Cash). Loan types stay excluded (not offered in any group).
+  const typeGroups: { label: string; items: readonly string[] }[] = [
+    { label: t("groupTrade"), items: ACQUISITION_TYPES },
+    { label: t("groupShareReceipt"), items: SHARE_RECEIPT_TYPES },
+    { label: t("groupTransfer"), items: TRANSFER_TYPES },
+    { label: t("groupIncome"), items: INCOME_TYPES },
+    { label: t("groupCash"), items: CASH_TYPES },
+  ];
+
   // Per-type field groups — drive which fields are shown and validated.
   const isAcquisition = (ACQUISITION_TYPES as readonly string[]).includes(type);
   const isShareReceipt = (SHARE_RECEIPT_TYPES as readonly string[]).includes(type);
   // Transfers: instrument + quantity + carried-cost-basis price. Cash-neutral, no fees/tax.
   const isTransfer = (TRANSFER_TYPES as readonly string[]).includes(type);
   const isIncome = (INCOME_TYPES as readonly string[]).includes(type);
-  const isCash = (CASH_TYPES as readonly string[]).includes(type) ||
-    type === "loan_drawdown" || type === "loan_repayment";
+  const isCash =
+    (CASH_TYPES as readonly string[]).includes(type) ||
+    type === "loan_drawdown" ||
+    type === "loan_repayment";
 
   /** Shows the instrument picker. */
   const hasInstrument = !isCash;
@@ -363,183 +377,243 @@ export function AddTransactionForm({
         </div>
       )}
 
-      <Field label={t("type")} htmlFor="tx-type">
-        <Select id="tx-type" value={type} onChange={(e) => setType(e.target.value as TxType)}>
-          {/* Render the curated selectable list, plus the current type if it's a loan/legacy
-              row that isn't in the list — so editing won't clobber it. */}
-          {[
-            ...SELECTABLE_TYPES,
-            ...(!(SELECTABLE_TYPES as readonly string[]).includes(type) ? [type] : []),
-          ].map((ty) => (
-            <option key={ty} value={ty}>
-              {tt(ty)}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      {/* Type — reference grouped chip palette, collapsed behind an input-styled trigger. */}
+      <div className="space-y-1.5">
+        <Label>{t("type")}</Label>
+        <button
+          type="button"
+          aria-label={t("type")}
+          aria-expanded={typePickerOpen}
+          onClick={() => setTypePickerOpen((o) => !o)}
+          className="flex w-full items-center justify-between rounded-[13px] border border-border bg-card px-3.5 py-[13px] text-sm font-semibold text-foreground transition-colors focus-visible:border-primary focus-visible:outline-none"
+        >
+          <span>{tt(type)}</span>
+          <ChevronDown
+            className={cn(
+              "size-4 text-chevron transition-transform",
+              typePickerOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {typePickerOpen && (
+          <div className="mt-2.5 flex flex-col gap-3.5 rounded-[14px] border border-border bg-card p-[15px]">
+            {typeGroups.map((g) => (
+              <div key={g.label}>
+                <p className="mb-2 ml-0.5 text-[10px] font-bold uppercase tracking-[.06em] text-text-3">
+                  {g.label}
+                </p>
+                <div className="flex flex-wrap gap-[7px]">
+                  {g.items.map((ty) => (
+                    <button
+                      key={ty}
+                      type="button"
+                      onClick={() => {
+                        setType(ty as TxType);
+                        setTypePickerOpen(false);
+                      }}
+                      className={cn(
+                        "rounded-[10px] px-[13px] py-[9px] text-[12px] transition-colors",
+                        ty === type
+                          ? "bg-primary font-bold text-primary-foreground"
+                          : "border border-border bg-card-2 font-semibold text-foreground hover:bg-secondary",
+                      )}
+                    >
+                      {tt(ty)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {hasInstrument && (
-        <div className="space-y-3 rounded-lg border border-border p-4">
-          <Label>{t("instrument")}</Label>
-          {selected ? (
-            <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm">
-              <span>
-                <span className="font-medium">{selected.symbol}</span>
-                <span className="ml-2 text-muted-foreground">{selected.name}</span>
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label={t("back")}
-                onClick={() => setSelected(null)}
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
-          ) : (
-            <>
-              <Field label={t("kind")} htmlFor="tx-kind">
-                <Select
-                  id="tx-kind"
-                  value={assetClass}
-                  onChange={(e) => {
-                    const ac = e.target.value as (typeof ASSET_CLASSES)[number];
-                    setAssetClass(ac);
-                    setUnit(unitForClass(ac));
-                  }}
+        <Field label={t("instrument")}>
+          <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+            {selected ? (
+              <div className="flex items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-sm">
+                <MonogramBadge
+                  label={selected.symbol}
+                  assetClass={selected.assetClass}
+                  className="size-8 rounded-[9px]"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{selected.symbol}</span>
+                  <span className="ml-2 text-muted-foreground">{selected.name}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("back")}
+                  onClick={() => setSelected(null)}
                 >
-                  {ASSET_CLASSES.map((c) => (
-                    <option key={c} value={c}>
-                      {tc(c)}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+                  <X className="size-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Field label={t("kind")} htmlFor="tx-kind">
+                  <Select
+                    id="tx-kind"
+                    value={assetClass}
+                    onChange={(e) => {
+                      const ac = e.target.value as (typeof ASSET_CLASSES)[number];
+                      setAssetClass(ac);
+                      setUnit(unitForClass(ac));
+                    }}
+                  >
+                    {ASSET_CLASSES.map((c) => (
+                      <option key={c} value={c}>
+                        {tc(c)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
 
-              {assetClass === "gold" ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t("goldSource")} htmlFor="tx-gold-source">
-                    <Select
-                      id="tx-gold-source"
-                      value={goldMarket}
-                      onChange={(e) => setGoldMarket(e.target.value)}
-                    >
-                      {goldSourceList.map((s) => (
-                        <option key={s.market} value={s.market}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field label={t("goldLabel")} htmlFor="tx-gold-label">
-                    <Input
-                      id="tx-gold-label"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder={t("goldLabelPlaceholder")}
-                    />
-                  </Field>
-                  <p className="text-xs text-muted-foreground sm:col-span-2">{t("goldNote")}</p>
-                </div>
-              ) : (
-                <>
-                  <Input
-                    value={query}
-                    onChange={(e) => runSearch(e.target.value)}
-                    placeholder={t("search")}
-                    aria-label={t("search")}
-                  />
-                  {results.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {t("savedResults")}
-                      </p>
-                      <ul className="divide-y divide-border rounded-md border border-border">
-                        {results.map((i) => (
-                          <li key={i.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelected(i);
-                                setResults([]);
-                                setDiscovered([]);
-                              }}
-                              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                            >
-                              <span className="font-medium">{i.symbol}</span>
-                              <span className="text-muted-foreground">{i.name}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {discovered.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                        <Sparkles className="size-3" />
-                        {t("discoveredResults")}
-                      </p>
-                      <ul className="divide-y divide-border rounded-md border border-border">
-                        {discovered.map((i) => (
-                          <li key={`${i.market}:${i.symbol}:${i.source}`}>
-                            <button
-                              type="button"
-                              onClick={() => prefillFrom(i)}
-                              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                            >
-                              <span className="font-medium">{i.symbol}</span>
-                              <span className="truncate text-muted-foreground">{i.name}</span>
-                              <span className="shrink-0 text-xs text-muted-foreground">
-                                {i.currency}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <p className="pt-1 text-xs font-medium text-muted-foreground">
-                    {t("newInstrument")}
-                  </p>
+                {assetClass === "gold" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label={t("symbol")} htmlFor="tx-symbol">
-                      <Input
-                        id="tx-symbol"
-                        value={symbol}
-                        onChange={(e) => {
-                          setSymbol(e.target.value.toUpperCase());
-                          // Manual edits override a discovered identity.
-                          setIsin(null);
-                          setDiscoveredMarket(null);
-                        }}
-                      />
-                    </Field>
-                    <Field label={t("name")} htmlFor="tx-name">
-                      <Input id="tx-name" value={name} onChange={(e) => setName(e.target.value)} />
-                    </Field>
-                    <Field label={t("unit")} htmlFor="tx-unit">
+                    <Field label={t("goldSource")} htmlFor="tx-gold-source">
                       <Select
-                        id="tx-unit"
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value as (typeof UNITS)[number])}
+                        id="tx-gold-source"
+                        value={goldMarket}
+                        onChange={(e) => setGoldMarket(e.target.value)}
                       >
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>
-                            {t(`units.${u}`)}
+                        {goldSourceList.map((s) => (
+                          <option key={s.market} value={s.market}>
+                            {s.label}
                           </option>
                         ))}
                       </Select>
                     </Field>
+                    <Field label={t("goldLabel")} htmlFor="tx-gold-label">
+                      <Input
+                        id="tx-gold-label"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={t("goldLabelPlaceholder")}
+                      />
+                    </Field>
+                    <p className="text-xs text-muted-foreground sm:col-span-2">{t("goldNote")}</p>
                   </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
+                ) : (
+                  <>
+                    <Input
+                      value={query}
+                      onChange={(e) => runSearch(e.target.value)}
+                      placeholder={t("search")}
+                      aria-label={t("search")}
+                    />
+                    {results.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {t("savedResults")}
+                        </p>
+                        <ul className="divide-y divide-border rounded-md border border-border">
+                          {results.map((i) => (
+                            <li key={i.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelected(i);
+                                  setResults([]);
+                                  setDiscovered([]);
+                                }}
+                                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent"
+                              >
+                                <MonogramBadge
+                                  label={i.symbol}
+                                  assetClass={i.assetClass}
+                                  className="size-8 rounded-[9px]"
+                                />
+                                <span className="min-w-0 flex-1 truncate">
+                                  <span className="font-medium">{i.symbol}</span>
+                                  <span className="ml-2 text-muted-foreground">{i.name}</span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {discovered.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                          <Sparkles className="size-3" />
+                          {t("discoveredResults")}
+                        </p>
+                        <ul className="divide-y divide-border rounded-md border border-border">
+                          {discovered.map((i) => (
+                            <li key={`${i.market}:${i.symbol}:${i.source}`}>
+                              <button
+                                type="button"
+                                onClick={() => prefillFrom(i)}
+                                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-accent"
+                              >
+                                <MonogramBadge
+                                  label={i.symbol}
+                                  assetClass={i.assetClass}
+                                  className="size-8 rounded-[9px]"
+                                />
+                                <span className="min-w-0 flex-1 truncate">
+                                  <span className="font-medium">{i.symbol}</span>
+                                  <span className="ml-2 text-muted-foreground">{i.name}</span>
+                                </span>
+                                <span className="shrink-0 text-xs text-muted-foreground">
+                                  {i.currency}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <p className="pt-1 text-xs font-medium text-muted-foreground">
+                      {t("newInstrument")}
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label={t("symbol")} htmlFor="tx-symbol">
+                        <Input
+                          id="tx-symbol"
+                          value={symbol}
+                          onChange={(e) => {
+                            setSymbol(e.target.value.toUpperCase());
+                            // Manual edits override a discovered identity.
+                            setIsin(null);
+                            setDiscoveredMarket(null);
+                          }}
+                        />
+                      </Field>
+                      <Field label={t("name")} htmlFor="tx-name">
+                        <Input
+                          id="tx-name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                        />
+                      </Field>
+                      <Field label={t("unit")} htmlFor="tx-unit">
+                        <Select
+                          id="tx-unit"
+                          value={unit}
+                          onChange={(e) => setUnit(e.target.value as (typeof UNITS)[number])}
+                        >
+                          {UNITS.map((u) => (
+                            <option key={u} value={u}>
+                              {t(`units.${u}`)}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </Field>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -655,11 +729,7 @@ export function AddTransactionForm({
             />
           </Field>
           <Field label={t("subType")} htmlFor="tx-sub-type">
-            <Select
-              id="tx-sub-type"
-              value={kind}
-              onChange={(e) => setKind(e.target.value)}
-            >
+            <Select id="tx-sub-type" value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="">{t("subTypeNone")}</option>
               <option value="saveback">{t("subTypeSaveback")}</option>
               <option value="roundup">{t("subTypeRoundup")}</option>
@@ -681,7 +751,12 @@ export function AddTransactionForm({
         <p className="text-sm text-muted-foreground">{t("enrichHint")}</p>
       )}
 
-      <Button type="submit" disabled={busy}>
+      {/* Reference primary button: full-width green, rounded-15, 15px padding, 700/15px. */}
+      <Button
+        type="submit"
+        disabled={busy}
+        className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+      >
         {busy && <Loader2 className="size-4 animate-spin" />}
         {busy ? t("submitting") : isEdit ? t("save") : t("submit")}
       </Button>

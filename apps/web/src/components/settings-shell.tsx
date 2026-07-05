@@ -39,6 +39,7 @@ export function SettingsShell({
   railTop,
   railBottom,
   landingTop,
+  landingBottom,
   children,
 }: {
   navItems: ShellNavItem[];
@@ -48,6 +49,8 @@ export function SettingsShell({
   railTop?: React.ReactNode;
   railBottom?: React.ReactNode;
   landingTop?: React.ReactNode;
+  /** Rendered at the bottom of the mobile landing (the rail's `railBottom` is desktop-only). */
+  landingBottom?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -102,7 +105,7 @@ export function SettingsShell({
             {landingTop}
             {landingGroups.map((group, i) => (
               <div
-                key={i}
+                key={`group-${i}`}
                 className={cn("divide-y divide-line overflow-hidden rounded-[20px] bg-card", CARD_SHADOW)}
               >
                 {group.map((item) => (
@@ -135,6 +138,7 @@ export function SettingsShell({
                 ))}
               </div>
             ))}
+            {landingBottom}
           </div>
         )}
 

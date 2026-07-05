@@ -7,8 +7,8 @@
     "more": "+{count} lainnya"
   },
   "Install": {
-    "title": "Tambahkan Portfolio ke layar utama",
-    "cta": "Instal aplikasi",
+    "title": "Tambahkan Pocket ke layar utama",
+    "cta": "Instal Pocket",
     "dismiss": "Tutup",
     "iosHint": "Untuk memasang: ketuk Bagikan, lalu “Add to Home Screen”."
   },
@@ -251,7 +251,7 @@
   },
   "Income": {
     "title": "Pendapatan",
-    "subtitle": "Dividen dan kupon obligasi di seluruh portofolio Anda.",
+    "subtitle": "Dividen, kupon & distribusi",
     "date": "Tanggal",
     "type": "Jenis",
     "instrument": "Instrumen",
@@ -310,7 +310,7 @@
   },
   "Savings": {
     "title": "Tabungan",
-    "subtitle": "Berapa yang Anda setor dari waktu ke waktu, dan ke mana arahnya.",
+    "subtitle": "Kontribusi, rencana & proyeksi",
     "totalContributed": "Total setoran",
     "monthlyAverage": "Rata-rata per bulan",
     "monthsActive": "{count, plural, other {# bulan}}",
@@ -322,8 +322,8 @@
     "xirr": "Imbal hasil tahunan",
     "xirrYoungHint": "* disetahunkan dari data di bawah setahun — bisa berlebih",
     "contributionsOverTime": "Setoran dari waktu ke waktu",
-    "chartContributions": "Setoran",
-    "chartValue": "Nilai portofolio",
+    "chartContributions": "Kontribusi",
+    "chartValue": "Nilai",
     "chartValueUnavailable": "Riwayat nilai belum tersedia — jalankan backfill dari Admin → Jobs.",
     "footerInvested": "Diinvestasikan",
     "footerGain": "Keuntungan",
@@ -397,7 +397,9 @@
     "taxAllowanceHint": "Plafon per orang: €1.000 untuk lajang; €2.000 untuk pasangan yang dihitung bersama. Alokasi per depot diatur di pengaturan masing-masing portofolio.",
     "capitalGainsTaxRate": "Tarif pajak keuntungan modal",
     "capitalGainsTaxRateHint": "0,25 (25% KapSt) atau 0,26375 termasuk Soli.",
-    "churchTax": "Pajak gereja (Kirchensteuer)"
+    "churchTax": "Pajak gereja (Kirchensteuer)",
+    "deleteTitle": "Hapus “{name}”?",
+    "edit": "Ubah pemilik"
   },
   "PortfolioSwitcher": {
     "label": "Portofolio",
@@ -445,13 +447,13 @@
     "confirmDelete": "Hapus",
     "cancel": "Batal",
     "includeInAggregate": "Sertakan dalam agregat kekayaan bersih",
-    "includeInAggregateHint": "Hilangkan centang untuk mengecualikan portofolio ini dari perhitungan total kekayaan bersih.",
+    "includeInAggregateHint": "Hitung portofolio ini dalam total nilai bersih Anda.",
     "cashCounted": "Kas adalah bagian dari portofolio ini",
-    "cashCountedHint": "Centang untuk rekening tabungan/deposito (Tagesgeld, Festgeld, depot tabungan anak): kas dihitung sebagai uang yang ditabung dan masuk ke kekayaan bersih. Biarkan kosong untuk rekening sekuritas atau giro/campuran: hanya modal yang diinvestasikan yang dihitung dan kas menganggur dikecualikan — default yang tepat untuk akun yang kasnya hanya numpang lewat.",
+    "cashCountedHint": "Hitung kas menganggur sebagai nilai bersih — untuk rekening tabungan/deposito, bukan broker.",
     "allowNegativeCash": "Izinkan saldo kas negatif sementara",
-    "allowNegativeCashHint": "Centang jika pembelian sering tercatat sebelum setoran pendanaannya masuk, sehingga saldo kas sempat di bawah nol. Ini mencegah peringatan integritas data kas-negatif menandai penurunan sesaat yang akan terkoreksi sendiri. Hanya relevan saat kas adalah bagian dari portofolio ini.",
+    "allowNegativeCashHint": "Redam peringatan saat pembelian tercatat sebelum setoran dana masuk.",
     "documentRetention": "Simpan dokumen sumber",
-    "documentRetentionHint": "Saat diaktifkan, PDF dan tangkapan layar yang diunggah akan disimpan setelah konfirmasi sehingga dapat diunduh nanti. Nonaktif secara default — dokumen dihapus setelah parsing untuk melindungi privasi Anda.",
+    "documentRetentionHint": "Simpan PDF dan tangkapan layar setelah diproses agar bisa diunduh lagi.",
     "taxAllowanceAnnual": "Freistellungsauftrag (FSA)",
     "taxAllowanceAnnualPlaceholder": "misal 1000",
     "taxAllowanceAnnualHint": "Opsional. Jumlah Sparerpauschbetrag yang dialokasikan ke depot ini. Pajak retensi hanya dipotong setelah jumlah ini terpakai.",
@@ -461,7 +463,11 @@
     "trConnectAfterSave": "Simpan portofolio terlebih dahulu untuk mengatur koneksi Trade Republic.",
     "trChildUnsupported": "Trade Republic belum bisa menyinkronkan akun anak (Kinderdepot) — impor lewat CSV atau PDF saja.",
     "trLoading": "Memuat koneksi…",
-    "done": "Selesai"
+    "done": "Selesai",
+    "sectionBasics": "Dasar",
+    "sectionOwnership": "Kepemilikan",
+    "sectionAccount": "Akun",
+    "sectionAccounting": "Opsi akuntansi"
   },
   "Import": {
     "title": "Impor transaksi",
@@ -976,7 +982,7 @@
     "title": "Aktivitas",
     "subtitle": "Setiap beli, jual, dividen, dan arus kas.",
     "filterScope": "Cakupan",
-    "filterAll": "Semua aktivitas",
+    "filterAll": "Semua",
     "filterInvestments": "Investasi saja",
     "filterType": "Jenis",
     "filterInstrument": "Instrumen",
@@ -1073,9 +1079,12 @@
       "chipIncome": "Pendapatan",
       "chipIssues": "Perlu ditinjau · {count}"
     },
-    "subtitleCount": "{count} transaksi · diimpor dari tangkapan layar, CSV & manual",
+    "subtitleCount": "{count} transaksi",
     "transactionCol": "Transaksi",
-    "price": "Harga"
+    "price": "Harga",
+    "breakdown": "Rincian",
+    "details": "Detail",
+    "currency": "Mata uang"
   },
   "Manage": {
     "addTransaction": "Tambah transaksi",
@@ -1184,7 +1193,12 @@
       "subTypeNone": "(tidak ada)",
       "subTypeSaveback": "Saveback",
       "subTypeRoundup": "Pembulatan",
-      "subTypeMerger": "Merger"
+      "subTypeMerger": "Merger",
+      "groupTrade": "Perdagangan",
+      "groupShareReceipt": "Penerimaan saham",
+      "groupTransfer": "Transfer",
+      "groupIncome": "Pendapatan",
+      "groupCash": "Kas"
     },
     "reassign": "Pindahkan"
   },
@@ -1321,8 +1335,8 @@
     }
   },
   "Trades": {
-    "title": "Catatan Transaksi",
-    "subtitle": "Setiap posisi dan kinerjanya, termasuk dividen.",
+    "title": "P&L Terwujud",
+    "subtitle": "Posisi tertutup & kinerja",
     "methodAverage": "Biaya rata-rata",
     "methodFifo": "FIFO",
     "filter_all": "Semua",
@@ -1427,8 +1441,8 @@
     "loadSalesError": "Gagal memuat rekomendasi transaksi."
   },
   "Tax": {
-    "title": "Optimasi Pajak",
-    "subtitle": "Sisa Sparerpauschbetrag dan saran panen bebas pajak. Khusus pajak Jerman.",
+    "title": "Pajak",
+    "subtitle": "Keuntungan modal & saran panen bebas pajak",
     "defaultHolderName": "Semua portofolio",
     "empty": {
       "title": "Alokasi FSA belum dikonfigurasi",

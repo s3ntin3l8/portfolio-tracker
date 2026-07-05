@@ -126,44 +126,42 @@ export default async function HoldingsPage({
       ]),
   ];
 
+  // Title + (icon-only) export share the top line; the subtitle spans the full width below
+  // it — same pattern as the Activity page header.
   const Heading = (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
           <span className="sm:hidden">{t("titleMobile")}</span>
           <span className="hidden sm:inline">{t("title")}</span>
         </h1>
-        <p className="text-sm text-muted-foreground">
-          {result.status === "ok" && holdings.length > 0
-            ? t("subtitleCount", { count: holdings.length })
-            : t("subtitle")}
-        </p>
+        {result.status === "ok" && holdings.length > 0 && (
+          <ExportCsvButton
+            filename="holdings.csv"
+            headers={[
+              "Symbol",
+              "Name",
+              "AssetClass",
+              "Quantity",
+              "Unit",
+              "AvgCost",
+              "Price",
+              "PriceCurrency",
+              "MarketValue",
+              "UnrealizedPnL",
+              "Currency",
+            ]}
+            rows={exportRows}
+            label={t("exportCsv")}
+            iconOnly
+          />
+        )}
       </div>
-      {result.status === "ok" && (
-        <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          {holdings.length > 0 && (
-            <ExportCsvButton
-              filename="holdings.csv"
-              headers={[
-                "Symbol",
-                "Name",
-                "AssetClass",
-                "Quantity",
-                "Unit",
-                "AvgCost",
-                "Price",
-                "PriceCurrency",
-                "MarketValue",
-                "UnrealizedPnL",
-                "Currency",
-              ]}
-              rows={exportRows}
-              label={t("exportCsv")}
-              iconOnly
-            />
-          )}
-        </div>
-      )}
+      <p className="text-sm text-muted-foreground">
+        {result.status === "ok" && holdings.length > 0
+          ? t("subtitleCount", { count: holdings.length })
+          : t("subtitle")}
+      </p>
     </div>
   );
 

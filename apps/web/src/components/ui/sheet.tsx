@@ -34,9 +34,13 @@ function SheetContent({
   className,
   children,
   side = "bottom",
+  hideClose = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   side?: "bottom" | "full";
+  /** Suppress the built-in top-right close button — for sheets that render their own
+   *  close inside a custom header (e.g. the transaction detail sheet's icon cluster). */
+  hideClose?: boolean;
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -55,17 +59,19 @@ function SheetContent({
           <div className="mx-auto mt-3.5 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
         )}
         {children}
-        <DialogPrimitive.Close
-          className={cn(
-            "absolute focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none",
-            side === "bottom"
-              ? "right-5 top-7 flex size-[34px] items-center justify-center rounded-[11px] bg-card text-foreground shadow-[0_1px_2px_rgba(15,27,20,.08)]"
-              : "right-4 top-4 rounded-md opacity-70 transition-opacity hover:opacity-100",
-          )}
-        >
-          <X className="size-[18px]" strokeWidth={2.2} />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
+        {!hideClose && (
+          <DialogPrimitive.Close
+            className={cn(
+              "absolute focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none",
+              side === "bottom"
+                ? "right-5 top-7 flex size-[34px] items-center justify-center rounded-[11px] bg-card text-foreground shadow-[0_1px_2px_rgba(15,27,20,.08)]"
+                : "right-4 top-4 rounded-md opacity-70 transition-opacity hover:opacity-100",
+            )}
+          >
+            <X className="size-[18px]" strokeWidth={2.2} />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );

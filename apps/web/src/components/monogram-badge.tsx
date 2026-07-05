@@ -6,8 +6,9 @@ import { monogram, tintFor, assetClassTone } from "@/lib/brokerages";
  * the reference uses these throughout (Holdings/Trades rows, Savings plan rows, Tax
  * harvest rows). When `assetClass` is known, matches the reference's soft rounded-square
  * chip tinted per asset class (`chipBg`/`chipFg` in `Pocket Prototype.dc.html`). Falls
- * back to a hash-derived solid circle (any name → a stable, but class-agnostic, hue) for
- * contexts without a resolvable asset class (e.g. savings-plan rows).
+ * back to a hash-derived solid rounded-square (any name → a stable, but class-agnostic,
+ * hue) for contexts without a resolvable asset class (e.g. savings-plan rows). The app uses
+ * rounded squares — never circles — for every avatar/monogram/icon tile.
  */
 export function MonogramBadge({
   label,
@@ -37,7 +38,7 @@ export function MonogramBadge({
   return (
     <span
       className={cn(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold text-white",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[0.7rem] font-bold text-white",
         className,
       )}
       style={{ backgroundColor: tintFor(label) }}

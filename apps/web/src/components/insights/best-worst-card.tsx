@@ -18,7 +18,7 @@ function MoverRow({ mover, label, locale }: { mover: Mover; label: string; local
   return (
     <div className="flex items-center gap-3">
       <span
-        className="flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+        className="flex size-9 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold text-white"
         style={{ background: color }}
       >
         {mover.symbol.slice(0, 2).toUpperCase()}

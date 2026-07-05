@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { ScrollText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { ReportHeader } from "@/components/report-header";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradesTable } from "@/components/trades-table";
@@ -36,19 +37,19 @@ export default async function TradesPage({
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
 
   const Heading = (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
-      {log && (
-        <TradeMethodToggle
-          current={method}
-          labelAverage={t("methodAverage")}
-          labelFifo={t("methodFifo")}
-        />
-      )}
-    </div>
+    <ReportHeader
+      title={t("title")}
+      subtitle={t("subtitle")}
+      action={
+        log ? (
+          <TradeMethodToggle
+            current={method}
+            labelAverage={t("methodAverage")}
+            labelFifo={t("methodFifo")}
+          />
+        ) : undefined
+      }
+    />
   );
 
   if (result.status === "unavailable") {
@@ -94,7 +95,7 @@ export default async function TradesPage({
     <div className="space-y-6">
       {Heading}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label={t("totalReturn")}
           value={formatSignedMoney(totalReturn, currency, locale)}

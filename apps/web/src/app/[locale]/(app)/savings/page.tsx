@@ -10,6 +10,7 @@ import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
 import { ForecastPanel } from "@/components/savings/forecast-panel";
 import { SparplanSection } from "@/components/savings/sparplan-section";
+import { ReportHeader } from "@/components/report-header";
 import { CashOnHandCard } from "@/components/savings/cash-on-hand-card";
 import { EmptyState } from "@/components/empty-state";
 import { loadContributions, loadSparplan, loadHoldings } from "@/lib/server-api";
@@ -37,12 +38,7 @@ export default async function SavingsPage({
   // nothing "idle" to nudge when cash isn't part of the portfolio's boundary).
   const holdingsResult = await loadHoldings();
 
-  const heading = (
-    <div>
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-    </div>
-  );
+  const heading = <ReportHeader title={t("title")} subtitle={t("subtitle")} />;
 
   if (result.status !== "ok" || Number(result.data.totalContributed) === 0) {
     const unavailable = result.status === "unavailable";
@@ -67,7 +63,7 @@ export default async function SavingsPage({
     <div className="space-y-8">
       {heading}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
         <StatCard label={t("totalContributed")} value={m(Number(c.netContributed))} />
         <StatCard
           label={t("monthlyAverage")}
@@ -105,16 +101,31 @@ export default async function SavingsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t("contributionsOverTime")}</CardTitle>
-          {c.dailySeries.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {t("contributionsSubtitle", {
-                date: new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(
-                  new Date(c.dailySeries[0].date),
-                ),
-              })}
-            </p>
-          )}
+          {/* Reference: title/subtitle on the left, the chart legend on the right of the same row. */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="text-base">{t("contributionsOverTime")}</CardTitle>
+              {c.dailySeries.length > 0 && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("contributionsSubtitle", {
+                    date: new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(
+                      new Date(c.dailySeries[0].date),
+                    ),
+                  })}
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-3.5 text-[11px] font-semibold text-text-2">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-[3px] bg-success" />
+                {t("chartValue")}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-0 w-3.5 border-t-2 border-dashed border-text-3" />
+                {t("chartContributions")}
+              </span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <ContributionsChart
