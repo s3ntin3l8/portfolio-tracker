@@ -199,6 +199,7 @@ function TaxHolderSectionId({
           totalSalesTax={idTax.totalSalesTax}
           money={money}
           t={t}
+          year={year}
         />
         <IdDividendsTable
           rows={idTax.dividends}
@@ -283,6 +284,7 @@ function TaxHolderSectionDe({
             totalGain={detail.totalGain}
             money={money}
             t={t}
+            year={entry.year}
           />
           <DividendsTable
             rows={detail.dividendRows}

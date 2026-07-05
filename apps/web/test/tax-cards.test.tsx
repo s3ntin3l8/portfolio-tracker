@@ -66,6 +66,7 @@ describe("DisposalTable", () => {
         totalGain="700"
         money={money}
         t={t}
+        year={2026}
       />,
     );
     expect(screen.getByText("NVDA")).toBeInTheDocument();
@@ -80,7 +81,9 @@ describe("DisposalTable", () => {
   });
 
   it("renders the empty state when there are no disposals", () => {
-    render(<DisposalTable rows={[]} totalProceeds="0" totalGain="0" money={money} t={t} />);
+    render(
+      <DisposalTable rows={[]} totalProceeds="0" totalGain="0" money={money} t={t} year={2026} />,
+    );
     expect(screen.getByText(/No disposals/)).toBeInTheDocument();
     expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });
@@ -293,6 +296,7 @@ describe("IdSalesTable", () => {
         totalSalesTax="2242.00"
         money={money}
         t={t}
+        year={2026}
       />,
     );
     expect(screen.getByText("BBNI")).toBeInTheDocument();
@@ -307,7 +311,9 @@ describe("IdSalesTable", () => {
   });
 
   it("renders the empty state when there are no disposals", () => {
-    render(<IdSalesTable rows={[]} totalProceeds="0" totalSalesTax="0" money={money} t={t} />);
+    render(
+      <IdSalesTable rows={[]} totalProceeds="0" totalSalesTax="0" money={money} t={t} year={2026} />,
+    );
     expect(screen.getByText(/No disposals/)).toBeInTheDocument();
     expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });

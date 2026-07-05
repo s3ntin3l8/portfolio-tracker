@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/stat-card";
+import { MonogramBadge } from "@/components/monogram-badge";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
 import type { TaxCurrencyTotal, TaxDisposalRow, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
@@ -39,14 +39,16 @@ export function EstimatedTaxHero({
 }) {
   return (
     <div
-      className={
-        tone === "green"
-          ? "rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-sm"
-          : "rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 p-5 text-white shadow-sm"
-      }
+      className="rounded-[18px] p-5 text-white"
+      style={{
+        background:
+          tone === "green"
+            ? "linear-gradient(135deg,#0E9F6E,#0B7D58)"
+            : "linear-gradient(135deg,#7C5CFC,#5B3FD6)",
+      }}
     >
       <p className="text-xs font-semibold text-white/80">{label}</p>
-      <p className="tabular mt-1 text-2xl font-extrabold">{value}</p>
+      <p className="tabular mt-1 text-[28px] font-extrabold">{value}</p>
       <p className="mt-1 text-xs font-medium text-white/80">{description}</p>
     </div>
   );
@@ -60,12 +62,14 @@ export function DisposalTable({
   totalGain,
   money,
   t,
+  year,
 }: {
   rows: TaxDisposalRow[];
   totalProceeds: string;
   totalGain: string;
   money: (n: string | number) => string;
   t: TaxTranslator;
+  year: number;
 }) {
   return (
     <Card>
@@ -75,7 +79,7 @@ export function DisposalTable({
       </CardHeader>
       <CardContent className="px-0 pt-0">
         {rows.length === 0 ? (
-          <p className="px-6 text-sm text-muted-foreground">{t("disposals.empty")}</p>
+          <p className="px-6 text-sm text-muted-foreground">{t("disposals.empty", { year })}</p>
         ) : (
           <Table>
             <TableHeader>
@@ -389,11 +393,17 @@ export function HarvestRow({
   t: TaxTranslator;
 }) {
   const tfPct = Math.round(parseFloat(s.tfRate) * 100);
+  const label = s.instrument?.symbol ?? s.instrumentId.slice(0, 8);
 
   return (
-    <div className="py-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5 sm:items-center">
+    <div className="py-3 grid grid-cols-2 items-center gap-x-4 gap-y-2 sm:grid-cols-[38px_1fr_1fr_1fr_1fr]">
+      <MonogramBadge
+        label={label}
+        assetClass={s.instrument?.assetClass}
+        className="hidden size-[38px] sm:inline-flex"
+      />
       <div className="col-span-2 sm:col-span-1">
-        <p className="font-medium text-sm">{s.instrument?.symbol ?? s.instrumentId.slice(0, 8)}</p>
+        <p className="font-medium text-sm">{label}</p>
         <p className="text-xs text-muted-foreground">{s.instrument?.name}</p>
       </div>
       <div>
@@ -418,11 +428,13 @@ export function HarvestRow({
         </p>
       </div>
       <div className="col-span-2 sm:col-span-1 sm:text-right">
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/transactions/new?harvestInstrument=${s.instrumentId}`}>
-            {t("harvest.button")}
-          </Link>
-        </Button>
+        <Link
+          href={`/transactions/new?harvestInstrument=${s.instrumentId}`}
+          className="inline-flex items-center rounded-full px-3.5 py-1.5 text-xs font-bold text-[#7C5CFC] hover:brightness-95"
+          style={{ backgroundColor: "rgba(124,92,252,.13)" }}
+        >
+          {t("harvest.button")}
+        </Link>
       </div>
     </div>
   );
@@ -442,12 +454,14 @@ export function IdSalesTable({
   totalSalesTax,
   money,
   t,
+  year,
 }: {
   rows: IdDisposalTax[];
   totalProceeds: string;
   totalSalesTax: string;
   money: (n: string | number) => string;
   t: TaxTranslator;
+  year: number;
 }) {
   return (
     <Card>
@@ -456,7 +470,7 @@ export function IdSalesTable({
       </CardHeader>
       <CardContent className="px-0 pt-0">
         {rows.length === 0 ? (
-          <p className="px-6 text-sm text-muted-foreground">{t("id.sales.empty")}</p>
+          <p className="px-6 text-sm text-muted-foreground">{t("id.sales.empty", { year })}</p>
         ) : (
           <Table>
             <TableHeader>
