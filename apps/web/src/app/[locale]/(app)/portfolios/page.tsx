@@ -8,7 +8,12 @@ import { PortfolioCardMenu } from "@/components/portfolio-card-menu";
 import { PortfolioCardLink } from "@/components/portfolio-card-link";
 import { AccountHoldersManager } from "@/components/account-holders-manager";
 import { BrokerageIcon } from "@/components/brokerage-icon";
-import { loadAccountHolders, loadPortfolios, loadTrConnection, loadIbkrConnection } from "@/lib/server-api";
+import {
+  loadAccountHolders,
+  loadPortfolios,
+  loadTrConnection,
+  loadIbkrConnection,
+} from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 
 export default async function PortfoliosPage({
@@ -43,12 +48,37 @@ export default async function PortfoliosPage({
       ? ibkrConn.portfolioId
       : null;
 
+  // Aggregate subtitle (reference: "Rp 56,65jt aggregate · 4 portfolios") — grouped by
+  // each portfolio's own currency rather than force-converted (same "don't sum across
+  // currencies" convention as CashOnHandCard/DividendsTable), since `netWorth` here is
+  // each portfolio's native value, not FX-converted to one display currency.
+  const aggregateByCurrency = new Map<string, number>();
+  for (const { portfolio, netWorth } of result.portfolios) {
+    if (portfolio.includeInAggregate === false) continue;
+    aggregateByCurrency.set(
+      portfolio.baseCurrency,
+      (aggregateByCurrency.get(portfolio.baseCurrency) ?? 0) + Number(netWorth),
+    );
+  }
+  const aggregateLabel = [...aggregateByCurrency.entries()]
+    .map(([ccy, sum]) => formatMoney(sum, ccy, locale))
+    .join(" · ");
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+          {result.status === "ok" && result.portfolios.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("aggregateSubtitle", {
+                amount: aggregateLabel,
+                count: result.portfolios.length,
+              })}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+          )}
         </div>
         {result.status !== "unavailable" && (
           <PortfolioFormDialog
@@ -95,7 +125,7 @@ export default async function PortfoliosPage({
             return (
               <Card
                 key={portfolio.id}
-                className="relative flex flex-col rounded-[18px] border-border shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)] transition-colors hover:bg-accent/50"
+                className="relative flex flex-col rounded-[18px] border-border shadow-card transition-colors hover:bg-accent/50"
               >
                 {/* Overlay button — sets the pf cookie and navigates to /holdings */}
                 <PortfolioCardLink portfolioId={portfolio.id} name={portfolio.name} />

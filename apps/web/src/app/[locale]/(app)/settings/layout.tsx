@@ -107,7 +107,7 @@ export default async function SettingsLayout({
       indexHref="/settings"
       railTop={
         identityCard && (
-          <div className="rounded-[18px] border border-border bg-card p-3.5 shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)]">
+          <div className="rounded-[18px] border border-border bg-card p-3.5 shadow-card">
             {identityCard}
           </div>
         )
@@ -117,7 +117,7 @@ export default async function SettingsLayout({
         identityCard && (
           <Link
             href="/settings/account"
-            className="mb-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card p-4 shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)] transition-colors hover:bg-muted/50"
+            className="mb-4 flex items-center gap-3.5 rounded-[20px] border border-border bg-card p-4 shadow-card transition-colors hover:bg-muted/50"
           >
             {identityCard}
           </Link>

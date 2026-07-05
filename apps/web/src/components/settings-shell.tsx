@@ -20,7 +20,7 @@ export interface ShellNavItem {
   badge?: string;
 }
 
-const CARD_SHADOW = "shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)]";
+const CARD_SHADOW = "shadow-card";
 
 /**
  * Shared master-detail shell for `/settings/*` and `/admin/*`: a sticky left rail of

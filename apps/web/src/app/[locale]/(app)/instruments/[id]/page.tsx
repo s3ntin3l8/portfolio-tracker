@@ -58,7 +58,13 @@ export default async function InstrumentPage({
   const instrumentYield = incomeStats?.yields.find((y) => y.instrumentId === id) ?? null;
 
   const back = (
-    <Button variant="ghost" size="icon" asChild aria-label={t("priceHistory")}>
+    <Button
+      variant="outline"
+      size="icon"
+      asChild
+      aria-label={t("priceHistory")}
+      className="rounded-xl bg-card shadow-card"
+    >
       <Link href="/holdings">
         <ArrowLeft className="size-4" />
       </Link>

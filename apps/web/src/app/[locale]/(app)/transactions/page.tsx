@@ -114,6 +114,7 @@ export default async function TransactionsPage({
         headers={exportHeaders}
         rows={exportRows}
         label={t("exportCsv")}
+        iconOnly
       />
       {singlePortfolio?.documentRetention && (
         <ExportDocumentsButton

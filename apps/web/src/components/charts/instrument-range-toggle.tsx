@@ -30,9 +30,9 @@ export function InstrumentRangeToggle({
           onClick={() => onChange(r)}
           aria-pressed={value === r}
           className={cn(
-            "rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50",
+            "rounded-full px-3.5 py-[7px] text-xs font-bold transition-colors disabled:opacity-50",
             value === r
-              ? "bg-primary text-primary-foreground"
+              ? "bg-foreground text-background"
               : "text-muted-foreground hover:bg-accent",
           )}
         >

@@ -91,7 +91,7 @@ export default async function AdminLayout({
       railTop={
         <Link
           href="/settings"
-          className="flex items-center gap-2 rounded-[18px] border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-foreground shadow-[0_1px_2px_rgba(15,27,20,.04),0_6px_16px_rgba(15,27,20,.05)] transition-colors hover:text-foreground"
+          className="flex items-center gap-2 rounded-[18px] border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
         >
           <ChevronLeft className="size-[15px]" />
           {t("title")}
