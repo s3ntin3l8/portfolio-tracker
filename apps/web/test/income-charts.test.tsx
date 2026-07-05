@@ -13,8 +13,24 @@ vi.mock("recharts", () => ({
     </div>
   ),
   Bar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Cell: ({ fill, fillOpacity }: { fill: string; fillOpacity: number }) => (
-    <div data-testid="cell" data-fill={fill} data-opacity={fillOpacity} />
+  Cell: ({
+    fill,
+    fillOpacity,
+    stroke,
+    strokeDasharray,
+  }: {
+    fill: string;
+    fillOpacity?: number;
+    stroke?: string;
+    strokeDasharray?: string;
+  }) => (
+    <div
+      data-testid="cell"
+      data-fill={fill}
+      data-opacity={fillOpacity}
+      data-stroke={stroke}
+      data-stroke-dash={strokeDasharray}
+    />
   ),
   XAxis: () => null,
   YAxis: () => null,
@@ -34,7 +50,7 @@ function wrap(ui: React.ReactNode) {
 }
 
 describe("IncomeBarChart", () => {
-  it("renders a bar per year plus a muted forecast bar", () => {
+  it("renders a bar per year plus a dashed-outline forecast bar", () => {
     wrap(
       <IncomeBarChart
         currency="IDR"
@@ -49,14 +65,16 @@ describe("IncomeBarChart", () => {
     const cells = screen.getAllByTestId("cell");
     // 3 value cells + 3 projected cells (all zero, but still rendered)
     expect(cells).toHaveLength(6);
-    // First value bar: forecast bar is muted
+    // The forecast bar reads as a dashed green outline, not a filled/muted bar.
     const forecast = cells[2];
-    expect(forecast).toHaveAttribute("data-fill", "var(--color-muted-foreground)");
-    expect(forecast).toHaveAttribute("data-opacity", "0.4");
+    expect(forecast).toHaveAttribute("data-fill", "var(--color-primary)");
+    expect(forecast).toHaveAttribute("data-opacity", "0.12");
+    expect(forecast).toHaveAttribute("data-stroke", "var(--color-primary)");
+    expect(forecast).toHaveAttribute("data-stroke-dash", "4 3");
     expect(cells[0]).toHaveAttribute("data-fill", "var(--color-primary)");
   });
 
-  it("renders a stacked projected segment for the current year", () => {
+  it("renders a striped-pattern projected segment for the current year", () => {
     wrap(
       <IncomeBarChart
         currency="IDR"
@@ -70,10 +88,10 @@ describe("IncomeBarChart", () => {
     const cells = screen.getAllByTestId("cell");
     // value bar: 3 cells; projected bar: 3 cells
     expect(cells).toHaveLength(6);
-    // The projected cell for 2026 (index 4 = 3 value cells + 1 projected cell)
+    // The projected cell for 2026 (index 4 = 3 value cells + 1 projected cell) uses the
+    // diagonal-stripe hatch pattern, not a flat fill.
     const projected = cells[4];
-    expect(projected).toHaveAttribute("data-fill", "var(--color-primary)");
-    expect(projected).toHaveAttribute("data-opacity", "0.25");
+    expect(projected).toHaveAttribute("data-fill", "url(#income-projected-stripe)");
   });
 });
 

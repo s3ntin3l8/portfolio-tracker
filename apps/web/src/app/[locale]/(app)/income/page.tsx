@@ -181,7 +181,7 @@ export default async function IncomePage({
     <div className="space-y-8">
       {heading}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label={t("thisYear")}
           value={m(thisFullYear)}
@@ -193,12 +193,6 @@ export default async function IncomePage({
           deltaTone={deltaAbs > 0 ? "up" : deltaAbs < 0 ? "down" : "neutral"}
         />
         <StatCard label={t("ttm")} value={m(Number(s.ttm))} />
-        {Number(s.forecastRestOfYear) > 0 && (
-          <StatCard
-            label={t("restOfYear", { year: String(new Date().getUTCFullYear()) })}
-            value={m(Number(s.forecastRestOfYear))}
-          />
-        )}
         <StatCard label={t("forecastNext12")} value={m(Number(s.forecastNextYear))} />
         <StatCard label={t("lifetime")} value={m(Number(s.lifetimeTotal))} />
         <StatCard
@@ -236,7 +230,7 @@ export default async function IncomePage({
               <CardTitle>{t("byClassTitle")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <AllocationDonut data={classSlices} currency={currency} />
+              <AllocationDonut data={classSlices} currency={currency} showPercent={false} />
             </CardContent>
           </Card>
         )}
@@ -281,7 +275,7 @@ export default async function IncomePage({
       {s.yields.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">{t("yieldTitle")}</h2>
-          <div className="rounded-xl border border-border">
+          <div className="rounded-xl bg-card shadow-card">
             <YieldsTable rows={s.yields} />
           </div>
         </section>
@@ -290,7 +284,7 @@ export default async function IncomePage({
       {s.byCurrency.length > 1 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">{t("currencyTitle")}</h2>
-          <div className="rounded-xl border border-border">
+          <div className="rounded-xl bg-card shadow-card">
             <ByCurrencyTable rows={s.byCurrency} displayCurrency={currency} />
           </div>
         </section>
@@ -317,7 +311,7 @@ export default async function IncomePage({
             {hasContributions && <> {t("assumptionsContributions")}</>}
           </p>
 
-          <div className="rounded-xl border border-border">
+          <div className="rounded-xl bg-card shadow-card">
             <IncomeEventsTable rows={nextYearRows} />
           </div>
         </CollapsibleYearSection>
@@ -343,7 +337,7 @@ export default async function IncomePage({
                 </>
               }
             >
-              <div className="rounded-xl border border-border">
+              <div className="rounded-xl bg-card shadow-card">
                 <IncomeEventsTable rows={events} />
               </div>
             </CollapsibleYearSection>

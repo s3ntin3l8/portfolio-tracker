@@ -87,16 +87,28 @@ export function IncomeHeatmap({
                   aria-pressed={isActive}
                   onClick={() => setActive({ year, monthIdx: i })}
                   className={cn(
-                    "aspect-square rounded-sm bg-primary p-0",
+                    "aspect-square rounded-[4px] p-0",
+                    value > 0 ? "bg-primary" : "bg-muted",
                     isActive && "ring-2 ring-foreground ring-offset-1 ring-offset-background",
                   )}
-                  style={{ opacity: max > 0 ? 0.12 + 0.88 * (value / max) : 0.12 }}
+                  style={value > 0 ? { opacity: 0.14 + 0.86 * (value / max) } : undefined}
                 />
               );
             })}
           </div>
         );
       })}
+      <div className="flex items-center justify-end gap-1.5 pt-1 text-muted-foreground">
+        <span>{t("heatmapLess")}</span>
+        {[0.14, 0.4, 0.66, 1].map((opacity) => (
+          <span
+            key={opacity}
+            className="size-2.5 rounded-[3px] bg-primary"
+            style={{ opacity }}
+          />
+        ))}
+        <span>{t("heatmapMore")}</span>
+      </div>
     </div>
   );
 }
