@@ -191,12 +191,31 @@ describe("AdminProvidersForm", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("shows 'none' for a provider with no key and no env key when encryption is enabled", () => {
+  it("shows 'Not needed' for a keyless provider (configured with no key required)", () => {
     const providers: AdminProvider[] = [
       provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
+    expect(screen.getByText(messages.Admin.keyNotNeeded)).toBeInTheDocument();
+    // Keyless providers offer no key editor.
+    expect(screen.queryByRole("button", { name: messages.Admin.editCredential })).toBeNull();
+  });
+
+  it("shows 'none' for a key-requiring provider with no key set", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "eodhd", label: "EODHD", priority: 1, keySource: null, hasKey: false, configured: false }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
     expect(screen.getByText(messages.Admin.keyNone)).toBeInTheDocument();
+  });
+
+  it("shows 'Not needed' even when encryption is disabled (no key to encrypt)", () => {
+    const providers: AdminProvider[] = [
+      provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
+    ];
+    renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: false });
+    expect(screen.getByText(messages.Admin.keyNotNeeded)).toBeInTheDocument();
+    expect(screen.queryByText(messages.Admin.encryptionDisabled)).toBeNull();
   });
 
   it("shows masked key hint for a provider with a DB key when encryption is enabled", () => {
@@ -220,8 +239,9 @@ describe("AdminProvidersForm", () => {
       ({ providers: PROVIDERS, encryptionEnabled: true }),
     );
     const client: AdminProvidersClient = { ...STUB_CLIENT, setAdminProviderCredential };
+    // A key-requiring provider with no key yet (configured:false) → shows the key editor.
     const providers: AdminProvider[] = [
-      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: null }),
+      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: null, configured: false }),
     ];
     renderForm(client, vi.fn(), { providers, encryptionEnabled: true });
 

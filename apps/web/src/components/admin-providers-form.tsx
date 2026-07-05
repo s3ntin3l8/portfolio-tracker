@@ -9,6 +9,7 @@ import {
   EyeOff,
   GripVertical,
   Loader2,
+  Lock,
   Pencil,
   ShieldOff,
   Trash2,
@@ -126,6 +127,15 @@ function CredentialCell({
     } finally {
       setBusy(false);
     }
+  }
+
+  // Keyless / always-available providers (e.g. Yahoo Finance): no key anywhere yet the
+  // provider still works. `configured` stays true with no stored/env key only when a key
+  // isn't required — a key-requiring provider with no key reports `configured: false`.
+  // These need no key and no encryption, so short-circuit before both.
+  const keyless = provider.keySource === null && provider.configured && !provider.hasKey;
+  if (keyless) {
+    return <span className="text-xs text-muted-foreground">{t("keyNotNeeded")}</span>;
   }
 
   // Encryption disabled — show indicator instead of the full editor.
@@ -367,6 +377,18 @@ export function AdminProvidersForm({
         >
           <AlertCircle className="size-4 shrink-0" />
           {t("updateError")}
+        </div>
+      )}
+
+      {/* Reference "Pocket Prototype" AdminSettings: a green-tinted reassurance banner
+          below the section subtitle, above the provider list. */}
+      {encryptionEnabled && (
+        <div className="flex items-center gap-2.5 rounded-[14px] border border-primary/20 bg-primary/10 px-3.5 py-2.5">
+          <Lock className="size-[17px] shrink-0 text-primary" strokeWidth={2} />
+          <p className="text-xs">
+            <span className="font-semibold text-foreground">{t("credentialEncrypted")}</span>{" "}
+            <span className="font-medium text-text-2">· {t("credentialEncryptedMeta")}</span>
+          </p>
         </div>
       )}
 
