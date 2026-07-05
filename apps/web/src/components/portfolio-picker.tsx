@@ -53,15 +53,15 @@ export function PortfolioPicker({
       <DropdownMenuTrigger
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex h-9 max-w-full items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-9 max-w-full items-center gap-1.5 rounded-full bg-card py-1.5 pl-1.5 pr-3 text-xs font-semibold text-foreground shadow-card transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           triggerClassName,
         )}
       >
         {selected && (
-          <BrokerageIcon brokerage={selected.brokerage} className="size-5" />
+          <BrokerageIcon brokerage={selected.brokerage} className="size-5 rounded-md" />
         )}
-        <span className="truncate">{selected ? portfolioLabel(selected) : ""}</span>
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">{selected?.name ?? ""}</span>
+        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-w-[16rem]">
         {portfolios.map((p) => (

@@ -36,7 +36,13 @@ export default async function ImportReviewPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild aria-label={t("title")}>
+        <Button
+          variant="outline"
+          size="icon"
+          asChild
+          aria-label={t("title")}
+          className="rounded-xl bg-card shadow-card"
+        >
           <Link href="/transactions">
             <ArrowLeft className="size-4" />
           </Link>

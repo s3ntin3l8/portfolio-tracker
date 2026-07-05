@@ -60,7 +60,13 @@ export default async function NewTransactionPage({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild aria-label={tm("back")}>
+        <Button
+          variant="outline"
+          size="icon"
+          asChild
+          aria-label={tm("back")}
+          className="rounded-xl bg-card shadow-card"
+        >
           <Link href="/transactions">
             <ArrowLeft className="size-4" />
           </Link>
