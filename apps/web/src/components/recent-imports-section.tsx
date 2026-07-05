@@ -33,13 +33,15 @@ export function RecentImportsSection({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="flex items-center gap-1.5 px-0.5 text-xs font-bold uppercase tracking-[0.04em] text-text-3 transition-colors hover:text-foreground"
       >
-        <ChevronDown
-          className={cn("size-4 transition-transform", open && "rotate-180")}
-        />
         {t("title")}
-        <span className="text-muted-foreground">({items.length})</span>
+        <span className="font-semibold normal-case tracking-normal text-text-3">
+          ({items.length})
+        </span>
+        <ChevronDown
+          className={cn("size-[13px] transition-transform", open && "rotate-180")}
+        />
       </button>
       {open && (
         <ImportHistory items={items} showTitle={false} portfolios={portfolios} />
