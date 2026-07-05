@@ -865,6 +865,10 @@
     "preferences": "Preferensi",
     "appearance": "Tampilan",
     "language": "Bahasa",
+    "languageOptions": {
+      "en": "English",
+      "id": "Bahasa Indonesia"
+    },
     "displayCurrency": "Mata uang tampilan",
     "displayCurrencyHint": "Kekayaan bersih dan total ditampilkan dalam mata uang ini.",
     "save": "Simpan perubahan",

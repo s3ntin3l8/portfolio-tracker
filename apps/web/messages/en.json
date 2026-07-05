@@ -867,6 +867,10 @@
     "preferences": "Preferences",
     "appearance": "Appearance",
     "language": "Language",
+    "languageOptions": {
+      "en": "English",
+      "id": "Bahasa Indonesia"
+    },
     "displayCurrency": "Display currency",
     "displayCurrencyHint": "Net worth and totals are shown in this currency.",
     "save": "Save changes",
