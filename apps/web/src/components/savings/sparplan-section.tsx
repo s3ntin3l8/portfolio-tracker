@@ -1,10 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, ChevronRight, Target } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney, cn } from "@/lib/utils";
 import { monogram, softTintFor } from "@/lib/brokerages";
-import { RebalanceDialog } from "@/components/savings/rebalance-dialog";
+import { SparplanTargetEditor, type TargetSleeve } from "@/components/savings/sparplan-target-editor";
 import type { SparplanStats, DetectedPlan, DriftRow, SparplanContributionSplit } from "@portfolio/api-client";
 
 // ---------------------------------------------------------------------------
@@ -206,6 +209,7 @@ function AllocationSection({
   drift,
   contributionSplit,
   nameByKey,
+  colorByKey,
   monthlyTotalLabel,
   currency,
   locale,
@@ -214,12 +218,12 @@ function AllocationSection({
   drift: DriftRow[];
   contributionSplit?: SparplanContributionSplit[];
   nameByKey: Map<string, string>;
+  colorByKey: Map<string, string>;
   monthlyTotalLabel: string;
   currency: string;
   locale: string;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const colorByKey = new Map(drift.map((d, i) => [d.key, SEG_COLORS[i % SEG_COLORS.length]]));
   const splitByKey = new Map((contributionSplit ?? []).map((s) => [s.key, s]));
   const nameOf = (key: string) => nameByKey.get(key) ?? key;
 
@@ -341,6 +345,7 @@ function AllocationSection({
 export function SparplanSection({ data, currency, locale, portfolioId, drift, contributionSplit }: Props) {
   const t = useTranslations("Savings");
   const td = useTranslations("DriftBadge");
+  const [targetsOpen, setTargetsOpen] = useState(false);
 
   if (data.plans.length === 0) {
     return null;
@@ -354,6 +359,25 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
   // instrumentId → display name, for the allocation legend / split / callout.
   const nameByKey = new Map(
     data.plans.map((p) => [p.instrumentId, p.name ?? p.symbol ?? p.instrumentId]),
+  );
+
+  // One color per sleeve, keyed by instrumentId in a stable order (active plans first,
+  // then any drift-only keys). Shared by the target editor, the allocation bar & legend.
+  const orderedKeys = [
+    ...activePlans.map((p) => p.instrumentId),
+    ...(drift ?? [])
+      .map((d) => d.key)
+      .filter((k) => !activePlans.some((p) => p.instrumentId === k)),
+  ];
+  const colorByKey = new Map(orderedKeys.map((k, i) => [k, SEG_COLORS[i % SEG_COLORS.length]]));
+
+  // Sleeves offered in the "Set targets" editor (reference: short name per plan).
+  const targetSleeves: TargetSleeve[] = (activePlans.length > 0 ? activePlans : data.plans).map(
+    (p) => ({
+      key: p.instrumentId,
+      name: p.symbol ?? p.name ?? p.instrumentId,
+      color: colorByKey.get(p.instrumentId) ?? SEG_COLORS[0],
+    }),
   );
 
   // Header total subtitle: "{monthly}/mo total · next {date}".
@@ -372,22 +396,15 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
         <h2 className="text-base font-bold">{t("sparplanTitle")}</h2>
         <div className="flex shrink-0 items-center gap-2">
           {portfolioId && (
-            <RebalanceDialog
-              portfolioId={portfolioId}
-              plans={activePlans.length > 0 ? activePlans : data.plans}
-              activeMonthlyTotalDisplay={data.activeMonthlyTotalDisplay}
-              currency={currency}
-              drift={drift}
-              contributionSplit={contributionSplit}
-              trigger={
-                <button
-                  type="button"
-                  className="rounded-[9px] border border-border bg-card px-2.5 py-1 text-[11px] font-bold text-text-2 transition-transform active:scale-95"
-                >
-                  {t("setTargets")}
-                </button>
-              }
-            />
+            <button
+              type="button"
+              onClick={() => setTargetsOpen((v) => !v)}
+              aria-expanded={targetsOpen}
+              className="flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-2.5 py-1 text-[11px] font-bold text-text-mute transition-transform active:scale-95"
+            >
+              <Target className="size-3" />
+              {t("setTargets")}
+            </button>
           )}
           {activePlans.length > 0 && (
             <span className="shrink-0 rounded-lg bg-success/15 px-2 py-1 text-[11px] font-bold text-success">
@@ -402,6 +419,17 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
           {t("planTotalMonthly", { amount: monthlyTotal })}
           {nextDue && <> {" · "}{t("planNext", { date: shortDate(nextDue, locale) })}</>}
         </p>
+      )}
+
+      {/* Inline "Set targets" editor — expands between the sub-header and the plan list. */}
+      {portfolioId && targetsOpen && (
+        <div className="mt-4">
+          <SparplanTargetEditor
+            portfolioId={portfolioId}
+            sleeves={targetSleeves}
+            onClose={() => setTargetsOpen(false)}
+          />
+        </div>
       )}
 
       {/* Stacked plan list (reference: flex column, gap 12px — not a bordered table). */}
@@ -447,6 +475,7 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
           drift={drift}
           contributionSplit={contributionSplit}
           nameByKey={nameByKey}
+          colorByKey={colorByKey}
           monthlyTotalLabel={monthlyTotal}
           currency={currency}
           locale={locale}

@@ -393,7 +393,15 @@
     "driftUnderStrong": "{name} is {pct}pp under target.",
     "driftUnderRest": " Next top-up routes {amount} here to steer toward {target}.",
     "driftOverStrong": "{name} is {pct}pp over target.",
-    "driftOverRest": " Ease off top-ups here until it's back within the {target} band."
+    "driftOverRest": " Ease off top-ups here until it's back within the {target} band.",
+    "targetAllocation": "Target allocation",
+    "targetHelper": "A target weight per plan. Must total 100%.",
+    "targetTotal": "Total {pct}%",
+    "targetMustEqual": " · must equal 100%",
+    "targetCancel": "Cancel",
+    "targetSave": "Save targets",
+    "targetLoadError": "Couldn't load targets.",
+    "targetSaveError": "Couldn't save targets."
   },
   "Portfolios": {
     "title": "Portfolios",

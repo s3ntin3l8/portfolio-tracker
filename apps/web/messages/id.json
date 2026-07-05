@@ -393,7 +393,15 @@
     "driftUnderStrong": "{name} {pct}pp di bawah target.",
     "driftUnderRest": " Top-up berikutnya mengarahkan {amount} ke sini menuju {target}.",
     "driftOverStrong": "{name} {pct}pp di atas target.",
-    "driftOverRest": " Kurangi top-up di sini hingga kembali ke kisaran {target}."
+    "driftOverRest": " Kurangi top-up di sini hingga kembali ke kisaran {target}.",
+    "targetAllocation": "Alokasi target",
+    "targetHelper": "Bobot target per rencana. Harus berjumlah 100%.",
+    "targetTotal": "Total {pct}%",
+    "targetMustEqual": " · harus sama dengan 100%",
+    "targetCancel": "Batal",
+    "targetSave": "Simpan target",
+    "targetLoadError": "Gagal memuat target.",
+    "targetSaveError": "Gagal menyimpan target."
   },
   "Portfolios": {
     "title": "Portofolio",
