@@ -88,6 +88,7 @@ export function SettingsShell({
                     {item.badge}
                   </span>
                 )}
+                <ChevronRight className="size-4 shrink-0 text-text-3" />
               </Link>
             );
           })}
