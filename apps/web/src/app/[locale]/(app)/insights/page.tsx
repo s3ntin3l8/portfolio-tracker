@@ -46,7 +46,7 @@ export default async function InsightsPage({
     return (
       <div className="space-y-6">
         <header className="space-y-1">
-          <h1 className="text-2xl font-extrabold tracking-tight">{t("title")}</h1>
+          <h1 className="text-2xl font-bold">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </header>
         <EmptyState
@@ -82,7 +82,7 @@ export default async function InsightsPage({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-extrabold tracking-tight">{t("title")}</h1>
+        <h1 className="text-2xl font-bold">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </header>
 
@@ -90,17 +90,17 @@ export default async function InsightsPage({
         <div className="space-y-4">
           {/* XIRR hero */}
           <div
-            className="rounded-[20px] p-6 text-white shadow-lg"
+            className="rounded-[20px] p-6 text-white"
             style={{ background: "linear-gradient(135deg,#11211a,#1d3a2c)" }}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-white/78">{t("xirr.label")}</p>
-                <p className="tabular mt-1 text-4xl font-extrabold">
+                <p className="text-xs font-semibold text-white/70">{t("xirr.label")}</p>
+                <p className="tabular mt-1 text-[40px] font-extrabold">
                   {summary.xirr !== null ? formatPercent(summary.xirr, locale) : "—"}
                 </p>
               </div>
-              <p className="max-w-xs border-white/20 text-sm text-white/70 sm:border-l sm:pl-4">
+              <p className="max-w-xs border-white/[.18] text-xs font-medium leading-[1.5] text-white/70 sm:border-l sm:pl-6">
                 {t("xirr.caption", { year: sinceYear })}
               </p>
             </div>
