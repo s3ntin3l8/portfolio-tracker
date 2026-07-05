@@ -17,6 +17,16 @@ import {
   AlertCircle,
   Check,
   FolderInput,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ArrowRightLeft,
+  ArrowLeftRight,
+  Coins,
+  Gem,
+  Split,
+  GitMerge,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
@@ -71,6 +81,54 @@ const TYPE_VARIANT: Record<string, "success" | "destructive" | "default"> = {
   buy: "success",
   sell: "destructive",
 };
+
+/** Per-kind icon + tint, matching the reference's `TYPE` map (buy/sell arrows, a coin for
+ *  dividend/coupon, cash in/out arrows, a gem for share events, teal for transfers/merger).
+ *  `loan_drawdown`/`loan_repayment` (gold cicilan) have no reference equivalent — grouped
+ *  with cash in/out by cashflow direction. */
+const TYPE_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }> = {
+  buy: { icon: ArrowDownToLine, tone: "success" },
+  savings_plan: { icon: ArrowDownToLine, tone: "success" },
+  sell: { icon: ArrowUpFromLine, tone: "destructive" },
+  dividend: { icon: Coins, tone: "warning" },
+  coupon: { icon: Coins, tone: "warning" },
+  deposit: { icon: ArrowDownCircle, tone: "success" },
+  interest: { icon: ArrowDownCircle, tone: "success" },
+  bonus_cash: { icon: ArrowDownCircle, tone: "success" },
+  loan_drawdown: { icon: ArrowDownCircle, tone: "success" },
+  withdrawal: { icon: ArrowUpCircle, tone: "destructive" },
+  fee: { icon: ArrowUpCircle, tone: "destructive" },
+  tax: { icon: ArrowUpCircle, tone: "destructive" },
+  loan_repayment: { icon: ArrowUpCircle, tone: "destructive" },
+  bonus: { icon: Gem, tone: "violet" },
+  rights: { icon: Gem, tone: "violet" },
+  split: { icon: Split, tone: "violet" },
+  transfer_in: { icon: ArrowRightLeft, tone: "teal" },
+  transfer_out: { icon: ArrowLeftRight, tone: "teal" },
+  merger: { icon: GitMerge, tone: "teal" },
+};
+
+const TYPE_TONE_CLASSES = {
+  success: "bg-success/15 text-success",
+  destructive: "bg-destructive/15 text-destructive",
+  warning: "bg-warning/15 text-warning",
+  violet: "bg-[#7C5CFC]/15 text-[#7C5CFC]",
+  teal: "bg-[#0D9488]/15 text-[#0D9488]",
+} as const;
+
+function TypeIconChip({ type }: { type: string }) {
+  const entry = TYPE_ICON[type];
+  if (!entry) return null;
+  const Icon = entry.icon;
+  return (
+    <span
+      className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md ${TYPE_TONE_CLASSES[entry.tone]}`}
+      aria-hidden
+    >
+      <Icon className="size-3.5" />
+    </span>
+  );
+}
 
 export interface TxRow {
   id: string;
@@ -807,7 +865,8 @@ export function TransactionsTable({
                     {df.format(new Date(tx.executedAt))}
                   </TableCell>
                   <TableCell>
-                    <span className="flex flex-wrap items-center gap-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <TypeIconChip type={tx.type} />
                       <Badge variant={TYPE_VARIANT[tx.type] ?? "default"}>
                         {tt(tx.type)}
                       </Badge>
