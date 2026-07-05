@@ -365,7 +365,15 @@
     "cashOnHandSubtitle": "Idle balances by currency",
     "cashMeta": "Uninvested cash balance",
     "cashNudgeLead": "{amount} is sitting idle.",
-    "cashNudgeSuggestion": "A money-market fund at ~{rate} p.a. would earn about {amount}/yr."
+    "cashNudgeSuggestion": "A money-market fund at ~{rate} p.a. would earn about {amount}/yr.",
+    "setTargets": "Set targets",
+    "planTotalMonthly": "{amount}/mo total",
+    "planNext": "next {date}",
+    "cadenceMonthlyLabel": "Monthly",
+    "cadenceQuarterlyLabel": "Quarterly",
+    "cadenceSemiAnnualLabel": "Semi-annual",
+    "cadenceAnnualLabel": "Annual",
+    "driftOnTarget": "On target"
   },
   "Portfolios": {
     "title": "Portfolios",

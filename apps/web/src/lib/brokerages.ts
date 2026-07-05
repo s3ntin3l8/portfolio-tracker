@@ -102,6 +102,20 @@ export function tintFor(name: string): string {
 }
 
 /**
+ * Soft, hash-derived rounded-square tone (pastel wash + colored initials) for a monogram
+ * whose asset class isn't known — the savings-plan rows in `Pocket Prototype.dc.html` use
+ * this look ("tint bg + saturated fg") rather than the solid-fill/white-initials fallback.
+ * The alpha wash reads on both light and dark cards; the same name always maps to one hue.
+ */
+export function softTintFor(name: string): { bg: string; fg: string } {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 360;
+  }
+  return { bg: `hsl(${hash} 60% 50% / 0.16)`, fg: `hsl(${hash} 50% 45%)` };
+}
+
+/**
  * Soft tinted background + matching foreground color for a monogram badge, keyed by
  * asset class — matches the reference (`Pocket Prototype.dc.html`'s per-holding
  * `chipBg`/`chipFg`): a pastel fill with colored (not white) initials, one hue per

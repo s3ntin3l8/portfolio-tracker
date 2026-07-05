@@ -365,7 +365,15 @@
     "cashOnHandSubtitle": "Saldo menganggur per mata uang",
     "cashMeta": "Saldo kas belum diinvestasikan",
     "cashNudgeLead": "{amount} sedang menganggur.",
-    "cashNudgeSuggestion": "Reksa dana pasar uang dengan imbal hasil ~{rate} p.a. akan menghasilkan sekitar {amount}/thn."
+    "cashNudgeSuggestion": "Reksa dana pasar uang dengan imbal hasil ~{rate} p.a. akan menghasilkan sekitar {amount}/thn.",
+    "setTargets": "Atur target",
+    "planTotalMonthly": "{amount}/bln total",
+    "planNext": "berikutnya {date}",
+    "cadenceMonthlyLabel": "Bulanan",
+    "cadenceQuarterlyLabel": "Kuartalan",
+    "cadenceSemiAnnualLabel": "Semi-tahunan",
+    "cadenceAnnualLabel": "Tahunan",
+    "driftOnTarget": "Sesuai target"
   },
   "Portfolios": {
     "title": "Portofolio",
