@@ -219,14 +219,15 @@ describe("HarvestRow", () => {
 
   it("renders the harvest button linking to the prefilled sell draft", () => {
     render(<HarvestRow s={suggestion} money={money} t={t} />);
-    expect(screen.getByText("NIO")).toBeInTheDocument();
+    expect(screen.getByText("NIO Inc.")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Harvest" });
     expect(link).toHaveAttribute("href", "/transactions/new?harvestInstrument=i-nio");
   });
 
   it("shows the Teilfreistellung note when a TF rate applies", () => {
     render(<HarvestRow s={suggestion} money={money} t={t} />);
-    expect(screen.getByText("TF 30% applied")).toBeInTheDocument();
+    // The TF note is now folded into the row's single meta line.
+    expect(screen.getByText(/TF 30% applied/)).toBeInTheDocument();
   });
 });
 

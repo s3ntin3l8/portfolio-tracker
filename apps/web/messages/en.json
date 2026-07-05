@@ -1498,7 +1498,9 @@
       "tfApplied": "TF {pct}% applied",
       "button": "Harvest",
       "summary": "Harvest all {count} to offset {offset} of realized gains — about ~{saving} saved. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
-      "none": "No harvestable losses right now."
+      "none": "No harvestable gains right now.",
+      "positionsEyebrow": "Positions you could realize",
+      "metaLine": "{offset} realizable · saves ~{saving}"
     },
     "hero": {
       "estimatedTax": "Estimated tax · {year}",

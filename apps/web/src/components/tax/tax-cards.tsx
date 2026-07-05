@@ -272,32 +272,33 @@ export function AllowanceSummaryBoxes({
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-xl border bg-muted/40 p-4">
+      <div className="rounded-[14px] border bg-card-2 px-[15px] py-[13px]">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs font-semibold text-muted-foreground">
+          <span className="text-[11px] font-semibold text-text-2">
             {t("allowanceBoxes.left")}
           </span>
-          <span className="tabular text-lg font-extrabold">{money(remaining)}</span>
+          <span className="tabular text-[15px] font-extrabold">{money(remaining)}</span>
         </div>
-        <div className="mt-2 h-1.5 rounded-full bg-muted overflow-hidden">
+        {/* Reference: 7px track, purple allowance fill (#7C5CFC is the tax screen's accent). */}
+        <div className="mt-2 h-[7px] overflow-hidden rounded-[5px] bg-line">
           <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${Math.min(100, Math.max(0, usedPct))}%` }}
+            className="h-full rounded-[5px] transition-all"
+            style={{ width: `${Math.min(100, Math.max(0, usedPct))}%`, backgroundColor: "#7C5CFC" }}
           />
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-[10px] font-medium text-text-3">
           {t("allowanceBoxes.leftDesc", { used: money(usedYtd), annual: money(allowanceAnnual) })}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-[10px] font-medium text-text-3">
           {t("allowance.taxSaving")}: {money(taxSavingAvailable)}
         </p>
       </div>
-      <div className="rounded-xl border bg-muted/40 p-4">
-        <span className="text-xs font-semibold text-muted-foreground">
+      <div className="rounded-[14px] border bg-card-2 px-[15px] py-[13px]">
+        <span className="text-[11px] font-semibold text-text-2">
           {t("allowanceBoxes.taxableGains")}
         </span>
         <p className="tabular mt-1.5 text-xl font-extrabold">{money(taxable)}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-[10px] font-medium text-text-3">
           {t("allowanceBoxes.taxableGainsDesc", { tax: money(estimatedTax) })}
         </p>
       </div>
@@ -370,9 +371,9 @@ export function HarvestSummaryNote({
   if (totalHarvestable <= 0) return null;
 
   return (
-    <div className="mt-4 flex items-start gap-2.5 rounded-lg bg-emerald-500/10 p-3.5 text-sm">
-      <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" />
-      <p className="text-muted-foreground">
+    <div className="flex items-start gap-2.5 border-t border-card-2 bg-success/10 px-[22px] py-3.5">
+      <CircleCheck className="mt-px size-[17px] shrink-0 text-success" />
+      <p className="text-xs font-medium leading-relaxed text-text-mute">
         {t("harvest.summary", {
           count: suggestions.length,
           offset: money(totalHarvestable),
@@ -395,47 +396,29 @@ export function HarvestRow({
   const tfPct = Math.round(parseFloat(s.tfRate) * 100);
   const label = s.instrument?.symbol ?? s.instrumentId.slice(0, 8);
 
+  // Reference single-row layout: monogram | name + one meta line | gain + sublabel | CTA.
   return (
-    <div className="py-3 grid grid-cols-2 items-center gap-x-4 gap-y-2 sm:grid-cols-[38px_1fr_1fr_1fr_1fr]">
-      <MonogramBadge
-        label={label}
-        assetClass={s.instrument?.assetClass}
-        className="hidden size-[38px] sm:inline-flex"
-      />
-      <div className="col-span-2 sm:col-span-1">
-        <p className="font-medium text-sm">{label}</p>
-        <p className="text-xs text-muted-foreground">{s.instrument?.name}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">{t("harvest.unrealized")}</p>
-        <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-          {money(s.unrealizedGross)}
-        </p>
-        {tfPct > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {t("harvest.tfApplied", { pct: tfPct })}
-          </p>
-        )}
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">{t("harvest.harvestable")}</p>
-        <p className="text-sm font-medium">{money(s.harvestableGross)}</p>
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground">{t("harvest.taxSaving")}</p>
-        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-          {money(s.taxSaving)}
+    <div className="flex items-center gap-3 border-t border-card-2 px-[22px] py-3 first:border-t-0">
+      <MonogramBadge label={label} assetClass={s.instrument?.assetClass} className="size-[38px]" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-bold">{s.instrument?.name ?? label}</p>
+        <p className="truncate text-[11px] font-medium text-text-2">
+          {t("harvest.metaLine", { offset: money(s.harvestableGross), saving: money(s.taxSaving) })}
+          {tfPct > 0 && <> {" · "}{t("harvest.tfApplied", { pct: tfPct })}</>}
         </p>
       </div>
-      <div className="col-span-2 sm:col-span-1 sm:text-right">
-        <Link
-          href={`/transactions/new?harvestInstrument=${s.instrumentId}`}
-          className="inline-flex items-center rounded-full px-3.5 py-1.5 text-xs font-bold text-[#7C5CFC] hover:brightness-95"
-          style={{ backgroundColor: "rgba(124,92,252,.13)" }}
-        >
-          {t("harvest.button")}
-        </Link>
+      <div className="shrink-0 text-right">
+        {/* Our German model harvests unrealized GAINS within the allowance → shown green. */}
+        <p className="tabular text-[13px] font-bold text-success">{money(s.unrealizedGross)}</p>
+        <p className="text-[10px] font-semibold text-text-3">{t("harvest.unrealized")}</p>
       </div>
+      <Link
+        href={`/transactions/new?harvestInstrument=${s.instrumentId}`}
+        className="shrink-0 rounded-[10px] px-[13px] py-2 text-xs font-bold text-[#7C5CFC] transition-transform active:scale-95"
+        style={{ backgroundColor: "rgba(124,92,252,.13)" }}
+      >
+        {t("harvest.button")}
+      </Link>
     </div>
   );
 }

@@ -1496,7 +1496,9 @@
       "tfApplied": "TF {pct}% diterapkan",
       "button": "Panen",
       "summary": "Panen semua {count} untuk mengimbangi {offset} keuntungan terealisasi — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
-      "none": "Belum ada kerugian yang bisa dipanen saat ini."
+      "none": "Tidak ada keuntungan yang bisa dipanen saat ini.",
+      "positionsEyebrow": "Posisi yang bisa direalisasikan",
+      "metaLine": "{offset} bisa direalisasi · hemat ~{saving}"
     },
     "hero": {
       "estimatedTax": "Perkiraan pajak · {year}",

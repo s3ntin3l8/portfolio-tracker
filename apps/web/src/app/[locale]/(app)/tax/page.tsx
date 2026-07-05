@@ -330,14 +330,27 @@ function TaxHolderSectionDe({
 
       {/* Tax-loss harvesting: always shows the allowance summary; the position list and
           summary note only when there's something harvestable. */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="size-4" />
-            {t("harvest.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Card className="overflow-hidden rounded-[20px]">
+        {/* Header: title + subtitle on the left, a currency pill on the right (reference). */}
+        <div className="flex items-start justify-between gap-3 px-[22px] pb-1 pt-[18px]">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold">
+              <TrendingUp className="size-4" />
+              {t("harvest.title")}
+            </h2>
+            <p className="mt-0.5 text-xs font-medium text-text-2">
+              {hasForecast ? t("harvest.subtitle") : t("harvest.subtitleNoForecast")}
+            </p>
+          </div>
+          <span
+            className="shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#7C5CFC]"
+            style={{ backgroundColor: "rgba(124,92,252,.16)" }}
+          >
+            {entry.currency}
+          </span>
+        </div>
+
+        <div className="px-[22px] pb-1.5 pt-3.5">
           <AllowanceSummaryBoxes
             usedPct={usedPct}
             allowanceAnnual={u.allowanceAnnual}
@@ -349,22 +362,23 @@ function TaxHolderSectionDe({
             money={money}
             t={t}
           />
-          {harvestSuggestions.length > 0 ? (
+        </div>
+
+        {harvestSuggestions.length > 0 ? (
+          <>
+            <p className="px-[22px] pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide text-text-3">
+              {t("harvest.positionsEyebrow")}
+            </p>
             <div>
-              <p className="text-sm text-muted-foreground mb-2">
-                {hasForecast ? t("harvest.subtitle") : t("harvest.subtitleNoForecast")}
-              </p>
-              <div className="divide-y">
-                {harvestSuggestions.map((s) => (
-                  <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />
-                ))}
-              </div>
-              <HarvestSummaryNote suggestions={harvestSuggestions} money={money} t={t} />
+              {harvestSuggestions.map((s) => (
+                <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />
+              ))}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("harvest.none")}</p>
-          )}
-        </CardContent>
+            <HarvestSummaryNote suggestions={harvestSuggestions} money={money} t={t} />
+          </>
+        ) : (
+          <p className="px-[22px] pb-5 pt-1 text-sm text-muted-foreground">{t("harvest.none")}</p>
+        )}
       </Card>
 
       {/* By year */}
