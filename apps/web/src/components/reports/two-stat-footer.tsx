@@ -14,19 +14,19 @@ export function TwoStatFooter({
   accentColor: string;
 }) {
   return (
-    <div className="mt-3 flex items-end justify-between gap-3 border-t border-border pt-3">
+    <div className="mt-auto flex items-end justify-between gap-3.5 border-t border-line pt-4">
       <div className="flex gap-4">
         {metrics.map((m, i) => (
           <div key={i}>
-            <p className="text-[11px] text-muted-foreground">{m.label}</p>
-            <p className="tabular text-sm font-semibold" style={m.color ? { color: m.color } : undefined}>
+            <p className="text-[10px] font-semibold uppercase tracking-[.03em] text-text-3">{m.label}</p>
+            <p className="tabular mt-[3px] text-[15px] font-bold" style={m.color ? { color: m.color } : undefined}>
               {m.value}
             </p>
           </div>
         ))}
       </div>
       <span
-        className="flex shrink-0 items-center gap-0.5 text-xs font-semibold"
+        className="flex shrink-0 items-center gap-0.5 text-[13px] font-bold"
         style={{ color: accentColor }}
       >
         {openLabel}

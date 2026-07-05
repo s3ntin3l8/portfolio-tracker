@@ -9,11 +9,12 @@ export function MiniSplitBar({
   segments: Array<{ pct: number; color: string }>;
 }) {
   return (
-    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+    <div className="flex h-[7px] w-full gap-[3px]">
       {segments.map((s, i) => (
         <div
           key={i}
-          style={{ width: `${Math.max(0, Math.min(100, s.pct))}%`, background: s.color }}
+          className="h-full rounded-full"
+          style={{ flex: Math.max(0.5, Math.min(100, s.pct)), background: s.color }}
         />
       ))}
     </div>

@@ -20,7 +20,7 @@ export function TrendChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold",
+        "inline-flex items-center gap-[5px] whitespace-nowrap rounded-full px-[11px] py-[5px] text-xs font-bold",
         tone === "up" && "bg-success/15 text-success",
         tone === "down" && "bg-destructive/15 text-destructive",
         tone === "neutral" && "bg-muted text-muted-foreground",

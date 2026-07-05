@@ -18,13 +18,13 @@ export function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="p-[15px]">
-        <p className="text-[11px] font-semibold text-muted-foreground">{label}</p>
-        <p className="tabular mt-2 text-[18px] font-extrabold">{value}</p>
+      <CardContent className="px-[18px] py-4">
+        <p className="text-xs font-semibold text-text-2">{label}</p>
+        <p className="tabular mt-1 text-[22px] font-extrabold lg:text-[26px]">{value}</p>
         {delta && (
           <p
             className={cn(
-              "tabular mt-1 text-[11px] font-bold",
+              "tabular mt-0.5 text-xs font-bold",
               deltaTone === "up" && "text-success",
               deltaTone === "down" && "text-destructive",
               deltaTone === "neutral" && "text-muted-foreground",

@@ -37,27 +37,28 @@ export function ReportCard({
   href: string;
   openLabel: string;
 }) {
+  // Layout transcribed from the reference's desktop `reports` cards: 44px icon chip +
+  // 700 16px title + delta pill in ONE header row, 800 30px value, 500 13px caption,
+  // 7px split bar, and a bordered footer pinned to the card bottom.
   return (
-    <Link href={href} className="group block">
-      <Card className="p-5 transition-colors group-hover:border-primary/40">
-        <div className="flex items-start justify-between gap-2">
+    <Link href={href} className="group block h-full">
+      <Card className="flex h-full flex-col rounded-[18px] px-[22px] py-5 transition-colors group-hover:border-primary/40">
+        <div className="flex w-full items-center gap-3">
           <span
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl"
+            className="flex size-11 shrink-0 items-center justify-center rounded-[14px]"
             style={{ background: iconBg, color: iconFg }}
           >
-            <Icon className="size-4.5" />
+            <Icon className="size-[22px]" strokeWidth={1.9} />
           </span>
+          <span className="min-w-0 flex-1 text-base font-bold">{title}</span>
           {trend && <TrendChip label={trend.label} tone={trend.tone} arrow={trend.arrow} />}
         </div>
 
-        <p className="mt-3 text-sm font-semibold text-muted-foreground">{title}</p>
-        <p className="tabular mt-1 text-2xl font-extrabold tracking-tight sm:text-[30px]">
-          {value}
-        </p>
-        <p className="text-xs text-muted-foreground">{caption}</p>
+        <p className="tabular mt-4 text-[30px] font-extrabold">{value}</p>
+        <p className="mt-[3px] text-[13px] font-medium text-text-2">{caption}</p>
 
         {splitBar && splitBar.length > 0 && (
-          <div className="mt-3">
+          <div className="mt-4">
             <MiniSplitBar segments={splitBar} />
           </div>
         )}

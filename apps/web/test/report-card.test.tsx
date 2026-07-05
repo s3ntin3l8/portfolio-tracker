@@ -30,7 +30,7 @@ describe("MiniSplitBar", () => {
         ]}
       />,
     );
-    const bar = container.querySelector(".bg-muted");
+    const bar = container.querySelector(".h-\\[7px\\]");
     expect(bar?.children).toHaveLength(2);
   });
 });

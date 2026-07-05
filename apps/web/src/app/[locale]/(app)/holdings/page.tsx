@@ -20,7 +20,7 @@ import {
 } from "@/lib/server-api";
 import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
 
-const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto"] as const;
+const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto", "cash"] as const;
 
 /**
  * The range the Holdings hero chart initially loads. Deliberately a day-grained range
@@ -84,7 +84,9 @@ export default async function HoldingsPage({
     return acc;
   }, {});
   const visibleClassTabs = CLASS_TABS.filter(
-    (key) => key === "all" || (classCounts[key] ?? 0) > 0,
+    (key) =>
+      key === "all" ||
+      (key === "cash" ? hasCash : (classCounts[key] ?? 0) > 0),
   );
 
   // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
@@ -311,7 +313,7 @@ export default async function HoldingsPage({
               {/* Pill spec transcribed from the reference's `deskOn`/`deskOff` chips:
                   active 700 12px white on var(--pill); inactive 600 12px on bg-card
                   WITH a border — not a bare transparent outline. */}
-              <TabsList className="h-auto gap-2 rounded-full bg-transparent p-0">
+              <TabsList className="h-auto gap-2 rounded-full border-0 bg-transparent p-0">
                 {visibleClassTabs.map((key) => (
                   <TabsTrigger
                     key={key}
@@ -334,7 +336,7 @@ export default async function HoldingsPage({
                       : holdings.filter((h) => h.instrument?.assetClass === key)
                   }
                   currency={currency}
-                  cash={key === "all" && hasCash ? cash : undefined}
+                  cash={(key === "all" || key === "cash") && hasCash ? cash : undefined}
                 />
               </div>
             </TabsContent>
