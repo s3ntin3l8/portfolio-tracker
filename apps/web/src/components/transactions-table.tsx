@@ -321,6 +321,18 @@ export function TransactionsTable({
     setDraftFilter("all");
   }
 
+  // Keep the open detail sheet in sync with `rows`: it's opened from a snapshot (onRowActivate
+  // below), so once router.refresh() re-feeds updated rows (e.g. after confirming/discarding
+  // the very row the sheet is showing), re-point it at the fresh copy instead of freezing on
+  // the pre-refresh draft. Closes the sheet if the row no longer appears at all (e.g. deleted
+  // elsewhere). Adjusting state during render, same pattern as the filters above.
+  if (detailTx) {
+    const freshDetailTx = rows.find((r) => r.id === detailTx.id) ?? null;
+    if (freshDetailTx !== detailTx) {
+      setDetailTx(freshDetailTx);
+    }
+  }
+
   // Re-cap the visible window whenever the effective view changes, so a newly narrowed
   // filter/search/sort starts short instead of inheriting a stale "loaded 200" from the
   // previous view. Tracks the prior signature in state (not a ref) per React's documented

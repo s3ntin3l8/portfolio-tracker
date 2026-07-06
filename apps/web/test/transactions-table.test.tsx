@@ -528,6 +528,34 @@ describe("TransactionsTable", () => {
       );
     });
 
+    it("keeps the detail sheet open and reflects the fresh status after router.refresh() re-feeds a confirmed row", () => {
+      const draftRow = { ...ROWS[0], status: "draft" as const };
+      const { rerender } = render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[draftRow]} />
+        </NextIntlClientProvider>,
+      );
+
+      fireEvent.click(screen.getByText("Bank Central Asia")); // open the detail sheet
+      expect(screen.getByRole("button", { name: md.confirmDraft })).toBeInTheDocument();
+
+      // Confirming calls the API and triggers router.refresh(), which re-feeds `rows` with
+      // the same transaction now status='normal' — simulate that prop update directly rather
+      // than relying on the (mocked, no-op) refresh() to do anything.
+      rerender(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={[{ ...draftRow, status: "normal" }]} />
+        </NextIntlClientProvider>,
+      );
+
+      // The sheet stays open (not closed/reset) but no longer offers Confirm/Discard, since
+      // it's now re-pointed at the fresh (non-draft) row instead of the stale draft snapshot.
+      // (Instrument name now renders in both the sheet and the row, hence getAllByText.)
+      expect(screen.getAllByText("Bank Central Asia").length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: md.confirmDraft })).toBeNull();
+      expect(screen.queryByRole("button", { name: md.discardDraft })).toBeNull();
+    });
+
     it("filters to drafts only via the draft filter", () => {
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
