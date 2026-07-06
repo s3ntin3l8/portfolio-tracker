@@ -60,8 +60,13 @@ export default async function ReportsPage({
     const s = income.data;
     const currency = s.displayCurrency;
     const m = (n: number) => formatMoney(n, currency, locale);
+    // Full-year outlook (actuals-to-date + rest-of-year forecast) vs last year, not just
+    // actuals-to-date vs last year — matches the /income page's own headline delta.
+    const lastYearTotal = Number(s.lastYear);
+    const fullYearDeltaAbs = Number(s.forecastFullYear) - lastYearTotal;
+    const deltaPct = lastYearTotal > 0 ? fullYearDeltaAbs / lastYearTotal : null;
     const deltaTone: TrendTone =
-      s.deltaPct === null || s.deltaPct === 0 ? "neutral" : s.deltaPct > 0 ? "up" : "down";
+      deltaPct === null || deltaPct === 0 ? "neutral" : deltaPct > 0 ? "up" : "down";
 
     // Top two asset classes by income contribution, as a two-segment split bar.
     const topTwo = [...s.byAssetClass].sort((a, b) => Number(b.total) - Number(a.total)).slice(0, 2);
@@ -82,8 +87,8 @@ export default async function ReportsPage({
         iconFg={ICONS.income.fg}
         title={t("income.title")}
         trend={
-          s.deltaPct !== null
-            ? { label: t("income.trendVsLastYear", { pct: formatPercent(s.deltaPct, locale) }), tone: deltaTone, arrow: true }
+          deltaPct !== null
+            ? { label: t("income.trendVsLastYear", { pct: formatPercent(deltaPct, locale) }), tone: deltaTone, arrow: true }
             : undefined
         }
         value={m(Number(s.thisYear))}
@@ -286,7 +291,7 @@ export default async function ReportsPage({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-extrabold tracking-tight">{t("title")}</h1>
+        <h1 className="text-2xl font-bold">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </header>
 
