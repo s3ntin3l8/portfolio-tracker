@@ -696,6 +696,7 @@
   },
   "ImportHistory": {
     "title": "Impor terakhir",
+    "file": "Berkas",
     "items": "{count, plural, other {# item}}",
     "review": "Tinjau",
     "reviewTitle": "Tinjau impor",

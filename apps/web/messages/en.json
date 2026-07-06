@@ -698,6 +698,7 @@
   },
   "ImportHistory": {
     "title": "Recent imports",
+    "file": "File",
     "items": "{count, plural, one {# item} other {# items}}",
     "review": "Review",
     "reviewTitle": "Review import",

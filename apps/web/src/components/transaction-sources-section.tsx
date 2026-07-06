@@ -2,24 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Download, FileSpreadsheet, FileText, Loader2, PencilLine, ScanText } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import type { SourceSummary } from "@portfolio/api-client";
 import { useApiClient } from "@/lib/api";
-
-/**
- * Per-source-type icon + tint, transcribed from `Pocket Prototype.dc.html` (the `SRCTYPE`
- * map). A 40×40 tinted square keyed by import origin; unknown types fall back to neutral.
- */
-const SRC_STYLE: Record<string, { icon: LucideIcon; bg: string; fg: string }> = {
-  csv: { icon: FileSpreadsheet, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
-  pdf: { icon: FileText, bg: "rgba(229,72,77,.13)", fg: "#E5484D" },
-  screenshot: { icon: ScanText, bg: "rgba(124,92,252,.16)", fg: "#7C5CFC" },
-  pytr: { icon: FileText, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
-  ibkr: { icon: FileText, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
-  manual: { icon: PencilLine, bg: "var(--border)", fg: "var(--text-mute)" },
-};
-const DEFAULT_SRC = { icon: FileText, bg: "var(--border)", fg: "var(--text-mute)" };
+import { SRC_STYLE, DEFAULT_SRC } from "@/lib/source-style";
 
 /** Per-source tax component label map — keys match TaxComponents. */
 export const TAX_COMPONENT_LABELS: Record<string, string> = {
