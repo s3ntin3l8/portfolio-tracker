@@ -893,6 +893,10 @@ export interface InstrumentYield {
 
 /** A single dividend/coupon cash event (native currency), for the event log. */
 export interface IncomeEvent {
+  /** The underlying transaction id, when known — lets the UI open its detail sheet. */
+  transactionId?: string | null;
+  /** The portfolio the underlying transaction belongs to. */
+  portfolioId?: string | null;
   instrumentId: string | null;
   symbol: string | null;
   name: string | null;

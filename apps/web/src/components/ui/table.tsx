@@ -67,4 +67,21 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   );
 }
 
-export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell };
+// Shared cell-typography convention (sourced from the Holdings table, the most fully-realized
+// instance). Not baked into TableCell itself since weight/role varies by column — compose with
+// `cn()` (e.g. `cn(TABLE_VALUE, "text-text-mute")` for a de-emphasized secondary number).
+export const TABLE_LABEL = "text-sm font-bold";
+export const TABLE_SUBLABEL = "text-xs font-medium text-text-2";
+export const TABLE_VALUE = "tabular text-right text-[13px] font-medium";
+export const TABLE_VALUE_STRONG = "tabular text-right text-[13px] font-bold";
+export const TABLE_SUBVALUE = "text-[11px] font-semibold";
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+};

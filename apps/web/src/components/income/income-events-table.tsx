@@ -1,9 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import type { IncomeEvent, UpcomingPayment } from "@portfolio/api-client";
 import { monogram } from "@/lib/brokerages";
 import { formatMoney, cn } from "@/lib/utils";
+import { useApiClient } from "@/lib/api";
+import { useRouter } from "@/i18n/navigation";
+import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
+import type { TxRow } from "@/components/transactions-table";
 
 /** Unified row type: historical events + upcoming payments merged into one table. */
 export type IncomeEventRow = IncomeEvent & {
@@ -69,11 +74,29 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
   const tt = useTranslations("TxType");
   const locale = useLocale();
   const df = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" });
+  const api = useApiClient();
+  const router = useRouter();
+  const [detailTx, setDetailTx] = useState<TxRow | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // Received (non-forecast) rows carry the underlying transaction id/portfolio — open the
+  // same detail sheet used on the Activity page. Forecast rows have no backing transaction.
+  const openRow = async (e: IncomeEventRow) => {
+    if (!e.transactionId || !e.portfolioId) return;
+    setLoadingId(e.transactionId);
+    try {
+      const list = await api.listTransactions(e.portfolioId);
+      setDetailTx(list.find((r) => r.id === e.transactionId) ?? null);
+    } finally {
+      setLoadingId(null);
+    }
+  };
 
   return (
     <div>
       {rows.map((e, i) => {
         const forecast = Boolean(e.status);
+        const clickable = !forecast && Boolean(e.transactionId && e.portfolioId);
         const label = e.symbol ?? e.name ?? "—";
         const typeLabel = tt(e.type);
         const dateLabel = df.format(new Date(e.date));
@@ -110,7 +133,24 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
             key={`${e.instrumentId}-${e.date}-${i}`}
             title={title}
             style={forecast ? { opacity: 0.78 } : undefined}
-            className={cn(i > 0 && "border-t border-line")}
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={clickable ? () => openRow(e) : undefined}
+            onKeyDown={
+              clickable
+                ? (ev) => {
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      void openRow(e);
+                    }
+                  }
+                : undefined
+            }
+            className={cn(
+              i > 0 && "border-t border-line",
+              clickable && "cursor-pointer transition-colors hover:bg-muted/40",
+              loadingId === e.transactionId && "opacity-60",
+            )}
           >
             {/* Desktop: 6-column grid. */}
             <div className={cn("hidden items-center gap-3.5 px-0.5 py-[11px] sm:grid", TIMELINE_GRID)}>
@@ -145,6 +185,18 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
           </div>
         );
       })}
+
+      <TransactionDetailSheet
+        tx={detailTx}
+        open={!!detailTx}
+        onOpenChange={(o) => {
+          if (!o) setDetailTx(null);
+        }}
+        onDeleted={() => {
+          setDetailTx(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

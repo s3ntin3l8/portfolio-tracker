@@ -117,9 +117,10 @@ describe("TradesTable", () => {
     const legRow = screen.getByText("2021-02-01 → 2021-03-01").closest("tr");
     expect(legRow).toBeTruthy();
 
-    // 9 cells: dates(colSpan=2) + exitDate(1) + held(1) + quantity(1) + invested(1) + realized(1) + dividends(1) + totalReturn(1) + annualized(1) = 10 columns
+    // 7 <td> elements: dates(colSpan=2, covering instrument+period) + held(1) +
+    // invested(1) + realized(1) + dividends(1) + totalReturn(1) + annualized(1) = 8 columns
     const legCells = legRow!.querySelectorAll("td");
-    expect(legCells.length).toBe(9);
+    expect(legCells.length).toBe(7);
 
     // Verify key values are present in the leg row
     expect(legRow!.textContent).toContain("28d");
@@ -130,10 +131,14 @@ describe("TradesTable", () => {
 
   it("opens the trade detail sheet when a closed row is clicked, instead of expanding inline", () => {
     renderTable([closed]);
-    expect(screen.queryByText("2021-01-01 → 2021-06-01")).toBeNull();
+    // The collapsed row's merged Period column already shows "entry → exit" for a
+    // closed trade, so assert the count is unchanged by the click (no leg row added)
+    // rather than asserting absence outright.
+    const periodOccurrences = () => screen.queryAllByText("2021-01-01 → 2021-06-01").length;
+    const before = periodOccurrences();
     fireEvent.click(screen.getAllByText("Telkom")[0]);
     // No inline leg expansion for closed rows...
-    expect(screen.queryByText("2021-01-01 → 2021-06-01")).toBeNull();
+    expect(periodOccurrences()).toBe(before);
     // ...the detail sheet opens instead (unique header title).
     expect(screen.getByText(/Closed 2021-06-01/)).toBeInTheDocument();
   });

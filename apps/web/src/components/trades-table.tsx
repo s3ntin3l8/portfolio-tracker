@@ -11,13 +11,18 @@ import {
   TableFooter,
   TableHeader,
   TableRow,
+  TABLE_LABEL,
+  TABLE_SUBLABEL,
+  TABLE_VALUE,
+  TABLE_VALUE_STRONG,
+  TABLE_SUBVALUE,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Badge } from "@/components/ui/badge";
 import { MonogramBadge } from "@/components/monogram-badge";
 import { Link } from "@/i18n/navigation";
 import { TradeDetailSheet } from "@/components/trade-detail-sheet";
-import { formatMoney, formatPercent, formatSignedMoney, formatQuantity, cn } from "@/lib/utils";
+import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 
 const COLS: ColDef<Trade>[] = [
@@ -25,7 +30,6 @@ const COLS: ColDef<Trade>[] = [
   { key: "entryDate", get: (t) => t.entryDate, type: "date" },
   { key: "exitDate", get: (t) => t.exitDate ?? "", type: "date" },
   { key: "held", get: (t) => t.holdingDays, type: "numeric" },
-  { key: "quantity", get: (t) => Number(t.quantity), type: "numeric" },
   { key: "invested", get: (t) => Number(t.invested), type: "numeric" },
   { key: "realized", get: (t) => Number(t.realizedPnL), type: "numeric" },
   { key: "dividends", get: (t) => Number(t.dividends), type: "numeric" },
@@ -91,15 +95,13 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
             <TableHeader>
               <TableRow>
                 <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-                <SortableTableHead colKey="entryDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("entry")}</SortableTableHead>
-                <SortableTableHead colKey="exitDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("exit")}</SortableTableHead>
-                <SortableTableHead colKey="held" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("held")}</SortableTableHead>
-                <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("quantity")}</SortableTableHead>
-                <SortableTableHead colKey="invested" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("invested")}</SortableTableHead>
-                <SortableTableHead colKey="realized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("realized")}</SortableTableHead>
-                <SortableTableHead colKey="dividends" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("dividends")}</SortableTableHead>
-                <SortableTableHead colKey="totalReturn" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("totalReturn")}</SortableTableHead>
-                <SortableTableHead colKey="annualized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">
+                <SortableTableHead colKey="entryDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="whitespace-nowrap">{t("period")}</SortableTableHead>
+                <SortableTableHead colKey="held" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">{t("held")}</SortableTableHead>
+                <SortableTableHead colKey="invested" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">{t("invested")}</SortableTableHead>
+                <SortableTableHead colKey="realized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">{t("realized")}</SortableTableHead>
+                <SortableTableHead colKey="dividends" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">{t("dividends")}</SortableTableHead>
+                <SortableTableHead colKey="totalReturn" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">{t("totalReturn")}</SortableTableHead>
+                <SortableTableHead colKey="annualized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right" className="whitespace-nowrap">
                   <span className="inline-flex items-center gap-1" title={t("annualizedTooltip")}>
                     {t("annualized")}
                     <Info className="size-3 text-muted-foreground" aria-hidden />
@@ -120,73 +122,73 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                       onClick={() => handleRowClick(tr, key)}
                     >
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          {tr.status === "open" && (
-                            <ChevronRight
-                              className={cn(
-                                "size-3.5 text-muted-foreground transition-transform",
-                                tr.legs.length === 0 && "opacity-0",
-                                isOpen && "rotate-90",
-                              )}
-                            />
-                          )}
+                        <div className="relative flex items-center gap-2">
+                          <ChevronRight
+                            className={cn(
+                              "absolute -left-4 size-3.5 text-muted-foreground transition-transform",
+                              (tr.status !== "open" || tr.legs.length === 0) && "opacity-0",
+                              isOpen && "rotate-90",
+                            )}
+                          />
                           <MonogramBadge
                             label={tr.instrument?.symbol ?? tr.instrumentId}
                             assetClass={tr.instrument?.assetClass}
-                            className="size-8"
+                            className="shrink-0"
                           />
-                          <div>
-                            <Link
-                              href={`/instruments/${tr.instrumentId}`}
-                              className="font-medium hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {tr.instrument?.symbol ?? "—"}
-                            </Link>
-                            <div className="text-xs text-muted-foreground">
-                              {tr.instrument?.name ?? tr.instrumentId}
+                          <div className="min-w-0 max-w-[130px]">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <Link
+                                href={`/instruments/${tr.instrumentId}`}
+                                className={cn(TABLE_LABEL, "min-w-0 truncate hover:underline")}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {tr.instrument?.symbol ?? "—"}
+                              </Link>
+                              <Badge
+                                variant={tr.status === "open" ? "default" : "outline"}
+                                className="shrink-0"
+                              >
+                                {t(`status_${tr.status}`)}
+                              </Badge>
+                            </div>
+                            <div className={cn(TABLE_SUBLABEL, "truncate")}>
+                              {tr.instrument?.displayName ?? tr.instrument?.name ?? tr.instrumentId}
                             </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={tr.status === "open" ? "default" : "outline"}>
-                          {t(`status_${tr.status}`)}
-                        </Badge>
-                        <div className="mt-1 text-xs text-muted-foreground">{tr.entryDate}</div>
+                      <TableCell className={cn(TABLE_SUBLABEL, "whitespace-nowrap")}>
+                        {tr.entryDate}
+                        {tr.exitDate ? ` → ${tr.exitDate}` : ""}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{tr.exitDate ?? "—"}</TableCell>
-                      <TableCell className="tabular text-right">
+                      <TableCell className={cn(TABLE_VALUE, "whitespace-nowrap")}>
                         {heldLabel(tr.holdingDays)}
                         {Math.abs(tr.holdingDays - tr.avgHoldingDays) > 7 && (
                           <div
-                            className="text-xs text-muted-foreground"
+                            className={cn(TABLE_SUBVALUE, "text-muted-foreground")}
                             title={t("avgHeldTooltip")}
                           >
                             ~{heldLabel(tr.avgHoldingDays)} {t("avgHeld")}
                           </div>
                         )}
                         {tr.longTerm && (
-                          <div className="text-xs text-success">{t("longTerm")}</div>
+                          <div className={cn(TABLE_SUBVALUE, "text-success")}>{t("longTerm")}</div>
                         )}
                       </TableCell>
-                      <TableCell className="tabular text-right">
-                        {formatQuantity(Number(tr.quantity), tr.instrument?.unit, locale)}
-                      </TableCell>
-                      <TableCell className="tabular text-right">{money(Number(tr.invested))}</TableCell>
-                      <TableCell className={cn("tabular text-right", toneClass(realized))}>
+                      <TableCell className={cn(TABLE_VALUE, "whitespace-nowrap")}>{money(Number(tr.invested))}</TableCell>
+                      <TableCell className={cn(TABLE_VALUE_STRONG, "whitespace-nowrap", toneClass(realized))}>
                         {realized === 0 ? "—" : signed(realized)}
                       </TableCell>
-                      <TableCell className="tabular text-right">
+                      <TableCell className={cn(TABLE_VALUE, "whitespace-nowrap")}>
                         {Number(tr.dividends) === 0 ? "—" : money(Number(tr.dividends))}
                       </TableCell>
-                      <TableCell className={cn("tabular text-right", toneClass(ret))}>
+                      <TableCell className={cn(TABLE_VALUE_STRONG, "whitespace-nowrap", toneClass(ret))}>
                         {signed(ret)}
                         {tr.totalReturnPct !== null && (
-                          <div className="text-xs">{formatPercent(tr.totalReturnPct, locale)}</div>
+                          <div className={TABLE_SUBVALUE}>{formatPercent(tr.totalReturnPct, locale)}</div>
                         )}
                       </TableCell>
-                      <TableCell className={cn("tabular text-right", toneClass(tr.annualizedPct ?? 0))}>
+                      <TableCell className={cn(TABLE_VALUE_STRONG, "whitespace-nowrap", toneClass(tr.annualizedPct ?? 0))}>
                         {tr.annualizedPct === null ? "—" : formatPercent(tr.annualizedPct, locale)}
                       </TableCell>
                     </TableRow>
@@ -197,11 +199,9 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                             <TableCell className="pl-9 text-muted-foreground" colSpan={2}>
                               {leg.acqDate} → {leg.sellDate}
                             </TableCell>
-                            <TableCell />
                             <TableCell className="tabular text-right text-muted-foreground">
                               {leg.holdingDays >= 365 ? `${(leg.holdingDays / 365).toFixed(1)}${t("yearsAbbr")}` : `${leg.holdingDays}${t("daysAbbr")}`}
                             </TableCell>
-                            <TableCell className="tabular text-right">{Number(leg.quantity)}</TableCell>
                             <TableCell className="tabular text-right">{money(Number(leg.cost))}</TableCell>
                             <TableCell className="tabular text-right">{money(Number(leg.proceeds))}</TableCell>
                             <TableCell />
@@ -216,7 +216,7 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                         {/* The legs carry no transaction ids, so link to the instrument's
                             full transaction list rather than to individual rows. */}
                         <TableRow className="bg-muted/40">
-                          <TableCell colSpan={10} className="pl-9">
+                          <TableCell colSpan={8} className="pl-9">
                             <Link
                               href={`/instruments/${tr.instrumentId}`}
                               className="text-xs font-medium text-primary hover:underline"
@@ -234,12 +234,10 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
             </TableBody>
             <TableFooter>
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="font-semibold">
-                  {t("totalRealized")}
-                </TableCell>
+                <TableCell colSpan={4}>{t("totalRealized")}</TableCell>
                 <TableCell
                   className={cn(
-                    "tabular text-right font-semibold",
+                    "tabular text-right text-[13px]",
                     closedTotal > 0
                       ? "text-success"
                       : closedTotal < 0
@@ -272,13 +270,13 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                   <MonogramBadge
                     label={tr.instrument?.symbol ?? tr.instrumentId}
                     assetClass={tr.instrument?.assetClass}
-                    className="mt-0.5 size-8"
+                    className="mt-0.5 size-[42px] rounded-[13px]"
                   />
                   <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/instruments/${tr.instrumentId}`}
-                      className="font-medium hover:underline truncate"
+                      className={cn(TABLE_LABEL, "truncate hover:underline")}
                     >
                       {tr.instrument?.symbol ?? "—"}
                     </Link>
@@ -286,17 +284,29 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                       {t(`status_${tr.status}`)}
                     </Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className={cn(TABLE_SUBLABEL, "truncate")}>
+                    {tr.instrument?.displayName ?? tr.instrument?.name ?? tr.instrumentId}
+                  </div>
+                  <div className={TABLE_SUBLABEL}>
                     {tr.entryDate}
                     {tr.exitDate ? ` → ${tr.exitDate}` : ""} · {heldLabel(tr.holdingDays)}
                   </div>
                   </div>
                 </div>
                 <div className="text-right tabular">
-                  <div className={cn("text-sm font-medium", toneClass(ret))}>{signed(ret)}</div>
+                  <div className={cn("text-sm font-bold", toneClass(ret))}>{signed(ret)}</div>
                   {tr.totalReturnPct !== null && (
-                    <div className={cn("text-xs", toneClass(ret))}>
+                    <div className={cn(TABLE_SUBVALUE, toneClass(ret))}>
                       {formatPercent(tr.totalReturnPct, locale)}
+                    </div>
+                  )}
+                  {tr.annualizedPct !== null && (
+                    <div
+                      className={cn(TABLE_SUBVALUE, toneClass(tr.annualizedPct))}
+                      title={t("annualizedTooltip")}
+                    >
+                      {formatPercent(tr.annualizedPct, locale)}
+                      {t("annualizedAbbr")}
                     </div>
                   )}
                 </div>

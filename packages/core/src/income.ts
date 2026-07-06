@@ -248,6 +248,10 @@ export function projectDividends(
   heldQty: Map<string, string>,
   qtyAt: (instrumentId: string, at: Date) => string,
   now: Date = new Date(),
+  opts: {
+    /** Per-instrument monthly share accumulation rate (shares/month). */
+    accumulation?: Map<string, string>;
+  } = {},
 ): ProjectedDividend[] {
   // Source window: last year's equivalent of (now, Dec 31].
   const lastYearEnd = new Date(
@@ -274,11 +278,6 @@ export function projectDividends(
     const histQtyStr = qtyAt(e.instrumentId, e.executedAt);
     const histQty = new Decimal(histQtyStr);
 
-    // Scale by qty change; fall back to raw amount if no historical position.
-    const amount = histQty.lte(0)
-      ? new Decimal(e.price)
-      : new Decimal(e.price).mul(currentQty).div(histQty);
-
     // Shift date one year forward.
     const projected = new Date(e.executedAt);
     projected.setUTCFullYear(projected.getUTCFullYear() + 1);
@@ -286,6 +285,27 @@ export function projectDividends(
 
     // Skip projected dates that aren't strictly in the future.
     if (dateStr <= nowStr) continue;
+
+    // Project ongoing share accumulation (savings plan / regular buys) to the
+    // future payment date, mirroring projectNextYearDividends. Without this a
+    // year-end payment is understated against today's holding even though the
+    // position keeps growing each month.
+    const accRate = opts.accumulation
+      ? new Decimal(opts.accumulation.get(e.instrumentId) ?? "0")
+      : new Decimal(0);
+    const hasAccumulation = accRate.gt(0);
+    const monthsAhead = Math.max(0, monthsBetween(now, projected));
+    const projectedQty = hasAccumulation
+      ? currentQty.add(accRate.mul(monthsAhead))
+      : currentQty;
+
+    // Per-share stays at last year's actual run-rate (no growth applied for the
+    // rest-of-year window). Scale by the projected qty; fall back to the raw
+    // amount when no historical position is known.
+    const perShare = histQty.lte(0)
+      ? new Decimal(e.price).div(projectedQty)
+      : new Decimal(e.price).div(histQty);
+    const amount = perShare.mul(projectedQty);
 
     out.push({
       instrumentId: e.instrumentId,
@@ -296,8 +316,9 @@ export function projectDividends(
       currency: e.currency,
       basisYear: e.executedAt.getUTCFullYear(),
       source: "flat",
-      perShare: amount.div(currentQty).toString(),
-      quantity: currentQty.toString(),
+      assumesContributions: hasAccumulation ? true : undefined,
+      perShare: perShare.toString(),
+      quantity: projectedQty.toString(),
     });
   }
 

@@ -69,7 +69,8 @@
       "title": "Income",
       "desc": "Dividends, coupons & distributions.",
       "trendVsLastYear": "{pct} vs last year",
-      "caption": "This year",
+      "caption": "Year to date",
+      "captionEstimated": "Estimated this year",
       "metricTtm": "TTM",
       "metricLifetime": "Lifetime"
     },
@@ -80,6 +81,7 @@
       "caption": "Realized this year",
       "metricAvgHold": "Avg hold",
       "metricClosed": "Closed trades",
+      "metricAllTime": "Realized all time",
       "days": "{count}d"
     },
     "savings": {
@@ -1049,6 +1051,7 @@
     "noResults": "No transactions match your search.",
     "exportCsv": "Export CSV",
     "exportDocuments": "Export Documents",
+    "cashLabel": "Cash",
     "sources": {
       "screenshot": "Screenshot",
       "csv": "CSV",
@@ -1391,15 +1394,14 @@
     "status_open": "Open",
     "status_closed": "Closed",
     "instrument": "Instrument",
-    "entry": "Entry",
-    "exit": "Exit",
+    "period": "Period",
     "held": "Held",
-    "quantity": "Qty",
     "invested": "Invested",
     "realized": "Realized",
     "dividends": "Dividends",
     "totalReturn": "Total return",
     "annualized": "Annualized",
+    "annualizedAbbr": "/yr",
     "annualizedTooltip": "Money-weighted return (IRR). Reflects when each amount was invested — for savings plans this exceeds total return ÷ calendar period because capital was deployed gradually.",
     "avgHeld": "avg",
     "avgHeldTooltip": "Capital-weighted average holding period. Shorter than the calendar period when purchases were spread over time (e.g. savings plans).",

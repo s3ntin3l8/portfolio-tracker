@@ -160,6 +160,8 @@ export interface TxRow {
   instrument: {
     symbol?: string | null;
     name?: string | null;
+    /** Clean human-readable name from provider enrichment; prefer over `name` for display. */
+    displayName?: string | null;
     /** Present at runtime (from listTransactions) — needed to prefill the edit form. */
     assetClass?: string | null;
     unit?: string | null;
@@ -974,10 +976,10 @@ export function TransactionsTable({
               <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("date")}</SortableTableHead>
               <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("transactionCol")}</SortableTableHead>
               {showPortfolio && <SortableTableHead colKey="portfolio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("portfolio")}</SortableTableHead>}
-              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("quantity")}</SortableTableHead>
-              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("price")}</SortableTableHead>
+              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("quantity")}</SortableTableHead>
+              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("price")}</SortableTableHead>
               <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden sm:table-cell">{t("source")}</SortableTableHead>
-              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("amount")}</SortableTableHead>
+              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("amount")}</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1076,7 +1078,7 @@ export function TransactionsTable({
                           )}
                         </div>
                         <div className="truncate text-xs font-medium text-text-2">
-                          {tx.instrument?.name ?? t(`sources.${tx.source}`)}
+                          {tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel")}
                         </div>
                       </div>
                     </div>
@@ -1138,7 +1140,7 @@ export function TransactionsTable({
                 const sub =
                   Number(tx.quantity) > 0
                     ? `${Number(tx.quantity)} @ ${m(Number(tx.price), tx.currency)}`
-                    : (tx.instrument?.name ?? t(`sources.${tx.source}`));
+                    : (tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel"));
                 return (
                   <div
                     key={tx.id}

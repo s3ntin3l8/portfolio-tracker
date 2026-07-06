@@ -8,9 +8,12 @@ import {
   TableCell,
   TableHeader,
   TableRow,
+  TABLE_LABEL,
+  TABLE_VALUE,
+  TABLE_VALUE_STRONG,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, cn } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 
@@ -42,11 +45,11 @@ export function ByCurrencyTable({ rows, displayCurrency }: ByCurrencyTableProps)
       <TableBody>
         {sort(rows).map((c) => (
           <TableRow key={c.currency}>
-            <TableCell className="font-medium">{c.currency}</TableCell>
-            <TableCell className="tabular text-right">
+            <TableCell className={TABLE_LABEL}>{c.currency}</TableCell>
+            <TableCell className={TABLE_VALUE_STRONG}>
               {formatMoney(Number(c.totalNative), c.currency, locale)}
             </TableCell>
-            <TableCell className="tabular text-right text-muted-foreground">
+            <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>
               {formatMoney(Number(c.totalNormalized), displayCurrency, locale)}
             </TableCell>
           </TableRow>

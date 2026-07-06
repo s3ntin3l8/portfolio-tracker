@@ -3,7 +3,8 @@ import { ScrollText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ReportHeader } from "@/components/report-header";
 import { StatCard } from "@/components/stat-card";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { TABLE_LABEL, TABLE_VALUE, TABLE_VALUE_STRONG } from "@/components/ui/table";
 import { TradesTable } from "@/components/trades-table";
 import { TradeMethodToggle } from "@/components/trade-method-toggle";
 import { loadTrades, loadPreferences } from "@/lib/server-api";
@@ -118,14 +119,16 @@ export default async function TradesPage({
       {log.realizedByYear.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <CardContent className="p-5">
-              <h2 className="mb-4 text-sm font-semibold">{t("realizedByYearChartTitle")}</h2>
+            <CardHeader className="pb-2">
+              <CardTitle>{t("realizedByYearChartTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="flex items-end justify-around gap-4" style={{ height: 140 }}>
                 {log.realizedByYear.map((r) => {
                   const amount = Number(r.amount);
                   const pct = Math.max(4, (Math.abs(amount) / maxAbsYear) * 100);
                   return (
-                    <div key={r.year} className="flex flex-1 flex-col items-center gap-1.5">
+                    <div key={r.year} className="flex h-full flex-1 flex-col items-center gap-1.5">
                       <span
                         className={cn(
                           "tabular text-xs font-bold",
@@ -134,10 +137,10 @@ export default async function TradesPage({
                       >
                         {formatSignedMoney(amount, currency, locale)}
                       </span>
-                      <div className="flex w-full flex-1 items-end">
+                      <div className="flex w-full flex-1 items-end justify-center">
                         <div
                           className={cn(
-                            "w-full rounded-t-[4px]",
+                            "w-full max-w-10 rounded-t-[4px]",
                             amount >= 0 ? "bg-success" : "bg-destructive",
                           )}
                           style={{ height: `${pct}%` }}
@@ -152,12 +155,14 @@ export default async function TradesPage({
           </Card>
 
           <Card>
-            <CardContent className="p-5">
-              <h2 className="mb-1 text-sm font-semibold">{t("winLossTitle")}</h2>
+            <CardHeader className="pb-2">
+              <CardTitle>{t("winLossTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent>
               <p className="tabular text-3xl font-extrabold">
                 {log.winRate === null ? "—" : formatPercent(log.winRate, locale).replace("+", "")}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-text-2">
                 {t("winLossSubtitle", { winners: winners.length, total: closedTrades.length })}
               </p>
               <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-muted">
@@ -180,16 +185,23 @@ export default async function TradesPage({
       {/* ── Tax lens ── */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardContent className="space-y-3 p-5">
-            <h2 className="text-sm font-semibold">{t("realizedByYear")}</h2>
+          <CardHeader className="pb-2">
+            <CardTitle>{t("realizedByYear")}</CardTitle>
+          </CardHeader>
+          <CardContent>
             {log.realizedByYear.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("noRealized")}</p>
             ) : (
               <div className="space-y-1">
                 {log.realizedByYear.map((r) => (
-                  <div key={r.year} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{r.year}</span>
-                    <span className={Number(r.amount) >= 0 ? "tabular text-success" : "tabular text-destructive"}>
+                  <div key={r.year} className="flex justify-between">
+                    <span className={TABLE_LABEL}>{r.year}</span>
+                    <span
+                      className={cn(
+                        TABLE_VALUE_STRONG,
+                        Number(r.amount) >= 0 ? "text-success" : "text-destructive",
+                      )}
+                    >
                       {formatSignedMoney(Number(r.amount), currency, locale)}
                     </span>
                   </div>
@@ -200,13 +212,15 @@ export default async function TradesPage({
         </Card>
 
         <Card>
-          <CardContent className="space-y-3 p-5">
-            <h2 className="text-sm font-semibold">{t("dividendsByYear")}</h2>
+          <CardHeader className="pb-2">
+            <CardTitle>{t("dividendsByYear")}</CardTitle>
+          </CardHeader>
+          <CardContent>
             {log.dividendsByYear.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("noDividends")}</p>
             ) : (
               <div className="space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex justify-between text-xs font-medium text-text-2">
                   <span>{t("year")}</span>
                   <span className="flex gap-6">
                     <span className="w-24 text-right">{t("received")}</span>
@@ -214,11 +228,11 @@ export default async function TradesPage({
                   </span>
                 </div>
                 {log.dividendsByYear.map((d) => (
-                  <div key={d.year} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{d.year}</span>
-                    <span className="flex gap-6 tabular">
-                      <span className="w-24 text-right">{money(d.amount)}</span>
-                      <span className="w-24 text-right text-muted-foreground">{money(d.tax)}</span>
+                  <div key={d.year} className="flex justify-between">
+                    <span className={TABLE_LABEL}>{d.year}</span>
+                    <span className="flex gap-6">
+                      <span className={cn(TABLE_VALUE_STRONG, "w-24")}>{money(d.amount)}</span>
+                      <span className={cn(TABLE_VALUE, "w-24 text-text-mute")}>{money(d.tax)}</span>
                     </span>
                   </div>
                 ))}
@@ -229,14 +243,16 @@ export default async function TradesPage({
 
         {log.bonusesByYear.length > 0 && (
           <Card>
-            <CardContent className="space-y-3 p-5">
-              <h2 className="text-sm font-semibold">{t("bonusesByYear")}</h2>
-              <p className="text-xs text-muted-foreground">{t("bonusesNote")}</p>
+            <CardHeader className="pb-2">
+              <CardTitle>{t("bonusesByYear")}</CardTitle>
+              <p className="text-xs font-medium text-text-2">{t("bonusesNote")}</p>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-1">
                 {log.bonusesByYear.map((b) => (
-                  <div key={b.year} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{b.year}</span>
-                    <span className="tabular text-success">{money(b.amount)}</span>
+                  <div key={b.year} className="flex justify-between">
+                    <span className={TABLE_LABEL}>{b.year}</span>
+                    <span className={cn(TABLE_VALUE_STRONG, "text-success")}>{money(b.amount)}</span>
                   </div>
                 ))}
               </div>

@@ -270,6 +270,30 @@ describe("projectDividends", () => {
     const result = projectDividends(past, heldQty, () => "10", NOW);
     expect(result[0].source).toBe("flat");
   });
+
+  it("without accumulation, projects flat at currentQty (back-compat)", () => {
+    const past = [hist("msft", "2025-09-12", "8.00")];
+    const heldQty = new Map([["msft", "10"]]);
+    const result = projectDividends(past, heldQty, () => "10", NOW);
+    expect(result[0].quantity).toBe("10");
+    expect(result[0].assumesContributions).toBeUndefined();
+  });
+
+  it("scales projected quantity by accumulation rate (assumesContributions flag)", () => {
+    // Payment on 2025-09-12 → projected one year forward to 2026-09-12, which is
+    // 3 months ahead of NOW (2026-06-15). Accumulation rate = 2 shares/month →
+    // projectedQty = 10 + 2×3 = 16.
+    const past = [hist("grower", "2025-09-12", "8.00")]; // perShare = 8/10 = 0.8
+    const heldQty = new Map([["grower", "10"]]);
+    const accumulation = new Map([["grower", "2"]]); // 2 shares/month
+    const result = projectDividends(past, heldQty, () => "10", NOW, { accumulation });
+    expect(result).toHaveLength(1);
+    expect(result[0].assumesContributions).toBe(true);
+    expect(Number(result[0].quantity)).toBeCloseTo(16, 4);
+    // amount = perShare (0.8) × projectedQty (16) = 12.8
+    expect(Number(result[0].amount)).toBeCloseTo(12.8, 4);
+    expect(Number(result[0].perShare)).toBeCloseTo(0.8, 4);
+  });
 });
 
 // ---------------------------------------------------------------------------

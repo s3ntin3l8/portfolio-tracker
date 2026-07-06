@@ -145,6 +145,28 @@ const discardedItem: ImportRecord = {
 
 const itemsWithDiscarded: ImportRecord[] = [...items, discardedItem];
 
+// A connection-sync (IBKR/pytr) "anchor" row: provenance-only, always count 0. Confirmed
+// means the last sync was clean (nothing to review); draft means it's still carrying an
+// unresolved attention error the user needs to see.
+const confirmedSyncAnchor: ImportRecord = {
+  id: "ibkr-anchor",
+  portfolioId: "p1",
+  parser: "ibkr",
+  status: "confirmed",
+  confidence: null,
+  count: 0,
+  createdAt: "2026-07-06T12:00:00.000Z",
+  batchId: null,
+  document: null,
+  originalFilename: null,
+};
+
+const draftSyncAnchor: ImportRecord = {
+  ...confirmedSyncAnchor,
+  id: "ibkr-anchor-draft",
+  status: "draft",
+};
+
 describe("ImportHistory", () => {
   beforeEach(() => {
     refresh.mockClear();
@@ -208,6 +230,39 @@ describe("ImportHistory", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
     expect(screen.queryByRole("button", { name: m.reassign })).toBeNull();
+  });
+
+  describe("connection-sync anchor rows", () => {
+    it("never shows a confirmed zero-item IBKR anchor, even with Show completed on", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <ImportHistory items={[...items, confirmedSyncAnchor]} />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+      expect(screen.queryByText("ibkr")).toBeNull();
+    });
+
+    it("excludes the dead anchor from the Show completed count", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <ImportHistory items={[...items, confirmedSyncAnchor]} />
+        </NextIntlClientProvider>,
+      );
+      // Only conf1 is a real confirmed import — the anchor doesn't add to the count.
+      expect(
+        screen.getByRole("button", { name: m.showCompleted.replace("{count}", "1") }),
+      ).toBeInTheDocument();
+    });
+
+    it("still shows a draft IBKR anchor (an unresolved attention error) by default", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <ImportHistory items={[...items, draftSyncAnchor]} />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByText("ibkr")).toBeInTheDocument();
+    });
   });
 
   it("renders sortable column headers", () => {

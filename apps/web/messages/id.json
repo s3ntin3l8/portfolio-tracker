@@ -69,7 +69,8 @@
       "title": "Pendapatan",
       "desc": "Dividen, kupon & distribusi.",
       "trendVsLastYear": "{pct} dari tahun lalu",
-      "caption": "Tahun ini",
+      "caption": "Tahun berjalan",
+      "captionEstimated": "Perkiraan tahun ini",
       "metricTtm": "TTM",
       "metricLifetime": "Sepanjang masa"
     },
@@ -80,6 +81,7 @@
       "caption": "Terealisasi tahun ini",
       "metricAvgHold": "Rata-rata tahan",
       "metricClosed": "Transaksi tertutup",
+      "metricAllTime": "Terealisasi sepanjang masa",
       "days": "{count}h"
     },
     "savings": {
@@ -1047,6 +1049,7 @@
     "noResults": "Tidak ada transaksi yang cocok dengan pencarian Anda.",
     "exportCsv": "Ekspor CSV",
     "exportDocuments": "Ekspor Dokumen",
+    "cashLabel": "Tunai",
     "sources": {
       "screenshot": "Tangkapan layar",
       "csv": "CSV",
@@ -1389,15 +1392,14 @@
     "status_open": "Terbuka",
     "status_closed": "Tertutup",
     "instrument": "Instrumen",
-    "entry": "Masuk",
-    "exit": "Keluar",
+    "period": "Periode",
     "held": "Ditahan",
-    "quantity": "Jml",
     "invested": "Diinvestasikan",
     "realized": "Terealisasi",
     "dividends": "Dividen",
     "totalReturn": "Total imbal hasil",
     "annualized": "Tahunan",
+    "annualizedAbbr": "/thn",
     "annualizedTooltip": "Imbal hasil berbobot uang (IRR). Mencerminkan kapan setiap dana diinvestasikan — untuk rencana tabungan, angka ini melebihi total imbal hasil ÷ periode kalender karena modal diinvestasikan secara bertahap.",
     "avgHeld": "rata-rata",
     "avgHeldTooltip": "Periode kepemilikan rata-rata berbobot modal. Lebih pendek dari periode kalender jika pembelian tersebar dari waktu ke waktu (misalnya rencana tabungan).",

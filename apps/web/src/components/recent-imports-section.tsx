@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ImportRecord } from "@portfolio/api-client";
-import { ImportHistory } from "@/components/import-history";
+import { ImportHistory, isDeadSyncAnchor } from "@/components/import-history";
 import type { PickablePortfolio } from "@/components/portfolio-picker";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,9 @@ export function RecentImportsSection({
   // Collapsed by default — the import history is a secondary audit trail; the user opens
   // it on demand. (Drafts also surface inline in the transactions list as draft rows.)
   const [open, setOpen] = useState(false);
+  // Exclude dead sync anchors — they never render in ImportHistory (even with "Show
+  // completed" on), so counting them here would show a number the list can't back up.
+  const visibleCount = items.filter((i) => !isDeadSyncAnchor(i)).length;
 
   return (
     <div className="space-y-3">
@@ -35,7 +38,7 @@ export function RecentImportsSection({
       >
         {t("title")}
         <span className="font-semibold normal-case tracking-normal text-text-3">
-          ({items.length})
+          ({visibleCount})
         </span>
         <ChevronDown
           className={cn("size-[13px] transition-transform", open && "rotate-180")}

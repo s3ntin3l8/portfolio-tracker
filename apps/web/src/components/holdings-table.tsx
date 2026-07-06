@@ -9,6 +9,11 @@ import {
   TableFooter,
   TableHeader,
   TableRow,
+  TABLE_LABEL,
+  TABLE_SUBLABEL,
+  TABLE_VALUE,
+  TABLE_VALUE_STRONG,
+  TABLE_SUBVALUE,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { MonogramBadge } from "@/components/monogram-badge";
@@ -124,35 +129,35 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                       <div>
                         <Link
                           href={`/instruments/${h.instrumentId}`}
-                          className="text-sm font-bold hover:underline"
+                          className={cn(TABLE_LABEL, "hover:underline")}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {h.instrument?.symbol ?? "—"}
                         </Link>
-                        <div className="text-xs font-medium text-text-2">
+                        <div className={TABLE_SUBLABEL}>
                           {h.instrument?.displayName ?? h.instrument?.name ?? h.instrumentId}
                         </div>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="tabular text-right text-[13px] font-medium">
+                  <TableCell className={TABLE_VALUE}>
                     {formatQuantity(Number(h.quantity), h.instrument?.unit, locale)}
                   </TableCell>
-                  <TableCell className="tabular text-right text-[13px] font-medium text-text-mute">
+                  <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>
                     {native(Number(h.avgCost))}
                   </TableCell>
-                  <TableCell className="tabular text-right text-[13px] font-medium">
+                  <TableCell className={TABLE_VALUE}>
                     {h.price !== null ? native(Number(h.price)) : "—"}
                   </TableCell>
-                  <TableCell className="tabular text-right text-[13px] font-bold">
+                  <TableCell className={TABLE_VALUE_STRONG}>
                     {h.marketValueDisplay !== null
                       ? display(Number(h.marketValueDisplay))
                       : "—"}
                   </TableCell>
-                  <TableCell className={cn("tabular text-right text-[13px] font-bold", pnlColor)}>
+                  <TableCell className={cn(TABLE_VALUE_STRONG, pnlColor)}>
                     {pnl === null ? "—" : formatSignedMoney(pnl, currency, locale)}
                     {pct !== null && (
-                      <div className="text-[11px] font-semibold">
+                      <div className={TABLE_SUBVALUE}>
                         {formatPercent(pct / 100, locale)}
                       </div>
                     )}
@@ -166,18 +171,18 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                   <div className="flex items-center gap-3">
                     <MonogramBadge label={ccy} assetClass="cash" />
                     <div>
-                      <span className="font-medium">{t("cash")}</span>
-                      <div className="text-xs text-muted-foreground">{ccy}</div>
+                      <span className={TABLE_LABEL}>{t("cash")}</span>
+                      <div className={TABLE_SUBLABEL}>{ccy}</div>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
-                <TableCell className="tabular text-right">
+                <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>—</TableCell>
+                <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>—</TableCell>
+                <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>—</TableCell>
+                <TableCell className={TABLE_VALUE_STRONG}>
                   {formatMoney(Number(balance), ccy, locale)}
                 </TableCell>
-                <TableCell className="tabular text-right text-muted-foreground">—</TableCell>
+                <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>—</TableCell>
               </TableRow>
             ))}
           </TableBody>

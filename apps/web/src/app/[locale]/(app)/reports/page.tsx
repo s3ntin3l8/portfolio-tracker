@@ -68,15 +68,18 @@ export default async function ReportsPage({
     const deltaTone: TrendTone =
       deltaPct === null || deltaPct === 0 ? "neutral" : deltaPct > 0 ? "up" : "down";
 
-    // Top two asset classes by income contribution, as a two-segment split bar.
-    const topTwo = [...s.byAssetClass].sort((a, b) => Number(b.total) - Number(a.total)).slice(0, 2);
-    const topSum = topTwo.reduce((sum, c) => sum + Number(c.total), 0);
+    // Realized-to-date vs. forecasted-remainder, same green as the card icon — the
+    // forecast segment is drawn as a diagonal-stripe hatch, matching the "Projected"
+    // segment styling on the Income page's own per-year bar chart.
+    const thisYearAmt = Number(s.thisYear);
+    const forecastFullYearAmt = Number(s.forecastFullYear);
+    const remainingAmt = Math.max(0, forecastFullYearAmt - thisYearAmt);
     const splitBar =
-      topTwo.length === 2 && topSum > 0
-        ? topTwo.map((c, i) => ({
-            pct: (Number(c.total) / topSum) * 100,
-            color: i === 0 ? "var(--color-chart-1)" : "var(--color-chart-3)",
-          }))
+      forecastFullYearAmt > 0
+        ? [
+            { pct: (thisYearAmt / forecastFullYearAmt) * 100, color: ICONS.income.fg },
+            { pct: (remainingAmt / forecastFullYearAmt) * 100, color: ICONS.income.fg, striped: true },
+          ]
         : undefined;
 
     cards.push(
@@ -95,6 +98,7 @@ export default async function ReportsPage({
         caption={t("income.caption")}
         splitBar={splitBar}
         metrics={[
+          { label: t("income.captionEstimated"), value: m(Number(s.forecastFullYear)) },
           { label: t("income.metricTtm"), value: m(Number(s.ttm)) },
           { label: t("income.metricLifetime"), value: m(Number(s.lifetimeTotal)) },
         ]}
@@ -111,7 +115,10 @@ export default async function ReportsPage({
     const m = (n: number) => formatMoney(n, currency, locale);
     const currentYear = new Date().getUTCFullYear();
     const ytdEntry = log.realizedByYear.find((y) => y.year === currentYear);
-    const ytdRealized = ytdEntry ? Number(ytdEntry.amount) : Number(log.totalRealized);
+    // No entry for the current year means no trades closed this year — 0, not the
+    // all-time total (a prior fallback here conflated the two whenever `realizedByYear`
+    // had no current-year row, e.g. every closed trade was from an earlier year).
+    const ytdRealized = ytdEntry ? Number(ytdEntry.amount) : 0;
 
     const closedTrades = log.trades.filter((tr) => tr.status === "closed");
     const winSum = closedTrades
@@ -152,6 +159,7 @@ export default async function ReportsPage({
         caption={t("trades.caption")}
         splitBar={splitBar}
         metrics={[
+          { label: t("trades.metricAllTime"), value: m(Number(log.totalRealized)) },
           {
             label: t("trades.metricAvgHold"),
             value: avgHoldingDays !== null ? t("trades.days", { count: avgHoldingDays }) : "—",

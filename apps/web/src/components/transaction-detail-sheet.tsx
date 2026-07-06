@@ -402,9 +402,9 @@ export function TransactionDetailSheet({
             {tx.instrument?.symbol && (
               <Row label={t("instrument")}>
                 <span>{tx.instrument.symbol}</span>
-                {tx.instrument.name && (
+                {(tx.instrument.displayName ?? tx.instrument.name) && (
                   <span className="block text-[11px] font-medium text-text-2">
-                    {tx.instrument.name}
+                    {tx.instrument.displayName ?? tx.instrument.name}
                   </span>
                 )}
               </Row>

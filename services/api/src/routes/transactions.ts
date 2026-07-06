@@ -430,6 +430,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     coreTxns: CoreTransaction[],
     summary: PortfolioSummary,
     display: string,
+    portfolioIdOf?: (txId: string) => string | undefined,
   ) {
     const now = new Date();
     const incomeTxns = coreTxns.filter((t) => t.type === "dividend" || t.type === "coupon");
@@ -448,6 +449,8 @@ export async function transactionsRoute(app: FastifyInstance) {
       .map((t) => {
         const im = t.instrumentId ? meta.get(t.instrumentId) : undefined;
         return {
+          transactionId: t.id ?? null,
+          portfolioId: (t.id && portfolioIdOf?.(t.id)) ?? null,
           instrumentId: t.instrumentId,
           symbol: im?.symbol ?? null,
           name: im?.name ?? null,
@@ -540,12 +543,12 @@ export async function transactionsRoute(app: FastifyInstance) {
       return holdingsCache.get(key)!.get(instrumentId) ?? "0";
     };
     const pastDivs = enriched.filter((e) => e.type === "dividend");
-    const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now);
 
     // Compute per-instrument share-accumulation rate (shares/month) from the trailing
     // 12 months of buy + savings_plan transactions, excluding "saveback" kind (consistent
-    // with contribution boundary rules). Used by projectNextYearDividends so that a
-    // growing savings plan is reflected in the next-year dividend forecast.
+    // with contribution boundary rules). Used by both projectDividends and
+    // projectNextYearDividends so a growing savings plan is reflected consistently in
+    // the rest-of-year and next-year dividend forecasts.
     const accCutoff = new Date(now);
     accCutoff.setUTCFullYear(accCutoff.getUTCFullYear() - 1);
     const sharesAccumulated = new Map<string, number>();
@@ -568,6 +571,10 @@ export async function transactionsRoute(app: FastifyInstance) {
         String(total / 12), // monthly rate
       ]),
     );
+
+    const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now, {
+      accumulation,
+    });
 
     // Project dividends for the full next calendar year using the cadence/growth engine.
     // applyGrowth uses the per-share YoY multiplier (clamped [0.5, 2.0]) when ≥2 years
@@ -700,6 +707,8 @@ export async function transactionsRoute(app: FastifyInstance) {
         }
       }
       return {
+        transactionId: e.transactionId,
+        portfolioId: e.portfolioId,
         instrumentId: e.instrumentId,
         symbol: e.symbol,
         name: e.name,
@@ -773,7 +782,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         kind: "dividend" as const,
         status: "projected" as const,
         growthApplied: undefined as number | undefined,
-        assumesContributions: undefined as boolean | undefined,
+        assumesContributions: d.assumesContributions,
         perShare: d.perShare,
         quantity: d.quantity,
       })),
@@ -1622,14 +1631,18 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       const summaries = [];
       const allTxns: CoreTransaction[] = [];
+      const txPortfolioId = new Map<string, string>();
       for (const p of pfs) {
         const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
         summaries.push(summary);
         allTxns.push(...coreTxns);
+        for (const t of coreTxns) {
+          if (t.id) txPortfolioId.set(t.id, p.id);
+        }
       }
       const aggregated = aggregatePortfolios(summaries, display);
 
-      return buildIncomeStats(allTxns, aggregated, display);
+      return buildIncomeStats(allTxns, aggregated, display, (txId) => txPortfolioId.get(txId));
     },
   );
 
@@ -1702,7 +1715,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         undefined,
         portfolio.cashCounted,
       );
-      return buildIncomeStats(coreTxns, summary, portfolio.baseCurrency);
+      return buildIncomeStats(coreTxns, summary, portfolio.baseCurrency, () => portfolioId);
     },
   );
 

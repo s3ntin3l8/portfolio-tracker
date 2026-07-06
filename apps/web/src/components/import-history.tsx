@@ -48,6 +48,18 @@ const STATUS_VARIANT: Record<
 };
 
 /**
+ * A connection sync (IBKR/Trade Republic) keeps one permanent zero-item "anchor" row per
+ * connection — provenance for its drafted transactions' importId, not a real import a user
+ * would review. Once it's clean (confirmed, nothing pending) it never renders inside
+ * {@link ImportHistory} (even with "Show completed" on), so callers counting "recent
+ * imports" must exclude it too, or a header count can include rows the list never shows.
+ * A *draft* anchor is left alone: that status means the last sync left an unresolved
+ * attention error the user still needs to see, so it stays visible like any other draft.
+ */
+export const isDeadSyncAnchor = (i: ImportRecord) =>
+  (i.parser === "ibkr" || i.parser === "pytr") && i.count === 0 && i.status === "confirmed";
+
+/**
  * The user's import history with per-row actions: discard a draft, or undo a
  * confirmed import (which removes the transactions it wrote). Discarded rows are
  * shown for the audit trail but carry no action.
@@ -200,12 +212,14 @@ export function ImportHistory({
   }
 
   const discardedIds = items.filter((i) => i.status === "discarded").map((i) => i.id);
-  const confirmedCount = items.filter((i) => i.status === "confirmed").length;
+  const confirmedCount = items.filter(
+    (i) => i.status === "confirmed" && !isDeadSyncAnchor(i),
+  ).length;
   // Hide confirmed rows unless the user opted to show them. Drafts (actionable) and
   // discarded (still have a Clear action) always stay visible.
-  const visibleItems = showCompleted
-    ? items
-    : items.filter((i) => i.status !== "confirmed");
+  const visibleItems = (
+    showCompleted ? items : items.filter((i) => i.status !== "confirmed")
+  ).filter((i) => !isDeadSyncAnchor(i));
 
   // Group visible rows by their upload-step batchId; only batches with ≥2 visible members
   // are rendered as a group (a singleton batch is just a normal row). Newest batch first.
@@ -476,7 +490,9 @@ export function ImportHistory({
             >
               <Icon className="size-3.5" strokeWidth={2} />
             </span>
-            <span className="min-w-0 truncate text-[13px] font-bold">{label}</span>
+            <span className="min-w-0 truncate text-[13px] font-bold" title={label}>
+              {label}
+            </span>
           </span>
         </TableCell>
         <TableCell>
@@ -545,7 +561,9 @@ export function ImportHistory({
           <Icon className="size-5" strokeWidth={1.9} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-bold">{label}</p>
+          <p className="truncate text-[13px] font-bold" title={label}>
+            {label}
+          </p>
           <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-text-2">
             <span className="truncate">
               {sourceLabel} · {shortDf.format(new Date(imp.createdAt))} ·{" "}

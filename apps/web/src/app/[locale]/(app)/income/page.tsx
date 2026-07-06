@@ -16,12 +16,17 @@ import { ReportHeader } from "@/components/report-header";
 import { YieldsTable } from "@/components/income/yields-table";
 import { ByCurrencyTable } from "@/components/income/by-currency-table";
 import {
+  TABLE_LABEL,
+  TABLE_SUBLABEL,
+  TABLE_VALUE_STRONG,
+} from "@/components/ui/table";
+import {
   IncomeEventsTable,
   TimelineColumnHeader,
   type IncomeEventRow,
 } from "@/components/income/income-events-table";
 import { loadIncomeStats } from "@/lib/server-api";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatPercent, cn } from "@/lib/utils";
 
 /** Sum a year's events per currency (income can span currencies). */
 function totalsByCurrency(events: IncomeEventRow[]): Record<string, number> {
@@ -266,16 +271,16 @@ export default async function IncomePage({
                 <div key={c.instrumentId ?? c.symbol ?? "—"} className="space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <div className="min-w-0">
-                      <span className="font-medium">{c.symbol ?? "—"}</span>
+                      <span className={TABLE_LABEL}>{c.symbol ?? "—"}</span>
                       {c.name && (
-                        <span className="ml-2 truncate text-xs text-muted-foreground">
+                        <span className={cn("ml-2 truncate", TABLE_SUBLABEL)}>
                           {c.name}
                         </span>
                       )}
                     </div>
-                    <span className="tabular shrink-0 text-sm">
+                    <span className={cn("shrink-0", TABLE_VALUE_STRONG)}>
                       {m(Number(c.total))}{" "}
-                      <span className="text-muted-foreground">
+                      <span className="text-text-mute">
                         ({formatPercent(c.pct, locale)})
                       </span>
                     </span>

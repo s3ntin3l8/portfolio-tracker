@@ -8,9 +8,13 @@ import {
   TableCell,
   TableHeader,
   TableRow,
+  TABLE_LABEL,
+  TABLE_SUBLABEL,
+  TABLE_VALUE,
+  TABLE_VALUE_STRONG,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatPercent, cn } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 
@@ -42,21 +46,19 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
         {sort(rows).map((y) => (
           <TableRow key={y.instrumentId}>
             <TableCell>
-              <div className="font-medium">{y.symbol}</div>
-              {y.name && (
-                <div className="text-xs text-muted-foreground">{y.name}</div>
-              )}
+              <div className={TABLE_LABEL}>{y.symbol}</div>
+              {y.name && <div className={TABLE_SUBLABEL}>{y.name}</div>}
             </TableCell>
-            <TableCell className="tabular text-right">
+            <TableCell className={TABLE_VALUE_STRONG}>
               {formatMoney(Number(y.trailingIncome), y.currency, locale)}
             </TableCell>
-            <TableCell className="tabular text-right text-muted-foreground">
+            <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>
               {formatMoney(Number(y.marketValue), y.currency, locale)}
             </TableCell>
-            <TableCell className="tabular text-right font-medium">
+            <TableCell className={TABLE_VALUE_STRONG}>
               {y.yield !== null ? formatPercent(Number(y.yield), locale) : "—"}
             </TableCell>
-            <TableCell className="tabular text-right text-muted-foreground">
+            <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>
               {y.yieldOnCost !== null
                 ? formatPercent(Number(y.yieldOnCost), locale)
                 : "—"}
