@@ -13,6 +13,8 @@ vi.mock("recharts", () => ({
     </div>
   ),
   Bar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  useXAxisScale: () => undefined,
+  useYAxisScale: () => undefined,
   Cell: ({
     fill,
     fillOpacity,
@@ -38,7 +40,11 @@ vi.mock("recharts", () => ({
   CartesianGrid: () => null,
 }));
 
-import { IncomeBarChart, ChartTooltip } from "../src/components/charts/income-bar-chart";
+import {
+  IncomeBarChart,
+  IncomeBarChartLegend,
+  ChartTooltip,
+} from "../src/components/charts/income-bar-chart";
 import { IncomeHeatmap } from "../src/components/charts/income-heatmap";
 
 function wrap(ui: React.ReactNode) {
@@ -92,6 +98,15 @@ describe("IncomeBarChart", () => {
     // diagonal-stripe hatch pattern, not a flat fill.
     const projected = cells[4];
     expect(projected).toHaveAttribute("data-fill", "url(#income-projected-stripe)");
+  });
+});
+
+describe("IncomeBarChartLegend", () => {
+  it("renders the Received/Projected/Forecast key", () => {
+    wrap(<IncomeBarChartLegend />);
+    expect(screen.getByText("Received")).toBeInTheDocument();
+    expect(screen.getByText("Projected")).toBeInTheDocument();
+    expect(screen.getByText("Forecast")).toBeInTheDocument();
   });
 });
 

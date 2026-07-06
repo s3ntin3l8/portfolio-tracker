@@ -10,7 +10,7 @@ import {
 import { StatCard } from "@/components/stat-card";
 import { EmptyState } from "@/components/empty-state";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
-import { IncomeBarChart } from "@/components/charts/income-bar-chart";
+import { IncomeBarChart, IncomeBarChartLegend } from "@/components/charts/income-bar-chart";
 import { IncomeHeatmap } from "@/components/charts/income-heatmap";
 import { ReportHeader } from "@/components/report-header";
 import { YieldsTable } from "@/components/income/yields-table";
@@ -223,8 +223,9 @@ export default async function IncomePage({
 
       {s.byYear.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
             <CardTitle>{t("perYearTitle")}</CardTitle>
+            <IncomeBarChartLegend />
           </CardHeader>
           <CardContent>
             <IncomeBarChart data={yearBars} currency={currency} />
