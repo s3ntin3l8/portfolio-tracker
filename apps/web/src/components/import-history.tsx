@@ -553,8 +553,13 @@ export function ImportHistory({
   return (
     <Card>
       {(showTitle || discardedIds.length > 0 || confirmedCount > 0) && (
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          {showTitle ? <CardTitle>{t("title")}</CardTitle> : <span />}
+        <CardHeader
+          className={cn(
+            "flex flex-row items-center gap-2 py-3",
+            showTitle ? "justify-between" : "justify-end",
+          )}
+        >
+          {showTitle && <CardTitle>{t("title")}</CardTitle>}
           <div className="flex items-center gap-1">
             {confirmedCount > 0 && (
               <Button
