@@ -278,17 +278,21 @@ export async function classifyDraftDuplicates(
   return { enrichmentMatches, enrichmentDraftIndices, plainDuplicates };
 }
 
-/** Map a resolved draft + import source to the `transaction_sources.sourceType` value. */
+/**
+ * Map a resolved draft + import source to the `transaction_sources.sourceType` value.
+ * Keep this in sync with `draftSourceType` in `enrichment.ts` — the two must agree, or a
+ * source's provenance rows flip labels depending which path materialized them.
+ */
 function sourceTypeForDraft(d: ParsedTransaction, source: TxSource) {
   const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
   return (
     hasTaxComponents ? "pdf"
     : source === "pytr" ? "pytr"
-    : source === "ibkr" ? "pytr"
+    : source === "ibkr" ? "ibkr"
     : source === "screenshot" ? "screenshot"
     : source === "pdf" ? "pdf"
     : "csv"
-  ) as "pdf" | "pytr" | "screenshot" | "csv" | "manual";
+  ) as "pdf" | "pytr" | "ibkr" | "screenshot" | "csv" | "manual";
 }
 
 /**

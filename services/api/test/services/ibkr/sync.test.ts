@@ -6,6 +6,7 @@ import {
   portfolios,
   screenshotImports,
   transactions,
+  transactionSources,
   trResolvedEvents,
   users,
 } from "@portfolio/db";
@@ -160,6 +161,24 @@ describe("syncIbkrConnection", () => {
     const row = result.reconciliation!.cash[0]!;
     expect(row.currency).toBe("EUR");
     expect(row.diff).toBe("0.00");
+  });
+
+  it("tags materialized transaction_sources rows sourceType='ibkr' (not 'pytr')", async () => {
+    const { conn } = await makeConnection("t11", { baseCurrency: "EUR", cashCounted: true });
+    await syncIbkrConnection(getDb(), enc, mockFlex(OPENING_EMPTY_XML), conn);
+
+    const [draftTx] = await getDb()
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")));
+    expect(draftTx).toBeDefined();
+
+    const sourceRows = await getDb()
+      .select({ sourceType: transactionSources.sourceType })
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, draftTx!.id));
+    expect(sourceRows).toHaveLength(1);
+    expect(sourceRows[0]!.sourceType).toBe("ibkr");
   });
 
   it("books the opening balance only once across repeated syncs", async () => {
