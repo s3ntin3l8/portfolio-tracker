@@ -348,10 +348,16 @@ _DATE_RE = re.compile(r"^\d{1,2}\.\d{2}\.\d{4}$")
 def _extract_tax(details):
     """Tax withheld/corrected (Steuer/Steuern/Steuerkorrektur), signed as TR shows it.
 
+    Summed across every matching row rather than returning the first: a payout can
+    legitimately carry more than one 'Steuer'-titled line (e.g. a foreign Quellensteuer
+    row alongside a domestic Kapitalertragsteuer row), and only summing the first would
+    silently drop the rest.
+
     Guard: reject rows whose text looks like a date (DD.MM.YYYY). `_num` would otherwise
     parse '19.12.2024' as 19122024 — stripping the dots yields an 8-digit integer that
     masquerades as a tax amount.
     """
+    total = None
     for title, text in _walk_rows(details or {}):
         if "steuer" in title:
             stripped = text.strip()
@@ -359,8 +365,8 @@ def _extract_tax(details):
                 continue  # skip date-like values (Buchungsdatum etc.)
             value = _num(stripped)
             if value is not None:
-                return value
-    return None
+                total = value if total is None else total + value
+    return total
 
 
 def _extract_fx(details):

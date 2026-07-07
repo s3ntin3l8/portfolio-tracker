@@ -334,6 +334,16 @@ class TestFieldExtractors:
         ]}]}
         assert tx._extract_tax(details_date_only) is None
 
+    def test_tax_sums_multiple_rows(self):
+        # A payout can carry more than one '...steuer'-titled row (e.g. foreign
+        # Quellensteuer alongside domestic Kapitalertragsteuer) — all should be summed,
+        # not just the first one found.
+        details_multi_tax = {"sections": [{"type": "table", "data": [
+            {"title": "Quellensteuer", "detail": {"text": "-0,12 €"}},
+            {"title": "Kapitalertragsteuer", "detail": {"text": "-0,25 €"}},
+        ]}]}
+        assert tx._extract_tax(details_multi_tax) == -0.37
+
     def test_fx_from_wechselkurs(self):
         # '1 $ 0,84492 €' → the EUR-per-foreign rate, ignoring the leading '1 $'.
         assert tx._extract_fx(DIV_DETAIL) == 0.84492

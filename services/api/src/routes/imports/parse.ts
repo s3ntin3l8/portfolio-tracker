@@ -1,7 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq, inArray, ne } from "drizzle-orm";
-import { loans, portfolios, screenshotImports, transactions } from "@portfolio/db";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import {
+  loans,
+  portfolios,
+  screenshotImports,
+  transactionSources,
+  transactions,
+} from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
 import { parsedTransactionSchema } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
@@ -24,7 +30,12 @@ import {
 } from "../../services/parsers/dedup.js";
 import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
-import { storeReceipt, finalizeReceipts } from "../../storage/receipts.js";
+import {
+  storeReceipt,
+  finalizeReceipts,
+  retainDocumentForTransaction,
+  getDocumentForImport,
+} from "../../storage/receipts.js";
 import { materializeDrafts } from "../../services/materialize-drafts.js";
 import { isCashMovementAction } from "../../services/pytr/mapper.js";
 import {
@@ -311,7 +322,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     drafts: ParsedTransaction[];
     parserTag: string;
     targetPortfolioId: string;
-  }): Promise<{ materialized: number; excludedCashMovements: number }> {
+  }): Promise<{ materialized: number; excludedCashMovements: number; enriched: number }> {
     const { imp, drafts, parserTag, targetPortfolioId } = opts;
     const [pf] = await app.db
       .select({
@@ -350,6 +361,31 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       .set({ portfolioId: targetPortfolioId, status: "confirmed" })
       .where(eq(screenshotImports.id, imp.id));
 
+    const retain = pf?.documentRetention ?? false;
+
+    // Link the staged PDF to every matched pre-existing transaction (dedup/enrichment case)
+    // BEFORE finalizing receipts — mirrors the interactive /confirm route's auto-enrich step
+    // (#259 orphan fix), which this deterministic-parser path otherwise skips: without this,
+    // a PDF that matches an already-existing transaction gets its tax/fee detail folded in
+    // (materializeDrafts always does that) but the document itself never surfaces on that
+    // transaction, since it's outside the current import. Best-effort, same as confirm.ts.
+    if (retain && res.matchedTransactionIds.length > 0) {
+      for (const matchedTransactionId of res.matchedTransactionIds) {
+        try {
+          await retainDocumentForTransaction(app, {
+            importId: imp.id,
+            transactionId: matchedTransactionId,
+            portfolioId: targetPortfolioId,
+          });
+        } catch (err) {
+          app.log.warn(
+            { err, importId: imp.id, matchedTransactionId },
+            "retainDocumentForTransaction failed after materialize (non-fatal)",
+          );
+        }
+      }
+    }
+
     // Finalize the staged receipt now (retain per portfolio setting) — the old confirm-time
     // finalization no longer runs for this path. Best-effort: per-doc failures already log
     // inside finalizeReceipts; guard the bulk path too so it can't unwind a confirmed import.
@@ -357,7 +393,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       await finalizeReceipts(app, {
         importId: imp.id,
         portfolioId: targetPortfolioId,
-        retain: pf?.documentRetention ?? false,
+        retain,
       });
     } catch (err) {
       app.log.warn(
@@ -366,7 +402,32 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       );
     }
 
-    return { materialized: res.written.length, excludedCashMovements };
+    // For DKB/TR-PDF imports: link every source row (both newly-written and enrichment
+    // matches) to the retained document so the per-source download button works — mirrors
+    // /confirm's equivalent backfill. The document is always a single file per import.
+    if ((parserTag === "dkb-pdf" || parserTag === "tr-pdf") && retain) {
+      try {
+        const retainedDoc = await getDocumentForImport(app, imp.id);
+        if (retainedDoc) {
+          await app.db
+            .update(transactionSources)
+            .set({ documentId: retainedDoc.id })
+            .where(
+              and(
+                eq(transactionSources.importId, imp.id),
+                isNull(transactionSources.documentId),
+              ),
+            );
+        }
+      } catch (err) {
+        app.log.warn(
+          { err, importId: imp.id },
+          "materialize: failed to link PDF source rows to document (non-fatal)",
+        );
+      }
+    }
+
+    return { materialized: res.written.length, excludedCashMovements, enriched: res.enriched };
   }
 
   // Parse a CSV into draft transactions and store them as a draft import.
@@ -872,6 +933,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         portfolioId,
         materializedCount: mat.materialized,
         excludedCashMovements: mat.excludedCashMovements,
+        enrichedCount: mat.enriched,
       };
     },
   );

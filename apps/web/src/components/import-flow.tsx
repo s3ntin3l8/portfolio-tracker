@@ -171,12 +171,12 @@ export interface ImportClient {
     portfolioId?: string,
     acknowledgeAccountMismatch?: boolean,
     acknowledgeDuplicates?: boolean,
-  ): Promise<{ confirmed: number; excludedCashMovements?: number }>;
+  ): Promise<{ confirmed: number; excludedCashMovements?: number; enriched?: number }>;
   materializeImport(
     importId: string,
     portfolioId: string,
     acknowledgeAccountMismatch?: boolean,
-  ): Promise<{ materializedCount: number; excludedCashMovements: number }>;
+  ): Promise<{ materializedCount: number; excludedCashMovements: number; enrichedCount: number }>;
   /** Read-only pre-flight: which of these (importId, portfolioId) units conflict on account? */
   checkAccounts(
     units: MaterializeUnit[],
@@ -253,7 +253,11 @@ const demoClient: ImportClient = {
   confirmImport: async (_id, drafts, contracts) => ({
     confirmed: drafts.length + (contracts?.length ?? 0),
   }),
-  materializeImport: async () => ({ materializedCount: 0, excludedCashMovements: 0 }),
+  materializeImport: async () => ({
+    materializedCount: 0,
+    excludedCashMovements: 0,
+    enrichedCount: 0,
+  }),
   checkAccounts: async () => ({ mismatches: [] }),
 };
 

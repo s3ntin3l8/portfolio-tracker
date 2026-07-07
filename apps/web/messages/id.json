@@ -519,6 +519,7 @@
       "success": "{count, plural, one {# transaksi diimpor} other {# transaksi diimpor}}",
       "successOfTotal": "Mengimpor {count} dari {total} transaksi",
       "excluded": "{count, plural, one {# pergerakan kas dikecualikan} other {# pergerakan kas dikecualikan}} — kas berada di luar batas portofolio ini.",
+      "enriched": "{count, plural, one {# cocok dengan transaksi yang sudah ada — detail digabungkan} other {# cocok dengan transaksi yang sudah ada — detail digabungkan}}",
       "skipped": "{count, plural, one {# duplikat dilewati} other {# duplikat dilewati}}",
       "error": "Impor gagal",
       "retry": "Coba lagi",

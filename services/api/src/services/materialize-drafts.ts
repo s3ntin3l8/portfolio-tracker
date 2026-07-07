@@ -424,10 +424,18 @@ export async function materializeDrafts(
   skipped: number;
   enriched: number;
   collapsed: string[];
+  matchedTransactionIds: string[];
 }> {
   const { drafts, targetPortfolioId, source, importId, status, isEu } = args;
   if (drafts.length === 0)
-    return { written: [], attempted: 0, skipped: 0, enriched: 0, collapsed: [] };
+    return {
+      written: [],
+      attempted: 0,
+      skipped: 0,
+      enriched: 0,
+      collapsed: [],
+      matchedTransactionIds: [],
+    };
 
   const resolved = await resolveDraftInstruments(ctx, drafts, { isEu });
   const { enrichmentMatches, plainDuplicates } = await classifyDraftDuplicates(ctx, {
@@ -464,6 +472,7 @@ export async function materializeDrafts(
   // can mark them resolved and not re-process them next sync.
   let enriched = 0;
   const collapsed: string[] = [];
+  const matchedTransactionIds = new Set<string>();
   for (const { draftIndex, matchedTransactionId } of allMatches) {
     const draft = resolved[draftIndex].draft;
     try {
@@ -472,11 +481,19 @@ export async function materializeDrafts(
         importSource: source,
       });
       enriched++;
+      matchedTransactionIds.add(matchedTransactionId);
     } catch (err) {
       ctx.log?.warn({ err, matchedTransactionId }, "materializeDrafts: enrichment failed (non-fatal)");
     }
     if (draft.externalId) collapsed.push(draft.externalId);
   }
 
-  return { written, attempted, skipped, enriched, collapsed };
+  return {
+    written,
+    attempted,
+    skipped,
+    enriched,
+    collapsed,
+    matchedTransactionIds: [...matchedTransactionIds],
+  };
 }

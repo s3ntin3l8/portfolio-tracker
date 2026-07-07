@@ -23,6 +23,9 @@ interface TransactionSourcesSectionProps {
   hasFullTaxDetail: boolean;
   /** When true the section is read-only (no download buttons). Defaults to false. */
   readOnly?: boolean;
+  /** When false, hides the per-source tax-component footnote — set by callers that
+   *  promote the same breakdown into their own Details fields instead. Defaults to true. */
+  showTaxBreakdown?: boolean;
 }
 
 /**
@@ -43,6 +46,7 @@ export function TransactionSourcesSection({
   sources,
   hasFullTaxDetail,
   readOnly = false,
+  showTaxBreakdown = true,
 }: TransactionSourcesSectionProps) {
   const t = useTranslations("Transactions");
   const locale = useLocale();
@@ -97,7 +101,7 @@ export function TransactionSourcesSection({
                   {t("sourcesSection.importedAt", { date: df.format(new Date(src.createdAt)) })}
                   {src.filename ? ` · ${src.filename}` : ""}
                 </p>
-                {tcEntries.length > 0 && (
+                {showTaxBreakdown && tcEntries.length > 0 && (
                   <p className="mt-0.5 text-[11px] font-semibold text-[#0E9F6E]">
                     {tcEntries
                       .map(([k, v]) => `${TAX_COMPONENT_LABELS[k] ?? k}: ${v}`)

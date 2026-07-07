@@ -36,9 +36,18 @@ interface WriteProgress {
   count: number;
   /** Cash movements excluded so far (boundary), carried into the toast description. */
   excluded: number;
+  /** Drafts that matched an existing transaction and had their detail folded in (source
+   *  provenance + tax/fee/venue rollup) rather than being dropped — carried so the toast
+   *  can say "merged" instead of implying they were discarded. */
+  enriched: number;
 }
 
-const emptyProgress = (): WriteProgress => ({ doneImportIds: [], count: 0, excluded: 0 });
+const emptyProgress = (): WriteProgress => ({
+  doneImportIds: [],
+  count: 0,
+  excluded: 0,
+  enriched: 0,
+});
 
 /** Monotonic toast-id source so concurrent imports get independent toasts (no throwaway paint). */
 let toastSeq = 0;
@@ -85,6 +94,7 @@ async function materializeUnits(
         importId: unit.importId,
         count: r.materializedCount,
         excluded: r.excludedCashMovements,
+        enriched: r.enrichedCount,
       };
     } catch (err) {
       return { ok: false as const, importId: unit.importId, err };
@@ -94,12 +104,13 @@ async function materializeUnits(
   const ok = outcomes.filter((o) => o.ok);
   const count = ok.reduce((s, o) => s + (o.ok ? o.count : 0), 0);
   const excluded = ok.reduce((s, o) => s + (o.ok ? o.excluded : 0), 0);
+  const enriched = ok.reduce((s, o) => s + (o.ok ? o.enriched : 0), 0);
   const doneImportIds = ok.map((o) => o.importId);
   const failed = outcomes.find((o) => !o.ok);
   if (failed && !failed.ok) {
-    throw new PartialWriteError(failed.err, { doneImportIds, count, excluded });
+    throw new PartialWriteError(failed.err, { doneImportIds, count, excluded, enriched });
   }
-  return { count, excluded, doneImportIds };
+  return { count, excluded, enriched, doneImportIds };
 }
 
 /**
@@ -126,6 +137,7 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
       try {
         let count = carry.count;
         let excluded = carry.excluded;
+        let enriched = carry.enriched;
 
         if (task.kind === "materialize") {
           const allUnits = task.units ?? [];
@@ -150,6 +162,7 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
           );
           count += r.count;
           excluded += r.excluded;
+          enriched += r.enriched;
         } else {
           const r = await client.confirmImport(
             task.importId ?? "",
@@ -160,15 +173,19 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
           );
           count += r.confirmed;
           excluded += r.excludedCashMovements ?? 0;
+          enriched += r.enriched ?? 0;
         }
         router.refresh(); // surface the new transactions on whatever screen is open
 
-        // "Imported X of Y" when some drafts didn't land; split the gap into cash
-        // (excluded by the portfolio's boundary) vs duplicates the server collapsed.
+        // "Imported X of Y" when some drafts didn't land; split the gap into cash (excluded
+        // by the portfolio's boundary), matches that got merged into an existing transaction
+        // (not dropped — the server already tells us this count, see `enriched`), and only
+        // whatever's left over as genuine duplicates.
         const expected = task.expectedCount;
         const shortfall = expected != null ? Math.max(0, expected - count) : 0;
         const cash = excluded;
-        const dups = Math.max(0, shortfall - cash);
+        const merged = Math.min(Math.max(0, shortfall - cash), enriched);
+        const dups = Math.max(0, shortfall - cash - merged);
         const message =
           shortfall > 0
             ? t("toast.successOfTotal", { count, total: expected! })
@@ -176,6 +193,7 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
         const description =
           [
             cash > 0 ? t("toast.excluded", { count: cash }) : null,
+            merged > 0 ? t("toast.enriched", { count: merged }) : null,
             dups > 0 ? t("toast.skipped", { count: dups }) : null,
           ]
             .filter(Boolean)
@@ -199,6 +217,7 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
               doneImportIds: [...carry.doneImportIds, ...partial.progress.doneImportIds],
               count: carry.count + partial.progress.count,
               excluded: carry.excluded + partial.progress.excluded,
+              enriched: carry.enriched + partial.progress.enriched,
             }
           : carry;
 

@@ -127,6 +127,35 @@ const SRC_TONES: Record<string, React.CSSProperties> = {
   manual: { background: "var(--border)", color: "var(--text-mute)" },
 };
 
+/** Distinct source types backing a row's provenance chips — one chip per source (e.g. a
+ *  CSV row later enriched by a PDF shows both), falling back to the single legacy `source`
+ *  field when there's no `sources[]` breakdown (manual entries, or pre-provenance data). */
+function sourceTypesFor(tx: TxRow): string[] {
+  const types = (tx.sources ?? []).map((s) => s.sourceType).filter(Boolean);
+  return types.length > 0 ? [...new Set(types)] : [tx.source];
+}
+
+/** One tinted pill per distinct source type on a row (see {@link sourceTypesFor}). */
+function SourceChips({
+  tx,
+  t,
+  chipClassName,
+}: {
+  tx: TxRow;
+  t: (key: `sources.${string}`) => string;
+  chipClassName: string;
+}) {
+  return (
+    <>
+      {sourceTypesFor(tx).map((type) => (
+        <span key={type} className={chipClassName} style={SRC_TONES[type] ?? SRC_TONES.manual}>
+          {t(`sources.${type}`)}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function TypeIconChip({ type, className }: { type: string; className?: string }) {
   const entry = TYPE_ICON[type];
   if (!entry) return null;
@@ -312,6 +341,12 @@ export function TransactionsTable({
   if (showFlagged && flaggedCount === 0) {
     setShowFlagged(false);
   }
+  // Same reset for the "Needs review · N" chip: it only renders while flaggedCount > 0
+  // (see below), so leaving chipFilter on "issues" after the last anomaly is dismissed
+  // would strand the user on an empty table with no visible way back to "all".
+  if (chipFilter === "issues" && flaggedCount === 0) {
+    setChipFilter("all");
+  }
   // Id of a single row currently being confirmed/discarded (shows a spinner on that row).
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
@@ -381,6 +416,17 @@ export function TransactionsTable({
           r.source.toLowerCase().includes(q)),
     );
   }, [rows, showFlagged, anomalyByTxId, draftFilter, chipFilter, yearFilter, query, tt]);
+
+  // Whether any picker/search is narrowing the view, so the empty state can distinguish
+  // "no transactions at all" from "no transactions match the current filter" — covers the
+  // chip filter too, not just search/showFlagged, so an "issues"/"buy"/etc. filter with no
+  // matches doesn't show the misleading "no transactions yet" copy.
+  const hasActiveFilter =
+    query.trim().length > 0 ||
+    showFlagged ||
+    chipFilter !== "all" ||
+    yearFilter !== "all" ||
+    draftFilter !== "all";
 
   // Which filter-scoped summary banner (if any) to show above the list — keyed directly
   // off the reference-style chip filter (All/Buys/Sells/Income).
@@ -1130,12 +1176,13 @@ export function TransactionsTable({
                     {Number(tx.quantity) > 0 ? m(Number(tx.price), tx.currency) : "—"}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
-                    <span
-                      className="inline-flex items-center whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[9px] font-bold uppercase"
-                      style={SRC_TONES[tx.source] ?? SRC_TONES.manual}
-                    >
-                      {t(`sources.${tx.source}`)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <SourceChips
+                        tx={tx}
+                        t={t}
+                        chipClassName="inline-flex items-center whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[9px] font-bold uppercase"
+                      />
+                    </div>
                   </TableCell>
                   <TableCell
                     className={`tabular text-right text-sm font-bold ${netAmount > 0 ? "text-success" : ""}`}
@@ -1152,7 +1199,7 @@ export function TransactionsTable({
                   colSpan={colSpan}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
-                  {query.trim() || showFlagged ? t("noResults") : t("empty")}
+                  {hasActiveFilter ? t("noResults") : t("empty")}
                 </TableCell>
               </TableRow>
             )}
@@ -1223,11 +1270,12 @@ export function TransactionsTable({
                       </div>
                       <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-text-2">
                         <span className="truncate">{sub}</span>
-                        <span
-                          className="inline-flex shrink-0 items-center whitespace-nowrap rounded-[6px] px-1.5 py-[2px] text-[9px] font-bold uppercase"
-                          style={SRC_TONES[tx.source] ?? SRC_TONES.manual}
-                        >
-                          {t(`sources.${tx.source}`)}
+                        <span className="flex shrink-0 flex-wrap items-center gap-1">
+                          <SourceChips
+                            tx={tx}
+                            t={t}
+                            chipClassName="inline-flex shrink-0 items-center whitespace-nowrap rounded-[6px] px-1.5 py-[2px] text-[9px] font-bold uppercase"
+                          />
                         </span>
                       </div>
                     </div>
@@ -1247,7 +1295,7 @@ export function TransactionsTable({
         ))}
         {visibleRows.length === 0 && (
           <div className="rounded-[20px] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
-            {query.trim() || showFlagged ? t("noResults") : t("empty")}
+            {hasActiveFilter ? t("noResults") : t("empty")}
           </div>
         )}
       </div>

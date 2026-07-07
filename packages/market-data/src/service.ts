@@ -43,9 +43,13 @@ export class MarketDataService {
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
     for (const provider of this.providersFor(ref.assetClass, ref.market)) {
-      this.opts.onCall?.(provider.name);
-      const quote = await provider.getQuote(ref);
-      if (quote) return quote;
+      try {
+        this.opts.onCall?.(provider.name);
+        const quote = await provider.getQuote(ref);
+        if (quote) return quote;
+      } catch {
+        // A failing/timing-out provider shouldn't block the fallback chain — try the next.
+      }
     }
     return null;
   }

@@ -273,6 +273,45 @@ describe("MarketDataService", () => {
     expect((await svc.getHistory(bbca, "1mo"))[0].close).toBe("9999");
   });
 
+  it("falls through to the next provider when the primary throws (e.g. a network timeout)", async () => {
+    const flaky: MarketDataProvider = {
+      name: "flaky",
+      supports: (ac) => ac === "equity",
+      getQuote: async () => {
+        throw new Error("fetch failed: Connect Timeout Error");
+      },
+    };
+    const fallback: MarketDataProvider = {
+      name: "fallback",
+      supports: (ac) => ac === "equity",
+      getQuote: async (ref) => ({
+        price: "9999",
+        currency: ref.currency,
+        asOf: "2026-02-08T00:00:00.000Z",
+      }),
+    };
+    const svc = new MarketDataService([flaky, fallback]);
+    expect((await svc.getQuote(bbca))?.price).toBe("9999");
+  });
+
+  it("getQuotes drops a throwing instrument instead of rejecting the whole batch", async () => {
+    const flaky: MarketDataProvider = {
+      name: "flaky",
+      supports: (ac) => ac === "equity",
+      getQuote: async (ref) => {
+        if (ref.symbol === "BBCA") throw new Error("fetch failed: Connect Timeout Error");
+        return { price: "9500", currency: ref.currency, asOf: "2026-02-08T00:00:00.000Z" };
+      },
+    };
+    const svc = new MarketDataService([flaky]);
+    const quotes = await svc.getQuotes([
+      { id: "i1", ref: bbca },
+      { id: "i2", ref: { ...bbca, symbol: "TLKM" } },
+    ]);
+    expect(quotes.i1).toBeUndefined();
+    expect(quotes.i2.price).toBe("9500");
+  });
+
   const result = (over: Partial<InstrumentSearchResult>): InstrumentSearchResult => ({
     symbol: "BBCA",
     name: "Bank Central Asia",

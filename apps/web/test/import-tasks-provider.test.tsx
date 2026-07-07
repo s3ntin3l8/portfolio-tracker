@@ -35,7 +35,7 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importScreenshot: vi.fn(),
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-    materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0 })),
+    materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 })),
     checkAccounts: vi.fn(async () => ({ mismatches: [] })),
     ...overrides,
   };
@@ -99,8 +99,8 @@ describe("ImportTasksProvider", () => {
   it("materialize: sums counts across units and resolves the toast to success", async () => {
     const materializeImport = vi
       .fn()
-      .mockResolvedValueOnce({ materializedCount: 2, excludedCashMovements: 0 })
-      .mockResolvedValueOnce({ materializedCount: 3, excludedCashMovements: 0 });
+      .mockResolvedValueOnce({ materializedCount: 2, excludedCashMovements: 0, enrichedCount: 0 })
+      .mockResolvedValueOnce({ materializedCount: 3, excludedCashMovements: 0, enrichedCount: 0 });
     h.client = makeClient({ materializeImport });
 
     renderRunner(
@@ -149,7 +149,7 @@ describe("ImportTasksProvider", () => {
   it("reports 'X of Y' and splits the gap into excluded cash + skipped duplicates", async () => {
     // Expected 12, server materializes 9 with 1 cash excluded → 2 duplicates skipped.
     h.client = makeClient({
-      materializeImport: vi.fn(async () => ({ materializedCount: 9, excludedCashMovements: 1 })),
+      materializeImport: vi.fn(async () => ({ materializedCount: 9, excludedCashMovements: 1, enrichedCount: 0 })),
     });
     renderRunner(materializeTask({ expectedCount: 12 }));
 
@@ -164,7 +164,7 @@ describe("ImportTasksProvider", () => {
 
   it("surfaces excluded cash movements in the success description", async () => {
     h.client = makeClient({
-      materializeImport: vi.fn(async () => ({ materializedCount: 4, excludedCashMovements: 2 })),
+      materializeImport: vi.fn(async () => ({ materializedCount: 4, excludedCashMovements: 2, enrichedCount: 0 })),
     });
 
     renderRunner(materializeTask());
@@ -179,7 +179,7 @@ describe("ImportTasksProvider", () => {
     const materializeImport = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error("x"), { status: 503 }))
-      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 });
     h.client = makeClient({ materializeImport });
 
     renderRunner(materializeTask());
@@ -219,7 +219,7 @@ describe("ImportTasksProvider", () => {
     const materializeImport = vi
       .fn()
       .mockRejectedValueOnce(Object.assign(new Error("unauthorized"), { status: 401 }))
-      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 });
     h.client = makeClient({ materializeImport });
     renderRunner(materializeTask());
 
@@ -250,10 +250,10 @@ describe("ImportTasksProvider", () => {
   it("partial failure → Retry resumes only the un-written units and totals correctly", async () => {
     let impBCalls = 0;
     const materializeImport = vi.fn(async (importId: string) => {
-      if (importId === "imp-a") return { materializedCount: 2, excludedCashMovements: 0 };
+      if (importId === "imp-a") return { materializedCount: 2, excludedCashMovements: 0, enrichedCount: 0 };
       impBCalls++;
       if (impBCalls === 1) throw Object.assign(new Error("x"), { status: 401 });
-      return { materializedCount: 3, excludedCashMovements: 0 };
+      return { materializedCount: 3, excludedCashMovements: 0, enrichedCount: 0 };
     });
     h.client = makeClient({ materializeImport });
 
@@ -296,7 +296,7 @@ describe("ImportTasksProvider", () => {
           }),
         ),
       )
-      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0 });
+      .mockResolvedValueOnce({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 });
     h.client = makeClient({ materializeImport });
 
     renderRunner(materializeTask());

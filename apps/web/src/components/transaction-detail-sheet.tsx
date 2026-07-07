@@ -37,7 +37,10 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { BrokerageIcon } from "@/components/brokerage-icon";
-import { TransactionSourcesSection } from "@/components/transaction-sources-section";
+import {
+  TransactionSourcesSection,
+  TAX_COMPONENT_LABELS,
+} from "@/components/transaction-sources-section";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cn, formatMoney, formatSignedMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
@@ -206,6 +209,16 @@ export function TransactionDetailSheet({
   const status = tx.status ?? "normal";
   const canReassign = portfolios.length > 1;
   const hasSources = (tx.sources?.length ?? 0) > 0;
+  // Merged per-component tax breakdown across every source row (union of keys, later source
+  // wins on overlap — same rule the server's cross-source merge uses). Promoted into its own
+  // Details rows below instead of the sources-section footnote (see `showTaxBreakdown` below).
+  const mergedTaxComponents = (tx.sources ?? []).reduce<Record<string, string>>((acc, s) => {
+    if (s.taxComponents) Object.assign(acc, s.taxComponents);
+    return acc;
+  }, {});
+  const taxComponentEntries = Object.entries(mergedTaxComponents).filter(
+    ([, v]) => v && Number(v) !== 0,
+  );
   // The legacy per-transaction receipt only shows when no source row carries its own doc.
   const showReceipt = tx.hasDocument && !tx.sources?.some((s) => s.hasDocument);
   // The owning account/portfolio — resolve the full record via the portfolios prop (for
@@ -428,6 +441,11 @@ export function TransactionDetailSheet({
             )}
             <Row label={t("currency")}>{tx.currency}</Row>
             {tx.fxRate && <Row label={t("fxRate")}>{Number(tx.fxRate).toFixed(4)}</Row>}
+            {taxComponentEntries.map(([key, value]) => (
+              <Row key={key} label={TAX_COMPONENT_LABELS[key] ?? key}>
+                {m(Number(value), tx.currency)}
+              </Row>
+            ))}
             {/* Source is only surfaced here when there are no provenance rows below. */}
             {!hasSources && (
               <Row label={t("source")}>
@@ -447,6 +465,7 @@ export function TransactionDetailSheet({
                 txId={tx.id}
                 sources={tx.sources!}
                 hasFullTaxDetail={tx.hasFullTaxDetail ?? false}
+                showTaxBreakdown={false}
               />
             </div>
           )}

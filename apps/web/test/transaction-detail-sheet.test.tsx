@@ -253,6 +253,33 @@ describe("TransactionDetailSheet", () => {
     expect(screen.queryByText("dkb:12345")).toBeNull();
   });
 
+  it("promotes the per-source tax breakdown into Details rows, not the sources-section footnote", () => {
+    const txWithTaxComponents = {
+      ...TX,
+      currency: "EUR",
+      hasDocument: true,
+      sources: [
+        {
+          id: "src-tax",
+          sourceType: "pdf",
+          externalId: "dkb:msft",
+          orderRef: null,
+          documentId: "doc-1",
+          taxComponents: { quellensteuer: "0.12" },
+          createdAt: "2026-03-15T00:00:00.000Z",
+          filename: "settlement.pdf",
+          hasDocument: true,
+        },
+      ],
+    };
+    renderSheet({ tx: txWithTaxComponents });
+    // Promoted as a labelled Details row.
+    const qstRow = screen.getByText("QSt").closest("div");
+    expect(qstRow).toHaveTextContent("€0.12");
+    // Not duplicated as the old footnote under the source row.
+    expect(screen.queryByText(/QSt: 0.12/)).toBeNull();
+  });
+
   it("hides the top-level Source field when source rows exist, shows it for manual (no sources)", () => {
     // Manual transaction (no source rows) → top-level Source field is shown.
     renderSheet();

@@ -519,6 +519,7 @@
       "success": "{count, plural, one {# transaction imported} other {# transactions imported}}",
       "successOfTotal": "Imported {count} of {total} transactions",
       "excluded": "{count, plural, one {# cash movement excluded} other {# cash movements excluded}} — cash is outside this portfolio's boundary.",
+      "enriched": "{count, plural, one {# matched an existing transaction — details merged in} other {# matched existing transactions — details merged in}}",
       "skipped": "{count, plural, one {# duplicate skipped} other {# duplicates skipped}}",
       "error": "Import failed",
       "retry": "Retry",

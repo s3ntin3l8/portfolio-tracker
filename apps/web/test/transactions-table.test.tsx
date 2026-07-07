@@ -1148,6 +1148,12 @@ describe("TransactionsTable", () => {
       );
       expect(screen.getByText(messages.Anomalies.reconciliationTitle)).toBeInTheDocument();
       expect(screen.getByText(messages.Anomalies.portfolioTag)).toBeInTheDocument();
+      // meta fields must interpolate into the detail string (regression: previously
+      // `codes.reconciliation_gap` was rendered with no values, throwing next-intl's
+      // FORMATTING_ERROR).
+      expect(
+        screen.getByText("Cash reconciliation gap vs. broker (EUR: reported 100, derived 98)"),
+      ).toBeInTheDocument();
       // No transaction-scoped anomaly → no "Show flagged" toggle, yet the recon banner shows.
       expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });

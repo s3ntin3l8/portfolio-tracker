@@ -46,8 +46,10 @@ export type AnomalyTranslator = (key: string, values?: Record<string, string>) =
 
 /**
  * Localized label/tooltip for a transaction-scoped anomaly. For `negative_cash` it folds the
- * formatted cash balance (and its currency) into the message; every other code uses the bare
- * localized string. Shared by the transactions table tooltip and the detail sheet.
+ * formatted cash balance (and its currency) into the message; `reconciliation_gap`,
+ * `reconciliation_drift` and `position_gap` interpolate their raw `meta` fields (currency/isin,
+ * reported, derived, …) as-is — every other code uses the bare localized string. Shared by the
+ * transactions table tooltip and the detail sheet.
  */
 export function anomalyLabel(
   anomaly: { code: string; meta?: Record<string, unknown> | null },
@@ -60,6 +62,13 @@ export function anomalyLabel(
       currency,
       balance: formatMoney(Number(anomaly.meta.balance), currency, locale),
     });
+  }
+  if (anomaly.meta) {
+    const values: Record<string, string> = {};
+    for (const [key, value] of Object.entries(anomaly.meta)) {
+      values[key] = String(value);
+    }
+    return ta(`codes.${anomaly.code}`, values);
   }
   return ta(`codes.${anomaly.code}`);
 }
