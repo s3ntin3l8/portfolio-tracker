@@ -1078,6 +1078,7 @@
       "confirmDrafts": "Konfirmasi yang dipilih",
       "discardDrafts": "Buang yang dipilih",
       "reassign": "Pindahkan…",
+      "merge": "Gabungkan…",
       "loadMore": "Muat lainnya",
       "showingCount": "Menampilkan {shown} dari {total}"
     },
@@ -1093,6 +1094,24 @@
       "success": "{count, plural, one {# transaksi dipindahkan} other {# transaksi dipindahkan}}.",
       "successWithSkips": "{moved} dipindahkan; {skipped} dilewati karena sudah ada di tujuan.",
       "none": "Tidak ada yang dipindahkan — sudah ada di portofolio tujuan."
+    },
+    "merge": {
+      "title": "Gabungkan transaksi duplikat",
+      "description": "Pilih transaksi mana yang bertahan. Tanggal, kuantitas, dan harganya yang berlaku; dokumen dan detail dari transaksi lain digabungkan, dan biaya/pajak dihitung ulang dari sumber yang lebih lengkap.",
+      "survives": "Bertahan",
+      "previewTitle": "Hasil gabungan",
+      "previewLine": "{quantity} @ {price} · {date}",
+      "previewFees": "Biaya {fees}",
+      "previewDocuments": "{count, plural, one {# dokumen terlampir} other {# dokumen terlampir}}",
+      "cancel": "Batal",
+      "confirm": "Gabungkan",
+      "blocked": {
+        "not_found": "Salah satu transaksi ini sudah tidak ditemukan.",
+        "same_transaction": "Pilih dua transaksi berbeda untuk digabungkan.",
+        "different_instrument": "Tidak dapat digabungkan: instrumen berbeda.",
+        "incompatible_type": "Tidak dapat digabungkan: jenis transaksi tidak cocok.",
+        "loan_linked": "Tidak dapat digabungkan: salah satunya terkait pinjaman pembiayaan."
+      }
     },
     "banners": {
       "invested": "Diinvestasikan",

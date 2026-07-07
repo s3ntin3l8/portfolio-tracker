@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 
@@ -13,23 +13,45 @@ const reassignTransactions = vi.fn(async () => ({
   skippedConflicts: 0,
   skippedLoans: 0,
 }));
+const previewMergeTransactions = vi.fn(async () => ({
+  ok: true,
+  merged: {
+    quantity: "10",
+    price: "100",
+    executedAt: "2026-02-01T00:00:00.000Z",
+    type: "buy",
+    currency: "IDR",
+    tax: null,
+    fees: "5",
+    executedPrice: null,
+    fxRate: null,
+    venue: null,
+    documentCount: 0,
+  },
+}));
+const mergeTransactions = vi.fn(async () => ({ survivorId: "m1" }));
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
+// A stable object — some components (e.g. MergeDialog) depend on `api` in a useEffect,
+// and a fresh object literal on every call would re-trigger that effect on every render.
+const apiMock = {
+  bulkDeleteTransactions,
+  deleteTransaction,
+  setTransactionStatus,
+  resolveDraftTransactions,
+  reassignTransactions,
+  previewMergeTransactions,
+  mergeTransactions,
+  // Needed once the in-place EditTransactionSheet mounts its AddTransactionForm.
+  getGoldSources: vi.fn(async () => []),
+  searchInstruments: vi.fn(async () => []),
+  lookupInstruments: vi.fn(async () => []),
+};
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({
-    bulkDeleteTransactions,
-    deleteTransaction,
-    setTransactionStatus,
-    resolveDraftTransactions,
-    reassignTransactions,
-    // Needed once the in-place EditTransactionSheet mounts its AddTransactionForm.
-    getGoldSources: vi.fn(async () => []),
-    searchInstruments: vi.fn(async () => []),
-    lookupInstruments: vi.fn(async () => []),
-  }),
+  useApiClient: () => apiMock,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
@@ -155,6 +177,39 @@ function enterSelectionMode(rowLabel = "Bank Central Asia") {
   vi.useRealTimers();
 }
 
+// Two rows in the SAME portfolio — the Merge action only appears when exactly two selected
+// rows share a portfolio (a cross-portfolio merge doesn't correspond to a real event).
+const MERGE_ROWS: TxRow[] = [
+  {
+    id: "m1",
+    portfolioId: "p1",
+    type: "buy",
+    quantity: "10",
+    price: "100",
+    fees: "5",
+    tax: null,
+    fxRate: null,
+    currency: "IDR",
+    executedAt: "2026-02-01T00:00:00.000Z",
+    source: "csv",
+    instrument: { symbol: "BBCA", name: "Bank Central Asia" },
+  },
+  {
+    id: "m2",
+    portfolioId: "p1",
+    type: "buy",
+    quantity: "10",
+    price: "100",
+    fees: "5",
+    tax: null,
+    fxRate: null,
+    currency: "IDR",
+    executedAt: "2026-02-02T00:00:00.000Z",
+    source: "pdf",
+    instrument: { symbol: "TLKM", name: "Telkom" },
+  },
+];
+
 function renderTable(showPortfolio = false) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -191,6 +246,49 @@ describe("TransactionsTable", () => {
     await waitFor(() =>
       expect(reassignTransactions).toHaveBeenCalledWith("p1", ["t1"], "p2"),
     );
+  });
+
+  // Scope to a row's own "select transaction" checkbox in the desktop table (both the
+  // desktop and mobile renderings share the checkbox's aria-label, so an unscoped query
+  // would match both).
+  function selectRowCheckbox(label: string) {
+    const table = screen.getByRole("table");
+    const row = within(table).getByText(label).closest("tr")!;
+    return within(row as HTMLElement).getByLabelText(tb.selectRow);
+  }
+
+  it("offers Merge only when exactly two selected rows share a portfolio", async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <TransactionsTable rows={MERGE_ROWS} />
+      </NextIntlClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: tb.selectRows }));
+    fireEvent.click(selectRowCheckbox("Bank Central Asia"));
+    // Only one row selected so far — Merge isn't offered yet.
+    expect(screen.queryByRole("button", { name: new RegExp(tb.merge) })).toBeNull();
+
+    fireEvent.click(selectRowCheckbox("Telkom")); // both rows now selected, both in p1
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(tb.merge) }));
+
+    // The merge dialog opens and previews the merged result; the confirm button stays
+    // disabled until the (async, mocked) preview resolves.
+    await waitFor(() => expect(previewMergeTransactions).toHaveBeenCalledWith("p1", "m1", "m2"));
+    const confirmButton = await screen.findByRole("button", {
+      name: messages.Transactions.merge.confirm,
+    });
+    await waitFor(() => expect(confirmButton).not.toBeDisabled());
+    fireEvent.click(confirmButton);
+    await waitFor(() => expect(mergeTransactions).toHaveBeenCalledWith("p1", "m1", "m2"));
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("hides Merge when the two selected rows belong to different portfolios", () => {
+    renderTable(true); // t1 in p1, t2 in p2
+    fireEvent.click(screen.getByRole("button", { name: tb.selectRows }));
+    fireEvent.click(selectRowCheckbox("Bank Central Asia"));
+    fireEvent.click(selectRowCheckbox("Apple"));
+    expect(screen.queryByRole("button", { name: new RegExp(tb.merge) })).toBeNull();
   });
 
   it("opens the edit sheet in place when Edit is clicked in the detail sheet", () => {
@@ -342,6 +440,58 @@ describe("TransactionsTable", () => {
     expect(screen.getByRole("button", { name: /price/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /source/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /amount/i })).toBeInTheDocument();
+  });
+
+  it("renders one chip per distinct source when a row has multiple provenance rows", () => {
+    const mergedRow: TxRow = {
+      id: "merged1",
+      portfolioId: "p1",
+      type: "dividend",
+      quantity: "0",
+      price: "0.65",
+      fees: "0",
+      tax: "0.12",
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+      source: "pdf",
+      instrument: { symbol: "MSFT", name: "Microsoft" },
+      sources: [
+        {
+          id: "src-csv",
+          sourceType: "csv",
+          externalId: null,
+          orderRef: null,
+          documentId: null,
+          taxComponents: null,
+          createdAt: "2026-03-01T00:00:00.000Z",
+          filename: null,
+          hasDocument: false,
+        },
+        {
+          id: "src-pdf",
+          sourceType: "pdf",
+          externalId: null,
+          orderRef: null,
+          documentId: "doc-1",
+          taxComponents: { quellensteuer: "0.12" },
+          createdAt: "2026-03-02T00:00:00.000Z",
+          filename: "settlement.pdf",
+          hasDocument: true,
+        },
+      ],
+    };
+    renderSingleRow(mergedRow);
+    // Desktop table + mobile card both render for the same row (jsdom doesn't apply the
+    // responsive hidden/table-cell CSS), so each chip appears at least once per view.
+    expect(screen.getAllByText(messages.Transactions.sources.csv).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(messages.Transactions.sources.pdf).length).toBeGreaterThan(0);
+  });
+
+  it("falls back to the single legacy source chip when a row has no sources[] breakdown", () => {
+    renderTable();
+    // ROWS[1] has source: "csv" and no `sources` array.
+    expect(screen.getAllByText(messages.Transactions.sources.csv).length).toBeGreaterThan(0);
   });
 
   it("shows a dash in the price column for qty-less cash rows", () => {

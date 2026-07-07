@@ -82,6 +82,7 @@ import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 import { enqueueRecompute, enqueueInstrumentMetadata } from "../services/scheduler.js";
 import { reassignTransactions } from "../services/reassign.js";
+import { mergeTransactions, previewMerge, MergeBlockedError } from "../services/merge.js";
 import { needsSectorEnrichment, needsNameEnrichment } from "../services/instrument-metadata.js";
 import { loadSparklines } from "../services/sparklines.js";
 import { flattenJoinRow } from "../lib/portfolio.js";
@@ -1175,6 +1176,59 @@ export async function transactionsRoute(app: FastifyInstance) {
         skippedConflicts: res.skippedConflicts,
         skippedLoans: res.skippedLoans,
       };
+    },
+  );
+
+  // Read-only preview of a merge: validates the guardrails and returns the merged result the
+  // confirm action would produce, without writing anything. Powers the merge dialog.
+  app.get<{ Params: PortfolioParams; Querystring: { survivorId?: string; absorbedId?: string } }>(
+    "/portfolios/:portfolioId/transactions/merge-preview",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const query = z
+        .object({ survivorId: z.uuid(), absorbedId: z.uuid() })
+        .safeParse(request.query);
+      if (!query.success) return reply.code(400).send({ error: "invalid_query" });
+
+      const preview = await previewMerge(app.db, { portfolioId, ...query.data });
+      return preview;
+    },
+  );
+
+  // Merge two duplicate transactions (manual recovery when cross-source dedup misses a
+  // pair). `survivorId` keeps its core economic fields; `absorbedId`'s sources/documents are
+  // folded in and the row is deleted. See services/merge.ts for the full write sequence.
+  const mergeSchema = z
+    .object({ survivorId: z.uuid(), absorbedId: z.uuid() })
+    .refine((v) => v.survivorId !== v.absorbedId, { message: "same_transaction" });
+  app.post<{ Params: PortfolioParams }>(
+    "/portfolios/:portfolioId/transactions/merge",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+      const parsed = mergeSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: "invalid_body" });
+
+      try {
+        const result = await mergeTransactions(app.db, { portfolioId, ...parsed.data });
+        for (const { portfolioId: pid, day } of result.recompute) await enqueueRecompute(pid, day);
+        return { survivorId: result.survivorId };
+      } catch (err) {
+        if (err instanceof MergeBlockedError) {
+          const status = err.reason === "not_found" ? 404 : 400;
+          return reply.code(status).send({ error: `cannot_merge_${err.reason}` });
+        }
+        throw err;
+      }
     },
   );
 

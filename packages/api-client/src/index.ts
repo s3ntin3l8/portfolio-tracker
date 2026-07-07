@@ -621,6 +621,32 @@ export interface Transaction {
   sources: SourceSummary[];
 }
 
+/** Result of a read-only merge simulation (`previewMergeTransactions`). `ok: false` means the
+ *  guardrails blocked it (different instrument, incompatible type, loan-linked leg, or the
+ *  transaction wasn't found) — `blockedReason` is a `cannot_merge_<reason>`-style key for i18n. */
+export interface MergePreview {
+  ok: boolean;
+  blockedReason?:
+    | "not_found"
+    | "same_transaction"
+    | "different_instrument"
+    | "incompatible_type"
+    | "loan_linked";
+  merged?: {
+    quantity: string;
+    price: string;
+    executedAt: string;
+    type: string;
+    currency: string;
+    tax: string | null;
+    fees: string | null;
+    executedPrice: string | null;
+    fxRate: string | null;
+    venue: string | null;
+    documentCount: number;
+  };
+}
+
 export interface Holding {
   instrumentId: string;
   quantity: string;
@@ -1846,6 +1872,23 @@ export function createApiClient(config: ApiClientConfig) {
     /** Record a fund merger (Fondsverschmelzung) as an atomic sell+buy pair. */
     createMerger: (portfolioId: string, input: Omit<MergerInput, "portfolioId">) =>
       request<Transaction[]>("POST", `/portfolios/${portfolioId}/mergers`, input),
+    /** Read-only preview of merging two duplicate transactions — validates the guardrails
+     * (same instrument, compatible type, no loan legs) and returns what the merged result
+     * would look like, without writing anything. */
+    previewMergeTransactions: (portfolioId: string, survivorId: string, absorbedId: string) =>
+      request<MergePreview>(
+        "GET",
+        `/portfolios/${portfolioId}/transactions/merge-preview?survivorId=${survivorId}&absorbedId=${absorbedId}`,
+      ),
+    /** Merge two duplicate transactions (manual recovery when cross-source dedup misses a
+     * pair). `survivorId` keeps its core economic fields; `absorbedId`'s sources/documents
+     * fold in and it is deleted. */
+    mergeTransactions: (portfolioId: string, survivorId: string, absorbedId: string) =>
+      request<{ survivorId: string }>(
+        "POST",
+        `/portfolios/${portfolioId}/transactions/merge`,
+        { survivorId, absorbedId },
+      ),
 
     getQuote: (ref: QuoteRef) =>
       request<Quote>(
@@ -2086,6 +2129,10 @@ export function createApiClient(config: ApiClientConfig) {
         portfolioId: string;
         materializedCount: number;
         excludedCashMovements: number;
+        /** Of materializedCount, how many folded detail into an already-existing
+         *  transaction (source-provenance + tax/fee/venue rollup) rather than being
+         *  dropped outright — see ImportTasksProvider's toast wording. */
+        enrichedCount: number;
       }>("POST", `/imports/${importId}/materialize`, {
         portfolioId,
         acknowledgeAccountMismatch,

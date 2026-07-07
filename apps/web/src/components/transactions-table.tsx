@@ -59,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ReassignDialog } from "@/components/reassign-dialog";
+import { MergeDialog } from "@/components/merge-dialog";
 import type { PickablePortfolio } from "@/components/portfolio-picker";
 import {
   AllFilterBanner,
@@ -591,6 +592,15 @@ export function TransactionsTable({
   const [reassignRows, setReassignRows] = useState<TxRow[] | null>(null);
   const tr = useTranslations("Transactions.reassign");
 
+  // Merge: only offered for exactly two selected rows in the SAME portfolio (a cross-portfolio
+  // merge doesn't correspond to any real economic event — each portfolio is its own boundary).
+  // The dialog itself re-validates server-side (same instrument, compatible type, no loan legs)
+  // via the preview endpoint and surfaces a blocked reason when those guardrails fail.
+  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
+  const canMerge =
+    selectedRows.length === 2 && selectedRows[0].portfolioId === selectedRows[1].portfolioId;
+  const [mergeRows, setMergeRows] = useState<[TxRow, TxRow] | null>(null);
+
   async function doReassign(targetPortfolioId: string) {
     const queued = reassignRows ?? [];
     // Group by source portfolio — the reassign endpoint is scoped to one source portfolio.
@@ -910,6 +920,17 @@ export function TransactionsTable({
                     {tb("reassign")}
                   </Button>
                 )}
+                {canMerge && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setMergeRows([selectedRows[0], selectedRows[1]])}
+                    disabled={busy}
+                  >
+                    <GitMerge className="size-3.5" />
+                    {tb("merge")}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="destructive"
@@ -938,6 +959,22 @@ export function TransactionsTable({
               : undefined
           }
           onConfirm={doReassign}
+        />
+      )}
+
+      {mergeRows && (
+        <MergeDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setMergeRows(null);
+          }}
+          rowA={mergeRows[0]}
+          rowB={mergeRows[1]}
+          onMerged={() => {
+            setMergeRows(null);
+            clearSelection();
+            router.refresh();
+          }}
         />
       )}
 

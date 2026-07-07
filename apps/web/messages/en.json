@@ -1080,6 +1080,7 @@
       "confirmDrafts": "Confirm selected",
       "discardDrafts": "Discard selected",
       "reassign": "Reassign…",
+      "merge": "Merge…",
       "loadMore": "Load more",
       "showingCount": "Showing {shown} of {total}"
     },
@@ -1095,6 +1096,24 @@
       "success": "{count, plural, one {Moved # transaction} other {Moved # transactions}}.",
       "successWithSkips": "Moved {moved}; skipped {skipped} already in the target.",
       "none": "Nothing moved — already in the target portfolio."
+    },
+    "merge": {
+      "title": "Merge duplicate transactions",
+      "description": "Pick which transaction survives. Its date, quantity and price win; the other's documents and details fold in, and fees/tax are recomputed from the richer source.",
+      "survives": "Survives",
+      "previewTitle": "Merged result",
+      "previewLine": "{quantity} @ {price} · {date}",
+      "previewFees": "Fees {fees}",
+      "previewDocuments": "{count, plural, one {# document attached} other {# documents attached}}",
+      "cancel": "Cancel",
+      "confirm": "Merge",
+      "blocked": {
+        "not_found": "One of these transactions could no longer be found.",
+        "same_transaction": "Select two different transactions to merge.",
+        "different_instrument": "These can't be merged: different instruments.",
+        "incompatible_type": "These can't be merged: incompatible transaction types.",
+        "loan_linked": "These can't be merged: one is linked to a financing loan."
+      }
     },
     "banners": {
       "invested": "Invested",
