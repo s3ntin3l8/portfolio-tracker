@@ -255,7 +255,10 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
     return;
   }
 
-  const boss = new PgBoss(url);
+  // Cap pg-boss's own connection pool explicitly — left unset it falls back to `pg`'s
+  // default of 10, which combined with the app's query pool (client.ts) can exhaust a
+  // Supabase pooler's connection ceiling (see the EMAXCONNSESSION investigation).
+  const boss = new PgBoss({ connectionString: url, max: 5 });
   activeBoss = boss;
   boss.on("error", (err) => app.log.error({ err }, "pg-boss error"));
   await boss.start();

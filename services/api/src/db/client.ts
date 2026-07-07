@@ -58,6 +58,11 @@ export async function initDb(databaseUrl?: string): Promise<DB> {
   } else {
     // Remote Postgres (e.g. Supabase) requires SSL; local does not.
     const isLocal = /@(localhost|127\.0\.0\.1|0\.0\.0\.0|postgres)[:/]/.test(url!);
+    // max:10 here + pg-boss's capped pool (scheduler.ts) must stay well under whatever
+    // connection ceiling DATABASE_URL points at. Prefer Supabase's direct connection
+    // (db.<ref>.supabase.co, bounded by Postgres max_connections, ~60 on the free tier)
+    // over a pooler (Supavisor session-mode pool_size is a much smaller shared budget) —
+    // see the EMAXCONNSESSION investigation notes.
     sql = postgres(url!, { max: 10, ssl: isLocal ? undefined : "require" });
     dbInstance = drizzlePostgres(sql, { schema });
   }
