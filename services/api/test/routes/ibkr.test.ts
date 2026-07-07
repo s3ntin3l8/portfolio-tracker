@@ -203,6 +203,66 @@ describe("IBKR routes", () => {
       expect([200, 202]).toContain(res.statusCode);
     });
 
+    it("POST /ibkr/connection/sync 409s sync_in_progress when a sync is already running", async () => {
+      const [u] = await connApp.db
+        .insert(users)
+        .values({ authSub: "ibkr-sync-inflight", email: "inflight@ibkr.test" })
+        .returning();
+      const [p] = await connApp.db
+        .insert(portfolios)
+        .values({ userId: u.id, name: "Inflight", baseCurrency: "USD", cashCounted: false })
+        .returning();
+      await connApp.db.insert(ibkrConnections).values({
+        userId: u.id,
+        portfolioId: p.id,
+        tokenEnc: connApp.encryption.encryptString("TK"),
+        queryId: "1",
+        status: "connected",
+        // Simulate a sync already in flight (the flag the route guards on).
+        syncing: true,
+      });
+
+      const t = await token("ibkr-sync-inflight");
+      const res = await connApp.inject({
+        method: "POST",
+        url: "/ibkr/connection/sync",
+        headers: auth(t),
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: "sync_in_progress" });
+    });
+
+    it("POST /ibkr/connection/sync re-claims a stale syncing flag past the lease (killed worker)", async () => {
+      const [u] = await connApp.db
+        .insert(users)
+        .values({ authSub: "ibkr-sync-stale-lease", email: "stale-lease@ibkr.test" })
+        .returning();
+      const [p] = await connApp.db
+        .insert(portfolios)
+        .values({ userId: u.id, name: "Stale Lease", baseCurrency: "USD", cashCounted: false })
+        .returning();
+      await connApp.db.insert(ibkrConnections).values({
+        userId: u.id,
+        portfolioId: p.id,
+        tokenEnc: connApp.encryption.encryptString("TK"),
+        queryId: "1",
+        status: "connected",
+        // A claim left behind by a worker killed mid-sync (process restart/crash) —
+        // `syncing` never got cleared, and it's old enough to be past SYNC_CLAIM_LEASE_MS.
+        syncing: true,
+        updatedAt: new Date(Date.now() - 3 * 60 * 60_000),
+      });
+
+      const t = await token("ibkr-sync-stale-lease");
+      const res = await connApp.inject({
+        method: "POST",
+        url: "/ibkr/connection/sync",
+        headers: auth(t),
+      });
+      // Not blocked by the stale claim (would be 409 if the lease weren't honored).
+      expect([200, 202]).toContain(res.statusCode);
+    });
+
     it("POST /ibkr/connection/reimport returns removed count", async () => {
       const t = await token("ibkr-connected-user");
       const res = await connApp.inject({

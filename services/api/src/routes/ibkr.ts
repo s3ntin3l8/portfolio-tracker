@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt, or } from "drizzle-orm";
 import {
   ibkrConnections,
   portfolios,
@@ -11,7 +11,7 @@ import {
 import { requireUser } from "../plugins/auth.js";
 import { IbkrFlexError } from "../services/ibkr/flex-client.js";
 import { syncIbkrConnection } from "../services/ibkr/sync.js";
-import { enqueueIbkrSync } from "../services/scheduler.js";
+import { enqueueIbkrSync, SYNC_CLAIM_LEASE_MS } from "../services/scheduler.js";
 
 const connectBodySchema = z.object({
   // The Flex API token from the IBKR portal.
@@ -128,16 +128,44 @@ export async function ibkrRoute(app: FastifyInstance) {
       if (!conn || conn.status !== "connected") {
         return reply.code(409).send({ error: "not_connected" });
       }
-      const { queued } = await enqueueIbkrSync(conn.id);
-      if (queued) {
-        await app.db
+      // Atomically claim the sync: flip `syncing` false→true in a single statement so two
+      // concurrent requests can't both pass the check (mirrors routes/tr.ts). A claim older
+      // than the lease can always be re-taken — it means a prior worker was killed
+      // (process restart mid-sync) and left the flag set with no writer left to clear it;
+      // the scheduler's startup reaper handles the common case, this is the backstop.
+      const [claimed] = await app.db
+        .update(ibkrConnections)
+        .set({ syncing: true, updatedAt: new Date() })
+        .where(
+          and(
+            eq(ibkrConnections.id, conn.id),
+            or(eq(ibkrConnections.syncing, false), lt(ibkrConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS))),
+          ),
+        )
+        .returning({ id: ibkrConnections.id });
+      if (!claimed) {
+        return reply.code(409).send({ error: "sync_in_progress" });
+      }
+      const releaseClaim = () =>
+        app.db
           .update(ibkrConnections)
-          .set({ syncing: true, updatedAt: new Date() })
+          .set({ syncing: false, updatedAt: new Date() })
           .where(eq(ibkrConnections.id, conn.id));
+
+      let queued: boolean;
+      try {
+        ({ queued } = await enqueueIbkrSync(conn.id));
+      } catch (err) {
+        await releaseClaim();
+        request.log.error({ err }, "ibkr sync enqueue failed");
+        return reply.code(502).send({ error: "ibkr_sync_failed" });
+      }
+      if (queued) {
+        // The worker clears `syncing` when it finishes; the poller already sees it set.
         reply.code(202);
         return { queued: true };
       }
-      // Inline fallback (pg-boss unavailable / PGlite).
+      // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
       try {
         const result = await syncIbkrConnection(
           app.db, app.encryption, app.ibkrFlex, conn, request.log,
@@ -148,6 +176,9 @@ export async function ibkrRoute(app: FastifyInstance) {
         );
         return result;
       } catch (err) {
+        // syncIbkrConnection clears `syncing` on most failure paths, but a later throw would
+        // leave our claim set — release it so the next sync isn't blocked.
+        await releaseClaim();
         request.log.error({ err }, "ibkr sync failed");
         return reply.code(502).send({ error: "ibkr_sync_failed" });
       }

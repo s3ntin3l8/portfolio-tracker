@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { ibkrConnections, trConnections } from "@portfolio/db";
 import { getDb } from "../db/client.js";
+import type { DB } from "../db/client.js";
 import { getMarketData, flushUsage } from "./market-data.js";
 import { refreshHeldPrices } from "./refresh.js";
 import { refreshDividends } from "./dividends.js";
@@ -29,6 +30,38 @@ const TR_SYNC_QUEUE = "tr-sync";
 const TR_SYNC_CRON = "0 * * * *"; // hourly — TR data isn't intraday; be gentle on their API
 
 const IBKR_SYNC_QUEUE = "ibkr-sync";
+
+// How stale a `syncing` claim must be before a new sync request is allowed to re-claim it.
+// This is a backstop for a wedge that outlives the process (the startup reaper below covers
+// the common case — see resetStaleSyncFlags). It must stay well above any realistic sync
+// duration: the pytr export subprocess is hard-capped at 5 minutes (PytrRunner's
+// exportTimeoutMs, SIGKILL on timeout), but the steps after a successful export — draft
+// materialization, document downloads, reconciliation — have NO timeout of their own, so
+// total sync time isn't actually bounded. Re-claiming too eagerly would let a second sync
+// race a still-alive one against the same "collector" draft (see the claim comment in
+// routes/tr.ts) and lose transactions — so this errs long rather than tight. Exported so
+// routes/tr.ts and routes/ibkr.ts can share it.
+export const SYNC_CLAIM_LEASE_MS = 2 * 60 * 60_000; // 2 hours
+
+/**
+ * Clear any `syncing=true` flag left behind by a worker that never got to run its
+ * terminal update — most commonly a process restart/crash mid-sync. Safe to call from
+ * a fresh process: a brand-new process can't have an in-flight worker of its own, so
+ * anything still marked `syncing` at boot is necessarily stale. A genuinely still-queued
+ * pg-boss job (rare — the process only just started) re-runs and re-clears `syncing`
+ * normally when it completes. Exported (and split out of `startScheduler`) so it's
+ * unit-testable against PGlite without needing real Postgres/pg-boss.
+ */
+export async function resetStaleSyncFlags(
+  db: DB,
+): Promise<{ trConnections: number; ibkrConnections: number }> {
+  const staleReset = { syncing: false, updatedAt: new Date() };
+  const [staleTr, staleIbkr] = await Promise.all([
+    db.update(trConnections).set(staleReset).where(eq(trConnections.syncing, true)).returning({ id: trConnections.id }),
+    db.update(ibkrConnections).set(staleReset).where(eq(ibkrConnections.syncing, true)).returning({ id: ibkrConnections.id }),
+  ]);
+  return { trConnections: staleTr.length, ibkrConnections: staleIbkr.length };
+}
 
 const ANTAM_QUEUE = "scrape-antam";
 const ANTAM_CRON = "0 */4 * * *"; // every 4h — the Antam buyback moves intraday but slowly
@@ -262,6 +295,15 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   activeBoss = boss;
   boss.on("error", (err) => app.log.error({ err }, "pg-boss error"));
   await boss.start();
+
+  // See resetStaleSyncFlags: a killed/crashed worker leaves `syncing=true` with no lease
+  // or reaper to clear it, wedging the connection (every retry 409s, cron sweep skips it
+  // forever). Clear stale flags on every boot.
+  const stale = await resetStaleSyncFlags(getDb());
+  if (stale.trConnections > 0 || stale.ibkrConnections > 0) {
+    app.log.warn(stale, "cleared stale syncing flags on startup");
+  }
+
   await boss.createQueue(QUEUE);
 
   await boss.work(QUEUE, async () => {
