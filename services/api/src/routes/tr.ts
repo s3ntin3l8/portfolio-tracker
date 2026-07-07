@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, count, eq, isNotNull, sql } from "drizzle-orm";
+import { and, count, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import {
   accountHolders,
   documents,
@@ -14,7 +14,7 @@ import { requireUser } from "../plugins/auth.js";
 import { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError } from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
 import { enrichTransactionsFromStoredDocuments } from "../services/enrichment.js";
-import { enqueueTrSync } from "../services/scheduler.js";
+import { enqueueTrSync, SYNC_CLAIM_LEASE_MS } from "../services/scheduler.js";
 import {
   storeReceipt,
   linkTrReceiptsToTransactions,
@@ -211,11 +211,20 @@ export async function trRoute(app: FastifyInstance) {
       // concurrent requests can't both pass the check. The single open "collector" draft is
       // read-modify-written by syncTrConnection, so two overlapping syncs would race and the
       // earlier one's new drafts would be lost. The flag is cleared at the end of every sync
-      // (success or failure), so it never wedges.
+      // (success or failure) — but a killed/crashed worker (process restart mid-sync) can
+      // leave it set with no writer left to clear it. The scheduler's startup reaper handles
+      // the common case; this lease is the belt-and-suspenders backstop for a wedge that
+      // outlives the current process's next restart, so a claim older than the lease can
+      // always be re-taken.
       const [claimed] = await app.db
         .update(trConnections)
         .set({ syncing: true, updatedAt: new Date() })
-        .where(and(eq(trConnections.id, conn.id), eq(trConnections.syncing, false)))
+        .where(
+          and(
+            eq(trConnections.id, conn.id),
+            or(eq(trConnections.syncing, false), lt(trConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS))),
+          ),
+        )
         .returning({ id: trConnections.id });
       if (!claimed) {
         return reply.code(409).send({ error: "sync_in_progress" });

@@ -465,6 +465,38 @@ describe("Trade Republic connection (encryption enabled)", () => {
     expect(res.json()).toEqual({ error: "sync_in_progress" });
   });
 
+  it("POST /tr/connection/sync re-claims a stale syncing flag past the lease (killed worker)", async () => {
+    const t = await token("tr-sync-stale-lease");
+    const portfolioId = await portfolioFor(app, t);
+    await app.inject({
+      method: "POST",
+      url: "/tr/connection",
+      headers: auth(t),
+      payload: { phone: "+4915199990000", pin: "1234", portfolioId },
+    });
+    await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
+
+    // Simulate a claim left behind by a worker that was killed mid-sync (process
+    // restart/crash) — `syncing` never got cleared, and the claim is old enough to
+    // be past SYNC_CLAIM_LEASE_MS.
+    await getDb()
+      .update(trConnections)
+      .set({ syncing: true, updatedAt: new Date(Date.now() - 3 * 60 * 60_000) })
+      .where(eq(trConnections.portfolioId, portfolioId));
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/sync",
+      headers: auth(t),
+    });
+    // Not blocked by the stale claim (would be 409 if the lease weren't honored). pg-boss is
+    // unavailable in tests, so this falls through to the inline sync path; FakePytr has no
+    // `export`, so the sync itself fails gracefully (syncTrConnection catches it) — the point
+    // here is only that the claim succeeded rather than 409ing.
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: "error" });
+  });
+
   it("disconnects: DELETE wipes the connection", async () => {
     const t = await token("tr-disc");
     const portfolioId = await portfolioFor(app, t);
