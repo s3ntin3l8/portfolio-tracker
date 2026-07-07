@@ -66,7 +66,7 @@ export type BuildAppOptions = AuthPluginOptions & {
  *   the pino instance's `redact` config, so secrets never reach the file.
  * - Otherwise, log to stdout only (default and Docker/prod behaviour).
  */
-async function resolveLogDestination(
+export async function resolveLogDestination(
   injected?: DestinationStream,
 ): Promise<DestinationStream> {
   if (injected) return injected;

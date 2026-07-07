@@ -53,7 +53,10 @@ RUN apt-get update \
     && /opt/pytr-venv/bin/pip install --no-cache-dir -r ./services/api/python/requirements.txt
 ENV PYTR_PYTHON_BIN=/opt/pytr-venv/bin/python
 
-RUN chown -R node:node /app
+# Pre-create /app/logs (default LOG_DIR mount point, see docker-compose.yml) so a fresh
+# named volume mounted there inherits node:node ownership from the image instead of
+# root's default — otherwise the non-root `node` user can't mkdir/write into it.
+RUN mkdir -p /app/logs && chown -R node:node /app
 USER node
 
 EXPOSE 3000

@@ -49,11 +49,18 @@ services:
       NODE_ENV: development
       PORT: "3000"
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/portfolio
+      # Opt-in rotating file logs inside the container (see LOG_DIR in .env.example).
+      # Unset by default — journald/CloudWatch already capture container stdout in most
+      # setups. Set LOG_DIR in your shell or root .env before `docker compose --profile
+      # full up` to also persist rotating logs into the apilogs volume below.
+      LOG_DIR: ${LOG_DIR:-}
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - apilogs:/app/logs
     profiles:
       - full
 
@@ -72,3 +79,4 @@ volumes:
   pgdata:
   miniodata:
   ollamadata:
+  apilogs:

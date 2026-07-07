@@ -98,6 +98,13 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 - Config is read from `app.config` (typed in `services/api/src/plugins/env.ts`), not
   `process.env` directly. After editing `services/api/src/db/schema.ts`, run
   `npm run db:generate` and commit the migration.
+- **Logging:** pino to stdout by default. Set `LOG_DIR` (see `.env.example`) to also fan
+  out to a `pino-roll` rotating file (daily rotation, 20 MB cap, 14-day retention) —
+  `resolveLogDestination()` in `services/api/src/app.ts`. Same secret redaction (auth
+  headers, cookies, TR phone/pin, `DB_ENCRYPTION_KEY`, …) applies to both sinks. Leave
+  unset for Docker/prod setups that already capture stdout via journald/CloudWatch; the
+  `docker-compose.yml` `api` service passes `LOG_DIR` through opt-in (unset by default)
+  and mounts an `apilogs` volume for it.
 - **Conventional Commits** (Release Please cuts versions). `detect-secrets` runs in
   pre-commit/CI against `.secrets.baseline`.
 - **PR descriptions (and commit messages) stay generic.** No personal/account-holder
