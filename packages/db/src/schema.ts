@@ -145,7 +145,7 @@ export const users = pgTable("users", {
   name: text("name"),
   displayCurrency: text("display_currency").notNull().default("IDR"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Personal access tokens: long-lived Bearer credentials a user mints from an
 // interactive (Authentik JWT) session for programmatic/CLI access scoped to their own
@@ -167,7 +167,7 @@ export const apiTokens = pgTable("api_tokens", {
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // A person an investment account belongs to (the user themselves, a child, a
 // spouse, …). Defined once per user and linked from any number of portfolios so
@@ -204,7 +204,7 @@ export const accountHolders = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("account_holders_user_id_idx").on(t.userId)],
-);
+).enableRLS();
 
 export const portfolios = pgTable(
   "portfolios",
@@ -257,7 +257,7 @@ export const portfolios = pgTable(
       .defaultNow(),
   },
   (t) => [index("portfolios_user_id_idx").on(t.userId)],
-);
+).enableRLS();
 
 // Global reference data shared across users (not user-owned).
 export const instruments = pgTable(
@@ -332,7 +332,7 @@ export const instruments = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex("instruments_market_symbol_idx").on(t.market, t.symbol)],
-);
+).enableRLS();
 
 // Screenshot/CSV import drafts. The raw image is deleted after a confirmed parse;
 // the parsed JSON + audit link are retained.
@@ -373,7 +373,7 @@ export const screenshotImports = pgTable(
     // Group a user's same-step uploads efficiently (import history batch headers).
     index("screenshot_imports_user_batch_idx").on(t.userId, t.batchId),
   ],
-);
+).enableRLS();
 
 // A user's link to their Trade Republic account (one per user for v1). Phone, PIN and
 // the pytr cookie session are encrypted at rest (EncryptionService) — never plaintext.
@@ -407,7 +407,7 @@ export const trConnections = pgTable("tr_connections", {
   syncing: boolean("syncing").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // A durable record of Trade Republic timeline events the user has already resolved — either
 // confirmed into a transaction or discarded. The sync excludes these from new drafts, so a
@@ -428,7 +428,7 @@ export const trResolvedEvents = pgTable(
     resolvedAt: timestamp("resolved_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.portfolioId, t.source, t.eventId] })],
-);
+).enableRLS();
 
 // A user's link to their Interactive Brokers account via the Flex Web Service.
 // The user generates a token + query ID once in the IBKR portal; we store the
@@ -457,7 +457,7 @@ export const ibkrConnections = pgTable("ibkr_connections", {
   syncing: boolean("syncing").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Server-wide market-data provider config, editable by admins from the UI. Global (not
 // user-scoped) — this is a single-operator self-host setting. Rows OVERRIDE the env-derived
@@ -470,7 +470,7 @@ export const providerSettings = pgTable("provider_settings", {
   enabled: boolean("enabled").notNull().default(true),
   priority: integer("priority").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Local count of API calls we've made per provider, used as the usage fallback for
 // providers without a live usage endpoint (e.g. OpenFIGI) and as a cross-check for the
@@ -482,7 +482,7 @@ export const providerUsage = pgTable("provider_usage", {
   month: text("month"), // 'YYYY-MM'
   callsMonth: integer("calls_month").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Cache of values scraped from unofficial web sources (Antam gold buyback, reksa-dana
 // NAV) by the scheduler and served back to the market-data providers via the internal
@@ -493,7 +493,7 @@ export const scrapedQuotes = pgTable("scraped_quotes", {
   value: numeric("value").notNull(),
   source: text("source"), // e.g. "harga-emas" | "bibit"
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Admin-managed credentials for data providers (market-data + vision). A DB row
 // overrides the corresponding env var; the env value is the fallback when no row
@@ -507,7 +507,7 @@ export const providerCredentials = pgTable("provider_credentials", {
   apiKeyEnc: text("api_key_enc"),     // encrypted; null for url-only or keyless providers
   urlOverride: text("url_override"),  // optional endpoint override (e.g. ANTAM_BUYBACK_URL)
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Vision screenshot-parser provider config, editable by admins. Mirrors
 // provider_settings for the market-data chain (enable/priority DB-override env defaults).
@@ -516,7 +516,7 @@ export const visionProviderSettings = pgTable("vision_provider_settings", {
   enabled: boolean("enabled").notNull().default(true),
   priority: integer("priority").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Immutable audit trail for admin actions on provider config / credentials.
 // actor_sub = the Authentik OIDC subject (not our DB user id) so the record
@@ -529,7 +529,7 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   target: text("target").notNull(), // provider id, e.g. "twelvedata" or "vision:gemini"
   meta: jsonb("meta"),              // non-secret context, e.g. { keyHint: "••••abc1" }
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Global, single-row config for the unstructured import path (screenshots + PDFs),
 // editable by admins from the UI. A single-operator self-host setting, so it is a
@@ -543,7 +543,7 @@ export const importSettings = pgTable("import_settings", {
   id: integer("id").primaryKey().default(1), // enforced singleton (always id=1)
   strategy: text("strategy").notNull().default("parser_first"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Admin-editable storage backend configuration. Singleton (always id=1) — the active
 // provider is "s3" (any S3-compatible endpoint) or "folder" (local disk). Each provider's
@@ -563,7 +563,7 @@ export const storageSettings = pgTable("storage_settings", {
   // Folder (local-disk) provider.
   folderPath: text("folder_path"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Stored source documents for imports (PDFs, screenshots, CSVs). Created when an import
 // is uploaded (status="staged") and finalised at confirm-time: retained if the portfolio
@@ -613,7 +613,7 @@ export const documents = pgTable(
     index("documents_transaction_id_idx").on(t.transactionId),
     index("documents_user_id_idx").on(t.userId),
   ],
-);
+).enableRLS();
 
 // The source of truth. Holdings, P&L, cash balance, XIRR and net worth are derived
 // from these rows (in @portfolio/core), never stored.
@@ -678,7 +678,7 @@ export const transactions = pgTable(
       .on(t.portfolioId, t.source, t.externalId)
       .where(sql`${t.externalId} is not null`),
   ],
-);
+).enableRLS();
 
 // Provenance + per-component tax breakdown for every source that contributed to a
 // transaction. Always written (even with documentRetention=off) — this is provenance,
@@ -744,7 +744,7 @@ export const transactionSources = pgTable(
       .on(t.transactionId, t.sourceType, t.externalId)
       .where(sql`${t.externalId} is not null`),
   ],
-);
+).enableRLS();
 
 // Persistently dismissed transaction-scoped anomalies. Anomalies are derived live by
 // detectAnomalies() and never stored; a row here suppresses one (transactionId, code)
@@ -776,7 +776,7 @@ export const dismissedAnomalies = pgTable(
     ),
     index("dismissed_anomalies_portfolio_id_idx").on(t.portfolioId),
   ],
-);
+).enableRLS();
 
 export const corporateActions = pgTable("corporate_actions", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -788,7 +788,7 @@ export const corporateActions = pgTable("corporate_actions", {
   exDate: date("ex_date").notNull(),
   terms: text("terms"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // Installment-financing contracts (e.g. Pegadaian/Galeri24 gold "MULIA" cicilan).
 // Holds the immutable contract TERMS and amortization schedule only — never the
@@ -834,7 +834,7 @@ export const loans = pgTable(
       .on(t.portfolioId, t.provider, t.contractNo)
       .where(sql`${t.contractNo} is not null`),
   ],
-);
+).enableRLS();
 
 // Provider-sourced dividend events: announced ex-dates and settled payments. Deduped
 // by (instrumentId, exDate) — an upsert from the scheduler updates the amount and
@@ -862,7 +862,7 @@ export const dividendEvents = pgTable(
   (t) => [
     uniqueIndex("dividend_events_instrument_exdate_idx").on(t.instrumentId, t.exDate),
   ],
-);
+).enableRLS();
 
 // Historical daily closes.
 export const prices = pgTable(
@@ -877,7 +877,7 @@ export const prices = pgTable(
     currency: text("currency").notNull(),
   },
   (t) => [uniqueIndex("prices_instrument_date_idx").on(t.instrumentId, t.date)],
-);
+).enableRLS();
 
 // Latest-quote cache (one row per instrument).
 export const lastPrices = pgTable("last_prices", {
@@ -889,7 +889,7 @@ export const lastPrices = pgTable("last_prices", {
   previousClose: numeric("previous_close"),
   currency: text("currency").notNull(),
   asOf: timestamp("as_of", { withTimezone: true }).notNull(),
-});
+}).enableRLS();
 
 // Daily net-worth snapshots per portfolio — one row per (portfolio, date), in the
 // portfolio's base currency. Powers the dashboard's value-over-time chart; written
@@ -919,7 +919,7 @@ export const portfolioSnapshots = pgTable(
       t.date,
     ),
   ],
-);
+).enableRLS();
 
 /**
  * Intraday portfolio-value points for the 1D/7D value-chart timeframes. Unlike
@@ -951,7 +951,7 @@ export const portfolioIntradaySnapshots = pgTable(
       t.capturedAt,
     ),
   ],
-);
+).enableRLS();
 
 /**
  * User-defined target allocation weights. One row per (user, portfolio_scope, dimension, key).
@@ -989,7 +989,7 @@ export const allocationTargets = pgTable(
     ),
     index("allocation_targets_user_idx").on(t.userId),
   ],
-);
+).enableRLS();
 
 // User dashboard preferences (period selector, KPI layout) + global investing prefs
 // (cost-basis method, tax regime — see the Settings "Investing" section and the Tax
@@ -1008,7 +1008,7 @@ export const userPreferences = pgTable("user_preferences", {
   taxRegime: text("tax_regime").notNull().default("DE"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
 
 // FX rates for converting to a portfolio/display currency.
 export const fxRates = pgTable(
@@ -1021,7 +1021,7 @@ export const fxRates = pgTable(
     date: date("date").notNull(),
   },
   (t) => [uniqueIndex("fx_rates_base_quote_date_idx").on(t.base, t.quote, t.date)],
-);
+).enableRLS();
 
 // --- Relations -----------------------------------------------------------
 
