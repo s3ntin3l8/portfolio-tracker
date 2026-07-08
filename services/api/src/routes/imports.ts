@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   loans,
   screenshotImports,
@@ -147,16 +147,37 @@ export async function importsRoute(app: FastifyInstance) {
       app,
       rows.map((r) => r.id),
     );
+    // TR/IBKR sync writes a single stable "anchor" screenshot_imports row whose
+    // parsedJson.drafts is always [] by design (materializeDrafts writes straight into
+    // `transactions` with status='draft' instead of staging in the collector — see
+    // sync.ts). Reading parsed.drafts.length for those rows always shows "0 items" even
+    // when the sync materialized hundreds of transactions. Batch a real transaction count
+    // by importId for just the sync parsers; every other parser keeps the drafts-length
+    // count (accurate pre-confirm, since those transactions don't exist yet).
+    const syncImportIds = rows.filter((r) => r.parser === "pytr" || r.parser === "ibkr").map((r) => r.id);
+    const syncCountRows = syncImportIds.length
+      ? await app.db
+          .select({ importId: transactions.importId, n: count() })
+          .from(transactions)
+          .where(inArray(transactions.importId, syncImportIds))
+          .groupBy(transactions.importId)
+      : [];
+    const syncCountByImport = new Map(syncCountRows.map((r) => [r.importId, r.n]));
     return rows.map((r) => {
       const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
       const document = r.status === "confirmed" ? (docByImport.get(r.id) ?? null) : null;
+      const isSync = r.parser === "pytr" || r.parser === "ibkr";
       return {
         id: r.id,
         portfolioId: r.portfolioId,
         parser: r.parser,
         status: r.status,
         confidence: r.confidence,
-        count: Array.isArray(parsed.drafts) ? parsed.drafts.length : 0,
+        count: isSync
+          ? (syncCountByImport.get(r.id) ?? 0)
+          : Array.isArray(parsed.drafts)
+            ? parsed.drafts.length
+            : 0,
         batchId: r.batchId,
         createdAt: r.createdAt,
         document,

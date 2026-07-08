@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { eq } from "drizzle-orm";
-import { screenshotImports } from "@portfolio/db";
+import { screenshotImports, transactions, portfolios } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
-import { closeDb } from "../../src/db/client.js";
+import { getDb, closeDb } from "../../src/db/client.js";
 import {
   parsedGoldContractSchema,
   type ParsedGoldContract,
@@ -877,6 +877,76 @@ describe("CSV import → confirm flow", () => {
       batchId: string | null;
     }>;
     expect(rows.find((r) => r.id === imp.importId)!.batchId).toBe(batchId);
+  });
+
+  it("counts a pytr sync anchor's real materialized transactions instead of its always-empty parsedJson.drafts (#0-items display bug)", async () => {
+    // Post-draft-transactions-unification, TR/IBKR sync writes a single stable "anchor"
+    // screenshotImports row whose parsedJson.drafts is always [] by design — the actual
+    // drafts are materialized straight into `transactions` with status='draft' instead of
+    // being staged in the collector (see services/pytr/sync.ts). Reading drafts.length for
+    // that row always showed "0 items" in the imports list, even with real transactions.
+    const t = await token("pytr-anchor-count-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "PytrAnchorCount", baseCurrency: "EUR" },
+      })
+    ).json().id;
+    const db = getDb();
+    const [{ userId }] = await db
+      .select({ userId: portfolios.userId })
+      .from(portfolios)
+      .where(eq(portfolios.id, portfolioId));
+    const [anchor] = await db
+      .insert(screenshotImports)
+      .values({
+        userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: { drafts: [], errors: [] },
+        status: "draft",
+      })
+      .returning();
+    await db.insert(transactions).values([
+      {
+        portfolioId,
+        instrumentId: null,
+        type: "deposit",
+        quantity: "0",
+        price: "500",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2026-03-02T10:00:00.000Z"),
+        source: "pytr",
+        importId: anchor.id,
+        status: "draft",
+        externalId: "anchor-tx-1",
+      },
+      {
+        portfolioId,
+        instrumentId: null,
+        type: "withdrawal",
+        quantity: "0",
+        price: "50",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2026-03-03T10:00:00.000Z"),
+        source: "pytr",
+        importId: anchor.id,
+        status: "draft",
+        externalId: "anchor-tx-2",
+      },
+    ]);
+    const rows = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) })).json() as Array<{
+      id: string;
+      parser: string;
+      count: number;
+    }>;
+    const row = rows.find((r) => r.id === anchor.id)!;
+    expect(row.parser).toBe("pytr");
+    expect(row.count).toBe(2);
   });
 
   it("returns existing draft import on re-upload of identical CSV", async () => {
