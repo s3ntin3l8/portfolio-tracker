@@ -1,0 +1,1 @@
+ALTER TYPE "public"."transaction_type" ADD VALUE 'adjustment';

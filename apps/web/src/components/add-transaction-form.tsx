@@ -72,7 +72,17 @@ export interface AddTransactionInitial {
 const ACQUISITION_TYPES = ["buy", "sell", "savings_plan"] as const;
 const SHARE_RECEIPT_TYPES = ["bonus", "split", "rights"] as const;
 const INCOME_TYPES = ["dividend", "coupon"] as const;
-const CASH_TYPES = ["deposit", "withdrawal", "fee", "tax", "interest", "bonus_cash"] as const;
+const CASH_TYPES = [
+  "deposit",
+  "withdrawal",
+  "fee",
+  "tax",
+  "interest",
+  "bonus_cash",
+  // Manual signed cash true-up — unlike every other cash type, the sign comes from the
+  // user's input (not derived from `type`), so it needs its own amount hint below.
+  "adjustment",
+] as const;
 // First-class transfer types (depot-to-depot, PR #309). Cash-neutral; price = carried basis.
 const TRANSFER_TYPES = ["transfer_in", "transfer_out"] as const;
 
@@ -215,6 +225,10 @@ export function AddTransactionForm({
     (CASH_TYPES as readonly string[]).includes(type) ||
     type === "loan_drawdown" ||
     type === "loan_repayment";
+  // Every other cash type's sign is derived from `type` (e.g. withdrawal is always an
+  // outflow); `adjustment` is the one exception — the user's entered amount IS the
+  // signed cash delta, so it gets its own hint instead of an unsigned "Amount" label.
+  const isAdjustment = type === "adjustment";
 
   /** Shows the instrument picker. */
   const hasInstrument = !isCash;
@@ -651,6 +665,9 @@ export function AddTransactionForm({
           />
           {isTransfer && (
             <p className="mt-1 text-xs text-muted-foreground">{t("transferBasisHint")}</p>
+          )}
+          {isAdjustment && (
+            <p className="mt-1 text-xs text-muted-foreground">{t("adjustmentHint")}</p>
           )}
         </Field>
         {showFees && (

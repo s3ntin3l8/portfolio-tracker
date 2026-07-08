@@ -63,6 +63,10 @@ export function cashFlow(tx: CoreTransaction): Decimal {
     case "transfer_out":
       // Securities transfers are cash-neutral — only fees (typically 0) affect cash.
       return f.neg();
+    case "adjustment":
+      // Manual signed true-up: `price` IS the signed delta the user entered (not an
+      // unsigned magnitude with sign derived from type, unlike fee/tax/deposit/withdrawal).
+      return p.sub(f);
     default:
       return new Decimal(0);
   }

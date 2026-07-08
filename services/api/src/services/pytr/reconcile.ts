@@ -1,6 +1,11 @@
 import { Decimal } from "decimal.js";
 import type { FastifyBaseLogger } from "fastify";
-import { cashBalances, type CoreTransaction } from "@portfolio/core";
+import {
+  cashBalances,
+  cashFlow,
+  type CoreTransaction,
+  type ReconciliationGap,
+} from "@portfolio/core";
 import { mapTrEvents } from "./mapper.js";
 import type { TrExportSummary } from "./runner.js";
 
@@ -117,6 +122,39 @@ export function reconcileCash(
     };
   });
   return { checkedAt: new Date().toISOString(), cash };
+}
+
+// `reconcileCash` derives purely from the raw TR feed (mapTrEvents), never from stored
+// rows — that's deliberate, it answers "did we map every feed event." A manual
+// `adjustment` transaction is the user's own correction for a known feed-vs-reality gap
+// the feed itself gives no signal for (see the 3b investigation); it lives only in
+// storage, so it can't move `reconcileCash`'s derived total. Fold it in here, at read
+// time, so booking the true-up actually clears the `reconciliation_gap` warning instead
+// of just fixing the holdings-cash number on a different screen. `cashFlow` already
+// zeroes archived/draft rows, so an unconfirmed adjustment has no effect until confirmed.
+export function netManualAdjustments(
+  rec: ReconciliationGap,
+  transactions: CoreTransaction[],
+): ReconciliationGap {
+  const adjustments = transactions.filter((tx) => tx.type === "adjustment");
+  if (adjustments.length === 0) return rec;
+
+  const byCurrency = new Map<string, Decimal>();
+  for (const tx of adjustments) {
+    const prev = byCurrency.get(tx.currency) ?? new Decimal(0);
+    byCurrency.set(tx.currency, prev.add(cashFlow(tx)));
+  }
+
+  return {
+    ...rec,
+    cash: rec.cash.map((c) => {
+      const delta = byCurrency.get(c.currency);
+      if (!delta || delta.isZero()) return c;
+      const derived = new Decimal(c.derived).add(delta);
+      const diff = new Decimal(c.reported).sub(derived).toFixed(2);
+      return { ...c, derived: derived.toString(), diff };
+    }),
+  };
 }
 
 // Derive per-ISIN held quantities from the full event timeline. Maps all TR timeline

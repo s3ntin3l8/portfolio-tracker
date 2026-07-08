@@ -234,7 +234,10 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
       tx.type === "deposit" ||
       tx.type === "withdrawal" ||
       tx.type === "loan_drawdown" ||
-      tx.type === "loan_repayment",
+      tx.type === "loan_repayment" ||
+      // A manual cash true-up is itself an explicit cash-account movement — it should
+      // switch on cash tracking the same as a deposit/withdrawal would.
+      tx.type === "adjustment",
   );
   const cashTracked = cashCounted && hasCashMovement;
   const cash = cashTracked ? cashBalances(input.transactions) : {};

@@ -27,6 +27,7 @@ import {
   Split,
   GitMerge,
   ChevronDown,
+  Scale,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
@@ -107,6 +108,9 @@ const TYPE_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructi
   transfer_in: { icon: ArrowRightLeft, tone: "teal" },
   transfer_out: { icon: ArrowLeftRight, tone: "teal" },
   merger: { icon: GitMerge, tone: "teal" },
+  // Manual signed cash true-up — a structural correction, not organic activity, so it
+  // groups tonally with transfers/merger rather than a real cash in/out flow.
+  adjustment: { icon: Scale, tone: "teal" },
 };
 
 const TYPE_TONE_CLASSES = {

@@ -30,7 +30,12 @@ export type TransactionType =
   // as contributed value at the carried basis (insideMonths). NOT realized P&L.
   // Replaces the former `bonus` + `kind:"transfer_in"` hack (PR #309).
   | "transfer_in"
-  | "transfer_out";
+  | "transfer_out"
+  // Manual, null-instrument signed cash true-up. `price` carries the signed EUR delta
+  // (user-entered, not derived from `type`). For known broker-feed-vs-reality gaps with
+  // no feed-side signal to detect automatically — a bookkeeping correction, never a
+  // contribution, never a trade, excluded from XIRR (see cash.ts/contributions.ts).
+  | "adjustment";
 
 /**
  * Visibility/lifecycle status of a transaction.

@@ -1259,6 +1259,7 @@
       "transferBasis": "Carried cost basis (per share)",
       "transferBasisPlaceholder": "e.g. 125.40",
       "transferBasisHint": "Enter the original purchase price per share. Leave at 0 to set later — a missing basis creates a phantom unrealized gain.",
+      "adjustmentHint": "Enter a signed amount: negative to lower cash, positive to raise it. Not a real transaction — use this only for a known, unfixable broker-feed-vs-reality gap.",
       "subType": "Sub-type",
       "subTypeNone": "(none)",
       "subTypeSaveback": "Saveback",
@@ -1290,7 +1291,8 @@
     "loan_drawdown": "Loan drawdown",
     "loan_repayment": "Loan repayment",
     "transfer_in": "Transfer in",
-    "transfer_out": "Transfer out"
+    "transfer_out": "Transfer out",
+    "adjustment": "Adjustment"
   },
   "AssetClass": {
     "equity": "Stocks",

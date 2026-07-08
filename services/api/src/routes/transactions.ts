@@ -86,6 +86,7 @@ import { mergeTransactions, previewMerge, MergeBlockedError } from "../services/
 import { needsSectorEnrichment, needsNameEnrichment } from "../services/instrument-metadata.js";
 import { loadSparklines } from "../services/sparklines.js";
 import { flattenJoinRow } from "../lib/portfolio.js";
+import { netManualAdjustments } from "../services/pytr/reconcile.js";
 
 interface PortfolioParams {
   portfolioId: string;
@@ -1265,10 +1266,19 @@ export async function transactionsRoute(app: FastifyInstance) {
       const coreTxns: CoreTransaction[] = toCoreTxns(rows);
       const cas = await corporateActionsFor(rows.map((r) => r.instrumentId));
       const holdings = computeHoldings(coreTxns, cas);
-      const reconciliation = trConn?.lastReconciliation as
+      const rawReconciliation = trConn?.lastReconciliation as
         | ReconciliationGap
         | null
         | undefined;
+      // Fold any manual `adjustment` transactions into the sync-derived reconciliation
+      // before anomaly detection: reconcileCash (services/pytr/reconcile.ts) is
+      // deliberately feed-only and never sees stored rows, so a user's true-up for a known
+      // feed-vs-reality gap would otherwise fix holdings cash but leave
+      // reconciliation_gap firing forever. netManualAdjustments is a no-op when there are
+      // no adjustment rows.
+      const reconciliation = rawReconciliation
+        ? netManualAdjustments(rawReconciliation, coreTxns)
+        : rawReconciliation;
       const anomalies = detectAnomalies(coreTxns, cas, {
         cashCounted: portfolio.cashCounted,
         allowNegativeCash: portfolio.allowNegativeCash,

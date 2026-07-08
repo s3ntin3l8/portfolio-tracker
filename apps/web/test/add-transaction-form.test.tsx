@@ -245,6 +245,36 @@ describe("AddTransactionForm", () => {
     );
   });
 
+  it("records a manual adjustment with a negative (signed) amount, hint shown", async () => {
+    // 3b remediation: the adjustment's amount IS the signed cash delta the user enters —
+    // unlike every other cash type, the sign is not derived from `type`. Confirm the form
+    // treats it as a cash type (no instrument) and passes the negative sign straight through.
+    const client = makeClient();
+    renderForm(client);
+
+    selectType(messages.TxType.adjustment);
+    expect(screen.queryByLabelText(m.symbol)).toBeNull();
+    expect(screen.getByText(m.adjustmentHint)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(m.amount), {
+      target: { value: "-26.70" },
+    });
+    fireEvent.change(screen.getByLabelText(m.date), {
+      target: { value: "2026-07-08" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: m.submit }));
+
+    await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
+    expect(client.createTransaction).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        type: "adjustment",
+        instrumentId: null,
+        price: "-26.70",
+      }),
+    );
+  });
+
   it("selects an existing instrument from search results", async () => {
     const client = makeClient({
       searchInstruments: vi.fn(async () => [INSTRUMENT]),

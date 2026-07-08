@@ -50,6 +50,12 @@ export const transactionTypeSchema = z.enum([
   // Replaces the former `bonus` + `kind:"transfer_in"` convention (PR #309).
   "transfer_in",
   "transfer_out",
+  // Manual, null-instrument signed cash true-up. `price` carries the signed EUR delta
+  // (user-entered, not derived from `type`). For known broker-feed-vs-reality gaps with
+  // no feed-side signal to detect automatically — a bookkeeping correction, never a
+  // contribution, never a trade, excluded from XIRR. Manual-only: never emitted by an
+  // importer, so it is NOT in `parsedActionSchema` below.
+  "adjustment",
 ]);
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
 

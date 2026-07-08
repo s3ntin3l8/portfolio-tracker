@@ -62,6 +62,12 @@ export const txTypeEnum = pgEnum("transaction_type", [
   // the former `bonus` + `kind:"transfer_in"` hack (PR #309 / migration 0044).
   "transfer_in",
   "transfer_out",
+  // Manual, null-instrument signed cash true-up. `price` carries the signed EUR delta
+  // (user-entered, not derived from `type`). For known broker-feed-vs-reality gaps with
+  // no feed-side signal to detect automatically (e.g. a TR timeline dividend
+  // re-representation that disagrees with TR's own reported balance) — a bookkeeping
+  // correction, never a contribution, never a trade, excluded from XIRR.
+  "adjustment",
 ]);
 
 // Lifecycle/visibility status of a transaction. Lets the user correct imports the

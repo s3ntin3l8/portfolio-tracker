@@ -1257,6 +1257,7 @@
       "transferBasis": "Harga perolehan (per lembar)",
       "transferBasisPlaceholder": "mis. 125,40",
       "transferBasisHint": "Masukkan harga pembelian awal per lembar. Biarkan 0 untuk diisi nanti — harga perolehan yang kosong menciptakan keuntungan tidak nyata.",
+      "adjustmentHint": "Masukkan jumlah bertanda: negatif untuk mengurangi kas, positif untuk menambahnya. Bukan transaksi nyata — gunakan hanya untuk kesenjangan feed broker yang diketahui dan tidak dapat diperbaiki.",
       "subType": "Sub-jenis",
       "subTypeNone": "(tidak ada)",
       "subTypeSaveback": "Saveback",
@@ -1288,7 +1289,8 @@
     "loan_drawdown": "Pinjaman cair",
     "loan_repayment": "Cicilan pinjaman",
     "transfer_in": "Transfer masuk",
-    "transfer_out": "Transfer keluar"
+    "transfer_out": "Transfer keluar",
+    "adjustment": "Penyesuaian"
   },
   "AssetClass": {
     "equity": "Saham",

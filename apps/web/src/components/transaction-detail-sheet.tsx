@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   Pencil,
   Receipt,
+  Scale,
   Split,
   Trash2,
   X,
@@ -75,6 +76,7 @@ const TYPE_BADGE: Record<string, { icon: LucideIcon; bg: string; fg: string }> =
   rights: { icon: Split, bg: "rgba(124,92,252,.16)", fg: "#7C5CFC" },
   transfer_in: { icon: ArrowLeftRight, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
   transfer_out: { icon: ArrowLeftRight, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
+  adjustment: { icon: Scale, bg: "rgba(13,148,136,.16)", fg: "#0D9488" },
 };
 const DEFAULT_BADGE = { icon: Receipt, bg: "var(--border)", fg: "var(--text-mute)" };
 
