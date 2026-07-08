@@ -10,7 +10,11 @@ jobs:
   test-node:
     permissions:
       contents: read
-    uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@main
+    # SMOKE TEST (temporary): pinned to the not-yet-merged sharding/turbo-cache commit
+    # on s3ntin3l8/.github#15 instead of @main, to validate test-shards + turbo-cache
+    # live before that PR merges. Revert to @main (and drop test-shards/turbo-cache
+    # overrides, since turbo-cache now defaults true) once validated.
+    uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@2672ba29c921a5f48a7d1147900d1eda0e2d3937
     with:
       node-version: "26"
       # Root scripts fan out across all workspaces (Turbo for build/lint/typecheck,
@@ -18,6 +22,8 @@ jobs:
       typecheck-script: "typecheck"
       test-script: "test:coverage"
       coverage-fail-under: "70"
+      test-shards: "4"
+      turbo-cache: true
     secrets: inherit
 
   test-python:
