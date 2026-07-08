@@ -141,11 +141,18 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 
 `.github/workflows/` are thin callers of the reusable workflows in
 [`s3ntin3l8/.github`](https://github.com/s3ntin3l8/.github): `ci-cd.yml` runs
-**ci-node** at the root (so root scripts fan out via Turbo: lint, typecheck,
-test:coverage, build) plus a self-contained **test-python** job (pytest over
-`services/api/python`, the vendored pytr extraction tests — not covered by ci-node),
-then **docker-publish** (root `Dockerfile`, builds `@portfolio/api`) once both test jobs
-pass.
+**ci-node** at the root (so root scripts fan out via Turbo: lint, typecheck, build)
+plus a self-contained **test-python** job (pytest over `services/api/python`, the
+vendored pytr extraction tests — not covered by ci-node), then **docker-publish**
+(root `Dockerfile`, builds `@portfolio/api`) once both test jobs pass. Tests run
+**sharded 4-way** (`test-shards: "4"`) via `test:coverage:sharded` — the same Vitest
+coverage run as `test:coverage`, but with `coverage.thresholds` disabled per-shard
+(a single shard's inherently-partial coverage would otherwise trip the 70% gate); the
+merged coverage across all 4 shards is what's actually checked against
+`coverage-fail-under`, in a `test-merge` job that runs after the shard matrix. Turbo's
+build/lint/typecheck cache is also persisted across runs (`turbo-cache: true`).
+Sharding + caching cut the job from ~5m30s to ~2m (live-validated via a smoke-test PR
+before adopting).
 Caller jobs invoking reusable workflows with write scopes **must declare a
 `permissions:` block** or the run fails at startup. `codeql`, `dependency-review`,
 `release-please`, `cleanup-ghcr` are also wired.
