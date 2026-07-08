@@ -14,7 +14,7 @@ jobs:
     # on s3ntin3l8/.github#15 instead of @main, to validate test-shards + turbo-cache
     # live before that PR merges. Revert to @main (and drop test-shards/turbo-cache
     # overrides, since turbo-cache now defaults true) once validated.
-    uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@d7372281ca5fe2dc5d6c713059ce1bb673cd2443
+    uses: s3ntin3l8/.github/.github/workflows/ci-node.yml@45788d10e62acfe32b5a4cf801283d4cf9e81e3a
     with:
       node-version: "26"
       # Root scripts fan out across all workspaces (Turbo for build/lint/typecheck,
