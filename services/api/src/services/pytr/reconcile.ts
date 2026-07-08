@@ -87,6 +87,13 @@ export function reconcileCash(
     // tax must be carried through: cashFlow() for sells subtracts tax from gross proceeds.
     // Omitting it would over-credit derived cash by the full capital-gains tax on each sell.
     tax: d.tax,
+    // kind must be carried through: cashFlow() treats reward-funded acquisitions
+    // (kind: "saveback" | "crypto_bonus") as cash-neutral — the reward covers the principal
+    // and TR's feed never emits a separate credit for it. Omitting kind here made
+    // reconcileCash count every saveback/crypto-bonus buy as a real outflow, understating
+    // derived cash by the full reward amount (a purely cosmetic reconcile bug — confirmed
+    // holdings cash already honors kind via the same @portfolio/core cashFlow()).
+    kind: d.kind,
     currency: d.currency,
     executedAt: d.executedAt,
   }));

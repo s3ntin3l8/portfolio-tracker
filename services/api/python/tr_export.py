@@ -83,6 +83,20 @@ _TRANSFER_EVENT_TYPES = {
     "SSP_SECURITIES_TRANSFER_INCOMING": "TRANSFER_IN",
 }
 
+# In-kind crypto transfers (e.g. a deposit from an external wallet) surface only on the
+# activity-log feed as CRYPTO_TRANSACTION_INCOMING — an unambiguous, already-explicit
+# eventType (unlike the securities-transfer forms above, which need the subtitle to
+# disambiguate). CRYPTO_TRANSACTION_OUTGOING is added defensively (not yet observed live);
+# if TR uses a different name for the outbound leg, it will surface as an unmapped-event
+# attention gap rather than being silently dropped. Unlike a securities transfer, these
+# events carry NEITHER an isin NOR a shares field anywhere — only a "<qty> <TICKER>"
+# subtitle (e.g. "0.026242 BTC") — resolved in _normalize via _crypto_isin_by_ticker.
+_CRYPTO_TRANSFER_EVENT_TYPES = {
+    "CRYPTO_TRANSACTION_INCOMING": "TRANSFER_IN",
+    "CRYPTO_TRANSACTION_OUTGOING": "TRANSFER_OUT",
+}
+_TRANSFER_EVENT_TYPES.update(_CRYPTO_TRANSFER_EVENT_TYPES)
+
 # A securities transfer (Depotübertrag) is the subtitle TR actually serves on the activity
 # log: eventType ACCOUNT_TRANSFER_{INCOMING,OUTGOING} with subtitle "Wertpapiertransfer"
 # (validated live, 2026-06). The eventType also maps to a cash deposit/withdrawal for
@@ -430,6 +444,58 @@ def _extract_isin(event):
     return match.group(1) if match else None
 
 
+_CRYPTO_TRANSFER_SUBTITLE_RE = re.compile(r"^([\d.,]+)\s+([A-Za-z]{2,6})$")
+
+# Maps a crypto instrument's TR display title to its ticker, so a transfer's "<qty>
+# <TICKER>" subtitle can be cross-referenced against ISINs this account's own crypto
+# trades already resolved (see _crypto_isin_by_ticker). Extend when a new coin shows up
+# live — matches the codebase's existing pattern for small, explicit, live-validated maps
+# (e.g. _TRANSFER_SUBTITLES above).
+_CRYPTO_TICKER_BY_TITLE = {"bitcoin": "BTC", "ethereum": "ETH"}
+
+
+def _crypto_transfer_qty_and_ticker(event):
+    """Parse the qty+ticker a crypto position transfer carries only in its subtitle (e.g.
+    "0.026242 BTC"), since these events have no amount/isin fields at all — unlike a
+    securities transfer, whose shares/isin come from the detail payload via the normal
+    _extract_shares/_extract_isin path.
+
+    Checked against the event's CURRENT eventType (TRANSFER_IN/TRANSFER_OUT), not the raw
+    CRYPTO_TRANSACTION_INCOMING/_OUTGOING type: by the time _normalize runs, the merge in
+    _collect_transactions has already overwritten eventType with the synthetic transfer
+    type (see `events[event_id] = {**event, "eventType": transfer_type}`), so the original
+    is gone. Safe to key on subtitle *shape* here — a securities transfer's subtitle
+    ("Wertpapiertransfer" / "Aktien erhalten") never matches "<number> <letters>".
+    """
+    if event.get("eventType") not in ("TRANSFER_IN", "TRANSFER_OUT"):
+        return None
+    match = _CRYPTO_TRANSFER_SUBTITLE_RE.match((event.get("subtitle") or "").strip())
+    if not match:
+        return None
+    qty = _share_num(match.group(1))
+    return (qty, match.group(2).upper()) if qty is not None else None
+
+
+def _crypto_isin_by_ticker(events):
+    """Derive {ticker: isin} for this account's own crypto holdings by cross-referencing
+    already-resolved ISINs (from real crypto trades, which carry a real isin + title) against
+    their known display title. Avoids hardcoding TR's synthetic ISIN digits (e.g. the
+    "0017"/"0019" suffix), which aren't derivable from the ticker alone and may differ by
+    account/region — see TR_CRYPTO_ISIN in mapper.ts. A ticker with no resolvable ISIN (e.g.
+    a coin transferred in that was never separately traded on this account) is left unset;
+    the Node mapper then surfaces it as a "without an ISIN" attention gap rather than
+    guessing wrong."""
+    by_ticker = {}
+    for event in events:
+        isin = _extract_isin(event)
+        if not (isin and isin.startswith("XF000")):
+            continue
+        ticker = _CRYPTO_TICKER_BY_TITLE.get((event.get("title") or "").strip().lower())
+        if ticker:
+            by_ticker.setdefault(ticker, isin)
+    return by_ticker
+
+
 def _is_crypto_bonus(event):
     """True for a crypto "1% bonus" trade — a crypto buy funded by a TR reward, so the buy
     must be booked cash-neutral (the reward leg never appears on the timeline feed; only the
@@ -473,7 +539,7 @@ def _extract_savings_plan_id(details):
     return walk(details or {})
 
 
-def _normalize(event, wkn_by_isin=None):
+def _normalize(event, wkn_by_isin=None, crypto_isin_by_ticker=None):
     """Flatten a raw timeline event into the shape the Node mapper consumes.
 
     Extraction of shares/fees from the detail sections is best-effort and the part most
@@ -484,6 +550,19 @@ def _normalize(event, wkn_by_isin=None):
     amount = event.get("amount") or {}
     details = event.get("details")
     isin = _extract_isin(event)
+    shares = _extract_shares(details)
+    # Crypto position transfers carry neither an isin nor a shares field anywhere (not even
+    # in the detail payload) — only a "<qty> <TICKER>" subtitle. Fall back to that, resolving
+    # the ISIN via this account's own crypto trades (see _crypto_isin_by_ticker). A ticker we
+    # can't resolve (e.g. a coin never separately traded here) leaves isin unset, which the
+    # Node mapper turns into a "without an ISIN" attention gap rather than a guess.
+    crypto_transfer = _crypto_transfer_qty_and_ticker(event)
+    if crypto_transfer is not None:
+        qty, ticker = crypto_transfer
+        if shares is None:
+            shares = qty
+        if isin is None:
+            isin = (crypto_isin_by_ticker or {}).get(ticker)
     return {
         "id": event.get("id"),
         "timestamp": event.get("timestamp"),
@@ -493,7 +572,7 @@ def _normalize(event, wkn_by_isin=None):
         "currency": amount.get("currency") or "EUR",
         "isin": isin,
         "wkn": (wkn_by_isin or {}).get(isin) if isin else None,
-        "shares": _extract_shares(details),
+        "shares": shares,
         "fees": _field(details, ["fee", "gebühr", "provision"]),
         # Top-level first (older event shapes), else dig it out of the detail payload.
         "savingsPlanId": event.get("savingsPlanId") or _extract_savings_plan_id(details),
@@ -673,6 +752,43 @@ async def _probe_timeline(tr, limit) -> int:
     return 0
 
 
+# Shared by --probe-events (all three, census) and --probe-feed (one, full raw dump).
+_TIMELINE_FEEDS = (
+    ("timelineTransactions", lambda tr: lambda after=None: tr.timeline_transactions(after)),
+    ("timelineActivityLog", lambda tr: lambda after=None: tr.timeline_activity_log(after)),
+    ("timeline", lambda tr: lambda after=None: tr.timeline(after)),
+)
+
+
+async def _probe_feed(tr, feed_name) -> int:
+    """One-shot diagnostic: dump EVERY raw event on a single named timeline feed, verbatim.
+
+    Unlike --probe-events (one sample per event type, across all feeds combined), this pages
+    one feed to exhaustion and prints every event as-is — for isolating whether a specific
+    feed (timeline / timelineTransactions / timelineActivityLog) is missing, malformed, or
+    slow, without the other two feeds' traffic in the way. Not part of the sync path.
+    """
+    method_by_name = dict(_TIMELINE_FEEDS)
+    if feed_name not in method_by_name:
+        print(
+            f"unknown feed {feed_name!r}; choose one of {', '.join(method_by_name)}",
+            file=sys.stderr,
+        )
+        return 1
+    feed_method = method_by_name[feed_name](tr)
+    events = await _collect_feed(tr, feed_method, feed_name)
+    for event in events.values():
+        sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+    print(f"{len(events)} events on {feed_name}", file=sys.stderr)
+    try:
+        ws = await tr._get_ws()
+        await ws.close()
+    except Exception:  # noqa: BLE001 - cleanup only
+        pass
+    return 0
+
+
 async def _probe_events(tr) -> int:
     """One-shot diagnostic: census every raw event across ALL of TR's timeline feeds.
 
@@ -684,11 +800,7 @@ async def _probe_events(tr) -> int:
     the id-overlap between feeds — so we can see which types exist, on which feed, and whether
     ids are shared (→ merge-by-id is safe) before changing the collector. Not part of sync.
     """
-    feeds = (
-        ("timelineTransactions", lambda after=None: tr.timeline_transactions(after)),
-        ("timelineActivityLog", lambda after=None: tr.timeline_activity_log(after)),
-        ("timeline", lambda after=None: tr.timeline(after)),
-    )
+    feeds = tuple((name, factory(tr)) for name, factory in _TIMELINE_FEEDS)
     by_feed = {}
     for sub_type, method in feeds:
         try:
@@ -744,8 +856,9 @@ async def _run(tr) -> int:
     events = await _attach_details(tr, events)
     isins = {isin for isin in (_extract_isin(e) for e in events) if isin}
     wkn_by_isin = await _collect_wkns(tr, isins)
+    crypto_isin_by_ticker = _crypto_isin_by_ticker(events)
     for event in events:
-        sys.stdout.write(json.dumps(_normalize(event, wkn_by_isin)) + "\n")
+        sys.stdout.write(json.dumps(_normalize(event, wkn_by_isin, crypto_isin_by_ticker)) + "\n")
     # A trailing, clearly-tagged summary line (not an event) carrying TR's reported balances.
     cash = await _fetch_cash(tr)
     positions = await _fetch_positions(tr)
@@ -786,6 +899,13 @@ def main() -> int:
         "(timelineTransactions/timelineActivityLog/timeline) with id-overlap, then exit. "
         "Reveals event types on feeds the sync path does not subscribe to.",
     )
+    parser.add_argument(
+        "--probe-feed",
+        choices=[name for name, _ in _TIMELINE_FEEDS],
+        metavar="FEED",
+        help="Diagnostic: dump every raw event on ONE named feed verbatim (NDJSON), then "
+        "exit. Choices: " + ", ".join(name for name, _ in _TIMELINE_FEEDS) + ".",
+    )
     args = parser.parse_args()
 
     phone = os.environ.get("TR_PHONE")
@@ -818,6 +938,8 @@ def main() -> int:
             return asyncio.run(_probe_timeline(tr, args.probe_timeline))
         if args.probe_events:
             return asyncio.run(_probe_events(tr))
+        if args.probe_feed:
+            return asyncio.run(_probe_feed(tr, args.probe_feed))
         return asyncio.run(_run(tr))
     except Exception as exc:  # noqa: BLE001
         print(f"export failed: {exc}", file=sys.stderr)

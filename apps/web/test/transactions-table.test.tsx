@@ -993,6 +993,93 @@ describe("TransactionsTable", () => {
       expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });
+
+    it("renders every portfolio-scoped anomaly, not just the first (regression: reconciliation_gap + 2x position_gap all showed as only 1 banner)", () => {
+      const portfolioAnomalies = [
+        {
+          code: "reconciliation_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { currency: "EUR", reported: "3552.4", derived: "3579.92", diff: "27.52" },
+        },
+        {
+          code: "position_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { isin: "XF000BTC0017", reported: "0.026504", derived: "0.000262", diff: "0.026242" },
+        },
+        {
+          code: "position_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { isin: "XF000ETH0019", reported: "0.850477", derived: "0.008420", diff: "0.842057" },
+        },
+      ];
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={portfolioAnomalies} />
+        </NextIntlClientProvider>,
+      );
+      // All 3 render as distinct ReconciliationBanners (interpolated meta makes each unique),
+      // not just the first one found — previously .find() only ever surfaced one.
+      expect(screen.getAllByText("Cash doesn't reconcile").length).toBe(3);
+      expect(screen.getByText(/XF000BTC0017/)).toBeInTheDocument();
+      expect(screen.getByText(/XF000ETH0019/)).toBeInTheDocument();
+      expect(screen.getByText(/EUR: reported 3552.4/)).toBeInTheDocument();
+      // Banner total counts all 3 portfolio warnings (none are row-flaggable — no toggle).
+      expect(screen.getByText("3 data warnings found")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
+    });
+
+    it("banner total combines row-flaggable and portfolio-scoped counts (regression: banner said 7 warnings, 'Show flagged only' showed 4)", () => {
+      const mixedWithPortfolio = [
+        ...MIXED_ANOMALIES, // a1: 1 error, a3: 1 warning — both row-flaggable
+        {
+          code: "reconciliation_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { currency: "EUR", reported: "1", derived: "2", diff: "1" },
+        },
+        {
+          code: "position_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { isin: "ISIN1", reported: "1", derived: "2", diff: "1" },
+        },
+        {
+          code: "position_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+          meta: { isin: "ISIN2", reported: "1", derived: "2", diff: "1" },
+        },
+      ];
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={mixedWithPortfolio} />
+        </NextIntlClientProvider>,
+      );
+      // 1 error (a1) + 4 warnings (a3 row + 3 portfolio banners) — all of which now actually
+      // render somewhere on the page (2 flaggable rows via the toggle + 3 banners below).
+      expect(screen.getByText("1 error and 4 warnings found in your data")).toBeInTheDocument();
+      // The toggle still only reflects row-flaggable anomalies (portfolio ones can't flag a row).
+      fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
+      expect(screen.getAllByRole("row").slice(1).length).toBe(2);
+    });
+
+    it("collapses two anomalies on the same transaction to one worst-severity row instead of double-counting", () => {
+      const sameTxAnomalies = [
+        { code: "oversell" as const, severity: "error" as const, scope: "transaction" as const, transactionId: "a1" },
+        { code: "zero_price" as const, severity: "warning" as const, scope: "transaction" as const, transactionId: "a1" },
+      ];
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={sameTxAnomalies} />
+        </NextIntlClientProvider>,
+      );
+      // a1 carries both — dedup keeps only the worse (error), so this is 1 error / 0 warnings,
+      // not "1 error and 1 warning" (which would double-count the same row).
+      expect(screen.getByText("1 data error found")).toBeInTheDocument();
+    });
   });
 
   describe("text search", () => {

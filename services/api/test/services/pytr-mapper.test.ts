@@ -407,6 +407,26 @@ describe("mapTrEventToDraft", () => {
     ).toBe("transfer_in");
   });
 
+  it("maps an in-kind crypto transfer to a cash-neutral transfer_in with assetClass crypto", () => {
+    // tr_export resolves the synthetic crypto ISIN + share count from the transfer's
+    // "<qty> <TICKER>" subtitle (CRYPTO_TRANSACTION_INCOMING carries no isin/shares field
+    // at all) before this event ever reaches the mapper — see _crypto_isin_by_ticker.
+    const tin = draftOf({
+      ...base,
+      eventType: "TRANSFER_IN", // synthesised by _collect_transactions from CRYPTO_TRANSACTION_INCOMING
+      amount: 0,
+      isin: "XF000BTC0017",
+      shares: 0.026242,
+      title: "Incoming crypto transaction",
+    });
+    expect(tin).toMatchObject({
+      action: "transfer_in",
+      quantity: "0.026242",
+      price: "0",
+      assetClass: "crypto",
+    });
+  });
+
   it("rejects a transfer missing its share count or ISIN", () => {
     expect(
       mapTrEventToDraft({ ...base, eventType: "TRANSFER_IN", amount: 0, isin: "X" }),

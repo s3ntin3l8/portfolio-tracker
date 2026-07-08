@@ -479,16 +479,18 @@ export function TransactionsTable({
 
   // Cash/position reconciliation-gap anomalies are portfolio-scoped (no transactionId), so
   // they never drive the row-level "Show flagged" toggle above — surfaced here instead,
-  // independent of any filter.
-  const portfolioAnomaly = useMemo(
+  // independent of any filter. There can be more than one (e.g. a position_gap per ISIN),
+  // so every one is rendered — not just the first — or the top banner's count would include
+  // anomalies nothing on the page ever shows.
+  const portfolioAnomalies = useMemo(
     () =>
-      anomalies.find(
+      anomalies.filter(
         (a) =>
           a.scope === "portfolio" &&
           (a.code === "reconciliation_gap" ||
             a.code === "reconciliation_drift" ||
             a.code === "position_gap"),
-      ) ?? null,
+      ),
     [anomalies],
   );
 
@@ -717,29 +719,39 @@ export function TransactionsTable({
   }, [windowedRows, dayFmt]);
 
   // Anomaly banner — only when anomalies exist (only passed in single-portfolio view).
-  const anomalyErrors = anomalies.filter((a) => a.severity === "error");
-  const anomalyWarnings = anomalies.filter((a) => a.severity === "warning");
+  // Counts must match what the page can actually surface, or "N warnings" promises rows
+  // that "Show flagged only" can never show. Two anomalies can share one transaction (worst
+  // severity wins in anomalyByTxId), so count DISTINCT flaggable rows rather than raw
+  // transaction-scoped anomalies; portfolio-scoped ones are counted separately since every
+  // one of those now renders its own ReconciliationBanner below (see portfolioAnomalies).
+  const flaggedRowsBySeverity = [...anomalyByTxId.values()];
+  const anomalyErrorsCount =
+    flaggedRowsBySeverity.filter((a) => a.severity === "error").length +
+    portfolioAnomalies.filter((a) => a.severity === "error").length;
+  const anomalyWarningsCount =
+    flaggedRowsBySeverity.filter((a) => a.severity === "warning").length +
+    portfolioAnomalies.filter((a) => a.severity === "warning").length;
   const anomalyBanner =
-    anomalyErrors.length > 0 || anomalyWarnings.length > 0 ? (
+    anomalyErrorsCount > 0 || anomalyWarningsCount > 0 ? (
       <div
         role="alert"
         className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm ${
-          anomalyErrors.length > 0
+          anomalyErrorsCount > 0
             ? "border-destructive/40 bg-destructive/5 text-destructive"
             : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
         }`}
       >
-        {anomalyErrors.length > 0 ? (
+        {anomalyErrorsCount > 0 ? (
           <AlertCircle className="size-4 shrink-0" />
         ) : (
           <AlertTriangle className="size-4 shrink-0" />
         )}
         <span className="flex-1">
-          {anomalyErrors.length > 0 && anomalyWarnings.length > 0
-            ? ta("bannerBoth", { errors: anomalyErrors.length, warnings: anomalyWarnings.length })
-            : anomalyErrors.length > 0
-              ? ta("bannerError", { count: anomalyErrors.length })
-              : ta("bannerWarning", { count: anomalyWarnings.length })}
+          {anomalyErrorsCount > 0 && anomalyWarningsCount > 0
+            ? ta("bannerBoth", { errors: anomalyErrorsCount, warnings: anomalyWarningsCount })
+            : anomalyErrorsCount > 0
+              ? ta("bannerError", { count: anomalyErrorsCount })
+              : ta("bannerWarning", { count: anomalyWarningsCount })}
         </span>
         {flaggedCount > 0 && (
           <Button
@@ -781,13 +793,15 @@ export function TransactionsTable({
           headingLabel={tBanner(activeBannerMode === "buy" ? "mostBought" : "mostSold")}
         />
       )}
-      {showFilterBanners && portfolioAnomaly && (
-        <ReconciliationBanner
-          title={ta("reconciliationTitle")}
-          detail={anomalyLabel(portfolioAnomaly, ta as AnomalyTranslator, locale)}
-          tag={ta("portfolioTag")}
-        />
-      )}
+      {showFilterBanners &&
+        portfolioAnomalies.map((a, i) => (
+          <ReconciliationBanner
+            key={`${a.code}:${a.meta?.currency ?? a.meta?.isin ?? i}`}
+            title={ta("reconciliationTitle")}
+            detail={anomalyLabel(a, ta as AnomalyTranslator, locale)}
+            tag={ta("portfolioTag")}
+          />
+        ))}
 
       <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center">
         {/* Chips scroll horizontally on mobile (no awkward multi-line wrap); wrap on desktop. */}

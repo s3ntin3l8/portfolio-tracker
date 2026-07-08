@@ -717,6 +717,41 @@ class TestTransfers:
         # Non-transfers are not matched.
         assert tx._transfer_event_type({"eventType": None, "subtitle": "Zinsen"}) is None
         assert tx._transfer_event_type({"eventType": "ORDER_EXECUTED"}) is None
+        # In-kind crypto transfers: an unambiguous, already-explicit eventType (no subtitle
+        # disambiguation needed, unlike the securities-transfer forms above).
+        assert tx._transfer_event_type({"eventType": "CRYPTO_TRANSACTION_INCOMING"}) == "TRANSFER_IN"
+        assert tx._transfer_event_type({"eventType": "CRYPTO_TRANSACTION_OUTGOING"}) == "TRANSFER_OUT"
+
+    def test_crypto_transfer_qty_and_ticker_parses_subtitle(self):
+        # Checked against the POST-MERGE eventType (TRANSFER_IN/TRANSFER_OUT) — by the time
+        # _normalize runs, _collect_transactions has already overwritten the raw
+        # CRYPTO_TRANSACTION_INCOMING/_OUTGOING type with the synthetic transfer type.
+        event = {"eventType": "TRANSFER_IN", "subtitle": "0.026242 BTC"}
+        assert tx._crypto_transfer_qty_and_ticker(event) == (0.026242, "BTC")
+        assert tx._crypto_transfer_qty_and_ticker({"eventType": "TRANSFER_OUT", "subtitle": "1.5 ETH"}) == (1.5, "ETH")
+        # A securities transfer's subtitle never matches "<number> <letters>" → no match.
+        assert tx._crypto_transfer_qty_and_ticker(
+            {"eventType": "TRANSFER_IN", "subtitle": "Aktien erhalten"}
+        ) is None
+        # Not a transfer at all → no match, even with a similarly-shaped subtitle.
+        assert tx._crypto_transfer_qty_and_ticker({"eventType": "ORDER_EXECUTED", "subtitle": "0.5 BTC"}) is None
+        # Malformed/missing subtitle → no match (never guesses).
+        assert tx._crypto_transfer_qty_and_ticker(
+            {"eventType": "TRANSFER_IN", "subtitle": "Some notification"}
+        ) is None
+        assert tx._crypto_transfer_qty_and_ticker({"eventType": "TRANSFER_IN"}) is None
+
+    def test_crypto_isin_by_ticker_derived_from_own_crypto_trades(self):
+        # Real crypto trades carry a resolvable isin (via icon) + a known display title —
+        # cross-reference those to build ticker->isin, without hardcoding TR's ISIN digits.
+        events = [
+            {"icon": "logos/XF000BTC0017/v2", "title": "Bitcoin"},
+            {"icon": "logos/XF000ETH0019/v2", "title": "Ethereum"},
+            {"icon": "logos/DE0007236101/v2", "title": "Siemens"},  # non-crypto, ignored
+            {"icon": "logos/bank_traderepublic/v2", "title": "Incoming crypto transaction"},  # no isin
+        ]
+        by_ticker = tx._crypto_isin_by_ticker(events)
+        assert by_ticker == {"BTC": "XF000BTC0017", "ETH": "XF000ETH0019"}
 
     def test_extract_status_from_detail_header(self):
         executed = {"sections": [{"type": "header", "data": {"status": "executed"}}]}
@@ -753,6 +788,66 @@ class TestTransfers:
         assert "cash" not in by_id
         # A dup id keeps the richer transactions-feed copy (activity-log copy ignored).
         assert by_id["t1"]["eventType"] == "ORDER_EXECUTED"
+
+    def test_collect_transactions_merges_crypto_transfers(self):
+        # Crypto transfers live on the activity-log feed too (like securities transfers),
+        # identified by their own unambiguous eventType (#PR — closes the position_gap for
+        # in-kind crypto deposits, e.g. an external-wallet transfer TR never emits a trade
+        # event for).
+        feeds = {
+            "timelineTransactions": [{"items": [{"id": "t1", "eventType": "ORDER_EXECUTED"}]}],
+            "timelineActivityLog": [
+                {"items": [
+                    {
+                        "id": "crypto1",
+                        "eventType": "CRYPTO_TRANSACTION_INCOMING",
+                        "subtitle": "0.026242 BTC",
+                        "title": "Incoming crypto transaction",
+                    },
+                ]},
+            ],
+        }
+        tr = FakeFeedTr(feeds=feeds)
+        out = asyncio.run(tx._collect_transactions(tr))
+        by_id = {e["id"]: e for e in out}
+        assert by_id["crypto1"]["eventType"] == "TRANSFER_IN"
+        assert by_id["crypto1"]["subtitle"] == "0.026242 BTC"
+
+    def test_normalize_crypto_transfer_resolves_isin_and_shares_from_subtitle(self):
+        # Unlike a securities transfer, a crypto transfer carries NEITHER an isin (icon is
+        # just the generic TR logo, not ISIN-shaped) NOR a shares row in its detail — only
+        # the "<qty> <TICKER>" subtitle. The ISIN is resolved by cross-referencing this
+        # account's own crypto trades (passed in via crypto_isin_by_ticker), never guessed.
+        event = {
+            "id": "crypto1",
+            "timestamp": "2025-12-11T16:56:34.866+0000",
+            "eventType": "TRANSFER_IN",  # synthesised by _collect_transactions
+            "title": "Incoming crypto transaction",
+            "icon": "logos/bank_traderepublic/v2",
+            "subtitle": "0.026242 BTC",
+            "details": None,
+        }
+        out = tx._normalize(event, {}, {"BTC": "XF000BTC0017", "ETH": "XF000ETH0019"})
+        assert out["eventType"] == "TRANSFER_IN"
+        assert out["isin"] == "XF000BTC0017"
+        assert out["shares"] == 0.026242
+        assert out["amount"] == 0  # no top-level amount field at all → cash-neutral
+
+    def test_normalize_crypto_transfer_with_unresolvable_ticker_leaves_isin_unset(self):
+        # A coin transferred in that was never separately traded on this account can't be
+        # resolved — leave isin unset so the Node mapper surfaces a "without an ISIN"
+        # attention gap instead of a wrong guess.
+        event = {
+            "id": "crypto2",
+            "eventType": "TRANSFER_IN",
+            "title": "Incoming crypto transaction",
+            "icon": "logos/bank_traderepublic/v2",
+            "subtitle": "1.5 SOL",
+            "details": None,
+        }
+        out = tx._normalize(event, {}, {"BTC": "XF000BTC0017"})
+        assert out["isin"] is None
+        assert out["shares"] == 1.5
 
     def test_normalize_transfer_extracts_isin_shares_status_and_is_cash_neutral(self):
         # Shaped to the real transfer_in payload: ISIN in `icon`, shares in the "Aktien" row,
