@@ -20,7 +20,11 @@ jobs:
       # Root scripts fan out across all workspaces (Turbo for build/lint/typecheck,
       # Vitest projects for tests with aggregated coverage).
       typecheck-script: "typecheck"
-      test-script: "test:coverage"
+      # test:coverage:sharded (not test:coverage) — Vitest's OWN coverage.thresholds
+      # (root vitest.config.ts, the documented local-dev gate per CLAUDE.md) fires
+      # per invocation, so a single shard's inherently-partial coverage trivially
+      # fails it. Only test-merge's merged-report gate should apply when sharded.
+      test-script: "test:coverage:sharded"
       coverage-fail-under: "70"
       test-shards: "4"
       turbo-cache: true
