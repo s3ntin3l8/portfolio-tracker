@@ -714,7 +714,8 @@
     "status": {
       "draft": "Draft",
       "confirmed": "Confirmed",
-      "discarded": "Discarded"
+      "discarded": "Discarded",
+      "syncNeedsAttention": "Needs attention"
     },
     "importedBanner": "{count, plural, one {# transaction imported} other {# transactions imported}}",
     "clear": "Clear",

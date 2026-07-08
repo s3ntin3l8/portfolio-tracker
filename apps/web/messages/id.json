@@ -712,7 +712,8 @@
     "status": {
       "draft": "Draf",
       "confirmed": "Terkonfirmasi",
-      "discarded": "Dibuang"
+      "discarded": "Dibuang",
+      "syncNeedsAttention": "Perlu perhatian"
     },
     "importedBanner": "{count, plural, other {# transaksi diimpor}}",
     "clear": "Bersihkan",

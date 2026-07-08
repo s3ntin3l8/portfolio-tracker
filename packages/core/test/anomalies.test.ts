@@ -309,6 +309,32 @@ describe("negative_cash", () => {
     const anomalies = detectAnomalies(txns, [], { cashCounted: true, allowNegativeCash: true });
     expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
   });
+
+  it("does NOT flag a sub-cent rounding dip (Decimal-reconstruction noise), e.g. -1e-10", () => {
+    // Chained cashFlow() reconstruction across hundreds of events can leave a balance a
+    // fraction of a cent below zero with no real cash shortfall — observed live as
+    // ~-8e-11 EUR on a real TR portfolio. Below NEGATIVE_CASH_TOLERANCE (1e-6), this must
+    // not fire the `error`-severity negative_cash anomaly.
+    const txns = [
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100.0000000001", id: "dep", executedAt: new Date("2024-01-01") }),
+      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "100.0000000002", id: "wdraw", executedAt: new Date("2024-02-01") }),
+    ];
+    const anomalies = detectAnomalies(txns, [], { cashCounted: true });
+    expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
+  });
+
+  it("still flags a small but genuine negative balance just past the tolerance", () => {
+    // -0.00001 is ten times NEGATIVE_CASH_TOLERANCE (1e-6) — a real (if tiny) shortfall,
+    // not reconstruction noise, so it must still flag.
+    const txns = [
+      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep", executedAt: new Date("2024-01-01") }),
+      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "100.00001", id: "wdraw", executedAt: new Date("2024-02-01") }),
+    ];
+    const anomalies = detectAnomalies(txns, [], { cashCounted: true });
+    const negs = anomalies.filter((a) => a.code === "negative_cash");
+    expect(negs).toHaveLength(1);
+    expect(negs[0]).toMatchObject({ transactionId: "wdraw", meta: { currency: "EUR", balance: "-0.00001" } });
+  });
 });
 
 // ── Reconciliation gap ─────────────────────────────────────────────────────────

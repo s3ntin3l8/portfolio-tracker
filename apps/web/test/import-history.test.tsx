@@ -87,7 +87,10 @@ const threeItems: ImportRecord[] = [
   {
     id: "i1",
     portfolioId: "p1",
-    parser: "pytr",
+    // Deliberately not "pytr"/"ibkr" — those are the two sync parsers isDeadSyncAnchor
+    // always hides once confirmed (see import-history.tsx), and this fixture exists purely
+    // for generic parser-name/count sort-order testing below, not sync-anchor behavior.
+    parser: "screenshot",
     status: "confirmed",
     confidence: null,
     count: 10,
@@ -145,9 +148,11 @@ const discardedItem: ImportRecord = {
 
 const itemsWithDiscarded: ImportRecord[] = [...items, discardedItem];
 
-// A connection-sync (IBKR/pytr) "anchor" row: provenance-only, always count 0. Confirmed
-// means the last sync was clean (nothing to review); draft means it's still carrying an
-// unresolved attention error the user needs to see.
+// A connection-sync (IBKR/pytr) "anchor" row: provenance-only, not a real import to review.
+// Confirmed means the last sync was clean (no unresolved attention error); draft means it's
+// still carrying one the user needs to see. Visibility is keyed on `status` alone — `count`
+// reflects real materialized transactions and can be large even on a clean `confirmed`
+// anchor (see the nonzero-count variant below), so it must NOT gate visibility.
 const confirmedSyncAnchor: ImportRecord = {
   id: "ibkr-anchor",
   portfolioId: "p1",
@@ -165,6 +170,14 @@ const draftSyncAnchor: ImportRecord = {
   ...confirmedSyncAnchor,
   id: "ibkr-anchor-draft",
   status: "draft",
+};
+
+// A healthy, actively-syncing connection: the anchor is `confirmed` (no attention errors)
+// but `count` reflects hundreds of real materialized transactions, not 0.
+const confirmedSyncAnchorWithTransactions: ImportRecord = {
+  ...confirmedSyncAnchor,
+  id: "ibkr-anchor-active",
+  count: 883,
 };
 
 describe("ImportHistory", () => {
@@ -263,6 +276,39 @@ describe("ImportHistory", () => {
       );
       expect(screen.getByText("ibkr")).toBeInTheDocument();
     });
+
+    it("hides a confirmed anchor even with a large real transaction count (regression: count is no longer 0 for an active sync)", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <ImportHistory items={[...items, confirmedSyncAnchorWithTransactions]} />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
+      // Visibility is keyed on status alone — a clean (confirmed) anchor stays hidden no
+      // matter how many transactions it materialized.
+      expect(screen.queryByText("ibkr")).toBeNull();
+    });
+
+    it("labels a draft sync anchor 'Needs attention' instead of the generic 'Draft'", () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <ImportHistory items={[...items, draftSyncAnchor]} />
+        </NextIntlClientProvider>,
+      );
+      // A visible sync anchor is always draft (a clean confirmed one is filtered out), and
+      // its draft doesn't mean "unreviewed" — it means the last sync left an attention
+      // error. Reusing "Draft" would misleadingly suggest the real, already-live
+      // transactions it materialized haven't been looked at. (Desktop table + mobile card
+      // both render — scope to the table like the rest of this file's dual-render tests.
+      // `items` also has its own genuine draft CSV row, so "Draft" legitimately still
+      // appears elsewhere — only the anchor's own label is under test here.)
+      expect(desktop().getByText(m.status.syncNeedsAttention)).toBeInTheDocument();
+    });
+
+    it("still labels a genuine CSV/PDF draft import 'Draft' (not affected by the sync-anchor relabel)", () => {
+      renderHistory();
+      expect(desktop().getByText(m.status.draft)).toBeInTheDocument();
+    });
   });
 
   it("renders sortable column headers", () => {
@@ -281,13 +327,13 @@ describe("ImportHistory", () => {
     );
     // All three are confirmed (hidden by default) — reveal them first.
     fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
-    // Default: pytr(10), csv(1), dkb(5)
+    // Default: screenshot(10), csv(1), dkb(5)
     fireEvent.click(screen.getByRole("button", { name: /items/i }));
     const rows = screen.getAllByRole("row").slice(1);
-    // asc: 1 (csv), 5 (dkb), 10 (pytr)
+    // asc: 1 (csv), 5 (dkb), 10 (screenshot)
     expect(rows[0]).toHaveTextContent("csv");
     expect(rows[1]).toHaveTextContent("dkb");
-    expect(rows[2]).toHaveTextContent("pytr");
+    expect(rows[2]).toHaveTextContent("screenshot");
   });
 
   it("sorts by parser name alphabetically", () => {
@@ -299,10 +345,10 @@ describe("ImportHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
     fireEvent.click(screen.getByRole("button", { name: /parser/i }));
     const rows = screen.getAllByRole("row").slice(1);
-    // asc: csv, dkb, pytr
+    // asc: csv, dkb, screenshot
     expect(rows[0]).toHaveTextContent("csv");
     expect(rows[1]).toHaveTextContent("dkb");
-    expect(rows[2]).toHaveTextContent("pytr");
+    expect(rows[2]).toHaveTextContent("screenshot");
   });
 
   it("sets aria-sort ascending then descending on repeated clicks", () => {
@@ -371,7 +417,7 @@ describe("ImportHistory", () => {
     // No rows visible by default; a hint explains the hidden completed imports (shown once
     // per layout — desktop's empty table row and the mobile empty-state card).
     expect(screen.getAllByText(/3 completed imports hidden/).length).toBeGreaterThan(0);
-    expect(screen.queryByText("pytr")).not.toBeInTheDocument();
+    expect(screen.queryByText("screenshot")).not.toBeInTheDocument();
   });
 
   it("does not render the completed toggle when no confirmed imports exist", () => {

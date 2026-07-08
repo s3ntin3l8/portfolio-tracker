@@ -65,6 +65,12 @@ const DRIFT_THRESHOLD = new Decimal("0.50");
 // Position qty tolerance: TR savings-plan fractions go to ~6 dp. 1e-4 ignores floating-
 // point noise while still catching meaningful discrepancies (e.g. a missed buy event).
 const POSITION_GAP_THRESHOLD = new Decimal("0.0001");
+// Below this magnitude, a "negative" running cash balance is Decimal-reconstruction noise
+// (observed live: ~1e-10 EUR after chaining hundreds of cashFlow() additions/subtractions),
+// not a real negative balance — without this, a portfolio with no real negative-cash day
+// still throws a spurious `error`-severity negative_cash anomaly. 1e-6 tolerates that noise
+// (many orders of magnitude below a cent) while still catching a genuine shortfall.
+const NEGATIVE_CASH_TOLERANCE = new Decimal("0.000001");
 
 /**
  * Detect data-integrity anomalies in a portfolio's transactions.
@@ -223,7 +229,13 @@ export function detectAnomalies(
         const prev = running.get(cur) ?? ZERO;
         const next = prev.add(flow);
         running.set(cur, next);
-        if (!flagged.has(cur) && next.lt(ZERO) && prev.gte(ZERO)) {
+        // Both sides of the crossing check use the same tolerant "zero" so a noise-level dip
+        // on an earlier day never counts as "already negative" for a later, real crossing.
+        if (
+          !flagged.has(cur) &&
+          next.lt(ZERO.sub(NEGATIVE_CASH_TOLERANCE)) &&
+          prev.gte(ZERO.sub(NEGATIVE_CASH_TOLERANCE))
+        ) {
           flagged.add(cur);
           anomalies.push({
             code: "negative_cash",

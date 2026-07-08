@@ -48,16 +48,37 @@ const STATUS_VARIANT: Record<
 };
 
 /**
- * A connection sync (IBKR/Trade Republic) keeps one permanent zero-item "anchor" row per
- * connection — provenance for its drafted transactions' importId, not a real import a user
- * would review. Once it's clean (confirmed, nothing pending) it never renders inside
- * {@link ImportHistory} (even with "Show completed" on), so callers counting "recent
- * imports" must exclude it too, or a header count can include rows the list never shows.
- * A *draft* anchor is left alone: that status means the last sync left an unresolved
+ * A connection sync (IBKR/Trade Republic) keeps one permanent "anchor" row per connection —
+ * provenance for its drafted transactions' importId, not a real import a user would review.
+ * Once it's clean (`confirmed`: the last sync left no unresolved attention error) it never
+ * renders inside {@link ImportHistory} (even with "Show completed" on), so callers counting
+ * "recent imports" must exclude it too, or a header count can include rows the list never
+ * shows. A *draft* anchor is left alone: that status means the last sync left an unresolved
  * attention error the user still needs to see, so it stays visible like any other draft.
+ *
+ * Keyed on `status` alone, NOT `count` — `count` now reflects real materialized transactions
+ * (see the imports route), so a healthy, actively-syncing connection can have a large count
+ * on a `confirmed` anchor. Those transactions already show up in the regular transactions
+ * list; this row's only job is to surface residual attention errors, which `status` alone
+ * already encodes.
  */
 export const isDeadSyncAnchor = (i: ImportRecord) =>
-  (i.parser === "ibkr" || i.parser === "pytr") && i.count === 0 && i.status === "confirmed";
+  (i.parser === "ibkr" || i.parser === "pytr") && i.status === "confirmed";
+
+/**
+ * A visible sync anchor (parser pytr/ibkr) is, by construction, always `draft` — a clean
+ * `confirmed` one is filtered out by {@link isDeadSyncAnchor} before rendering. Its `draft`
+ * doesn't mean "unreviewed" like a real CSV/screenshot import; it means the last sync left
+ * an unresolved attention error. Reusing the generic "Draft" badge would read as "this
+ * import hasn't been looked at yet," which is misleading for a row with real, already-live
+ * transactions — so it gets its own label instead.
+ */
+function statusLabelKey(imp: ImportRecord): string {
+  if ((imp.parser === "ibkr" || imp.parser === "pytr") && imp.status === "draft") {
+    return "status.syncNeedsAttention";
+  }
+  return `status.${imp.status}`;
+}
 
 /**
  * The user's import history with per-row actions: discard a draft, or undo a
@@ -501,7 +522,7 @@ export function ImportHistory({
           </Badge>
         </TableCell>
         <TableCell>
-          <Badge variant={STATUS_VARIANT[imp.status]}>{t(`status.${imp.status}`)}</Badge>
+          <Badge variant={STATUS_VARIANT[imp.status]}>{t(statusLabelKey(imp))}</Badge>
         </TableCell>
         <TableCell className="text-muted-foreground">{t("items", { count: imp.count })}</TableCell>
         <TableCell className="tabular whitespace-nowrap text-muted-foreground" suppressHydrationWarning>
@@ -570,7 +591,7 @@ export function ImportHistory({
               {t("items", { count: imp.count })}
             </span>
             <Badge variant={STATUS_VARIANT[imp.status]} className="shrink-0 px-1.5 py-0 text-[9px]">
-              {t(`status.${imp.status}`)}
+              {t(statusLabelKey(imp))}
             </Badge>
           </div>
         </div>
