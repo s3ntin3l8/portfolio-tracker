@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, count, eq, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import {
   accountHolders,
   documents,
@@ -20,6 +20,7 @@ import {
   linkTrReceiptsToTransactions,
   finalizeReceipts,
   transactionIdsWithDocuments,
+  deleteStorageObjectsByKey,
 } from "../storage/receipts.js";
 
 const connectBodySchema = z.object({
@@ -277,8 +278,26 @@ export async function trRoute(app: FastifyInstance) {
       return reply.code(409).send({ error: "not_connected" });
     }
     const portfolioId = conn.portfolioId;
-    return app.db.transaction(async (tx) => {
-      const removed = await tx
+
+    // Capture the storage keys of any transaction-scoped documents (TR settlement PDFs)
+    // BEFORE deleting the transactions below — `documents.transactionId` cascades on delete,
+    // so once the transactions are gone there's no way to recover which storage objects they
+    // owned. (documents rows without app cleanup here would leak in S3 forever — the FK only
+    // removes the DB row, never the object.)
+    const toRemoveIds = await app.db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr")));
+    const txIds = toRemoveIds.map((t) => t.id);
+    const docsToClean = txIds.length > 0
+      ? await app.db
+          .select({ id: documents.id, storageKey: documents.storageKey })
+          .from(documents)
+          .where(inArray(documents.transactionId, txIds))
+      : [];
+
+    const { removed } = await app.db.transaction(async (tx) => {
+      const removedRows = await tx
         .delete(transactions)
         .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr")))
         .returning({ id: transactions.id });
@@ -296,9 +315,21 @@ export async function trRoute(app: FastifyInstance) {
             eq(screenshotImports.status, "draft"),
           ),
         );
-      request.log.info({ userId: id, portfolioId, removed: removed.length }, "tr reimport");
-      return { removed: removed.length };
+      return { removed: removedRows.length };
     });
+
+    // Storage deletion happens AFTER the DB transaction commits (never hold DB locks/rows
+    // open across S3 round-trips). Best-effort: a failed delete here just leaves an orphaned
+    // object, already logged by deleteStorageObjectsByKey — never blocks the reimport response.
+    if (docsToClean.length > 0) {
+      await deleteStorageObjectsByKey(app, docsToClean, `tr reimport portfolioId=${portfolioId}`);
+    }
+
+    request.log.info(
+      { userId: id, portfolioId, removed, documentsCleaned: docsToClean.length },
+      "tr reimport",
+    );
+    return { removed };
   });
 
   // Re-process retained settlement PDFs: enrich all already-confirmed pytr transactions

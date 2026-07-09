@@ -705,4 +705,40 @@ describe("TR document diagnose + backfill", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: "document_retention_disabled" });
   });
+
+  it("reimport deletes the storage object for a retained, transaction-scoped document (not just the DB row)", async () => {
+    // Reproduces the orphaned-S3-object bug: documents.transactionId cascades on delete, so
+    // the DB row disappears silently the moment reimport wipes the transaction — without an
+    // explicit storage.delete, the underlying PDF is never removed and leaks in S3 forever.
+    const { t, portfolioId } = await connect("doc-reimport-cleanup");
+    const txId = await seedPytrTx(portfolioId, "evt-cleanup", "doc-cleanup");
+
+    const backfill = await app.inject({
+      method: "POST",
+      url: "/tr/connection/backfill-documents",
+      headers: auth(t),
+    });
+    expect(backfill.json()).toMatchObject({ downloaded: 1, stored: 1, linked: 1 });
+
+    const [docRow] = await getDb()
+      .select()
+      .from(documents)
+      .where(eq(documents.transactionId, txId));
+    expect(docRow.status).toBe("retained");
+    expect(storage.data.has(docRow.storageKey)).toBe(true);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tr/connection/reimport",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ removed: 1 });
+
+    // The DB row is gone (FK cascade) — and so is the storage object (explicit cleanup).
+    expect(
+      await getDb().select().from(documents).where(eq(documents.id, docRow.id)),
+    ).toHaveLength(0);
+    expect(storage.data.has(docRow.storageKey)).toBe(false);
+  });
 });

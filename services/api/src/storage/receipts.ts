@@ -635,6 +635,21 @@ export async function linkTrReceiptsToTransactions(
   }
 }
 
+/**
+ * Delete storage objects for already-captured (id, storageKey) pairs, without touching any
+ * DB rows. For callers that must capture a transaction-scoped document's storage key BEFORE
+ * a DB-level cascade delete (documents.transactionId -> onDelete: cascade) silently removes
+ * the row — by the time the row is gone there's no way to recover its storageKey, so the
+ * capture has to happen first and the actual storage delete after (see the TR reimport route).
+ */
+export async function deleteStorageObjectsByKey(
+  app: Pick<FastifyInstance, "storage" | "log">,
+  rows: { id: string; storageKey: string }[],
+  context: string,
+): Promise<void> {
+  return _deleteStorageObjects(app, rows, context);
+}
+
 // ---- Internal helpers ------------------------------------------------------
 
 async function _deleteStorageObjects(
