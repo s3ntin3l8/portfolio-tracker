@@ -1291,7 +1291,11 @@
     "loan_repayment": "Cicilan pinjaman",
     "transfer_in": "Transfer masuk",
     "transfer_out": "Transfer keluar",
-    "adjustment": "Penyesuaian"
+    "adjustment": "Penyesuaian",
+    "saveback": "Saveback",
+    "roundup": "Pembulatan",
+    "crypto_bonus": "Bonus kripto",
+    "reinvestment": "Reinvestasi"
   },
   "AssetClass": {
     "equity": "Saham",

@@ -313,6 +313,52 @@ describe("parseTrPdf — savings plan (Sparplanausführung)", () => {
   });
 });
 
+// Saveback is a TR cash bonus reinvested cash-neutrally — must book as `savings_plan`
+// (matching the live pytr sync path, mapper.ts SAVEBACK_AGGREGATE), NOT a real-money `buy`
+// like round-up. See services/api/src/services/pytr/mapper.ts:134 for the parallel mapping.
+describe("parseTrPdf — saveback", () => {
+  const text = trTradeFixture({
+    action: "saveback",
+    qty: "0,0142",
+    price: "70,42",
+    total: "1,00",
+    auftrag: "saveback-0001",
+    ausfuehrung: "saveback-exec-0001",
+  });
+
+  it("action is savings_plan (cash-neutral, not a real-money buy)", () => {
+    const [d] = parseTrPdf(text).drafts;
+    expect(d.action).toBe("savings_plan");
+  });
+
+  it("kind is saveback", () => {
+    const [d] = parseTrPdf(text).drafts;
+    expect(d.kind).toBe("saveback");
+  });
+});
+
+// Round-up spends the user's own spare change — a real cash-out, so it stays a `buy`.
+describe("parseTrPdf — round-up", () => {
+  const text = trTradeFixture({
+    action: "roundup",
+    qty: "0,0056",
+    price: "70,42",
+    total: "0,39",
+    auftrag: "roundup-0001",
+    ausfuehrung: "roundup-exec-0001",
+  });
+
+  it("action is buy (real cash-out)", () => {
+    const [d] = parseTrPdf(text).drafts;
+    expect(d.action).toBe("buy");
+  });
+
+  it("kind is roundup", () => {
+    const [d] = parseTrPdf(text).drafts;
+    expect(d.kind).toBe("roundup");
+  });
+});
+
 describe("parseTrPdf — split order (two legs, same AUFTRAG)", () => {
   // Real TR AUFTRAG IDs are lowercase hex with hyphens (e.g. "18c9-92a6").
   const legA = trTradeFixture({

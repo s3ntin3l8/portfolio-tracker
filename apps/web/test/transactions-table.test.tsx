@@ -593,6 +593,49 @@ describe("TransactionsTable", () => {
     expect(screen.getAllByText(messages.TxType.bonus_cash).length).toBeGreaterThan(0);
   });
 
+  // Matches a row title node whose text STARTS with `label` (it also carries a trailing
+  // " · SYMBOL" from the instrument, e.g. "Saveback · BBCA"). Anchored + word-boundary so
+  // "Buy" doesn't false-positive-match unrelated page chrome like the "Buys" filter chip.
+  function titleStartsWith(label: string) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^${escaped}(\\s|$)`);
+  }
+
+  describe("kind-aware sub-type label (saveback/roundup/crypto bonus)", () => {
+    // Saveback, round-up and crypto-bonus all collapse to a generic `buy`/`savings_plan`
+    // `type` — the list must prefer `kind` so they don't all read as plain "Buy".
+    it("shows 'Saveback', not 'Savings plan', for a savings_plan row with kind=saveback", () => {
+      renderSingleRow({ ...ROWS[0], type: "savings_plan", kind: "saveback" });
+      expect(
+        screen.getAllByText(titleStartsWith(messages.TxType.saveback)).length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByText(titleStartsWith(messages.TxType.savings_plan)),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows 'Round-up', not 'Buy', for a buy row with kind=roundup", () => {
+      renderSingleRow({ ...ROWS[0], type: "buy", kind: "roundup" });
+      expect(
+        screen.getAllByText(titleStartsWith(messages.TxType.roundup)).length,
+      ).toBeGreaterThan(0);
+      expect(screen.queryByText(titleStartsWith(messages.TxType.buy))).not.toBeInTheDocument();
+    });
+
+    it("shows 'Crypto bonus', not 'Buy', for a buy row with kind=crypto_bonus", () => {
+      renderSingleRow({ ...ROWS[0], type: "buy", kind: "crypto_bonus" });
+      expect(
+        screen.getAllByText(titleStartsWith(messages.TxType.crypto_bonus)).length,
+      ).toBeGreaterThan(0);
+      expect(screen.queryByText(titleStartsWith(messages.TxType.buy))).not.toBeInTheDocument();
+    });
+
+    it("still shows the generic 'Buy' label for a plain buy row (no kind)", () => {
+      renderSingleRow({ ...ROWS[0], type: "buy", kind: null });
+      expect(screen.getAllByText(titleStartsWith(messages.TxType.buy)).length).toBeGreaterThan(0);
+    });
+  });
+
   describe("transaction status", () => {
     it("renders an Archived badge and dims the row for archived transactions", () => {
       renderSingleRow({ ...ROWS[0], status: "archived" });

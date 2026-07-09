@@ -28,6 +28,10 @@ import {
   GitMerge,
   ChevronDown,
   Scale,
+  Gift,
+  PiggyBank,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
@@ -120,6 +124,21 @@ const TYPE_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructi
   adjustment: { icon: Scale, tone: "teal" },
 };
 
+/** Perk/reward `kind` sub-types that all collapse to a generic `buy`/`savings_plan` `type` and
+ *  would otherwise be indistinguishable in the list (e.g. TR saveback vs round-up vs crypto
+ *  bonus). Keyed by `kind`, takes precedence over {@link TYPE_ICON} when present — see
+ *  {@link TypeIconChip} and the row label in the Transaction column. */
+const KIND_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }> = {
+  // Real cash bonus from TR, reinvested cash-neutral — distinct from a round-up's real spend.
+  saveback: { icon: Gift, tone: "violet" },
+  // Spare-change purchase funded by the user's own money — a real cash-out, unlike saveback.
+  roundup: { icon: PiggyBank, tone: "success" },
+  // TR's "1% crypto bonus" reward-funded buy — cash-neutral, like saveback.
+  crypto_bonus: { icon: Sparkles, tone: "violet" },
+  // Dividend reinvestment funded by the payout itself, not external capital.
+  reinvestment: { icon: RefreshCw, tone: "success" },
+};
+
 const TYPE_TONE_CLASSES = {
   success: "bg-success/15 text-success",
   destructive: "bg-destructive/15 text-destructive",
@@ -167,8 +186,16 @@ function SourceChips({
   );
 }
 
-function TypeIconChip({ type, className }: { type: string; className?: string }) {
-  const entry = TYPE_ICON[type];
+function TypeIconChip({
+  type,
+  kind,
+  className,
+}: {
+  type: string;
+  kind?: string | null;
+  className?: string;
+}) {
+  const entry = (kind && KIND_ICON[kind]) ?? TYPE_ICON[type];
   if (!entry) return null;
   const Icon = entry.icon;
   return (
@@ -1163,11 +1190,11 @@ export function TransactionsTable({
                       and anomaly tags ride inline next to the title. */}
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-3">
-                      <TypeIconChip type={tx.type} />
+                      <TypeIconChip type={tx.type} kind={tx.kind} />
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-[7px]">
                           <span className="truncate text-sm font-bold">
-                            {tt(tx.type)}
+                            {tx.kind && KIND_ICON[tx.kind] ? tt(tx.kind) : tt(tx.type)}
                             {tx.instrument?.symbol ? ` · ${tx.instrument.symbol}` : ""}
                           </span>
                           {anomaly && (
@@ -1304,11 +1331,11 @@ export function TransactionsTable({
                         className="size-4 shrink-0 accent-primary"
                       />
                     )}
-                    <TypeIconChip type={tx.type} className="size-10 rounded-[12px]" />
+                    <TypeIconChip type={tx.type} kind={tx.kind} className="size-10 rounded-[12px]" />
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-[7px]">
                         <span className="truncate text-sm font-bold">
-                          {tt(tx.type)}
+                          {tx.kind && KIND_ICON[tx.kind] ? tt(tx.kind) : tt(tx.type)}
                           {tx.instrument?.symbol ? ` · ${tx.instrument.symbol}` : ""}
                         </span>
                         {anomaly && (

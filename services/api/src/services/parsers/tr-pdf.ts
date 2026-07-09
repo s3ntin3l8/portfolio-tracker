@@ -204,8 +204,10 @@ function tradeAction(text: string): { action: ParsedTransaction["action"]; kind:
   if (/Sparplanausführung|SPARPLAN/.test(text)) {
     return { action: "savings_plan", kind: undefined };
   }
+  // Saveback is a TR cash bonus reinvested cash-neutrally — booked as `savings_plan`, matching
+  // the live pytr sync path (mapper.ts SAVEBACK_AGGREGATE), not a real-money `buy` like round-up.
   if (/Saveback/.test(text)) {
-    return { action: "buy", kind: "saveback" };
+    return { action: "savings_plan", kind: "saveback" };
   }
   if (/Round[- ]?up/.test(text)) {
     return { action: "buy", kind: "roundup" };

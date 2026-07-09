@@ -1293,7 +1293,11 @@
     "loan_repayment": "Loan repayment",
     "transfer_in": "Transfer in",
     "transfer_out": "Transfer out",
-    "adjustment": "Adjustment"
+    "adjustment": "Adjustment",
+    "saveback": "Saveback",
+    "roundup": "Round-up",
+    "crypto_bonus": "Crypto bonus",
+    "reinvestment": "Reinvestment"
   },
   "AssetClass": {
     "equity": "Stocks",
