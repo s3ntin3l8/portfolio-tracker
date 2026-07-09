@@ -15,6 +15,38 @@ export interface DocumentDownloadResult {
 }
 
 /**
+ * TR postbox `postboxType` codes that are never a settlement/income document — cost-information
+ * sheets, order confirmations, pre-trade ex-ante cost disclosures, and savings-plan/benefit
+ * notifications. These carry no figures `detectTrPdf` would ever use and, per the user's
+ * "keep only the Wertpapierabrechnung" request, are noise the UI shouldn't surface.
+ *
+ * Deliberately a DENYLIST, not an allowlist: ~30% of stored TR docs have an empty/unknown
+ * postboxType (the codebase's documented "unreliable label" case — see the no-allowlist
+ * rationale in `enrichment.ts`), and those include real settlements/income/transfers. An
+ * allowlist would drop them; a denylist of known-noise types leaves anything unrecognized
+ * KEPT by default. Live-verified against production (2026-07): this set matches 224 stored
+ * docs, 0 of which were ever parsed (0 claimed by a `pdf`-typed `transaction_sources` row),
+ * and applying it never drops a transaction to zero retained documents.
+ */
+const DISCARDABLE_TR_DOC_TYPES = new Set([
+  "SAVINGS_PLAN_CREATED",
+  "BENEFIT_CASH_REWARD_INVOICE",
+  "BENEFIT_ACTIVATED",
+  "INFO",
+]);
+
+/** True when a TR postbox document type is known ancillary noise (cost info, order
+ *  confirmation, ex-ante cost sheet, plan/benefit notice) and should never be downloaded or
+ *  stored. Empty/null/unrecognized types are NOT discardable — see `DISCARDABLE_TR_DOC_TYPES`. */
+export function isDiscardableTrDocType(postboxType?: string | null): boolean {
+  if (!postboxType) return false;
+  if (postboxType.startsWith("COSTS_INFO")) return true;
+  if (postboxType.startsWith("CONFIRM_ORDER")) return true;
+  if (postboxType.endsWith("_EX_ANTE")) return true;
+  return DISCARDABLE_TR_DOC_TYPES.has(postboxType);
+}
+
+/**
  * Download postbox document bytes for newly-staged drafts and store them (best-effort).
  *
  * Only does work when:
@@ -43,12 +75,16 @@ export async function downloadNewDraftDocuments(opts: {
   const { db, runner, storage, connection, importId, newDrafts, retention, session, log } = opts;
   if (!storage || !importId || newDrafts.length === 0 || !retention) return {};
 
-  // Collect (eventId, docId) pairs from new drafts' documentRefs.
+  // Collect (eventId, docId) pairs from new drafts' documentRefs, skipping known-ancillary
+  // document types (cost info, order confirmation, ex-ante sheets, plan/benefit notices) —
+  // never fetched or stored, so they never appear as a "Data sources" entry either.
   const pairs: { eventId: string; docId: string }[] = [];
   for (const draft of newDrafts) {
     if (!draft.externalId || !draft.documentRefs) continue;
     for (const ref of draft.documentRefs) {
-      if (ref?.id) pairs.push({ eventId: draft.externalId, docId: ref.id });
+      if (!ref?.id) continue;
+      if (isDiscardableTrDocType(ref.type)) continue;
+      pairs.push({ eventId: draft.externalId, docId: ref.id });
     }
   }
   if (pairs.length === 0) return {};

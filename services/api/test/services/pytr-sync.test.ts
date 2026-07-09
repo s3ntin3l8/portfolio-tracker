@@ -768,6 +768,63 @@ describe("syncTrConnection", () => {
     expect(storage.puts[0]).toContain("doc-abc.pdf");
   });
 
+  it("never downloads or stores known-ancillary TR document types (cost info, order confirmation, plan notices)", async () => {
+    const conn = await makeConnection("docs-discard-noise");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const PDF = Buffer.from("%PDF-1.4 fake");
+    let downloadPairs: { eventId: string; docId: string }[] = [];
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "tr-saveback-1",
+            timestamp: "2026-03-01T10:00:00.000Z",
+            eventType: "SAVEBACK_AGGREGATE",
+            amount: -10,
+            shares: 1,
+            isin: "DE0007236101",
+            currency: "EUR",
+            documentRefs: [
+              { id: "doc-settlement", type: "SECURITIES_SETTLEMENT_SAVINGS_PLAN", date: "2026-03-01" },
+              { id: "doc-costs", type: "COSTS_INFO_SAVINGS_PLAN_V2", date: "2026-03-01" },
+              { id: "doc-order", type: "CONFIRM_ORDER_CREATE_V2", date: "2026-03-01" },
+              { id: "doc-created", type: "SAVINGS_PLAN_CREATED", date: "2026-03-01" },
+              { id: "doc-unknown-type", type: "", date: "2026-03-01" },
+            ],
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async (_session, pairs) => {
+        downloadPairs = pairs;
+        const docs = new Map<string, DocDownloadResult>();
+        for (const { docId } of pairs) {
+          docs.set(docId, { buf: PDF, mimeType: "application/pdf" });
+        }
+        return { docs, failures: [] };
+      },
+    );
+
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    expect(result.status).toBe("connected");
+    // Only the settlement doc and the empty-type doc (kept by default — unreliable label,
+    // not known noise) are requested; cost-info/order-confirmation/plan-notice are skipped
+    // before the download call is even made.
+    expect(downloadPairs.map((p) => p.docId).sort()).toEqual(["doc-settlement", "doc-unknown-type"]);
+    expect(storage.puts).toHaveLength(2);
+    expect(storage.puts.some((k) => k.includes("doc-costs"))).toBe(false);
+    expect(storage.puts.some((k) => k.includes("doc-order"))).toBe(false);
+    expect(storage.puts.some((k) => k.includes("doc-created"))).toBe(false);
+  });
+
   it("skips document download when documentRetention=false (default)", async () => {
     const conn = await makeConnection("docs-no-retention");
     const db = getDb();
