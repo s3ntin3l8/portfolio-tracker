@@ -19,7 +19,7 @@ import {
   loadIncomeStats,
   loadPreferences,
 } from "@/lib/server-api";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatPercent, rowAnomalyCounts } from "@/lib/utils";
 import { lastPriceInfo } from "@/lib/instrument-price";
 
 export default async function InstrumentPage({
@@ -46,10 +46,17 @@ export default async function InstrumentPage({
     loadAnomalies(),
     loadIncomeStats(),
   ]);
-  // Filter anomalies to those affecting this specific instrument.
-  const instrumentAnomalies = (allAnomalies ?? []).filter(
-    (a) => a.instrumentId === id || a.scope === "portfolio",
-  );
+  // Filter anomalies to those affecting this specific instrument. Portfolio-scoped
+  // anomalies (reconciliation_gap, position_gap) are NOT instrument-specific — they used to
+  // be included unconditionally here (`|| a.scope === "portfolio"`), which leaked an
+  // unrelated portfolio-wide cash/position warning onto every single instrument's page.
+  // They already have their own dedicated banner on Holdings/Transactions; this page only
+  // needs anomalies that actually attach to one of this instrument's own transactions.
+  const instrumentAnomalies = (allAnomalies ?? []).filter((a) => a.instrumentId === id);
+  // Same dedup-by-transaction, worst-severity-wins count used everywhere else (Holdings,
+  // Transactions) — see apps/web/src/lib/utils.ts `rowAnomalyCounts`.
+  const { errors: instrumentAnomalyErrors, warnings: instrumentAnomalyWarnings } =
+    rowAnomalyCounts(instrumentAnomalies);
 
   // This instrument's slice of the existing income analytics — reused as-is (same
   // lifetime `byInstrument` total and trailing `yields` the Income screen's YieldsTable
@@ -246,23 +253,22 @@ export default async function InstrumentPage({
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <CardTitle>{t("transactions")}</CardTitle>
-            {instrumentAnomalies.length > 0 && (
+            {(instrumentAnomalyErrors > 0 || instrumentAnomalyWarnings > 0) && (
               <span
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                  instrumentAnomalies.some((a) => a.severity === "error")
+                  instrumentAnomalyErrors > 0
                     ? "bg-destructive/10 text-destructive"
                     : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
                 }`}
               >
-                {instrumentAnomalies.some((a) => a.severity === "error") ? (
+                {instrumentAnomalyErrors > 0 ? (
                   <AlertCircle className="size-3" />
                 ) : (
                   <AlertTriangle className="size-3" />
                 )}
-                {instrumentAnomalies.length > 0 &&
-                  (instrumentAnomalies.some((a) => a.severity === "error")
-                    ? ta("bannerError", { count: instrumentAnomalies.filter((a) => a.severity === "error").length })
-                    : ta("bannerWarning", { count: instrumentAnomalies.length }))}
+                {instrumentAnomalyErrors > 0
+                  ? ta("bannerError", { count: instrumentAnomalyErrors })
+                  : ta("bannerWarning", { count: instrumentAnomalyWarnings })}
               </span>
             )}
           </div>

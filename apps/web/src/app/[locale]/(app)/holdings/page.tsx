@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Layers, Plus, AlertCircle, AlertTriangle } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
@@ -18,7 +19,16 @@ import {
   loadPreferences,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
-import { formatMoney, formatPercent, formatSignedMoney } from "@/lib/utils";
+import {
+  formatMoney,
+  formatPercent,
+  formatSignedMoney,
+  anomalyLabel,
+  rowAnomalyCounts,
+  bannerAnomalies,
+  type AnomalyTranslator,
+} from "@/lib/utils";
+import { ReconciliationBanner } from "@/components/transactions/activity-banners";
 
 const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto", "cash"] as const;
 
@@ -214,30 +224,41 @@ export default async function HoldingsPage({
     );
   }
 
-  const errors = anomalies?.filter((a) => a.severity === "error") ?? [];
-  const warnings = anomalies?.filter((a) => a.severity === "warning") ?? [];
+  // Headline count = ONLY anomalies that attach to a row (missing_transfer_basis, oversell,
+  // negative_cash, …). Unlike Transactions, Holdings is a positions list — it has no
+  // transaction rows and no "Show flagged only" filter, so a row-attached anomaly can never
+  // be located ON this page; it links to Transactions instead, where it can. Anomalies with
+  // nowhere to attach at all (reconciliation_gap, position_gap, …) are rendered below as
+  // their own labeled ReconciliationBanner — already fully locatable right here, no link
+  // needed (see apps/web/src/lib/utils.ts `isRowAnomaly` for why this is a transactionId
+  // partition, not a hardcoded code list).
+  const { errors: errorCount, warnings: warningCount } = rowAnomalyCounts(anomalies ?? []);
+  const standaloneAnomalies = bannerAnomalies(anomalies ?? []);
   const anomalyBanner =
-    anomalies && (errors.length > 0 || warnings.length > 0) ? (
+    errorCount > 0 || warningCount > 0 ? (
       <div
         role="alert"
         className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
-          errors.length > 0
+          errorCount > 0
             ? "border-destructive/40 bg-destructive/5 text-destructive"
             : "border-amber-400/40 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
         }`}
       >
-        {errors.length > 0 ? (
+        {errorCount > 0 ? (
           <AlertCircle className="mt-0.5 size-4 shrink-0" />
         ) : (
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
         )}
-        <span>
-          {errors.length > 0 && warnings.length > 0
-            ? ta("bannerBoth", { errors: errors.length, warnings: warnings.length })
-            : errors.length > 0
-              ? ta("bannerError", { count: errors.length })
-              : ta("bannerWarning", { count: warnings.length })}
+        <span className="flex-1">
+          {errorCount > 0 && warningCount > 0
+            ? ta("bannerBoth", { errors: errorCount, warnings: warningCount })
+            : errorCount > 0
+              ? ta("bannerError", { count: errorCount })
+              : ta("bannerWarning", { count: warningCount })}
         </span>
+        <Link href="/transactions" className="shrink-0 font-medium underline underline-offset-2">
+          {ta("viewTransactions")}
+        </Link>
       </div>
     ) : null;
 
@@ -317,6 +338,14 @@ export default async function HoldingsPage({
     <div className="space-y-5">
       {Heading}
       {anomalyBanner}
+      {standaloneAnomalies.map((a, i) => (
+        <ReconciliationBanner
+          key={`${a.code}:${a.meta?.currency ?? a.meta?.isin ?? i}`}
+          title={ta("reconciliationTitle")}
+          detail={anomalyLabel(a, ta as AnomalyTranslator, locale)}
+          tag={ta("portfolioTag")}
+        />
+      ))}
       {/* Reference stacks the glance cards 14px apart (each card: margin-bottom:14px). */}
       <div className="space-y-3.5">{glanceSection}</div>
 

@@ -47,7 +47,14 @@ import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cashFlow } from "@portfolio/core";
-import { formatMoney, anomalyLabel, cn, type AnomalyTranslator } from "@/lib/utils";
+import {
+  formatMoney,
+  anomalyLabel,
+  cn,
+  type AnomalyTranslator,
+  rowAnomalyCounts,
+  bannerAnomalies,
+} from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
@@ -481,22 +488,13 @@ export function TransactionsTable({
     [activeBannerMode, rows, locale],
   );
 
-  // Cash/position reconciliation-gap anomalies are portfolio-scoped (no transactionId), so
-  // they never drive the row-level "Show flagged" toggle above — surfaced here instead,
-  // independent of any filter. There can be more than one (e.g. a position_gap per ISIN),
-  // so every one is rendered — not just the first — or the top banner's count would include
-  // anomalies nothing on the page ever shows.
-  const portfolioAnomalies = useMemo(
-    () =>
-      anomalies.filter(
-        (a) =>
-          a.scope === "portfolio" &&
-          (a.code === "reconciliation_gap" ||
-            a.code === "reconciliation_drift" ||
-            a.code === "position_gap"),
-      ),
-    [anomalies],
-  );
+  // Anomalies with no transactionId (reconciliation_gap, position_gap, …) never drive the
+  // row-level "Show flagged" toggle above — surfaced here instead, independent of any
+  // filter. There can be more than one (e.g. a position_gap per ISIN), so every one is
+  // rendered — not just the first. Partitioned by `isRowAnomaly` (via bannerAnomalies), not
+  // a hardcoded code list, so any anomaly that can't attach to a row (including an edge-case
+  // negative_cash with no matching transactionId) always ends up shown somewhere.
+  const portfolioAnomalies = useMemo(() => bannerAnomalies(anomalies), [anomalies]);
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   // Reference row date cell: short, day-first "5 Jun" (`d + " " + SHORT[mo]`), regardless
@@ -724,17 +722,13 @@ export function TransactionsTable({
 
   // Anomaly banner — only when anomalies exist (only passed in single-portfolio view).
   // Counts must match what the page can actually surface, or "N warnings" promises rows
-  // that "Show flagged only" can never show. Two anomalies can share one transaction (worst
-  // severity wins in anomalyByTxId), so count DISTINCT flaggable rows rather than raw
-  // transaction-scoped anomalies; portfolio-scoped ones are counted separately since every
-  // one of those now renders its own ReconciliationBanner below (see portfolioAnomalies).
-  const flaggedRowsBySeverity = [...anomalyByTxId.values()];
-  const anomalyErrorsCount =
-    flaggedRowsBySeverity.filter((a) => a.severity === "error").length +
-    portfolioAnomalies.filter((a) => a.severity === "error").length;
-  const anomalyWarningsCount =
-    flaggedRowsBySeverity.filter((a) => a.severity === "warning").length +
-    portfolioAnomalies.filter((a) => a.severity === "warning").length;
+  // that "Show flagged only" can never show — so this counts ONLY row-attached anomalies
+  // (rowAnomalyCounts, same dedup as anomalyByTxId: two anomalies on one transaction count
+  // once, worst severity wins). Every anomaly that can't attach to a row instead renders its
+  // own ReconciliationBanner below (see portfolioAnomalies) and is deliberately excluded
+  // from this count.
+  const { errors: anomalyErrorsCount, warnings: anomalyWarningsCount } =
+    rowAnomalyCounts(anomalies);
   const anomalyBanner =
     anomalyErrorsCount > 0 || anomalyWarningsCount > 0 ? (
       <div
