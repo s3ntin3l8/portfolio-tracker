@@ -326,6 +326,85 @@ describe("enrichTransactionFromDrafts — basic write + rollup", () => {
     // Manual wins — tax stays at the original 7.00.
     expect(Number(updated.tax)).toBeCloseTo(7.0, 2);
   });
+
+  it("keeps a sell's price paired with executedPrice so a later tax correction can't silently break cash (2026-07 cash-drift bug)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { portfolio } = await makeUserAndPortfolio(db, s);
+    // Simulate the initial pytr sync: price reconstructed from TR's inflated preliminary tax
+    // estimate — same shape as the real Shell bug (21.314851 sh, tax overstated at 119.36).
+    const tx = await makeTx(db, portfolio.id, {
+      type: "sell",
+      quantity: "21.314851",
+      price: "37.8717167669",
+      fees: "1.00",
+      tax: "119.36",
+      source: "pytr",
+    });
+
+    // A later settlement-PDF enrichment corrects tax down to the real, cost-basis-aware figure
+    // and reports the (already-correct) execution price.
+    const d = draft({
+      action: "sell",
+      externalId: "tr:exec:shell-001",
+      tax: "30.23",
+      fees: "1.00",
+      executedPrice: "33.69",
+      taxComponents: { kapitalertragsteuer: "28.18", solidaritaetszuschlag: "1.54" },
+    });
+
+    await enrichTransactionFromDrafts(tx.id, db, [d], { importSource: "pdf" });
+
+    const [updated] = await db
+      .select({
+        price: transactions.price,
+        tax: transactions.tax,
+        fees: transactions.fees,
+        quantity: transactions.quantity,
+      })
+      .from(transactions)
+      .where(eq(transactions.id, tx.id));
+
+    // price must now track executedPrice, not stay pinned to the stale reconstruction.
+    expect(Number(updated.price)).toBeCloseTo(33.69, 2);
+    expect(Number(updated.tax)).toBeCloseTo(30.23, 2);
+
+    // The cash identity holds: qty·price − fees − tax ≈ the real net proceeds (686.87), not the
+    // 776.00 the old (price-frozen) behavior would have produced.
+    const cash =
+      Number(updated.quantity) * Number(updated.price) - Number(updated.fees) - Number(updated.tax);
+    expect(cash).toBeCloseTo(686.87, 2);
+  });
+
+  it("does not repoint price for a buy/savings_plan when executedPrice is enriched (different price semantic)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "buy",
+      quantity: "10",
+      price: "99.50", // net-of-fee per-share price, deliberately != executedPrice
+      fees: "1.00",
+      source: "pytr",
+    });
+
+    const d = draft({
+      action: "buy",
+      externalId: "tr:exec:buy-001",
+      fees: "1.00",
+      executedPrice: "100.00",
+    });
+
+    await enrichTransactionFromDrafts(tx.id, db, [d], { importSource: "pdf" });
+
+    const [updated] = await db
+      .select({ price: transactions.price, executedPrice: transactions.executedPrice })
+      .from(transactions)
+      .where(eq(transactions.id, tx.id));
+
+    expect(Number(updated.executedPrice)).toBeCloseTo(100.0, 2);
+    expect(Number(updated.price)).toBeCloseTo(99.5, 2); // unchanged — buy price semantic differs
+  });
 });
 
 // ---------------------------------------------------------------------------

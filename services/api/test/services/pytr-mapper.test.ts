@@ -91,6 +91,38 @@ describe("mapTrEventToDraft", () => {
     expect(sellWithFeesOnly).toMatchObject({ action: "sell", price: "100", fees: "10" });
   });
 
+  it("prefers TR's reported executedPrice for a sell's price over reconstructing from tax", () => {
+    // `tax` at sync time is only TR's preliminary trade-time withholding estimate — it can be
+    // corrected sharply later (settlement PDF / "Steuerliche Optimierung" true-up) without
+    // `price` being recomputed, which used to silently break qty·price−fees−tax=amount and
+    // over/under-credit cash by the full tax delta (2026-07 cash-drift bug, see tr_cash.md).
+    // `executedPrice` is TR's own reported per-share fill price and doesn't depend on `tax`, so
+    // price must come from it directly whenever it's present — regardless of what `tax` says.
+    const sell = draftOf({
+      ...base,
+      eventType: "ORDER_EXECUTED",
+      amount: 686.87,
+      fees: -1,
+      tax: -119.36, // wildly inflated vs. the real settled tax (30.23) — must not affect price
+      shares: -21.314851,
+      isin: "GB00BP6MXD84",
+      executedPrice: 33.69,
+    });
+    expect(sell).toMatchObject({ action: "sell", price: "33.69", fees: "1", tax: "119.36" });
+
+    // Falls back to the tax-based reconstruction when TR reports no executedPrice.
+    const sellNoExecutedPrice = draftOf({
+      ...base,
+      eventType: "ORDER_EXECUTED",
+      amount: 497,
+      fees: -1,
+      tax: -2,
+      shares: -5,
+      isin: "DE0007236101",
+    });
+    expect(sellNoExecutedPrice).toMatchObject({ action: "sell", price: "100" });
+  });
+
   it("maps savings plan executions and keeps the plan id", () => {
     const sp = draftOf({
       ...base,

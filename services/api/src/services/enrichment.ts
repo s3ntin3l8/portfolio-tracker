@@ -149,11 +149,11 @@ export async function enrichTransactionFromDrafts(
   // - Split-order leg2 enriched in a separate call: reads leg1 row already in the DB → sums.
   // - Re-import of lower-rank CSV after PDF: reads PDF row still present → PDF wins; no downgrade.
   // - Re-enrichment with same PDF: idempotent (onConflictDoNothing above → same rows → same rollup).
-  const exists = await dbClient
-    .select({ id: transactions.id })
+  const [txRow] = await dbClient
+    .select({ id: transactions.id, type: transactions.type })
     .from(transactions)
     .where(eq(transactions.id, transactionId));
-  if (exists.length === 0) return writtenIds; // tx deleted during enrichment — skip
+  if (!txRow) return writtenIds; // tx deleted during enrichment — skip
 
   const allSourceRows = await dbClient
     .select({
@@ -194,7 +194,18 @@ export async function enrichTransactionFromDrafts(
     const patch: Partial<typeof transactions.$inferInsert> = {};
     if (rollup.tax !== null) patch.tax = rollup.tax;
     if (rollup.fees !== null) patch.fees = rollup.fees;
-    if (rollup.executedPrice !== null) patch.executedPrice = rollup.executedPrice;
+    if (rollup.executedPrice !== null) {
+      patch.executedPrice = rollup.executedPrice;
+      // Keep `price` paired with `executedPrice` for sells — cashFlow reads `price` directly
+      // (packages/core/src/cash.ts), and a sell's cash-relevant price is authoritative from the
+      // execution fill (mirrors the mapper.ts fix; see tr_cash.md for the bug this prevents: a
+      // later tax correction silently inflating/deflating cash if price is left stale). Buys and
+      // savings-plan executions use a different, fee-net price semantic that doesn't equal
+      // executedPrice, so leave those untouched.
+      if (txRow.type === "sell") {
+        patch.price = rollup.executedPrice;
+      }
+    }
     if (rollup.fxRate !== null) patch.fxRate = rollup.fxRate;
     if (rollup.venue !== null) patch.venue = rollup.venue;
     if (rollup.perShare !== null) patch.perShare = rollup.perShare;

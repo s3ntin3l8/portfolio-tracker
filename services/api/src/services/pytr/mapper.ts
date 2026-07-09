@@ -359,10 +359,24 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
     }
     quantity = formatDecimal(shares);
     if (action === "sell") {
-      // pytr `amount` = net cash credited (gross proceeds − fees − tax).
-      // Reconstruct gross price so cashFlow = qty·grossPrice − fees − tax = amount.
-      const sellTax = Math.abs(ev.tax ?? 0);
-      price = formatDecimal((amount + fees + sellTax) / shares);
+      if (ev.executedPrice != null) {
+        // Prefer TR's own reported execution price over reconstructing one from `tax`. A
+        // sell's `tax` at sync time is only ever TR's preliminary trade-time withholding
+        // estimate — the real, cost-basis-aware figure is settled later (via the invoice PDF
+        // or a "Steuerliche Optimierung" true-up) and can differ sharply (see tr_cash.md).
+        // Reconstructing price from that estimate (the old approach, kept below as a
+        // fallback) ties `price` to `tax`; if a later enrichment pass corrects `tax` without
+        // recomputing `price`, the cash identity qty·price − fees − tax silently breaks and
+        // cash gets over/under-credited by the full tax delta. `executedPrice` is TR's own
+        // reported per-share fill price — stable and already correct at initial sync — so
+        // using it directly avoids the coupling entirely.
+        price = formatDecimal(Math.abs(ev.executedPrice));
+      } else {
+        // Fallback when TR doesn't report an execution price: reconstruct gross price so
+        // cashFlow = qty·grossPrice − fees − tax = amount (pytr `amount` = net cash credited).
+        const sellTax = Math.abs(ev.tax ?? 0);
+        price = formatDecimal((amount + fees + sellTax) / shares);
+      }
     } else {
       // buy / savings_plan: amount = gross debit (before fees); reconstruct net per-share.
       price = formatDecimal((amount - fees) / shares);
