@@ -35,6 +35,13 @@ const INTEREST =
 const TAXOPT_REFUND =
   "Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com service@traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Direktoren Andreas Torner Gernot Mittendorfer Christian Hecker Thomas Pischke TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 19.12.2024 DEPOT 1234567890 STEUERLICHE OPTIMIERUNG ÜBERSICHT Steuerliche Optimierung am 19.12.2024 ABRECHNUNG POSITION BETRAG Kapitalertragssteuer 1.57 EUR Solidaritätszuschlag 0.10 EUR GESAMT 1.67 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 19.12.2024 1.67 EUR Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Max Mustermann Musterstr. 1 12345 Musterstadt";
 
+// Real "Zinskonto" cash-account statement, sanitised — a single combined PDF with both an
+// "ABRECHNUNG ZINSEN" (Cash Zinsen) section and an "ABRECHNUNG - DIVIDENDE" (Geldmarktfonds
+// distribution) section for one credited amount. Neither single-leg parser can recover the
+// correct combined tax (each only sees its own section's figures) — must be rejected outright.
+const ZINSKONTO_COMPOUND =
+  "TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN DATUM 02.12.2024 VERRECHNUNGSKONTO 1234567890 Max Mustermann Musterstr. 1 12345 Musterstadt Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Geschäftsführer Andreas Torner Gernot Mittendorfer Christian Hecker Thomas Pischke Seite 1 von 2 ABRECHNUNG ZINSEN zum 30.11.2024 ÜBERSICHT VERMÖGENSWERT EINKOMMENSART GESAMT Cash Zinsen 2,62 EUR Geldmarkt Dividende 9,77 EUR Gesamt 12,39 EUR ABRECHNUNG - ZINSEN POSITION BETRAG Besteuerungsgrundlage 2,62 EUR Kapitalertragsteuer -0,66 EUR Solidaritätszuschlag -0,03 EUR Gesamt 1,93 EUR TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Geschäftsführer Andreas Torner Gernot Mittendorfer Christian Hecker Thomas Pischke Seite 2 von 2 ABRECHNUNG - DIVIDENDE POSITION BETRAG Besteuerungsgrundlage 9,77 EUR Kapitalertragsteuer -2,44 EUR Solidaritätszuschlag -0,13 EUR Gesamt 7,20 EUR BUCHUNG IBAN BUCHUNGSDATUM GUTSCHRIFT NACH STEUERN DE00000000000000000000 02.12.2024 9,13 EUR";
+
 const TAXOPT_CHARGE =
   "Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Direktoren Andreas Torner Gernot Mittendorfer Christian Hecker Thomas Pischke TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 24.04.2025 DEPOT 1234567890 STEUERLICHE OPTIMIERUNG ÜBERSICHT Steuerliche Optimierung am 24.04.2025 ABRECHNUNG POSITION BETRAG Kapitalertragssteuer -1.68 EUR Solidaritätszuschlag -0.09 EUR GESAMT -1.77 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 24.04.2025 -1.77 EUR Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Max Mustermann Musterstr. 1 12345 Musterstadt";
 
@@ -103,6 +110,14 @@ describe("detectTrPdf", () => {
 
   it("rejects a cash-transfer confirmation (no securities/tax to mine)", () => {
     expect(detectTrPdf(TRANSFER_REJECT)).toBe(false);
+  });
+
+  it("rejects a compound Zinskonto statement (Cash Zinsen + Geldmarkt-Dividende in one PDF)", () => {
+    // Both an ABRECHNUNG ZINSEN and an ABRECHNUNG - DIVIDENDE section are present for a single
+    // credited amount — neither parseTrInterest nor parseTrDividend alone can recover the
+    // correct combined tax (each only sees its own section), so it must be rejected outright
+    // and the pytr sync's own aggregate left as the authoritative figure.
+    expect(detectTrPdf(ZINSKONTO_COMPOUND)).toBe(false);
   });
 
   it("rejects non-Trade-Republic text", () => {

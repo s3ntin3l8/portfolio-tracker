@@ -15,7 +15,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { transactionSources, transactions, documents } from "@portfolio/db";
 import type { TransactionSource } from "@portfolio/db";
 import type { ParsedTransaction, TaxComponents } from "@portfolio/schema";
@@ -400,9 +400,21 @@ export async function sourcesForTransactions(
   // exactly as getDocumentForTransaction resolves at download time.
   const fallbackRows = rows.filter((r) => !r.documentId);
   const docIds = [...new Set(rows.map((r) => r.documentId).filter((d): d is string => !!d))];
-  const fallbackTxIds = [...new Set(fallbackRows.map((r) => r.transactionId))];
   const importIds = [
     ...new Set(fallbackRows.map((r) => r.importId).filter((i): i is string => !!i)),
+  ];
+
+  // The transaction-scoped doc fallback below is for the CSV/legacy case: a transaction where
+  // NO row owns a document directly. Once any sibling row (e.g. a `pdf`-typed enrichment row)
+  // has claimed its own document, that document is the authoritative one — any *other* stored
+  // document on the transaction (a non-settlement leftover: SAVINGS_PLAN_CREATED, COSTS_INFO_*,
+  // a rejected REKLASSIFIZIERUNG, …) must not be misattributed to a documentId-less sibling row
+  // (most commonly `pytr`, which never has its own documentId) as if it were that row's source.
+  const txnsWithOwnDoc = new Set(rows.filter((r) => r.documentId).map((r) => r.transactionId));
+  const fallbackTxIds = [
+    ...new Set(
+      fallbackRows.map((r) => r.transactionId).filter((txId) => !txnsWithOwnDoc.has(txId)),
+    ),
   ];
 
   const docNameById = new Map<string, string | null>();
@@ -442,12 +454,25 @@ export async function sourcesForTransactions(
     }
   }
 
+  // Import-level fallback: the CSV/legacy case, where one statement PDF is linked at
+  // `documents.importId` (not pinned to any single transaction, `transactionId IS NULL`) and
+  // covers many transactions from that import. Gated to `transactionId IS NULL` so it never
+  // resolves a transaction-pinned document (a TR per-event receipt) belonging to some *other*
+  // transaction that merely shares the same collector import (the TR backfill's "carrier
+  // import" holds 1000+ per-event docs under one importId) — that cross-transaction leak is
+  // what let an arbitrary sibling's PDF appear on unrelated pytr/documentId-less rows.
   const docNameByImportId = new Map<string, string | null>();
   if (importIds.length > 0) {
     const impRows = await db(app)
       .select({ importId: documents.importId, originalFilename: documents.originalFilename })
       .from(documents)
-      .where(and(inArray(documents.importId, importIds), eq(documents.status, "retained")));
+      .where(
+        and(
+          inArray(documents.importId, importIds),
+          eq(documents.status, "retained"),
+          isNull(documents.transactionId),
+        ),
+      );
     for (const d of impRows) {
       if (d.importId && !docNameByImportId.has(d.importId)) {
         docNameByImportId.set(d.importId, d.originalFilename);

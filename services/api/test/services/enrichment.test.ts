@@ -519,17 +519,21 @@ describe("sourcesForTransactions", () => {
     expect(pdfRow.filename).toBe("settlement.pdf");
   });
 
-  it("still resolves a genuinely different, unclaimed transaction-scoped document (not over-broad)", async () => {
-    // Discriminates a correct fix from a too-broad one ("skip all fallback once any sibling has
-    // a documentId"): this transaction has TWO distinct retained documents — one explicitly
-    // claimed by a sibling row's own documentId, and one that no row claims. The claimless row
-    // must still resolve the OTHER, unclaimed document via the transaction-scoped fallback —
-    // proving only the specifically-claimed document is excluded, not the fallback itself.
+  it("does not attribute an unrelated unclaimed document to a sibling once any row has its own document", async () => {
+    // A TR trade transaction typically has 2-3 stored documents: one real settlement PDF
+    // (claimed by the pdf row's own documentId) plus 1-2 non-settlement leftovers
+    // (SAVINGS_PLAN_CREATED, COSTS_INFO_*, a rejected REKLASSIFIZIERUNG) that were never
+    // detect+parsed into their own source row. Once the pdf row has claimed the real document,
+    // an unclaimed *other* document on the same transaction must NOT be misattributed to the
+    // documentId-less pytr row as if it were that row's provenance — even though it is
+    // "genuinely different" from the claimed one, it is not the pytr row's document either.
+    // (The true CSV/legacy fallback — no sibling row owns any document at all — is covered by
+    // "falls back to the import-linked document when the source has no documentId" above.)
     const db = getDb();
     const s = nextSuffix();
     const { user, portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id, { type: "dividend" });
-    const [claimedDoc, unclaimedDoc] = await db
+    const [claimedDoc] = await db
       .insert(documents)
       .values([
         {
@@ -558,8 +562,50 @@ describe("sourcesForTransactions", () => {
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
     const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
-    expect(pytrRow.hasDocument).toBe(true);
-    expect(pytrRow.filename).toBe(unclaimedDoc.originalFilename);
+    const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
+    expect(pytrRow.hasDocument).toBe(false);
+    expect(pytrRow.filename).toBeNull();
+    expect(pdfRow.hasDocument).toBe(true);
+    expect(pdfRow.filename).toBe("claimed.pdf");
+  });
+
+  it("does not leak an unrelated transaction's pinned doc via the shared-import fallback (TR carrier import)", async () => {
+    // The TR document backfill downloads all historical per-event receipts through one synthetic
+    // "carrier import" (one screenshotImports row shared by hundreds of transactions), with each
+    // document pinned to its OWN transaction via documents.transactionId. Before the fix, the
+    // import-level fallback (docNameByImportId) ignored transactionId and resolved an essentially
+    // arbitrary document from that shared import for ANY documentId-less row whose importId
+    // matched — including a transaction with no document of its own. Gating that fallback to
+    // transactionId IS NULL (a genuine import-level artifact, e.g. one CSV statement PDF) closes
+    // this without touching the legitimate CSV case (covered by the "CSV case" test above).
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const txOther = await makeTx(db, portfolio.id);
+    const txNoDoc = await makeTx(db, portfolio.id);
+    const [imp] = await db
+      .insert(screenshotImports)
+      .values({ userId: user.id, portfolioId: portfolio.id })
+      .returning();
+    // A document pinned to a DIFFERENT transaction, sharing the same collector import.
+    await db.insert(documents).values({
+      userId: user.id,
+      importId: imp.id,
+      transactionId: txOther.id,
+      storageKey: `receipts/${user.id}/other.pdf`,
+      mimeType: "application/pdf",
+      originalFilename: "other.pdf",
+      status: "retained",
+    });
+    // txNoDoc has no document of its own, only a pytr row sharing the collector importId.
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: txNoDoc.id, sourceType: "pytr", importId: imp.id, documentId: null });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id])).get(txNoDoc.id) ?? [];
+    expect(row.hasDocument).toBe(false);
+    expect(row.filename).toBeNull();
   });
 });
 
