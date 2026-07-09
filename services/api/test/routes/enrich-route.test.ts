@@ -356,4 +356,75 @@ describe("GET …/sources/:sourceId/document-url", () => {
     });
     expect([403, 404]).toContain(res.statusCode);
   });
+
+  it("resolves a synthetic doc:<documentId> source id (always-show-every-PDF entries)", async () => {
+    const sub = nextSub();
+    const { t, portfolioId, userId } = await setupUser(sub, true);
+    const tx = await insertTx(portfolioId);
+    const db = getDb();
+
+    const [imp] = await db
+      .insert(screenshotImports)
+      .values({ userId, portfolioId, parser: "pytr", status: "confirmed", parsedJson: {} })
+      .returning();
+    const storageKey = `receipts/${userId}/${imp.id}/reklassifizierung.pdf`;
+    await storage.put(storageKey, Buffer.from("pdf"), { mimeType: "application/pdf" });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId,
+        portfolioId,
+        importId: imp.id,
+        transactionId: tx.id,
+        storageKey,
+        originalFilename: "reklassifizierung.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 3,
+        status: "retained",
+      })
+      .returning();
+    // No transaction_sources row claims this document — it's a rejected/unparsed doc that
+    // sourcesForTransactions surfaces as a synthetic `doc:<id>` entry.
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions/${tx.id}/sources/doc:${doc.id}/document-url`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { url: string; mimeType: string };
+    expect(body.url).toContain(storageKey);
+    expect(body.mimeType).toBe("application/pdf");
+  });
+
+  it("404s a doc:<documentId> id whose document isn't pinned to the requested transaction", async () => {
+    const sub = nextSub();
+    const { t, portfolioId, userId } = await setupUser(sub, true);
+    const tx = await insertTx(portfolioId);
+    const otherTx = await insertTx(portfolioId);
+    const db = getDb();
+    const storageKey = `receipts/${userId}/other-tx.pdf`;
+    await storage.put(storageKey, Buffer.from("pdf"), { mimeType: "application/pdf" });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId,
+        portfolioId,
+        transactionId: otherTx.id, // pinned to a DIFFERENT transaction
+        storageKey,
+        originalFilename: "other-tx.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 3,
+        status: "retained",
+      })
+      .returning();
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions/${tx.id}/sources/doc:${doc.id}/document-url`,
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe("document_not_found");
+  });
 });
