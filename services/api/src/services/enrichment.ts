@@ -15,7 +15,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { transactionSources, transactions, documents } from "@portfolio/db";
 import type { TransactionSource } from "@portfolio/db";
 import type { ParsedTransaction, TaxComponents } from "@portfolio/schema";
@@ -454,12 +454,25 @@ export async function sourcesForTransactions(
     }
   }
 
+  // Import-level fallback: the CSV/legacy case, where one statement PDF is linked at
+  // `documents.importId` (not pinned to any single transaction, `transactionId IS NULL`) and
+  // covers many transactions from that import. Gated to `transactionId IS NULL` so it never
+  // resolves a transaction-pinned document (a TR per-event receipt) belonging to some *other*
+  // transaction that merely shares the same collector import (the TR backfill's "carrier
+  // import" holds 1000+ per-event docs under one importId) — that cross-transaction leak is
+  // what let an arbitrary sibling's PDF appear on unrelated pytr/documentId-less rows.
   const docNameByImportId = new Map<string, string | null>();
   if (importIds.length > 0) {
     const impRows = await db(app)
       .select({ importId: documents.importId, originalFilename: documents.originalFilename })
       .from(documents)
-      .where(and(inArray(documents.importId, importIds), eq(documents.status, "retained")));
+      .where(
+        and(
+          inArray(documents.importId, importIds),
+          eq(documents.status, "retained"),
+          isNull(documents.transactionId),
+        ),
+      );
     for (const d of impRows) {
       if (d.importId && !docNameByImportId.has(d.importId)) {
         docNameByImportId.set(d.importId, d.originalFilename);

@@ -568,6 +568,45 @@ describe("sourcesForTransactions", () => {
     expect(pdfRow.hasDocument).toBe(true);
     expect(pdfRow.filename).toBe("claimed.pdf");
   });
+
+  it("does not leak an unrelated transaction's pinned doc via the shared-import fallback (TR carrier import)", async () => {
+    // The TR document backfill downloads all historical per-event receipts through one synthetic
+    // "carrier import" (one screenshotImports row shared by hundreds of transactions), with each
+    // document pinned to its OWN transaction via documents.transactionId. Before the fix, the
+    // import-level fallback (docNameByImportId) ignored transactionId and resolved an essentially
+    // arbitrary document from that shared import for ANY documentId-less row whose importId
+    // matched — including a transaction with no document of its own. Gating that fallback to
+    // transactionId IS NULL (a genuine import-level artifact, e.g. one CSV statement PDF) closes
+    // this without touching the legitimate CSV case (covered by the "CSV case" test above).
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const txOther = await makeTx(db, portfolio.id);
+    const txNoDoc = await makeTx(db, portfolio.id);
+    const [imp] = await db
+      .insert(screenshotImports)
+      .values({ userId: user.id, portfolioId: portfolio.id })
+      .returning();
+    // A document pinned to a DIFFERENT transaction, sharing the same collector import.
+    await db.insert(documents).values({
+      userId: user.id,
+      importId: imp.id,
+      transactionId: txOther.id,
+      storageKey: `receipts/${user.id}/other.pdf`,
+      mimeType: "application/pdf",
+      originalFilename: "other.pdf",
+      status: "retained",
+    });
+    // txNoDoc has no document of its own, only a pytr row sharing the collector importId.
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: txNoDoc.id, sourceType: "pytr", importId: imp.id, documentId: null });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id])).get(txNoDoc.id) ?? [];
+    expect(row.hasDocument).toBe(false);
+    expect(row.filename).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

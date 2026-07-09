@@ -731,8 +731,11 @@ export const transactionSources = pgTable(
     documentId: uuid("document_id").references(() => documents.id, {
       onDelete: "set null",
     }),
-    // Per-source idempotency key. For TR settlement PDFs: `tr:exec:<AUSFÜHRUNG>`.
-    // For CSV: broker booking ref. Null for pytr (event id lives on the transaction).
+    // Per-source idempotency key. For TR settlement PDFs: `tr:exec:<AUSFÜHRUNG>`. For CSV:
+    // broker booking ref. For pytr sync rows: the TR resolved-event id (mirrors
+    // transactions.externalId) — required non-null so the dedup index below actually
+    // protects pytr rows; a pytr-typed row written with externalId=NULL is a bug, not the
+    // normal case (see materialize-drafts.ts's writeResolvedDrafts, the genuine sync insert).
     externalId: text("external_id"),
     // TR AUFTRAG order reference — shared across split-order legs. Null for non-TR sources.
     orderRef: text("order_ref"),
