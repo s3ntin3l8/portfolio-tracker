@@ -58,6 +58,20 @@ const DIVIDEND_USD_FORMAT_A =
 const AUSSCHUETTUNG_FORMAT_A =
   "TRADE REPUBLIC BANK GMBH KÖPENICKER STRASSE 40C 10179 BERLIN SEITE 1 von 1 DATUM 27.09.2023 DEPOT 1234567890 Max Mustermann Musterstr. 1 12345 Musterstadt Trade Republic Bank GmbH Köpenicker Straße 40c 10179 Berlin www.traderepublic.com service@traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B USt-ID DE307510626 Geschäftsführer Andreas Torner Gernot Mittendorfer ABRE / 28.09.2023 / 83161424 / 4102-32c8 AUSSCHÜTTUNG ABRECHNUNG POSITION BETRAG Zwischensumme 0,88 USD Zwischensumme 1,0587 EUR/USD 0,83 EUR GESAMT 0,83 EUR BUCHUNG VERRECHNUNGSKONTO WERTSTELLUNG BETRAG DE00000000000000000000 27.09.2023 0,83 EUR iShs Core S&P 500 UC.ETF USDD Registered Shares USD (Dist)oN in Wertpapierrechnung in Deutschland. Lagerland: Vereinigtes Königreich Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Sofern keine Umsatzsteuer ausgewiesen ist, handelt es sich gem. § 4 Nr. 8 UStG um eine umsatzsteuerfreie Leistung. ÜBERSICHT Ausschüttung mit dem Ex-Tag 14.09.2023. POSITION ANZAHL ERTRAG BETRAG iShs Core S&P 500 UC.ETF USDD Registered Shares USD (Dist)oN ISIN: IE0031442068 5,98573 Stk. 0,1462 USD 0,88 USD GESAMT 0,88 USD";
 
+// Real Realty Income dividend CANCELLATION — reverses an earlier payment (negative
+// POSITION/BUCHUNG amounts). Must be rejected outright: `parseTrDividend` isn't sign-aware
+// (it strips a leading "-" before parsing), so if this were accepted a -6.68 EUR reversal
+// would be recorded as a +6.68 EUR credit.
+const DIVIDEND_STORNIERUNG =
+  "TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 25.03.2025 DEPOT 1234567890 STORNIERUNG DER DIVIDENDE ÜBERSICHT Dividende mit Ex-Datum31.01.2024. POSITION ANZAHL ERTRAG BETRAG Realty Income US7561091049 37.78361 Stücke -0.26 USD -9.69 USD GESAMT -9.69 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten 1.45 USD Zwischensumme -8.24 USD Zwischensumme 1.0787 EUR/USD -7.64 EUR Kapitalertragssteuer 1.0787 EUR/USD 0.90 EUR Solidaritätszuschlag 1.0787 EUR/USD 0.06 EUR GESAMT -6.68 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 15.02.2024 -6.68 EUR Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Wird keine Umsatzsteuer ausgewiesen, handelt es sich um eine umsatzsteuerfreie Leistung gemäß § 4 Nr. 8 UStG Max Mustermann Musterstr. 1 12345 Musterstadt";
+
+// Real Realty Income US-REIT tax RECLASSIFICATION of an earlier distribution — not a fresh
+// payment either, and (per the live account) several of these can be linked to a single
+// transaction, so there's no reliable single per-share/native/fx to attach even if the
+// wording were otherwise treated as a plain dividend.
+const DIVIDEND_REKLASSIFIZIERUNG =
+  "TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 25.03.2025 DEPOT 1234567890 REKLASSIFIZIERUNG US-AUSSCHÜTTUNGEN ÜBERSICHT Du hast eine neu klassifizierte Barausschüttung für ein in den USA notiertes Wertpapier in deinem Konto erhalten. Dies ist keine neue Dividendenzahlung, sondern eine steuerliche Neuklassifizierung einer früheren Ausschüttung mit Ex-Tag am 31.01.2024. POSITION ANZAHL ERTRAG BETRAG Realty Income US7561091049 37.78361 Stücke 0.18 USD 6.75 USD GESAMT 6.75 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten -1.45 USD Zwischensumme 5.30 USD Zwischensumme 1.0787 EUR/USD 4.92 EUR GESAMT 4.92 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 27.02.2025 4.92 EUR Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Wird keine Umsatzsteuer ausgewiesen, handelt es sich um eine umsatzsteuerfreie Leistung gemäß § 4 Nr. 8 UStG Max Mustermann Musterstr. 1 12345 Musterstadt";
+
 // A cash-transfer confirmation (ÜBERWEISUNGSBESTÄTIGUNG) — amount only, no securities or
 // tax. Must NOT be detected as a settlement (it's mapped to deposit/withdrawal already).
 const TRANSFER_REJECT =
@@ -78,6 +92,13 @@ describe("detectTrPdf", () => {
     expect(detectTrPdf(DIVIDEND_GBP_FORMAT_A)).toBe(true);
     expect(detectTrPdf(DIVIDEND_USD_FORMAT_A)).toBe(true);
     expect(detectTrPdf(AUSSCHUETTUNG_FORMAT_A)).toBe(true);
+  });
+
+  it("rejects a dividend cancellation (STORNIERUNG) and a US-REIT reclassification (REKLASSIFIZIERUNG)", () => {
+    // Both carry "DIVIDENDE"/"AUSSCHÜTTUNG" + a quantity marker and would otherwise match —
+    // they must be excluded specifically, not just happen to fail some other check.
+    expect(detectTrPdf(DIVIDEND_STORNIERUNG)).toBe(false);
+    expect(detectTrPdf(DIVIDEND_REKLASSIFIZIERUNG)).toBe(false);
   });
 
   it("rejects a cash-transfer confirmation (no securities/tax to mine)", () => {

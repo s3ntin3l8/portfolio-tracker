@@ -71,21 +71,37 @@ const BARE_ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}\d)\b/;
  * Settlement trade: has WERTPAPIERABRECHNUNG + AUSFÜHRUNG (all 10 sample types).
  * Settlement dividend: has the word DIVIDENDE (or WAHLDIVIDENDE/AUSSCHÜTTUNG) + a quantity
  * marker (Stücke — US-locale era — or Stk. — German-locale, pre-2024Q3, era).
+ *
+ * Explicitly EXCLUDED (real docs, discovered via the historical backfill): a dividend
+ * cancellation ("STORNIERUNG DER DIVIDENDE ...") or a US-REIT tax reclassification
+ * ("REKLASSIFIZIERUNG US-AUSSCHÜTTUNGEN ...") of an *earlier* payment — not a fresh income
+ * event. These carry negative POSITION/BUCHUNG amounts that `parseTrDividend` isn't
+ * sign-aware for (it strips a leading "-" before parsing, which would turn a reversal into
+ * a same-sized positive credit), and in practice several conflicting STORNIERUNG/
+ * REKLASSIFIZIERUNG documents can be linked to a single transaction — there's no reliable
+ * "the" per-share/native/fx to pick even if the sign were handled. Safer to not parse them
+ * at all; the pytr sync's own net cash-flow for these transactions is left untouched.
  */
 export function detectTrPdf(text: string): boolean {
   if (!TR_SIG_RE.test(text)) return false;
   // Trade settlement confirmation.
   if (/WERTPAPIERABRECHNUNG/.test(text) && /\bAUSFÜHRUNG\b/.test(text)) return true;
+  // A dividend cancellation or US-REIT reclassification of a prior payment — see the
+  // module doc comment above. Excluded from both dividend branches below (not a top-level
+  // guard: a trade-settlement STORNIERUNG, if TR ever prints one, should still be free to
+  // hit the WERTPAPIERABRECHNUNG branch above).
+  const isCorrection = /STORNIERUNG DER DIVIDENDE|REKLASSIFIZIERUNG/.test(text);
   // Dividend income confirmation, ~2024Q3 onward (US locale, Stücke). Also matches
   // WAHLDIVIDENDE (scrip/choice-dividend paid in cash — same structure) — a plain
   // `\bDIVIDENDE\b` misses it because "WAHLDIVIDENDE" is one unbroken token, so there's no
   // word boundary directly before "DIVIDENDE".
-  if (/\b(?:WAHL)?DIVIDENDE\b/.test(text) && /Stücke/.test(text)) return true;
+  if (/\b(?:WAHL)?DIVIDENDE\b/.test(text) && /Stücke/.test(text) && !isCorrection) return true;
   // Dividend/distribution income confirmation, pre-2024Q3 (German locale, Stk.). Also
   // matches AUSSCHÜTTUNG (fund/ETF distribution) documents, which carry no "DIVIDENDE"
   // keyword at all. The `!WERTPAPIERABRECHNUNG` guard is belt-and-suspenders — trade docs
   // also use "Stk." for share quantity, though they never carry DIVIDENDE/AUSSCHÜTTUNG.
   if (
+    !isCorrection &&
     /\b(?:WAHL)?DIVIDENDE\b|\bAUSSCHÜTTUNG\b/.test(text) &&
     /Stk\./.test(text) &&
     !/WERTPAPIERABRECHNUNG/.test(text)
