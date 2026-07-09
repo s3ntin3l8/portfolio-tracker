@@ -842,7 +842,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           transactionIdsWithDocuments(app, allTxIds),
           txIdsWithFullTaxDetail(app, allTxIds),
           txIdsNeedingReview(app, allTxIds),
-          sourcesForTransactions(app, allTxIds),
+          sourcesForTransactions(app, allTxIds, request.params.portfolioId),
         ]);
       return rows.map((r) => ({
         ...r,

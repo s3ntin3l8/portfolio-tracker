@@ -15,6 +15,7 @@ import {
   transactionSources,
   documents,
   screenshotImports,
+  instruments,
 } from "@portfolio/db";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import {
@@ -23,7 +24,34 @@ import {
   txIdsWithFullTaxDetail,
   sourcesForTransactions,
 } from "../../src/services/enrichment.js";
+import { buildDocumentName, slug } from "../../src/storage/naming.js";
 import type { ParsedTransaction } from "@portfolio/schema";
+
+/**
+ * Compute the same synthesized display name `sourcesForTransactions` produces, from the
+ * fixture's own known inputs — via the real `buildDocumentName`, not a hand-typed literal, so
+ * these tests break if the naming format itself changes, not just if this file drifts from it.
+ */
+function expectedDisplayName(opts: {
+  type: string;
+  executedAt: Date;
+  portfolioName: string;
+  ext: string;
+  symbol?: string;
+}) {
+  const dt = opts.executedAt;
+  const date = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  return buildDocumentName({
+    scope: "transaction",
+    date,
+    year: String(dt.getUTCFullYear()),
+    portfolioSlug: slug(opts.portfolioName),
+    type: opts.type,
+    symbol: opts.symbol ?? "unknown",
+    ext: opts.ext,
+    docId: "",
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Mock extractPdfText so enrichTransactionsFromStoredDocuments tests don't
@@ -357,7 +385,7 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const map = await sourcesForTransactions(app as never, [tx.id]);
+    const map = await sourcesForTransactions(app as never, [tx.id], portfolio.id);
 
     const rows = map.get(tx.id) ?? [];
     expect(rows).toHaveLength(2);
@@ -367,7 +395,8 @@ describe("sourcesForTransactions", () => {
 
   it("returns empty map for empty input", async () => {
     const app = { db: getDb(), log: { warn: vi.fn(), info: vi.fn() } };
-    const map = await sourcesForTransactions(app as never, []);
+    // portfolioId is unused on the empty-input early-return path.
+    const map = await sourcesForTransactions(app as never, [], "");
     expect(map.size).toBe(0);
   });
 
@@ -391,9 +420,11 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.hasDocument).toBe(true);
-    expect(row.filename).toBe("settlement.pdf");
+    expect(row.filename).toBe(
+      expectedDisplayName({ type: "buy", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
   });
 
   it("falls back to the import-linked document when the source has no documentId (CSV case)", async () => {
@@ -419,10 +450,12 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "csv", importId: imp.id, documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.documentId).toBeNull();
     expect(row.hasDocument).toBe(true);
-    expect(row.filename).toBe("statement.csv");
+    expect(row.filename).toBe(
+      expectedDisplayName({ type: "buy", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".csv" }),
+    );
   });
 
   it("pytr rows never resolve a document; each transaction's OWN retained receipt gets its own synthetic pdf entry, not an arbitrary sibling's, when many docs share a collector import (TR)", async () => {
@@ -436,33 +469,36 @@ describe("sourcesForTransactions", () => {
       .values({ userId: user.id, portfolioId: portfolio.id })
       .returning();
     // Two docs share the collector importId but each is linked to its own transaction.
-    await db.insert(documents).values([
-      {
-        userId: user.id,
-        importId: imp.id,
-        transactionId: txA.id,
-        storageKey: `receipts/${user.id}/a.pdf`,
-        mimeType: "application/pdf",
-        originalFilename: "receipt-A.pdf",
-        status: "retained",
-      },
-      {
-        userId: user.id,
-        importId: imp.id,
-        transactionId: txB.id,
-        storageKey: `receipts/${user.id}/b.pdf`,
-        mimeType: "application/pdf",
-        originalFilename: "receipt-B.pdf",
-        status: "retained",
-      },
-    ]);
+    const [docA, docB] = await db
+      .insert(documents)
+      .values([
+        {
+          userId: user.id,
+          importId: imp.id,
+          transactionId: txA.id,
+          storageKey: `receipts/${user.id}/a.pdf`,
+          mimeType: "application/pdf",
+          originalFilename: "receipt-A.pdf",
+          status: "retained",
+        },
+        {
+          userId: user.id,
+          importId: imp.id,
+          transactionId: txB.id,
+          storageKey: `receipts/${user.id}/b.pdf`,
+          mimeType: "application/pdf",
+          originalFilename: "receipt-B.pdf",
+          status: "retained",
+        },
+      ])
+      .returning();
     await db.insert(transactionSources).values([
       { transactionId: txA.id, sourceType: "pytr", importId: imp.id, documentId: null },
       { transactionId: txB.id, sourceType: "pytr", importId: imp.id, documentId: null },
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const map = await sourcesForTransactions(app as never, [txA.id, txB.id]);
+    const map = await sourcesForTransactions(app as never, [txA.id, txB.id], portfolio.id);
     const rowsA = map.get(txA.id)!;
     const rowsB = map.get(txB.id)!;
 
@@ -471,16 +507,26 @@ describe("sourcesForTransactions", () => {
     expect(pytrA.filename).toBeNull();
 
     // Each transaction's own receipt surfaces as its own synthetic pdf entry — not an
-    // arbitrary/shared one from the other transaction.
+    // arbitrary/shared one from the other transaction. `documentId` is the unambiguous
+    // anti-leak signal (physical doc identity); the synthesized `filename` is checked too, to
+    // confirm the naming pass ran (both come out identical in shape since txA/txB share the
+    // same fixture type/executedAt/portfolio and neither has an instrument — that's expected,
+    // not a leak, since the underlying documentId still correctly differs per transaction).
     const syntheticA = rowsA.find((r) => r.id !== pytrA.id)!;
     expect(syntheticA.sourceType).toBe("pdf");
     expect(syntheticA.hasDocument).toBe(true);
-    expect(syntheticA.filename).toBe("receipt-A.pdf");
+    expect(syntheticA.documentId).toBe(docA.id);
+    expect(syntheticA.filename).toBe(
+      expectedDisplayName({ type: "buy", executedAt: txA.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
 
     const pytrB = rowsB.find((r) => r.sourceType === "pytr")!;
     expect(pytrB.hasDocument).toBe(false);
     const syntheticB = rowsB.find((r) => r.id !== pytrB.id)!;
-    expect(syntheticB.filename).toBe("receipt-B.pdf");
+    expect(syntheticB.documentId).toBe(docB.id);
+    expect(syntheticB.filename).toBe(
+      expectedDisplayName({ type: "buy", executedAt: txB.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
   });
 
   it("reports hasDocument=false + null filename when no document is retained", async () => {
@@ -493,7 +539,7 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "manual", documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
   });
@@ -525,13 +571,15 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
     const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
     expect(pytrRow.hasDocument).toBe(false);
     expect(pytrRow.filename).toBeNull();
     expect(pdfRow.hasDocument).toBe(true);
-    expect(pdfRow.filename).toBe("settlement.pdf");
+    expect(pdfRow.filename).toBe(
+      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
   });
 
   it("does not attribute an unrelated unclaimed document to a sibling once any row has its own document", async () => {
@@ -575,13 +623,19 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
     const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
     expect(pytrRow.hasDocument).toBe(false);
     expect(pytrRow.filename).toBeNull();
     expect(pdfRow.hasDocument).toBe(true);
-    expect(pdfRow.filename).toBe("claimed.pdf");
+    // documentId is the unambiguous proof that the CLAIMED doc resolved, not the unclaimed one
+    // (both share the same tx type/executedAt/portfolio, so the synthesized filename below would
+    // be identical either way — it only confirms the naming pass ran, not which doc was picked).
+    expect(pdfRow.documentId).toBe(claimedDoc.id);
+    expect(pdfRow.filename).toBe(
+      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
   });
 
   it("does not leak an unrelated transaction's pinned doc via the shared-import fallback (TR carrier import)", async () => {
@@ -618,7 +672,7 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: txNoDoc.id, sourceType: "pytr", importId: imp.id, documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id])).get(txNoDoc.id) ?? [];
+    const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id], portfolio.id)).get(txNoDoc.id) ?? [];
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
   });
@@ -646,7 +700,7 @@ describe("sourcesForTransactions", () => {
     await db.insert(transactionSources).values({ transactionId: tx.id, sourceType: "pytr", documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(rows).toHaveLength(2);
 
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
@@ -657,7 +711,9 @@ describe("sourcesForTransactions", () => {
     expect(syntheticRow.id).toBe(`doc:${doc.id}`);
     expect(syntheticRow.documentId).toBe(doc.id);
     expect(syntheticRow.hasDocument).toBe(true);
-    expect(syntheticRow.filename).toBe("reklassifizierung.pdf");
+    expect(syntheticRow.filename).toBe(
+      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+    );
   });
 
   it("does not synthesize a duplicate entry for a document already claimed by a real pdf row", async () => {
@@ -682,11 +738,86 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(rows).toHaveLength(2); // pytr + the one real pdf row — no synthetic third entry
     const pdfRows = rows.filter((r) => r.sourceType === "pdf");
     expect(pdfRows).toHaveLength(1);
     expect(pdfRows[0].id).not.toMatch(/^doc:/);
+  });
+
+  it("synthesizes a display name using the transaction's own instrument symbol when one is set", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const [instrument] = await db
+      .insert(instruments)
+      .values({
+        symbol: "AAPL",
+        market: "XNAS",
+        assetClass: "equity",
+        currency: "USD",
+        name: "Apple Inc.",
+      })
+      .returning();
+    const tx = await makeTx(db, portfolio.id, { instrumentId: instrument.id });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        transactionId: tx.id,
+        storageKey: `receipts/${user.id}/settlement.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "d0f17246-8fad-4a01-9324-9c184a774.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    expect(row.filename).toBe(
+      expectedDisplayName({
+        type: "buy",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+        symbol: "AAPL",
+      }),
+    );
+    expect(row.filename).not.toContain(doc.id);
+  });
+
+  it("falls back to the raw stored filename when display-name synthesis fails (best-effort, never throws)", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id);
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        transactionId: tx.id,
+        storageKey: `receipts/${user.id}/settlement.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "settlement.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
+
+    // `portfolios.id` is a uuid column — a malformed portfolioId makes gatherDocumentMetadata's
+    // portfolio-name lookup throw at the DB layer, strictly after the main source-row/document
+    // queries (which use the real, valid `tx.id`) have already succeeded. Exercises the same
+    // real failure surface the try/catch guards against, without mocking DB internals.
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const [row] = (await sourcesForTransactions(app as never, [tx.id], "not-a-valid-uuid")).get(tx.id) ?? [];
+    expect(row.hasDocument).toBe(true);
+    expect(row.filename).toBe("settlement.pdf"); // raw fallback, not a synthesized name
+    expect(app.log.warn).toHaveBeenCalled();
   });
 });
 

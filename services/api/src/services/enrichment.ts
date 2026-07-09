@@ -24,6 +24,14 @@ import type { DB } from "../db/client.js";
 import { recomputeRollup, type SourceRow } from "./parsers/dedup.js";
 import { extractPdfText } from "./parsers/pdf-text.js";
 import { detectTrPdf, parseTrPdf } from "./parsers/tr-pdf.js";
+import {
+  gatherDocumentMetadata,
+  namingContextFor,
+  computeNamingParts,
+  buildDocumentName,
+  type NamingRequest,
+  type DocumentForNaming,
+} from "../storage/naming.js";
 
 type AppLike = Pick<FastifyInstance, "db" | "log">;
 type AppWithStorage = Pick<FastifyInstance, "db" | "log" | "storage">;
@@ -355,7 +363,10 @@ export interface SourceSummary {
   documentId: string | null;
   taxComponents: TaxComponents | null;
   createdAt: Date;
-  /** Original filename of the document this row resolves to (null when none is retained). */
+  /** Human-readable display name for the document this row resolves to (null when none is
+   * retained) — the same `{date}_{portfolio}_{type}_{symbol}` name `buildDocumentName` produces
+   * for the actual download, not the literal stored filename (which for TR postbox docs is an
+   * opaque UUID). Falls back to the raw stored filename if synthesis fails for any reason. */
   filename: string | null;
   /** True when a document can be downloaded for this row — either its own `documentId`,
    * or (for upload imports) a retained document linked via the row's `importId`. */
@@ -364,7 +375,8 @@ export interface SourceSummary {
 
 /**
  * Fetch all source rows for the given transaction ids, keyed by transactionId.
- * Used by the transactions list endpoint to expose sources in bulk.
+ * Used by the transactions list endpoint to expose sources in bulk. `portfolioId` scopes the
+ * display-name synthesis pass (every transaction in `txIds` must belong to this portfolio).
  *
  * `pytr` rows are pure sync-provenance markers and never resolve a document — the TR API
  * sync never reads a PDF. Every OTHER source row resolves its own `documentId` when set
@@ -374,10 +386,18 @@ export interface SourceSummary {
  * row or not (a rejected compound statement, a REKLASSIFIZIERUNG, a COSTS_INFO leftover) —
  * gets a synthetic `pdf` entry so every stored PDF is independently downloadable, matching
  * `getDocumentForTransaction`'s own resolution order at actual download time.
+ *
+ * Every entry that resolves a document also gets its `filename` overwritten with a synthesized,
+ * human-readable display name (reusing the same `storage/naming.ts` machinery the download
+ * endpoint already uses), forcing "transaction" scope via each entry's own `transactionId` — so
+ * the list label always matches what the file will be named on download, even for a statement
+ * PDF shared across several transactions. Best-effort: falls back to the raw stored filename
+ * if the naming pass fails, and never throws out of this function.
  */
 export async function sourcesForTransactions(
   app: AppLike,
   txIds: string[],
+  portfolioId: string,
 ): Promise<Map<string, SourceSummary[]>> {
   if (txIds.length === 0) return new Map();
 
@@ -404,13 +424,25 @@ export async function sourcesForTransactions(
   ];
   const claimedDocIds = new Set(docIds);
 
-  const docNameById = new Map<string, string | null>();
+  // Collected alongside each entry that resolves a document — the display-name synthesis pass
+  // (below, after both loops) forces "transaction" scope via `txId`, so the other
+  // `DocumentForNaming` fields (source/importId/storedAt/transactionId) are never read; only
+  // `id` + `mimeType` matter here.
+  const namingRequests: { entry: SourceSummary; request: NamingRequest }[] = [];
+
+  const docNameById = new Map<string, { originalFilename: string | null; mimeType: string }>();
   if (docIds.length > 0) {
     const docRows = await db(app)
-      .select({ id: documents.id, originalFilename: documents.originalFilename })
+      .select({
+        id: documents.id,
+        originalFilename: documents.originalFilename,
+        mimeType: documents.mimeType,
+      })
       .from(documents)
       .where(and(inArray(documents.id, docIds), eq(documents.status, "retained")));
-    for (const d of docRows) docNameById.set(d.id, d.originalFilename);
+    for (const d of docRows) {
+      docNameById.set(d.id, { originalFilename: d.originalFilename, mimeType: d.mimeType });
+    }
   }
 
   // Import-level fallback: the CSV/legacy case, where one statement PDF is linked at
@@ -420,10 +452,18 @@ export async function sourcesForTransactions(
   // transaction that merely shares the same collector import (the TR backfill's "carrier
   // import" holds 1000+ per-event docs under one importId) — that cross-transaction leak is
   // what let an arbitrary sibling's PDF appear on unrelated documentId-less rows.
-  const docNameByImportId = new Map<string, string | null>();
+  const docNameByImportId = new Map<
+    string,
+    { id: string; originalFilename: string | null; mimeType: string }
+  >();
   if (importIds.length > 0) {
     const impRows = await db(app)
-      .select({ importId: documents.importId, originalFilename: documents.originalFilename })
+      .select({
+        id: documents.id,
+        importId: documents.importId,
+        originalFilename: documents.originalFilename,
+        mimeType: documents.mimeType,
+      })
       .from(documents)
       .where(
         and(
@@ -434,7 +474,11 @@ export async function sourcesForTransactions(
       );
     for (const d of impRows) {
       if (d.importId && !docNameByImportId.has(d.importId)) {
-        docNameByImportId.set(d.importId, d.originalFilename);
+        docNameByImportId.set(d.importId, {
+          id: d.id,
+          originalFilename: d.originalFilename,
+          mimeType: d.mimeType,
+        });
       }
     }
   }
@@ -443,18 +487,36 @@ export async function sourcesForTransactions(
   for (const r of rows) {
     let filename: string | null = null;
     let hasDocument = false;
+    let namingDoc: DocumentForNaming | null = null;
     if (r.sourceType === "pytr") {
       // Sync-provenance marker only — never linked to a document, even when a document
       // happens to be stored for this transaction (that document gets its own synthetic
       // `pdf` entry below).
     } else if (r.documentId && docNameById.has(r.documentId)) {
-      filename = docNameById.get(r.documentId) ?? null;
+      const doc = docNameById.get(r.documentId)!;
+      filename = doc.originalFilename;
       hasDocument = true;
+      namingDoc = {
+        id: r.documentId,
+        mimeType: doc.mimeType,
+        source: null,
+        storedAt: r.createdAt,
+        importId: null,
+        transactionId: null,
+      };
     } else if (r.importId && docNameByImportId.has(r.importId)) {
-      filename = docNameByImportId.get(r.importId) ?? null;
+      const doc = docNameByImportId.get(r.importId)!;
+      filename = doc.originalFilename;
       hasDocument = true;
+      namingDoc = {
+        id: doc.id,
+        mimeType: doc.mimeType,
+        source: null,
+        storedAt: r.createdAt,
+        importId: r.importId,
+        transactionId: null,
+      };
     }
-    const bucket = out.get(r.transactionId);
     const entry: SourceSummary = {
       id: r.id,
       sourceType: r.sourceType,
@@ -466,8 +528,10 @@ export async function sourcesForTransactions(
       filename,
       hasDocument,
     };
+    const bucket = out.get(r.transactionId);
     if (bucket) bucket.push(entry);
     else out.set(r.transactionId, [entry]);
+    if (namingDoc) namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
   }
 
   // Every retained document stored for one of these transactions gets its own downloadable
@@ -478,6 +542,7 @@ export async function sourcesForTransactions(
       id: documents.id,
       transactionId: documents.transactionId,
       originalFilename: documents.originalFilename,
+      mimeType: documents.mimeType,
       storedAt: documents.storedAt,
     })
     .from(documents)
@@ -498,6 +563,42 @@ export async function sourcesForTransactions(
     const bucket = out.get(d.transactionId);
     if (bucket) bucket.push(entry);
     else out.set(d.transactionId, [entry]);
+    namingRequests.push({
+      entry,
+      request: {
+        doc: {
+          id: d.id,
+          mimeType: d.mimeType,
+          source: null,
+          storedAt: d.storedAt,
+          importId: null,
+          transactionId: d.transactionId,
+        },
+        txId: d.transactionId,
+      },
+    });
+  }
+
+  // Synthesize a human-readable display name for every entry that resolved a document,
+  // overwriting the raw `filename` set above (which stays as the fallback on failure).
+  // Best-effort: this is a read/list endpoint and must never throw.
+  if (namingRequests.length > 0) {
+    try {
+      const meta = await gatherDocumentMetadata(
+        app,
+        namingRequests.map((n) => n.request),
+        portfolioId,
+      );
+      for (const { entry, request } of namingRequests) {
+        const parts = computeNamingParts(request.doc, namingContextFor(request, meta));
+        entry.filename = buildDocumentName(parts);
+      }
+    } catch (err) {
+      app.log.warn(
+        { err, portfolioId },
+        "sourcesForTransactions: display-name synthesis failed (non-fatal, raw filenames kept)",
+      );
+    }
   }
 
   return out;
