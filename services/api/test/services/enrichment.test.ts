@@ -425,7 +425,7 @@ describe("sourcesForTransactions", () => {
     expect(row.filename).toBe("statement.csv");
   });
 
-  it("resolves the transaction-scoped doc, not an arbitrary one, when many docs share a collector import (TR)", async () => {
+  it("pytr rows never resolve a document; each transaction's OWN retained receipt gets its own synthetic pdf entry, not an arbitrary sibling's, when many docs share a collector import (TR)", async () => {
     const db = getDb();
     const s = nextSuffix();
     const { user, portfolio } = await makeUserAndPortfolio(db, s);
@@ -463,9 +463,24 @@ describe("sourcesForTransactions", () => {
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
     const map = await sourcesForTransactions(app as never, [txA.id, txB.id]);
-    // Each transaction resolves its OWN per-transaction receipt, not a shared/arbitrary one.
-    expect(map.get(txA.id)![0].filename).toBe("receipt-A.pdf");
-    expect(map.get(txB.id)![0].filename).toBe("receipt-B.pdf");
+    const rowsA = map.get(txA.id)!;
+    const rowsB = map.get(txB.id)!;
+
+    const pytrA = rowsA.find((r) => r.sourceType === "pytr")!;
+    expect(pytrA.hasDocument).toBe(false);
+    expect(pytrA.filename).toBeNull();
+
+    // Each transaction's own receipt surfaces as its own synthetic pdf entry — not an
+    // arbitrary/shared one from the other transaction.
+    const syntheticA = rowsA.find((r) => r.id !== pytrA.id)!;
+    expect(syntheticA.sourceType).toBe("pdf");
+    expect(syntheticA.hasDocument).toBe(true);
+    expect(syntheticA.filename).toBe("receipt-A.pdf");
+
+    const pytrB = rowsB.find((r) => r.sourceType === "pytr")!;
+    expect(pytrB.hasDocument).toBe(false);
+    const syntheticB = rowsB.find((r) => r.id !== pytrB.id)!;
+    expect(syntheticB.filename).toBe("receipt-B.pdf");
   });
 
   it("reports hasDocument=false + null filename when no document is retained", async () => {
@@ -606,6 +621,72 @@ describe("sourcesForTransactions", () => {
     const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id])).get(txNoDoc.id) ?? [];
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
+  });
+
+  it("gives an unparsed/rejected stored document its own downloadable pdf entry (always-show-every-PDF)", async () => {
+    // A REKLASSIFIZIERUNG / compound-Zinskonto / COSTS_INFO document that detectTrPdf rejects
+    // never gets its own transaction_sources row — but it's still retained in S3, and per the
+    // clarified provenance model every retained document must be independently downloadable,
+    // whether or not it carried enrichment value.
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, { type: "dividend" });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        transactionId: tx.id,
+        storageKey: `receipts/${user.id}/reklassifizierung.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "reklassifizierung.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db.insert(transactionSources).values({ transactionId: tx.id, sourceType: "pytr", documentId: null });
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    expect(rows).toHaveLength(2);
+
+    const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
+    expect(pytrRow.hasDocument).toBe(false);
+    expect(pytrRow.filename).toBeNull();
+
+    const syntheticRow = rows.find((r) => r.sourceType === "pdf")!;
+    expect(syntheticRow.id).toBe(`doc:${doc.id}`);
+    expect(syntheticRow.documentId).toBe(doc.id);
+    expect(syntheticRow.hasDocument).toBe(true);
+    expect(syntheticRow.filename).toBe("reklassifizierung.pdf");
+  });
+
+  it("does not synthesize a duplicate entry for a document already claimed by a real pdf row", async () => {
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, { type: "dividend" });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        transactionId: tx.id,
+        storageKey: `receipts/${user.id}/settlement.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "settlement.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db.insert(transactionSources).values([
+      { transactionId: tx.id, sourceType: "pytr", documentId: null },
+      { transactionId: tx.id, sourceType: "pdf", documentId: doc.id },
+    ]);
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    expect(rows).toHaveLength(2); // pytr + the one real pdf row — no synthetic third entry
+    const pdfRows = rows.filter((r) => r.sourceType === "pdf");
+    expect(pdfRows).toHaveLength(1);
+    expect(pdfRows[0].id).not.toMatch(/^doc:/);
   });
 });
 

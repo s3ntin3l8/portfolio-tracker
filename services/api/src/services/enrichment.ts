@@ -15,7 +15,7 @@
  */
 
 import type { FastifyInstance } from "fastify";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { transactionSources, transactions, documents } from "@portfolio/db";
 import type { TransactionSource } from "@portfolio/db";
 import type { ParsedTransaction, TaxComponents } from "@portfolio/schema";
@@ -366,13 +366,14 @@ export interface SourceSummary {
  * Fetch all source rows for the given transaction ids, keyed by transactionId.
  * Used by the transactions list endpoint to expose sources in bulk.
  *
- * Each row also carries `filename`/`hasDocument`, resolved in bulk to mirror
- * `getDocumentForTransaction`: a row downloads its own `documentId` when set (retained PDF
- * imports); otherwise the transaction-scoped document (correct for TR, whose collector import
- * holds many docs) — excluding any document a *sibling* row already claims via its own
- * `documentId`, so e.g. the original pytr sync row (no document of its own) doesn't show the
- * same document a later pdf-enrichment row on the same transaction links directly — then the
- * import-linked document (the common CSV case, `documentId` null).
+ * `pytr` rows are pure sync-provenance markers and never resolve a document — the TR API
+ * sync never reads a PDF. Every OTHER source row resolves its own `documentId` when set
+ * (retained PDF imports), else the import-linked document (the CSV/legacy case, one statement
+ * PDF shared across many transactions, `documents.transactionId IS NULL`). On top of the real
+ * rows, every retained document actually stored for a transaction — parsed into its own `pdf`
+ * row or not (a rejected compound statement, a REKLASSIFIZIERUNG, a COSTS_INFO leftover) —
+ * gets a synthetic `pdf` entry so every stored PDF is independently downloadable, matching
+ * `getDocumentForTransaction`'s own resolution order at actual download time.
  */
 export async function sourcesForTransactions(
   app: AppLike,
@@ -395,27 +396,13 @@ export async function sourcesForTransactions(
     .from(transactionSources)
     .where(inArray(transactionSources.transactionId, txIds));
 
-  // Resolve filenames + downloadability in bulk to avoid N+1 lookups. Rows without their own
-  // documentId fall back to the transaction-scoped doc (txId), then the import-linked doc —
-  // exactly as getDocumentForTransaction resolves at download time.
-  const fallbackRows = rows.filter((r) => !r.documentId);
+  // Resolve filenames + downloadability in bulk to avoid N+1 lookups.
+  const fallbackRows = rows.filter((r) => !r.documentId && r.sourceType !== "pytr");
   const docIds = [...new Set(rows.map((r) => r.documentId).filter((d): d is string => !!d))];
   const importIds = [
     ...new Set(fallbackRows.map((r) => r.importId).filter((i): i is string => !!i)),
   ];
-
-  // The transaction-scoped doc fallback below is for the CSV/legacy case: a transaction where
-  // NO row owns a document directly. Once any sibling row (e.g. a `pdf`-typed enrichment row)
-  // has claimed its own document, that document is the authoritative one — any *other* stored
-  // document on the transaction (a non-settlement leftover: SAVINGS_PLAN_CREATED, COSTS_INFO_*,
-  // a rejected REKLASSIFIZIERUNG, …) must not be misattributed to a documentId-less sibling row
-  // (most commonly `pytr`, which never has its own documentId) as if it were that row's source.
-  const txnsWithOwnDoc = new Set(rows.filter((r) => r.documentId).map((r) => r.transactionId));
-  const fallbackTxIds = [
-    ...new Set(
-      fallbackRows.map((r) => r.transactionId).filter((txId) => !txnsWithOwnDoc.has(txId)),
-    ),
-  ];
+  const claimedDocIds = new Set(docIds);
 
   const docNameById = new Map<string, string | null>();
   if (docIds.length > 0) {
@@ -426,41 +413,13 @@ export async function sourcesForTransactions(
     for (const d of docRows) docNameById.set(d.id, d.originalFilename);
   }
 
-  // Transaction-scoped docs (TR per-event receipts), newest first to match getDocumentForTransaction.
-  // Exclude any document already claimed by some sibling row's own `documentId` (`docIds` above)
-  // — otherwise a row with no document of its own (e.g. the original pytr sync row) would show
-  // the SAME document a sibling row already links directly (e.g. a later pdf-enrichment row),
-  // rendering as two sources both "linked" to one file. A genuinely different, unclaimed
-  // transaction-scoped document (the CSV/legacy case this fallback exists for) still resolves.
-  const claimedDocIds = new Set(docIds);
-  const docNameByTxId = new Map<string, string | null>();
-  if (fallbackTxIds.length > 0) {
-    const txDocRows = await db(app)
-      .select({
-        transactionId: documents.transactionId,
-        originalFilename: documents.originalFilename,
-        id: documents.id,
-      })
-      .from(documents)
-      .where(
-        and(inArray(documents.transactionId, fallbackTxIds), eq(documents.status, "retained")),
-      )
-      .orderBy(desc(documents.storedAt));
-    for (const d of txDocRows) {
-      if (claimedDocIds.has(d.id)) continue;
-      if (d.transactionId && !docNameByTxId.has(d.transactionId)) {
-        docNameByTxId.set(d.transactionId, d.originalFilename);
-      }
-    }
-  }
-
   // Import-level fallback: the CSV/legacy case, where one statement PDF is linked at
   // `documents.importId` (not pinned to any single transaction, `transactionId IS NULL`) and
   // covers many transactions from that import. Gated to `transactionId IS NULL` so it never
   // resolves a transaction-pinned document (a TR per-event receipt) belonging to some *other*
   // transaction that merely shares the same collector import (the TR backfill's "carrier
   // import" holds 1000+ per-event docs under one importId) — that cross-transaction leak is
-  // what let an arbitrary sibling's PDF appear on unrelated pytr/documentId-less rows.
+  // what let an arbitrary sibling's PDF appear on unrelated documentId-less rows.
   const docNameByImportId = new Map<string, string | null>();
   if (importIds.length > 0) {
     const impRows = await db(app)
@@ -484,11 +443,12 @@ export async function sourcesForTransactions(
   for (const r of rows) {
     let filename: string | null = null;
     let hasDocument = false;
-    if (r.documentId && docNameById.has(r.documentId)) {
+    if (r.sourceType === "pytr") {
+      // Sync-provenance marker only — never linked to a document, even when a document
+      // happens to be stored for this transaction (that document gets its own synthetic
+      // `pdf` entry below).
+    } else if (r.documentId && docNameById.has(r.documentId)) {
       filename = docNameById.get(r.documentId) ?? null;
-      hasDocument = true;
-    } else if (docNameByTxId.has(r.transactionId)) {
-      filename = docNameByTxId.get(r.transactionId) ?? null;
       hasDocument = true;
     } else if (r.importId && docNameByImportId.has(r.importId)) {
       filename = docNameByImportId.get(r.importId) ?? null;
@@ -509,6 +469,37 @@ export async function sourcesForTransactions(
     if (bucket) bucket.push(entry);
     else out.set(r.transactionId, [entry]);
   }
+
+  // Every retained document stored for one of these transactions gets its own downloadable
+  // `pdf` entry — independent of whether it was ever successfully parsed into a source row.
+  // Excludes documents already claimed by a real row's own `documentId` above.
+  const unclaimedDocs = await db(app)
+    .select({
+      id: documents.id,
+      transactionId: documents.transactionId,
+      originalFilename: documents.originalFilename,
+      storedAt: documents.storedAt,
+    })
+    .from(documents)
+    .where(and(inArray(documents.transactionId, txIds), eq(documents.status, "retained")));
+  for (const d of unclaimedDocs) {
+    if (!d.transactionId || claimedDocIds.has(d.id)) continue;
+    const entry: SourceSummary = {
+      id: `doc:${d.id}`,
+      sourceType: "pdf",
+      externalId: null,
+      orderRef: null,
+      documentId: d.id,
+      taxComponents: null,
+      createdAt: d.storedAt,
+      filename: d.originalFilename,
+      hasDocument: true,
+    };
+    const bucket = out.get(d.transactionId);
+    if (bucket) bucket.push(entry);
+    else out.set(d.transactionId, [entry]);
+  }
+
   return out;
 }
 
