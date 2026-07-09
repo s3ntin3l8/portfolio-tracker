@@ -519,17 +519,21 @@ describe("sourcesForTransactions", () => {
     expect(pdfRow.filename).toBe("settlement.pdf");
   });
 
-  it("still resolves a genuinely different, unclaimed transaction-scoped document (not over-broad)", async () => {
-    // Discriminates a correct fix from a too-broad one ("skip all fallback once any sibling has
-    // a documentId"): this transaction has TWO distinct retained documents — one explicitly
-    // claimed by a sibling row's own documentId, and one that no row claims. The claimless row
-    // must still resolve the OTHER, unclaimed document via the transaction-scoped fallback —
-    // proving only the specifically-claimed document is excluded, not the fallback itself.
+  it("does not attribute an unrelated unclaimed document to a sibling once any row has its own document", async () => {
+    // A TR trade transaction typically has 2-3 stored documents: one real settlement PDF
+    // (claimed by the pdf row's own documentId) plus 1-2 non-settlement leftovers
+    // (SAVINGS_PLAN_CREATED, COSTS_INFO_*, a rejected REKLASSIFIZIERUNG) that were never
+    // detect+parsed into their own source row. Once the pdf row has claimed the real document,
+    // an unclaimed *other* document on the same transaction must NOT be misattributed to the
+    // documentId-less pytr row as if it were that row's provenance — even though it is
+    // "genuinely different" from the claimed one, it is not the pytr row's document either.
+    // (The true CSV/legacy fallback — no sibling row owns any document at all — is covered by
+    // "falls back to the import-linked document when the source has no documentId" above.)
     const db = getDb();
     const s = nextSuffix();
     const { user, portfolio } = await makeUserAndPortfolio(db, s);
     const tx = await makeTx(db, portfolio.id, { type: "dividend" });
-    const [claimedDoc, unclaimedDoc] = await db
+    const [claimedDoc] = await db
       .insert(documents)
       .values([
         {
@@ -558,8 +562,11 @@ describe("sourcesForTransactions", () => {
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
     const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
-    expect(pytrRow.hasDocument).toBe(true);
-    expect(pytrRow.filename).toBe(unclaimedDoc.originalFilename);
+    const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
+    expect(pytrRow.hasDocument).toBe(false);
+    expect(pytrRow.filename).toBeNull();
+    expect(pdfRow.hasDocument).toBe(true);
+    expect(pdfRow.filename).toBe("claimed.pdf");
   });
 });
 

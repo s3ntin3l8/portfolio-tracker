@@ -400,9 +400,21 @@ export async function sourcesForTransactions(
   // exactly as getDocumentForTransaction resolves at download time.
   const fallbackRows = rows.filter((r) => !r.documentId);
   const docIds = [...new Set(rows.map((r) => r.documentId).filter((d): d is string => !!d))];
-  const fallbackTxIds = [...new Set(fallbackRows.map((r) => r.transactionId))];
   const importIds = [
     ...new Set(fallbackRows.map((r) => r.importId).filter((i): i is string => !!i)),
+  ];
+
+  // The transaction-scoped doc fallback below is for the CSV/legacy case: a transaction where
+  // NO row owns a document directly. Once any sibling row (e.g. a `pdf`-typed enrichment row)
+  // has claimed its own document, that document is the authoritative one — any *other* stored
+  // document on the transaction (a non-settlement leftover: SAVINGS_PLAN_CREATED, COSTS_INFO_*,
+  // a rejected REKLASSIFIZIERUNG, …) must not be misattributed to a documentId-less sibling row
+  // (most commonly `pytr`, which never has its own documentId) as if it were that row's source.
+  const txnsWithOwnDoc = new Set(rows.filter((r) => r.documentId).map((r) => r.transactionId));
+  const fallbackTxIds = [
+    ...new Set(
+      fallbackRows.map((r) => r.transactionId).filter((txId) => !txnsWithOwnDoc.has(txId)),
+    ),
   ];
 
   const docNameById = new Map<string, string | null>();

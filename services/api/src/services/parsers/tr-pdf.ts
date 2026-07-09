@@ -81,9 +81,20 @@ const BARE_ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}\d)\b/;
  * REKLASSIFIZIERUNG documents can be linked to a single transaction — there's no reliable
  * "the" per-share/native/fx to pick even if the sign were handled. Safer to not parse them
  * at all; the pytr sync's own net cash-flow for these transactions is left untouched.
+ *
+ * Also EXCLUDED: a "compound" Zinskonto statement — some cash accounts periodically issue a
+ * single combined PDF with an "ABRECHNUNG ZINSEN" (cash interest) section *and* an
+ * "ABRECHNUNG - DIVIDENDE" (Geldmarktfonds/money-market distribution) section for one credited
+ * amount, mapped to a single `interest`-typed transaction. Neither `parseTrDividend` nor
+ * `parseTrInterest` alone can recover the correct combined tax (each only sees one section's
+ * figures), and the pytr sync's own aggregate for the transaction is already correct — same
+ * "ambiguous, don't guess" treatment as STORNIERUNG/REKLASSIFIZIERUNG above.
  */
 export function detectTrPdf(text: string): boolean {
   if (!TR_SIG_RE.test(text)) return false;
+  const isCompoundZinskonto =
+    /\b(?:WAHL)?DIVIDENDE\b|AUSSCHÜTTUNG/.test(text) && /ABRECHNUNG\s+ZINSEN/.test(text);
+  if (isCompoundZinskonto) return false;
   // Trade settlement confirmation.
   if (/WERTPAPIERABRECHNUNG/.test(text) && /\bAUSFÜHRUNG\b/.test(text)) return true;
   // A dividend cancellation or US-REIT reclassification of a prior payment — see the
