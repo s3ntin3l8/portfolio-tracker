@@ -1046,6 +1046,7 @@
     "tax": "Tax",
     "netAmount": "Net Amount",
     "fxRate": "FX Rate",
+    "grossNative": "Gross (native currency)",
     "source": "Source",
     "empty": "No transactions.",
     "searchPlaceholder": "Search transactions…",

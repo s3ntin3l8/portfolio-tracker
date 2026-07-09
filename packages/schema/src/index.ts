@@ -408,6 +408,16 @@ export const parsedTransactionSchema = z.object({
   tax: decimalString.nullish(),
   executedPrice: decimalString.nullish(),
   fxRate: decimalString.nullish(),
+  // Dividend/coupon per-share rate + shares paid on, in the instrument's native currency
+  // (income rows only). Informational — `price`/`quantity` keep their existing net-cash /
+  // zero-quantity semantics; see packages/db schema.ts for the full rationale.
+  perShare: decimalString.nullish(),
+  shares: decimalString.nullish(),
+  // The instrument's native currency for a foreign-currency income payment, when it differs
+  // from `currency` (which stays the cash actually credited, e.g. EUR).
+  nativeCurrency: currencyCode.nullish(),
+  // Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax.
+  grossNative: decimalString.nullish(),
   venue: z.string().nullish(),
   kind: z.string().nullish(),
   description: z.string().nullish(),

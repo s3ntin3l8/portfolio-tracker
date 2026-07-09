@@ -213,6 +213,12 @@ export interface SourceRow {
   fxRate?: string | null;
   venue?: string | null;
   taxComponents?: TaxComponents | null;
+  // Dividend/coupon per-share display fields (see packages/db schema.ts) — picked like
+  // executedPrice/fxRate/venue (one payment event, not summed across rows).
+  perShare?: string | null;
+  shares?: string | null;
+  nativeCurrency?: string | null;
+  grossNative?: string | null;
 }
 
 /**
@@ -238,13 +244,28 @@ export function recomputeRollup(rows: SourceRow[]): {
   executedPrice: string | null;
   fxRate: string | null;
   venue: string | null;
+  perShare: string | null;
+  shares: string | null;
+  nativeCurrency: string | null;
+  grossNative: string | null;
   hasManual: boolean;
   mergedTaxComponents: TaxComponents;
 } {
   const hasManual = rows.some((r) => r.sourceType === "manual");
 
+  type PickableField =
+    | "tax"
+    | "fees"
+    | "executedPrice"
+    | "fxRate"
+    | "venue"
+    | "perShare"
+    | "shares"
+    | "nativeCurrency"
+    | "grossNative";
+
   // Find the winning rank for each scalar type.
-  function winningRank(field: keyof Pick<SourceRow, "tax" | "fees" | "executedPrice" | "fxRate" | "venue">): number {
+  function winningRank(field: PickableField): number {
     return rows.reduce((best, r) => {
       const rank = SOURCE_RANK[r.sourceType] ?? 0;
       return r[field] != null && rank > best ? rank : best;
@@ -264,7 +285,10 @@ export function recomputeRollup(rows: SourceRow[]): {
     return found ? (cents / 100).toFixed(2) : null;
   }
 
-  function pickField(field: "executedPrice" | "fxRate" | "venue", rank: number): string | null {
+  function pickField(
+    field: "executedPrice" | "fxRate" | "venue" | "perShare" | "shares" | "nativeCurrency" | "grossNative",
+    rank: number,
+  ): string | null {
     if (rank < 0) return null;
     for (const r of rows) {
       if ((SOURCE_RANK[r.sourceType] ?? 0) === rank && r[field] != null) return r[field]!;
@@ -286,6 +310,10 @@ export function recomputeRollup(rows: SourceRow[]): {
     executedPrice: pickField("executedPrice", winningRank("executedPrice")),
     fxRate: pickField("fxRate", winningRank("fxRate")),
     venue: pickField("venue", winningRank("venue")),
+    perShare: pickField("perShare", winningRank("perShare")),
+    shares: pickField("shares", winningRank("shares")),
+    nativeCurrency: pickField("nativeCurrency", winningRank("nativeCurrency")),
+    grossNative: pickField("grossNative", winningRank("grossNative")),
     hasManual,
     mergedTaxComponents,
   };

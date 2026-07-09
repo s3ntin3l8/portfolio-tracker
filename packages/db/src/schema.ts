@@ -646,6 +646,19 @@ export const transactions = pgTable(
     executedPrice: numeric("executed_price"),
     // FX rate at execution for non-base-currency holdings (units of `currency` per foreign).
     fxRate: numeric("fx_rate"),
+    // Dividend/coupon per-share rate, in the instrument's native currency (income rows only).
+    // Purely informational/display (Activity table, detail sheet) — `price` (net cash credited)
+    // and `quantity` (always "0" for income) keep their existing semantics unchanged and still
+    // drive cash flow, holdings and reconciliation. Null when not parsed/known.
+    perShare: numeric("per_share"),
+    // Shares the per-share rate above was paid on. NOT the same field as `quantity`, which
+    // stays "0" for income transactions by convention — this is informational only.
+    shares: numeric("shares"),
+    // The instrument's native currency for a foreign-currency income payment (e.g. GBP for a
+    // UK stock), when it differs from `currency` (the EUR cash actually credited — unchanged).
+    nativeCurrency: text("native_currency"),
+    // Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax.
+    grossNative: numeric("gross_native"),
     venue: text("venue"), // execution venue/exchange when the broker reports it
     // Source-document references (e.g. TR postbox docs): [{ id, type, date }]. The actual
     // file URL is short-lived/presigned, so only the reference is stored (see issue #150).
@@ -731,6 +744,11 @@ export const transactionSources = pgTable(
     fees: numeric("fees"),
     executedPrice: numeric("executed_price"),
     fxRate: numeric("fx_rate"),
+    // Mirrors transactions.perShare/.shares/.nativeCurrency/.grossNative exactly — see there.
+    perShare: numeric("per_share"),
+    shares: numeric("shares"),
+    nativeCurrency: text("native_currency"),
+    grossNative: numeric("gross_native"),
     venue: text("venue"),
     // Per-component tax breakdown (display + provenance; summed into transactions.tax).
     taxComponents: jsonb("tax_components"),

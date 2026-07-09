@@ -195,6 +195,16 @@ export interface TxRow {
   fees: string;
   tax?: string | null;
   fxRate?: string | null;
+  /** Dividend/coupon per-share rate, in the instrument's native currency (income rows only).
+   *  `price`/`quantity` keep their existing net-cash/zero-quantity semantics unchanged. */
+  perShare?: string | null;
+  /** Shares the per-share rate above was paid on — NOT the same field as `quantity`. */
+  shares?: string | null;
+  /** The instrument's native currency for a foreign-currency income payment, when it differs
+   *  from `currency` (the cash actually credited). */
+  nativeCurrency?: string | null;
+  /** Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax. */
+  grossNative?: string | null;
   currency: string;
   executedAt: string;
   source: string;
@@ -255,6 +265,28 @@ export function txAmount(tx: TxRow): number {
   return qty > 0
     ? qty * price // trade: notional
     : price + (tx.tax ? Number(tx.tax) : 0); // income/cash: gross
+}
+
+/**
+ * Quantity/price cells fall back to "—" for income rows because `quantity` is always "0" by
+ * convention (see TxRow doc comments) — but a dividend/coupon parsed from a settlement PDF may
+ * still carry an informational `shares`/`perShare` pair. When present, show THOSE instead of a
+ * bare dash: shares under the Quantity column, per-share rate (in its native currency when the
+ * payment was foreign) under Price. Purely a display fallback — never affects `txNetAmount`/
+ * `txAmount`, which keep reading `tx.price`/`tx.quantity` unchanged.
+ */
+export function rowQuantityDisplay(tx: TxRow): string | null {
+  if (Number(tx.quantity) > 0) return null; // real trade row — caller uses tx.quantity as-is
+  return tx.shares ?? null;
+}
+
+export function rowPerShareDisplay(
+  tx: TxRow,
+  m: (n: number, currency: string) => string,
+): string | null {
+  if (Number(tx.quantity) > 0) return null; // real trade row — caller uses tx.price as-is
+  if (tx.perShare == null) return null;
+  return m(Number(tx.perShare), tx.nativeCurrency ?? tx.currency);
 }
 
 /**
@@ -1183,9 +1215,13 @@ export function TransactionsTable({
                       {tx.portfolioName ?? "—"}
                     </TableCell>
                   )}
-                  <TableCell className="tabular text-right text-[13px] font-semibold text-text-2">{Number(tx.quantity) || "—"}</TableCell>
+                  <TableCell className="tabular text-right text-[13px] font-semibold text-text-2">
+                    {Number(tx.quantity) || rowQuantityDisplay(tx) || "—"}
+                  </TableCell>
                   <TableCell className="tabular text-right text-[13px] font-semibold">
-                    {Number(tx.quantity) > 0 ? m(Number(tx.price), tx.currency) : "—"}
+                    {Number(tx.quantity) > 0
+                      ? m(Number(tx.price), tx.currency)
+                      : (rowPerShareDisplay(tx, m) ?? "—")}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     <div className="flex flex-wrap items-center gap-1">
@@ -1233,10 +1269,13 @@ export function TransactionsTable({
                 const isSelected = selected.has(tx.id);
                 const anomaly = anomalyByTxId.get(tx.id);
                 const status = tx.status ?? "normal";
+                const perShareDisplay = rowPerShareDisplay(tx, m);
                 const sub =
                   Number(tx.quantity) > 0
                     ? `${Number(tx.quantity)} @ ${m(Number(tx.price), tx.currency)}`
-                    : (tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel"));
+                    : tx.shares && perShareDisplay
+                      ? `${tx.shares} @ ${perShareDisplay}`
+                      : (tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel"));
                 return (
                   <div
                     key={tx.id}
