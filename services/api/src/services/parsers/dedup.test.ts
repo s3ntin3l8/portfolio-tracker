@@ -217,6 +217,91 @@ describe("recomputeRollup", () => {
     expect(r.mergedTaxComponents.kapitalertragsteuer).toBe("3.75");
     expect(r.mergedTaxComponents.solidaritaetszuschlag).toBe("0.21");
   });
+
+  // -------------------------------------------------------------------------
+  // Split distributions: one activity-log event settling across two PDFs
+  // (e.g. Realty Income's ordinary + return-of-capital documents).
+  // -------------------------------------------------------------------------
+
+  it("sums perShare and grossNative across two pdf rows at full decimal precision", () => {
+    const rows: SourceRow[] = [
+      src({
+        sourceType: "pdf",
+        tax: "0.86",
+        perShare: "0.17886715",
+        grossNative: "6.76",
+        shares: "37.8",
+        nativeCurrency: "USD",
+      }),
+      src({
+        sourceType: "pdf",
+        tax: "0",
+        perShare: "0.09063285",
+        grossNative: "3.42",
+        shares: "37.8",
+        nativeCurrency: "USD",
+      }),
+    ];
+    const r = recomputeRollup(rows);
+    // 0.17886715 + 0.09063285 = 0.26950000 exactly — a naive parseFloat/cents sum would corrupt
+    // this to "0.27" (Math.round(n*100) truncates the 6 trailing significant digits).
+    expect(r.perShare).toBe("0.26950000");
+    expect(r.grossNative).toBe("10.18");
+    expect(r.tax).toBe("0.86");
+  });
+
+  it("keeps shares and nativeCurrency picked, not summed, across the split rows", () => {
+    const rows: SourceRow[] = [
+      src({ sourceType: "pdf", shares: "37.8", nativeCurrency: "USD", perShare: "0.10" }),
+      src({ sourceType: "pdf", shares: "37.8", nativeCurrency: "USD", perShare: "0.05" }),
+    ];
+    const r = recomputeRollup(rows);
+    expect(r.shares).toBe("37.8"); // not "75.6" — summing would double-count the position
+    expect(r.nativeCurrency).toBe("USD");
+  });
+
+  it("a normal single-pdf-row transaction is unaffected by the sum (no-regression)", () => {
+    const rows: SourceRow[] = [
+      src({ sourceType: "pdf", perShare: "0.4520", grossNative: "12.34", shares: "27.3" }),
+    ];
+    const r = recomputeRollup(rows);
+    expect(r.perShare).toBe("0.4520");
+    expect(r.grossNative).toBe("12.34");
+  });
+
+  it("does not sum perShare across different ranks — lower rank is ignored", () => {
+    const rows: SourceRow[] = [
+      src({ sourceType: "pdf", perShare: "0.20" }),
+      src({ sourceType: "pytr", perShare: "999.99" }),
+    ];
+    expect(recomputeRollup(rows).perShare).toBe("0.20");
+  });
+
+  it("fxRate is a grossNative-weighted average across the split rows", () => {
+    const rows: SourceRow[] = [
+      src({ sourceType: "pdf", fxRate: "0.852174", grossNative: "6.76" }),
+      src({ sourceType: "pdf", fxRate: "0.853801", grossNative: "3.42" }),
+    ];
+    const r = recomputeRollup(rows);
+    const expected = (0.852174 * 6.76 + 0.853801 * 3.42) / (6.76 + 3.42);
+    expect(Number(r.fxRate)).toBeCloseTo(expected, 6);
+  });
+
+  it("fxRate falls back to the first value when no row carries a positive weight", () => {
+    const rows: SourceRow[] = [src({ sourceType: "pdf", fxRate: "0.85" })];
+    expect(recomputeRollup(rows).fxRate).toBe("0.85");
+  });
+
+  it("is idempotent for perShare/grossNative — re-running is a fixed point", () => {
+    const rows: SourceRow[] = [
+      src({ sourceType: "pdf", perShare: "0.17886715", grossNative: "6.76" }),
+      src({ sourceType: "pdf", perShare: "0.09063285", grossNative: "3.42" }),
+    ];
+    const r1 = recomputeRollup(rows);
+    const r2 = recomputeRollup(rows);
+    expect(r1.perShare).toBe(r2.perShare);
+    expect(r1.grossNative).toBe(r2.grossNative);
+  });
 });
 
 // aggregateByOrderRef was removed (fix 4.2). A TR split order imports as two separate

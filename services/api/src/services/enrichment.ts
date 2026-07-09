@@ -294,8 +294,25 @@ export async function enrichTransactionsFromStoredDocuments(
 
         const { drafts: parsed } = parseTrPdf(text);
         for (const d of parsed) {
-          drafts.push(d);
-          if (d.externalId) documentsByExternalId.set(d.externalId, doc.id);
+          // Dividend/interest externalIds are keyed by depot+isin/account+pay-date
+          // (`tr:div:...` / `tr:int:...`, tr-pdf.ts), with no per-document discriminator —
+          // one activity-log event can legitimately settle across TWO distinct PDFs (e.g. a
+          // split ordinary/return-of-capital distribution), and both would otherwise collide
+          // on the same externalId: the second document's id would silently overwrite the
+          // first in `documentsByExternalId`, and its source row would be dropped by
+          // `onConflictDoNothing` on (transactionId, sourceType, externalId) below — losing
+          // that document's tax/amount entirely. Suffix with the owning document's (stable)
+          // id so distinct documents get distinct keys, while re-parsing the SAME document
+          // still yields the SAME key (idempotent, order-independent — no reliance on the
+          // order documents are fetched in). Trade executions (`tr:exec:<ausfuehrung>`) are
+          // already per-fill-unique and don't need this.
+          const externalId =
+            d.externalId && (d.action === "dividend" || d.action === "interest")
+              ? `${d.externalId}:${doc.id}`
+              : d.externalId;
+          const keyedDraft = externalId === d.externalId ? d : { ...d, externalId };
+          drafts.push(keyedDraft);
+          if (externalId) documentsByExternalId.set(externalId, doc.id);
         }
       } catch (err) {
         app.log.warn({ err, docId: doc.id, txId: tx.id }, "enrichment: failed to parse stored doc");

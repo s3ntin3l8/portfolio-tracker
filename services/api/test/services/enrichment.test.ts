@@ -788,6 +788,157 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
     expect(enriched.sourceType).toBe("pdf");
   });
 
+  it("writes TWO pdf source rows when two stored documents share one dividend externalId (split distribution)", async () => {
+    // Reproduces the Realty Income case: one activity-log event settles across two distinct
+    // settlement PDFs for the same depot+isin+pay-date (an ordinary, taxed portion and a
+    // tax-free return-of-capital portion). Both parse to the SAME base
+    // `tr:div:<depot>:<isin>:<paydate>` externalId — before the per-document suffix fix, the
+    // second document's row was silently dropped by onConflictDoNothing and its documentId
+    // overwrote the first in `documentsByExternalId`.
+    const DOC_A_TEXT =
+      "MARKER_A Trade Republic Bank GmbH DATUM 15.12.2025 DEPOT 1234567890 DIVIDENDE ÜBERSICHT " +
+      "POSITION ANZAHL ERTRAG BETRAG Realty Income Corp US7561091049 10 Stücke 0.20 USD 2.00 USD " +
+      "GESAMT 2.00 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten -0.30 USD " +
+      "Zwischensumme 1.70 USD Zwischensumme 1.0000 USD/EUR 1.70 EUR GESAMT 1.70 EUR BUCHUNG " +
+      "VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 15.12.2025 1.70 EUR";
+    const DOC_B_TEXT =
+      "MARKER_B Trade Republic Bank GmbH DATUM 15.12.2025 DEPOT 1234567890 DIVIDENDE ÜBERSICHT " +
+      "POSITION ANZAHL ERTRAG BETRAG Realty Income Corp US7561091049 10 Stücke 0.10 USD 1.00 USD " +
+      "GESAMT 1.00 USD ABRECHNUNG POSITION BETRAG Zwischensumme 1.00 USD Zwischensumme 1.0000 " +
+      "USD/EUR 1.00 EUR GESAMT 1.00 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG " +
+      "DE00000000000000000000 15.12.2025 1.00 EUR";
+    // Both queued callbacks dispatch on the actual bytes fetched, so the result is correct
+    // regardless of which document the (unordered) documents query happens to process first.
+    const dispatchByMarker = async (buf: Buffer) =>
+      buf.toString().includes("MARKER_A") ? DOC_A_TEXT : DOC_B_TEXT;
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "dividend",
+      documentRefs: [{ id: "doc-split-a", type: "INCOME", date: "2025-12-15" }],
+    });
+    await db.insert(documents).values([
+      {
+        userId: user.id,
+        portfolioId: portfolio.id,
+        transactionId: tx.id,
+        storageKey: "receipts/split-a.pdf",
+        mimeType: "application/pdf",
+        status: "retained",
+      },
+      {
+        userId: user.id,
+        portfolioId: portfolio.id,
+        transactionId: tx.id,
+        storageKey: "receipts/split-b.pdf",
+        mimeType: "application/pdf",
+        status: "retained",
+      },
+    ]);
+    const app = makeApp(
+      db,
+      new Map([
+        ["receipts/split-a.pdf", Buffer.from("MARKER_A-bytes")],
+        ["receipts/split-b.pdf", Buffer.from("MARKER_B-bytes")],
+      ]),
+    );
+
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    const rows = await db
+      .select()
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.sourceType === "pdf")).toBe(true);
+    // Distinct, doc-suffixed externalIds — not the colliding bare `tr:div:...` key.
+    const externalIds = new Set(rows.map((r) => r.externalId));
+    expect(externalIds.size).toBe(2);
+    for (const id of externalIds) expect(id).toMatch(/^tr:div:1234567890:US7561091049:2025-12-15:/);
+    // Each row links its OWN document (not both collapsed onto one).
+    const documentIds = new Set(rows.map((r) => r.documentId));
+    expect(documentIds.size).toBe(2);
+
+    const [updated] = await db
+      .select({ tax: transactions.tax, perShare: transactions.perShare, grossNative: transactions.grossNative })
+      .from(transactions)
+      .where(eq(transactions.id, tx.id));
+    // Rollup sums both documents: tax 0.30, perShare 0.20+0.10, grossNative 2.00+1.00.
+    expect(Number(updated.tax)).toBeCloseTo(0.3, 2);
+    expect(Number(updated.perShare)).toBeCloseTo(0.3, 6);
+    expect(Number(updated.grossNative)).toBeCloseTo(3.0, 2);
+  });
+
+  it("re-running enrichment on the same two split-distribution documents is idempotent", async () => {
+    const DOC_A_TEXT =
+      "MARKER_A Trade Republic Bank GmbH DATUM 15.12.2025 DEPOT 1234567890 DIVIDENDE ÜBERSICHT " +
+      "POSITION ANZAHL ERTRAG BETRAG Realty Income Corp US7561091049 10 Stücke 0.20 USD 2.00 USD " +
+      "GESAMT 2.00 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten -0.30 USD " +
+      "Zwischensumme 1.70 USD Zwischensumme 1.0000 USD/EUR 1.70 EUR GESAMT 1.70 EUR BUCHUNG " +
+      "VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 15.12.2025 1.70 EUR";
+    const DOC_B_TEXT =
+      "MARKER_B Trade Republic Bank GmbH DATUM 15.12.2025 DEPOT 1234567890 DIVIDENDE ÜBERSICHT " +
+      "POSITION ANZAHL ERTRAG BETRAG Realty Income Corp US7561091049 10 Stücke 0.10 USD 1.00 USD " +
+      "GESAMT 1.00 USD ABRECHNUNG POSITION BETRAG Zwischensumme 1.00 USD Zwischensumme 1.0000 " +
+      "USD/EUR 1.00 EUR GESAMT 1.00 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG " +
+      "DE00000000000000000000 15.12.2025 1.00 EUR";
+    const dispatchByMarker = async (buf: Buffer) =>
+      buf.toString().includes("MARKER_A") ? DOC_A_TEXT : DOC_B_TEXT;
+
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "dividend",
+      documentRefs: [{ id: "doc-split-idem-a", type: "INCOME", date: "2025-12-15" }],
+    });
+    await db.insert(documents).values([
+      {
+        userId: user.id,
+        portfolioId: portfolio.id,
+        transactionId: tx.id,
+        storageKey: "receipts/split-idem-a.pdf",
+        mimeType: "application/pdf",
+        status: "retained",
+      },
+      {
+        userId: user.id,
+        portfolioId: portfolio.id,
+        transactionId: tx.id,
+        storageKey: "receipts/split-idem-b.pdf",
+        mimeType: "application/pdf",
+        status: "retained",
+      },
+    ]);
+    const app = makeApp(
+      db,
+      new Map([
+        ["receipts/split-idem-a.pdf", Buffer.from("MARKER_A-bytes")],
+        ["receipts/split-idem-b.pdf", Buffer.from("MARKER_B-bytes")],
+      ]),
+    );
+
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+    mockExtractPdfText.mockImplementationOnce(dispatchByMarker);
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    const rows = await db
+      .select()
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+    // Still exactly two rows — the second run is a fixed point, not a third/fourth row.
+    expect(rows).toHaveLength(2);
+  });
+
   it("skips documents that extractPdfText produces non-TR text for", async () => {
     mockExtractPdfText.mockResolvedValueOnce("This is a DKB PDF, not a TR settlement.");
 
