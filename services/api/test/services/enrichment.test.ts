@@ -482,6 +482,85 @@ describe("sourcesForTransactions", () => {
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
   });
+
+  it("does NOT leak a sibling's own document onto a row with no documentId of its own", async () => {
+    // Reproduces the post-backfill duplicate-source display: a pytr sync row (no document of
+    // its own) and a pdf-enrichment row (its own documentId, same underlying settlement PDF)
+    // on one transaction. Before the fix, the pytr row's `hasDocument` fell back to the
+    // transaction-scoped document — the SAME one the pdf row already claims — showing as two
+    // sources both "linked" to one file.
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, { type: "dividend" });
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        userId: user.id,
+        transactionId: tx.id,
+        storageKey: `receipts/${user.id}/settlement.pdf`,
+        mimeType: "application/pdf",
+        originalFilename: "settlement.pdf",
+        status: "retained",
+      })
+      .returning();
+    await db.insert(transactionSources).values([
+      { transactionId: tx.id, sourceType: "pytr", documentId: null },
+      { transactionId: tx.id, sourceType: "pdf", documentId: doc.id },
+    ]);
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
+    const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
+    expect(pytrRow.hasDocument).toBe(false);
+    expect(pytrRow.filename).toBeNull();
+    expect(pdfRow.hasDocument).toBe(true);
+    expect(pdfRow.filename).toBe("settlement.pdf");
+  });
+
+  it("still resolves a genuinely different, unclaimed transaction-scoped document (not over-broad)", async () => {
+    // Discriminates a correct fix from a too-broad one ("skip all fallback once any sibling has
+    // a documentId"): this transaction has TWO distinct retained documents — one explicitly
+    // claimed by a sibling row's own documentId, and one that no row claims. The claimless row
+    // must still resolve the OTHER, unclaimed document via the transaction-scoped fallback —
+    // proving only the specifically-claimed document is excluded, not the fallback itself.
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, { type: "dividend" });
+    const [claimedDoc, unclaimedDoc] = await db
+      .insert(documents)
+      .values([
+        {
+          userId: user.id,
+          transactionId: tx.id,
+          storageKey: `receipts/${user.id}/claimed.pdf`,
+          mimeType: "application/pdf",
+          originalFilename: "claimed.pdf",
+          status: "retained",
+        },
+        {
+          userId: user.id,
+          transactionId: tx.id,
+          storageKey: `receipts/${user.id}/unclaimed.pdf`,
+          mimeType: "application/pdf",
+          originalFilename: "unclaimed.pdf",
+          status: "retained",
+        },
+      ])
+      .returning();
+    await db.insert(transactionSources).values([
+      { transactionId: tx.id, sourceType: "pdf", documentId: claimedDoc.id },
+      { transactionId: tx.id, sourceType: "pytr", documentId: null },
+    ]);
+
+    const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
+    const rows = (await sourcesForTransactions(app as never, [tx.id])).get(tx.id) ?? [];
+    const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
+    expect(pytrRow.hasDocument).toBe(true);
+    expect(pytrRow.filename).toBe(unclaimedDoc.originalFilename);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -655,6 +734,58 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
     // the printed "1.1567 USD/EUR" label/direction (see tr-pdf.ts's fxRate comment).
     expect(src.fxRate).toBe("0.863636");
     expect((src.taxComponents as { quellensteuer?: string }).quellensteuer).toBe("0.98");
+  });
+
+  it("labels a re-parsed PDF's source row 'pdf' even when the draft carries no tax (Fix: importSource)", async () => {
+    // A tax-free dividend (no Quellensteuer/Kapitalertragsteuer/Soli lines at all — e.g. a
+    // tax-free quarter or a fund distribution) has an empty taxComponents draft. Passing
+    // importSource: "pytr" (the old behaviour) would make draftSourceType fall through to
+    // "pytr" for this draft, producing a SECOND row confusingly labeled the same as the
+    // original sync row instead of "pdf".
+    const TAXFREE_DIV_TEXT =
+      "Trade Republic Bank GmbH DATUM 27.09.2023 DEPOT 1234567890 AUSSCHÜTTUNG ABRECHNUNG " +
+      "POSITION BETRAG Zwischensumme 0,88 USD Zwischensumme 1,0587 EUR/USD 0,83 EUR GESAMT " +
+      "0,83 EUR BUCHUNG VERRECHNUNGSKONTO WERTSTELLUNG BETRAG DE00000000000000000000 " +
+      "27.09.2023 0,83 EUR ÜBERSICHT Ausschüttung POSITION ANZAHL ERTRAG BETRAG iShs Core " +
+      "S&P 500 ISIN: IE0031442068 5,98573 Stk. 0,1462 USD 0,88 USD GESAMT 0,88 USD";
+    mockExtractPdfText.mockResolvedValueOnce(TAXFREE_DIV_TEXT);
+
+    const db = getDb();
+    const s = nextSuffix();
+    const { user, portfolio } = await makeUserAndPortfolio(db, s);
+    const tx = await makeTx(db, portfolio.id, {
+      type: "dividend",
+      documentRefs: [{ id: "doc-ausschuettung-001", type: "INCOME", date: "2023-09-27" }],
+    });
+    // Pre-existing row from the original pytr activity-log sync (no document, no tax detail —
+    // the state every dividend was in before any PDF backfill/enrichment ran).
+    await db.insert(transactionSources).values({
+      transactionId: tx.id,
+      sourceType: "pytr",
+      externalId: "activity-log-event-001",
+      documentId: null,
+    });
+    await db.insert(documents).values({
+      userId: user.id,
+      portfolioId: portfolio.id,
+      transactionId: tx.id,
+      storageKey: "receipts/ausschuettung-001.pdf",
+      mimeType: "application/pdf",
+      status: "retained",
+    });
+    const app = makeApp(db, new Map([["receipts/ausschuettung-001.pdf", Buffer.from("x")]]));
+
+    await enrichTransactionsFromStoredDocuments(app as never, [tx.id]);
+
+    const rows = await db
+      .select()
+      .from(transactionSources)
+      .where(eq(transactionSources.transactionId, tx.id));
+    expect(rows).toHaveLength(2);
+    const original = rows.find((r) => r.externalId === "activity-log-event-001")!;
+    const enriched = rows.find((r) => r.externalId !== "activity-log-event-001")!;
+    expect(original.sourceType).toBe("pytr");
+    expect(enriched.sourceType).toBe("pdf");
   });
 
   it("skips documents that extractPdfText produces non-TR text for", async () => {

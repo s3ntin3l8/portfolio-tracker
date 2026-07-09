@@ -305,8 +305,15 @@ export async function enrichTransactionsFromStoredDocuments(
     if (drafts.length === 0) continue;
 
     try {
+      // importSource: "pdf" — every draft here comes from re-parsing a stored settlement PDF
+      // (not the original activity-log sync), regardless of whether it happens to carry tax
+      // components. `draftSourceType`'s tax-components heuristic exists for its OTHER caller
+      // (a direct upload, where there's no better signal); here we know the true source, so
+      // pass it explicitly rather than falling through to "pytr" for tax-free documents (a
+      // tax-free dividend/interest PDF would otherwise mislabel its source row "pytr" — a
+      // second, confusingly-identical "Trade Republic" row instead of "PDF").
       await enrichTransactionFromDrafts(tx.id, db(app), drafts, {
-        importSource: "pytr",
+        importSource: "pdf",
         documentsByExternalId,
       });
       app.log.info(
@@ -345,7 +352,10 @@ export interface SourceSummary {
  * Each row also carries `filename`/`hasDocument`, resolved in bulk to mirror
  * `getDocumentForTransaction`: a row downloads its own `documentId` when set (retained PDF
  * imports); otherwise the transaction-scoped document (correct for TR, whose collector import
- * holds many docs), then the import-linked document (the common CSV case, `documentId` null).
+ * holds many docs) — excluding any document a *sibling* row already claims via its own
+ * `documentId`, so e.g. the original pytr sync row (no document of its own) doesn't show the
+ * same document a later pdf-enrichment row on the same transaction links directly — then the
+ * import-linked document (the common CSV case, `documentId` null).
  */
 export async function sourcesForTransactions(
   app: AppLike,
@@ -388,12 +398,19 @@ export async function sourcesForTransactions(
   }
 
   // Transaction-scoped docs (TR per-event receipts), newest first to match getDocumentForTransaction.
+  // Exclude any document already claimed by some sibling row's own `documentId` (`docIds` above)
+  // — otherwise a row with no document of its own (e.g. the original pytr sync row) would show
+  // the SAME document a sibling row already links directly (e.g. a later pdf-enrichment row),
+  // rendering as two sources both "linked" to one file. A genuinely different, unclaimed
+  // transaction-scoped document (the CSV/legacy case this fallback exists for) still resolves.
+  const claimedDocIds = new Set(docIds);
   const docNameByTxId = new Map<string, string | null>();
   if (fallbackTxIds.length > 0) {
     const txDocRows = await db(app)
       .select({
         transactionId: documents.transactionId,
         originalFilename: documents.originalFilename,
+        id: documents.id,
       })
       .from(documents)
       .where(
@@ -401,6 +418,7 @@ export async function sourcesForTransactions(
       )
       .orderBy(desc(documents.storedAt));
     for (const d of txDocRows) {
+      if (claimedDocIds.has(d.id)) continue;
       if (d.transactionId && !docNameByTxId.has(d.transactionId)) {
         docNameByTxId.set(d.transactionId, d.originalFilename);
       }
