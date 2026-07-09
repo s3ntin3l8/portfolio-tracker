@@ -969,7 +969,7 @@ describe("TransactionsTable", () => {
       expect(restored.some((r) => r.textContent?.includes("TLKM"))).toBe(true);
     });
 
-    it("does not show the toggle when only portfolio-scoped anomalies are present", () => {
+    it("does not show the headline banner or toggle when only portfolio-scoped anomalies are present", () => {
       const portfolioOnlyAnomalies = [
         { code: "reconciliation_gap" as const, severity: "warning" as const, scope: "portfolio" as const },
       ];
@@ -978,9 +978,12 @@ describe("TransactionsTable", () => {
           <TransactionsTable rows={ANOMALY_ROWS} anomalies={portfolioOnlyAnomalies} />
         </NextIntlClientProvider>,
       );
-      // Banner should appear (warning exists)...
-      expect(screen.getByRole("alert")).toBeInTheDocument();
-      // ...but no toggle (no transactionIds → flaggedCount === 0).
+      // Headline count only includes row-flaggable anomalies; a portfolio-scoped one (no
+      // transactionId) contributes nothing to it — so with only one of those, the "N found"
+      // banner doesn't render at all (it's surfaced separately as its own ReconciliationBanner,
+      // see the dedicated "renders every portfolio-scoped anomaly" test below).
+      expect(screen.queryByRole("alert")).toBeNull();
+      // ...and no toggle either (no transactionIds → flaggedCount === 0).
       expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });
 
@@ -1026,12 +1029,14 @@ describe("TransactionsTable", () => {
       expect(screen.getByText(/XF000BTC0017/)).toBeInTheDocument();
       expect(screen.getByText(/XF000ETH0019/)).toBeInTheDocument();
       expect(screen.getByText(/EUR: reported 3552.4/)).toBeInTheDocument();
-      // Banner total counts all 3 portfolio warnings (none are row-flaggable — no toggle).
-      expect(screen.getByText("3 data warnings found")).toBeInTheDocument();
+      // None of these 3 are row-flaggable (no transactionId) → the headline "N found" count
+      // excludes them entirely instead of promising rows "Show flagged only" can't produce —
+      // they're already visible above as their own banners. No headline banner, no toggle.
+      expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });
 
-    it("banner total combines row-flaggable and portfolio-scoped counts (regression: banner said 7 warnings, 'Show flagged only' showed 4)", () => {
+    it("headline counts only row-flaggable anomalies, excluding portfolio-scoped ones which render as their own banners instead (regression: banner said 7 warnings, 'Show flagged only' showed only 4)", () => {
       const mixedWithPortfolio = [
         ...MIXED_ANOMALIES, // a1: 1 error, a3: 1 warning — both row-flaggable
         {
@@ -1058,10 +1063,11 @@ describe("TransactionsTable", () => {
           <TransactionsTable rows={ANOMALY_ROWS} anomalies={mixedWithPortfolio} />
         </NextIntlClientProvider>,
       );
-      // 1 error (a1) + 4 warnings (a3 row + 3 portfolio banners) — all of which now actually
-      // render somewhere on the page (2 flaggable rows via the toggle + 3 banners below).
-      expect(screen.getByText("1 error and 4 warnings found in your data")).toBeInTheDocument();
-      // The toggle still only reflects row-flaggable anomalies (portfolio ones can't flag a row).
+      // Headline = 1 error (a1) + 1 warning (a3) ONLY — exactly what "Show flagged only" can
+      // show. The 3 portfolio-scoped anomalies render as their own ReconciliationBanners
+      // instead of inflating this count to a number nothing on the page can match.
+      expect(screen.getByText("1 error and 1 warning found in your data")).toBeInTheDocument();
+      expect(screen.getAllByText("Cash doesn't reconcile").length).toBe(3);
       fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
       expect(screen.getAllByRole("row").slice(1).length).toBe(2);
     });
@@ -1079,6 +1085,32 @@ describe("TransactionsTable", () => {
       // a1 carries both — dedup keeps only the worse (error), so this is 1 error / 0 warnings,
       // not "1 error and 1 warning" (which would double-count the same row).
       expect(screen.getByText("1 data error found")).toBeInTheDocument();
+    });
+
+    it("surfaces a negative_cash anomaly with no transactionId as its own banner instead of dropping it (edge case: not row-flaggable, not a hardcoded portfolio-scope code)", () => {
+      const orphanedNegativeCash = [
+        {
+          code: "negative_cash" as const,
+          severity: "error" as const,
+          scope: "transaction" as const,
+          // No transactionId — no cash-flow row matched that day. Under the old hardcoded
+          // 3-code partition this fell into neither bucket: excluded from the row map (no
+          // transactionId) AND excluded from portfolioAnomalies (scope isn't "portfolio"),
+          // so it was counted nowhere and shown nowhere.
+          meta: { currency: "EUR", balance: -8e-11 },
+        },
+      ];
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={ANOMALY_ROWS} anomalies={orphanedNegativeCash} />
+        </NextIntlClientProvider>,
+      );
+      // Partitioned by `isRowAnomaly` (transactionId presence), not by code or scope — so it
+      // renders as its own ReconciliationBanner rather than vanishing.
+      expect(screen.getByText(messages.Anomalies.reconciliationTitle)).toBeInTheDocument();
+      // Not row-flaggable → no headline banner (0/0 row-attached) and no toggle.
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });
   });
 
