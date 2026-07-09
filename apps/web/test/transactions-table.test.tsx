@@ -442,6 +442,19 @@ describe("TransactionsTable", () => {
     expect(screen.getByRole("button", { name: /amount/i })).toBeInTheDocument();
   });
 
+  it("shows a desktop-only Tax column with the withheld amount, dash when none", () => {
+    renderTable();
+    expect(screen.getByRole("button", { name: messages.Transactions.tax })).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    // t2 (Apple): tax "10", currency USD → formatted "$10.00" in its own cell.
+    const taxedRow = within(table).getByText("Apple").closest("tr")!;
+    expect(within(taxedRow as HTMLElement).getByText("$10.00")).toBeInTheDocument();
+    // t1 (Bank Central Asia): tax null → dash, not blank or "0".
+    const untaxedRow = within(table).getByText("Bank Central Asia").closest("tr")!;
+    const cells = within(untaxedRow as HTMLElement).getAllByRole("cell");
+    expect(cells.some((c) => c.textContent === "—")).toBe(true);
+  });
+
   it("shows a dash in the price column for qty-less cash rows", () => {
     const cashRow: TxRow = {
       id: "cash1",
