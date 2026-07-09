@@ -396,8 +396,24 @@ export function TransactionDetailSheet({
           {/* ── Breakdown ── */}
           <SectionHeading>{t("breakdown")}</SectionHeading>
           <DetailCard>
-            {qty !== 0 && <Row label={t("quantity")}>{numFmt.format(qty)}</Row>}
-            {qty !== 0 && <Row label={t("price")}>{m(Number(tx.price), tx.currency)}</Row>}
+            {/* qty stays "0" for income rows by convention (see TxRow doc comments) — fall
+                back to the informational shares/perShare pair (parsed from a settlement PDF)
+                instead of hiding these rows entirely. */}
+            {(qty !== 0 || tx.shares != null) && (
+              <Row label={t("quantity")}>
+                {qty !== 0 ? numFmt.format(qty) : numFmt.format(Number(tx.shares))}
+              </Row>
+            )}
+            {(qty !== 0 || tx.perShare != null) && (
+              <Row label={t("price")}>
+                {qty !== 0
+                  ? m(Number(tx.price), tx.currency)
+                  : m(Number(tx.perShare), tx.nativeCurrency ?? tx.currency)}
+              </Row>
+            )}
+            {tx.grossNative != null && tx.nativeCurrency && (
+              <Row label={t("grossNative")}>{m(Number(tx.grossNative), tx.nativeCurrency)}</Row>
+            )}
             <Row label={t("amount")}>{m(amount, tx.currency)}</Row>
             {Number(tx.fees) !== 0 && (
               <Row label={t("fees")}>{m(Number(tx.fees), tx.currency)}</Row>

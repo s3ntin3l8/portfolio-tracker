@@ -114,6 +114,37 @@ describe("TransactionDetailSheet", () => {
     expect(screen.getByText(messages.Transactions.details)).toBeInTheDocument();
   });
 
+  it("shows shares/per-share/gross-native rows for a foreign-currency dividend instead of hiding Quantity/Price", () => {
+    renderSheet({
+      tx: {
+        ...TX,
+        id: "div-gbp",
+        type: "dividend",
+        quantity: "0", // stays "0" by convention — net-EUR-credited
+        price: "34.23",
+        currency: "EUR",
+        fxRate: "1.145199",
+        shares: "27.526515",
+        perShare: "1.08580023",
+        nativeCurrency: "GBP",
+        grossNative: "29.89",
+        instrument: { symbol: "RIO1", name: "Rio Tinto" },
+      },
+    });
+    // Quantity/Price would normally be hidden entirely when qty === 0; here they fall back
+    // to the parsed shares/per-share pair instead of disappearing. (The shared quantity
+    // formatter caps at 3 fraction digits, same as any other fractional-share quantity.)
+    expect(screen.getByText("27.527")).toBeInTheDocument();
+    expect(screen.getByText("£1.09")).toBeInTheDocument();
+    // New "Gross (native currency)" row.
+    expect(screen.getByText(messages.Transactions.grossNative)).toBeInTheDocument();
+    expect(screen.getByText("£29.89")).toBeInTheDocument();
+    // The FX rate is now populated (previously null for every synced dividend) and surfaces
+    // in the existing Details row.
+    expect(screen.getByText(messages.Transactions.fxRate)).toBeInTheDocument();
+    expect(screen.getByText("1.1452")).toBeInTheDocument();
+  });
+
   it("resolves the Account line from the portfolios prop when the row omits portfolioName", () => {
     // The reported bug: portfolioName is absent (single-portfolio scope) → the account line
     // vanished. It must now fall back to the portfolios lookup by portfolioId.

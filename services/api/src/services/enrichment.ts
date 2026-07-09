@@ -123,6 +123,10 @@ export async function enrichTransactionFromDrafts(
         executedPrice: draft.executedPrice ?? null,
         fxRate: draft.fxRate ?? null,
         venue: draft.venue ?? null,
+        perShare: draft.perShare ?? null,
+        shares: draft.shares ?? null,
+        nativeCurrency: draft.nativeCurrency ?? null,
+        grossNative: draft.grossNative ?? null,
         taxComponents,
         rawData: null,
       })
@@ -151,6 +155,10 @@ export async function enrichTransactionFromDrafts(
       executedPrice: transactionSources.executedPrice,
       fxRate: transactionSources.fxRate,
       venue: transactionSources.venue,
+      perShare: transactionSources.perShare,
+      shares: transactionSources.shares,
+      nativeCurrency: transactionSources.nativeCurrency,
+      grossNative: transactionSources.grossNative,
       taxComponents: transactionSources.taxComponents,
     })
     .from(transactionSources)
@@ -163,6 +171,10 @@ export async function enrichTransactionFromDrafts(
     executedPrice: r.executedPrice,
     fxRate: r.fxRate,
     venue: r.venue,
+    perShare: r.perShare,
+    shares: r.shares,
+    nativeCurrency: r.nativeCurrency,
+    grossNative: r.grossNative,
     taxComponents: r.taxComponents as TaxComponents | null,
   }));
 
@@ -177,6 +189,10 @@ export async function enrichTransactionFromDrafts(
     if (rollup.executedPrice !== null) patch.executedPrice = rollup.executedPrice;
     if (rollup.fxRate !== null) patch.fxRate = rollup.fxRate;
     if (rollup.venue !== null) patch.venue = rollup.venue;
+    if (rollup.perShare !== null) patch.perShare = rollup.perShare;
+    if (rollup.shares !== null) patch.shares = rollup.shares;
+    if (rollup.nativeCurrency !== null) patch.nativeCurrency = rollup.nativeCurrency;
+    if (rollup.grossNative !== null) patch.grossNative = rollup.grossNative;
 
     if (Object.keys(patch).length > 0) {
       await dbClient.update(transactions).set(patch).where(eq(transactions.id, transactionId));

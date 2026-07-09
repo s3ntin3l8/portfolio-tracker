@@ -78,13 +78,21 @@ function trTradeFixture(overrides: {
     .join("\n");
 }
 
-/** Build a minimal TR dividend (DIVIDENDE) text. */
+/**
+ * Build a minimal TR dividend (DIVIDENDE) text — the real structure (see tr-pdf.ts's module
+ * doc comment): a POSITION line with per-share/gross in the native currency, then TWO
+ * Zwischensumme lines (foreign net-of-Quellensteuer, then its EUR conversion) that `fxRate`
+ * is derived from — not the printed ratio's label/direction.
+ */
 function trDividendFixture(overrides: {
   isin?: string;
   name?: string;
   qty?: string;
-  fxRate?: string;
-  quellenUsd?: string;
+  perShare?: string;
+  foreignCcy?: string;
+  grossForeign?: string;
+  quellenForeign?: string;
+  eurNet?: string;
   kapstEur?: string;
   netEur?: string;
   payDate?: string;
@@ -93,24 +101,31 @@ function trDividendFixture(overrides: {
   const {
     isin = "US0378331005",
     name = "Apple Inc.",
-    qty = "0.459173",
-    fxRate = "1.1567",
-    quellenUsd = "0.02",
-    kapstEur = "0.01",
-    netEur = "0.04",
+    qty = "20",
+    perShare = "0.5",
+    foreignCcy = "USD",
+    grossForeign = "10.00",
+    quellenForeign = "1.50",
+    eurNet = "7.31",
+    kapstEur = "0.20",
+    netEur = "7.11",
     payDate = "2025-02-25",
     depot = "1234567890",
   } = overrides;
+
+  const foreignNet = (Number(grossForeign) - Number(quellenForeign)).toFixed(2);
 
   return [
     "Trade Republic Bank GmbH",
     `DATUM 25.02.2025 DEPOT ${depot}`,
     "DIVIDENDE",
     `POSITION ANZAHL ERTRAG BETRAG`,
-    `BETRAG ${name} ${isin} ${qty} Stücke`,
-    `Quellensteuer für US-Emittenten -${quellenUsd} USD`,
-    `Zwischensumme ${fxRate} USD/EUR`,
-    `Kapitalertragsteuer ${fxRate} USD/EUR -${kapstEur} EUR`,
+    `BETRAG ${name} ${isin} ${qty} Stücke ${perShare} ${foreignCcy} ${grossForeign} ${foreignCcy}`,
+    "ABRECHNUNG POSITION BETRAG",
+    `Quellensteuer für US-Emittenten -${quellenForeign} ${foreignCcy}`,
+    `Zwischensumme ${foreignNet} ${foreignCcy}`,
+    `Zwischensumme 1.1567 ${foreignCcy}/EUR ${eurNet} EUR`,
+    `Kapitalertragsteuer 1.1567 ${foreignCcy}/EUR -${kapstEur} EUR`,
     "BUCHUNG",
     `DATUM DER ZAHLUNG ${payDate} ${netEur} EUR`,
   ].join("\n");
@@ -346,11 +361,13 @@ describe("parseTrPdf — split order (two legs, same AUFTRAG)", () => {
 describe("parseTrPdf — USD dividend", () => {
   const text = trDividendFixture({
     isin: "US0378331005",
-    qty: "0.459173",
-    fxRate: "1.1567",
-    quellenUsd: "0.02",
-    kapstEur: "0.01",
-    netEur: "0.04",
+    qty: "20",
+    perShare: "0.5",
+    grossForeign: "10.00",
+    quellenForeign: "1.50",
+    eurNet: "7.31", // 8.50 USD net-of-Quellensteuer → 7.31 EUR (fxRate 0.86 EUR/USD)
+    kapstEur: "0.20",
+    netEur: "7.11",
     payDate: "2025-02-25",
     depot: "9876543210",
   });
@@ -367,16 +384,26 @@ describe("parseTrPdf — USD dividend", () => {
     expect(Number(d.quantity)).toBe(0);
   });
 
-  it("captures the FX rate", () => {
+  it("captures shares/per-share/native-currency (informational; quantity stays 0)", () => {
     const [d] = parseTrPdf(text).drafts;
-    expect(Number(d.fxRate)).toBeCloseTo(1.1567, 4);
+    expect(Number(d.shares)).toBeCloseTo(20, 2);
+    expect(Number(d.perShare)).toBeCloseTo(0.5, 2);
+    expect(d.nativeCurrency).toBe("USD");
+    expect(Number(d.grossNative)).toBeCloseTo(10.0, 2);
   });
 
-  it("converts Quellensteuer from USD to EUR via the FX rate", () => {
+  it("captures the FX rate, derived from the two Zwischensumme amounts (EUR ÷ foreign)", () => {
+    const [d] = parseTrPdf(text).drafts;
+    // 7.31 EUR ÷ 8.50 USD (net-of-Quellensteuer) — NOT the printed "1.1567 USD/EUR" label,
+    // whose direction is the opposite of this column's convention (see tr-pdf.ts comment).
+    expect(Number(d.fxRate)).toBeCloseTo(0.86, 4);
+  });
+
+  it("converts Quellensteuer from USD to EUR via the derived FX rate", () => {
     const [d] = parseTrPdf(text).drafts;
     const tc = d.taxComponents!;
-    // quellenUsd=0.02, fxRate=1.1567 → quellenEur=0.02/1.1567≈0.017
-    expect(Number(tc.quellensteuer)).toBeCloseTo(0.02 / 1.1567, 2);
+    // quellenForeign=1.50, fxRate≈0.86 → quellenEur≈1.29
+    expect(Number(tc.quellensteuer)).toBeCloseTo(1.5 * 0.86, 2);
   });
 
   it("tax rollup is quellensteuer + kapst (in EUR)", () => {

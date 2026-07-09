@@ -60,6 +60,10 @@ export interface MergePreview {
     executedPrice: string | null;
     fxRate: string | null;
     venue: string | null;
+    perShare: string | null;
+    shares: string | null;
+    nativeCurrency: string | null;
+    grossNative: string | null;
     documentCount: number;
   };
 }
@@ -105,6 +109,10 @@ function ownScalarsAsSourceRow(row: TxRow): SourceRow {
     executedPrice: row.executedPrice,
     fxRate: row.fxRate,
     venue: row.venue,
+    perShare: row.perShare,
+    shares: row.shares,
+    nativeCurrency: row.nativeCurrency,
+    grossNative: row.grossNative,
     taxComponents: null,
   };
 }
@@ -133,6 +141,10 @@ async function ensureSourceRow(db: DB, row: TxRow): Promise<void> {
       executedPrice: row.executedPrice,
       fxRate: row.fxRate,
       venue: row.venue,
+      perShare: row.perShare,
+      shares: row.shares,
+      nativeCurrency: row.nativeCurrency,
+      grossNative: row.grossNative,
       taxComponents: null,
       confidence: null,
       rawData: null,
@@ -220,6 +232,10 @@ export async function mergeTransactions(
         executedPrice: transactionSources.executedPrice,
         fxRate: transactionSources.fxRate,
         venue: transactionSources.venue,
+        perShare: transactionSources.perShare,
+        shares: transactionSources.shares,
+        nativeCurrency: transactionSources.nativeCurrency,
+        grossNative: transactionSources.grossNative,
         taxComponents: transactionSources.taxComponents,
       })
       .from(transactionSources)
@@ -235,6 +251,10 @@ export async function mergeTransactions(
       if (rollup.executedPrice !== null) patch.executedPrice = rollup.executedPrice;
       if (rollup.fxRate !== null) patch.fxRate = rollup.fxRate;
       if (rollup.venue !== null) patch.venue = rollup.venue;
+      if (rollup.perShare !== null) patch.perShare = rollup.perShare;
+      if (rollup.shares !== null) patch.shares = rollup.shares;
+      if (rollup.nativeCurrency !== null) patch.nativeCurrency = rollup.nativeCurrency;
+      if (rollup.grossNative !== null) patch.grossNative = rollup.grossNative;
     }
     await tx.update(transactions).set(patch).where(eq(transactions.id, survivorId));
 
@@ -295,6 +315,10 @@ export async function previewMerge(
         executedPrice: transactionSources.executedPrice,
         fxRate: transactionSources.fxRate,
         venue: transactionSources.venue,
+        perShare: transactionSources.perShare,
+        shares: transactionSources.shares,
+        nativeCurrency: transactionSources.nativeCurrency,
+        grossNative: transactionSources.grossNative,
         taxComponents: transactionSources.taxComponents,
       })
       .from(transactionSources)
@@ -308,6 +332,10 @@ export async function previewMerge(
         executedPrice: transactionSources.executedPrice,
         fxRate: transactionSources.fxRate,
         venue: transactionSources.venue,
+        perShare: transactionSources.perShare,
+        shares: transactionSources.shares,
+        nativeCurrency: transactionSources.nativeCurrency,
+        grossNative: transactionSources.grossNative,
         taxComponents: transactionSources.taxComponents,
       })
       .from(transactionSources)
@@ -350,6 +378,10 @@ export async function previewMerge(
       executedPrice: rollup.hasManual ? survivor.executedPrice : rollup.executedPrice,
       fxRate: rollup.hasManual ? survivor.fxRate : rollup.fxRate,
       venue: rollup.hasManual ? survivor.venue : rollup.venue,
+      perShare: rollup.hasManual ? survivor.perShare : rollup.perShare,
+      shares: rollup.hasManual ? survivor.shares : rollup.shares,
+      nativeCurrency: rollup.hasManual ? survivor.nativeCurrency : rollup.nativeCurrency,
+      grossNative: rollup.hasManual ? survivor.grossNative : rollup.grossNative,
       documentCount: docCount.length,
     },
   };

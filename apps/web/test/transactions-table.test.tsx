@@ -463,6 +463,57 @@ describe("TransactionsTable", () => {
     expect(cellTexts.some((t) => t === "—")).toBe(true);
   });
 
+  it("shows shares/per-share (in native currency) instead of a dash, for a dividend that carries them", () => {
+    // Rio Tinto GBP dividend: quantity stays "0" (net-EUR-credited convention), but
+    // shares/perShare/nativeCurrency were parsed from the settlement PDF.
+    const gbpDividendRow: TxRow = {
+      id: "div-gbp",
+      portfolioId: "p1",
+      type: "dividend",
+      quantity: "0",
+      price: "34.23",
+      fees: "0",
+      tax: null,
+      fxRate: "1.145199",
+      shares: "27.526515",
+      perShare: "1.08580023",
+      nativeCurrency: "GBP",
+      grossNative: "29.89",
+      currency: "EUR",
+      executedAt: "2025-09-25T00:00:00.000Z",
+      source: "pytr",
+      instrument: { symbol: "RIO1", name: "Rio Tinto" },
+    };
+    renderSingleRow(gbpDividendRow);
+    const cells = screen.getAllByRole("cell");
+    const texts = cells.map((c) => c.textContent ?? "");
+    // Quantity cell shows the parsed share count, not "0" or "—".
+    expect(texts.some((t) => t === "27.526515")).toBe(true);
+    // Price cell shows the per-share rate formatted in GBP (native currency), not EUR.
+    expect(texts.some((t) => t === "£1.09")).toBe(true);
+  });
+
+  it("falls back to a dash for a dividend with no shares/perShare captured (older/unparsed row)", () => {
+    const plainDividendRow: TxRow = {
+      id: "div-plain",
+      portfolioId: "p1",
+      type: "dividend",
+      quantity: "0",
+      price: "5.00",
+      fees: "0",
+      tax: null,
+      fxRate: null,
+      currency: "EUR",
+      executedAt: "2025-01-01T00:00:00.000Z",
+      source: "manual",
+      instrument: { symbol: "BBCA", name: "Bank Central Asia" },
+    };
+    renderSingleRow(plainDividendRow);
+    const cells = screen.getAllByRole("cell");
+    const texts = cells.map((c) => c.textContent ?? "");
+    expect(texts.some((t) => t === "—")).toBe(true);
+  });
+
   it("shows the net cash amount for dividend rows", () => {
     // Normal dividend: price=0.07 (net), tax=0.03 (withheld) → Amount should show gross 0.10.
     const dividendRow: TxRow = {

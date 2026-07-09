@@ -119,10 +119,58 @@ describe("parseTrPdf — dividend", () => {
     expect(d.isin).toBe("US56035L1044");
     // RC#2: net EUR now resolves from the BETRAG <IBAN> <DD.MM.YYYY> <amount> layout.
     expect(d.price).toBe("5.51");
-    expect(d.fxRate).toBe("1.1567");
+    // fxRate is now EUR-per-USD (5.51 net EUR ÷ 6.38 net USD), derived from the two
+    // Zwischensumme AMOUNTS — not the printed "1.1567 USD/EUR" ratio/label (that direction
+    // was the opposite of every other import path's convention; see tr-pdf.ts comment).
+    expect(d.fxRate).toBe("0.863636");
     expect(d.tax).toBe("0.98");
     expect(d.taxComponents?.quellensteuer).toBe("0.98");
     expect(d.total).toBe("6.49");
+    // New informational fields (per-share display), from "28.876429 Stücke 0.26 USD 7.51 USD".
+    expect(d.shares).toBe("28.876429");
+    expect(d.perShare).toBe("0.26");
+    expect(d.nativeCurrency).toBe("USD");
+    expect(d.grossNative).toBe("7.51");
+  });
+
+  it("parses a GBP dividend with no US withholding (currency generalized beyond USD)", () => {
+    const gbpDividend =
+      "Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Geschäftsführer Andreas Torner Gernot Mittendorfer Christian Hecker Thomas Pischke TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 26.09.2025 DEPOT 1234567890 DIVIDENDE ÜBERSICHT Dividende mit Ex-Datum 14.08.2025. POSITION ANZAHL ERTRAG BETRAG Rio Tinto GB0007188757 27.526515 Stücke 1.08580023 GBP 29.89 GBP GESAMT 29.89 GBP ABRECHNUNG POSITION BETRAG Zwischensumme 29.89 GBP Zwischensumme 0.8731 GBP/EUR 34.23 EUR GESAMT 34.23 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 25.09.2025 34.23 EUR GB0007188757 in Wertpapierrechnung Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Wird keine Umsatzsteuer ausgewiesen, handelt es sich um eine umsatzsteuerfreie Leistung gemäß § 4 Nr. 8 UStG Max Mustermann Musterstr. 1 12345 Musterstadt";
+    expect(detectTrPdf(gbpDividend)).toBe(true);
+    const { drafts, errors } = parseTrPdf(gbpDividend);
+    expect(errors).toEqual([]);
+    expect(drafts).toHaveLength(1);
+    const d = drafts[0];
+    expect(d.action).toBe("dividend");
+    expect(d.isin).toBe("GB0007188757");
+    expect(d.currency).toBe("EUR");
+    expect(d.price).toBe("34.23");
+    expect(d.tax ?? null).toBeNull(); // no UK withholding, no German tax line in this doc
+    expect(d.nativeCurrency).toBe("GBP");
+    expect(d.grossNative).toBe("29.89");
+    expect(d.shares).toBe("27.526515");
+    expect(d.perShare).toBe("1.08580023");
+    // 34.23 EUR ÷ 29.89 GBP.
+    expect(d.fxRate).toBe("1.145199");
+  });
+
+  it("detects a WAHLDIVIDENDE (cash-elected scrip dividend) — same structure as a plain dividend", () => {
+    const wahldividende =
+      "Trade Republic Bank GmbH Brunnenstraße 19-21 10119 Berlin www.traderepublic.com service@traderepublic.com Sitz der Gesellschaft: Berlin AG Charlottenburg HRB 244347 B Umsatzsteuer-ID DE307510626 Direktoren Andreas Torner Gernot Mittendorfer TRADE REPUBLIC BANK GMBH BRUNNENSTRASSE 19-21 10119 BERLIN SEITE 1 von 1 DATUM 02.07.2024 DEPOT 1234567890 WAHLDIVIDENDE ÜBERSICHT Wahldividende mit Ex-Datum 21.06.2024. POSITION ANZAHL ERTRAG BETRAG Main Street Capital US56035L1044 28.151896 Stücke 0.3 USD 8.45 USD GESAMT 8.45 USD ABRECHNUNG POSITION BETRAG Quellensteuer für US-Emittenten -1.27 USD Zwischensumme 7.18 USD Zwischensumme 1.0689 USD/EUR 6.72 EUR Kapitalertragssteuer 1.0689 USD/EUR -0.78 EUR Solidaritätszuschlag 1.0689 USD/EUR -0.04 EUR GESAMT 5.90 EUR BUCHUNG VERRECHNUNGSKONTO DATUM DER ZAHLUNG BETRAG DE00000000000000000000 27.06.2024 5.90 EUR US56035L1044 in Wertpapierrechnung Diese Abrechnung wird maschinell erstellt und daher nicht unterschrieben. Wird keine Umsatzsteuer ausgewiesen, handelt es sich um eine umsatzsteuerfreie Leistung gemäß § 4 Nr. 8 UStG Max Mustermann Musterstr. 1 12345 Musterstadt";
+    // Previously false: `\bDIVIDENDE\b` never matched inside the unbroken "WAHLDIVIDENDE" token.
+    expect(detectTrPdf(wahldividende)).toBe(true);
+    const { drafts, errors } = parseTrPdf(wahldividende);
+    expect(errors).toEqual([]);
+    expect(drafts).toHaveLength(1);
+    const d = drafts[0];
+    expect(d.action).toBe("dividend");
+    expect(d.price).toBe("5.9");
+    expect(d.nativeCurrency).toBe("USD");
+    expect(d.grossNative).toBe("8.45");
+    // Previously omitted entirely: Solidaritätszuschlag was never summed into dividend tax.
+    expect(d.taxComponents?.solidaritaetszuschlag).toBe("0.04");
+    expect(d.taxComponents?.kapitalertragsteuer).toBe("0.78");
+    expect(d.tax).toBe("2.01"); // quellensteuer(≈1.19) + kapst(0.78) + soli(0.04)
   });
 });
 

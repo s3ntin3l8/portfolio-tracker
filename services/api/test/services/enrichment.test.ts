@@ -651,7 +651,9 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
       .select()
       .from(transactionSources)
       .where(eq(transactionSources.transactionId, tx.id));
-    expect(src.fxRate).toBe("1.1567");
+    // EUR-per-USD, derived from the two Zwischensumme amounts (5.51 EUR ÷ 6.38 USD) — not
+    // the printed "1.1567 USD/EUR" label/direction (see tr-pdf.ts's fxRate comment).
+    expect(src.fxRate).toBe("0.863636");
     expect((src.taxComponents as { quellensteuer?: string }).quellensteuer).toBe("0.98");
   });
 

@@ -594,6 +594,17 @@ export interface Transaction {
   tax: string | null;
   /** FX rate at execution for cross-currency holdings; null for same-currency. */
   fxRate: string | null;
+  /** Dividend/coupon per-share rate, in the instrument's native currency (income rows only).
+   *  Informational — `price`/`quantity` keep their existing net-cash/zero-quantity semantics. */
+  perShare?: string | null;
+  /** Shares the per-share rate above was paid on. NOT the same as `quantity` (always "0" for
+   *  income transactions). */
+  shares?: string | null;
+  /** The instrument's native currency for a foreign-currency income payment, when it differs
+   *  from `currency` (the cash actually credited, e.g. EUR). */
+  nativeCurrency?: string | null;
+  /** Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax. */
+  grossNative?: string | null;
   /** Free-text memo (counterparty, merchant, transfer reference). */
   description: string | null;
   /** User-defined labels for filtering and reporting. */
@@ -643,6 +654,10 @@ export interface MergePreview {
     executedPrice: string | null;
     fxRate: string | null;
     venue: string | null;
+    perShare: string | null;
+    shares: string | null;
+    nativeCurrency: string | null;
+    grossNative: string | null;
     documentCount: number;
   };
 }

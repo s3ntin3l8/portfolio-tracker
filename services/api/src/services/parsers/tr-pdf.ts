@@ -15,10 +15,15 @@
  *    roundup). Table columns: POSITION / ANZAHL / PREIS|DURCHSCHNITTSKURS / BETRAG.
  *    ABRECHNUNG table: Fremdkostenzuschlag (fee), Kapitalertragsteuer, Solidaritätszuschlag.
  *    BUCHUNG table: VERRECHNUNGSKONTO / WERTSTELLUNG YYYY-MM-DD / BETRAG.
- *  - DIVIDENDE — dividend income. US decimal locale (`.` as decimal). Table columns:
- *    POSITION / ANZAHL / ERTRAG / BETRAG (all in the foreign currency, USD).
- *    ABRECHNUNG: Quellensteuer für <country>-Emittenten (USD), Zwischensumme (EUR convert),
- *    Kapitalertragsteuer (EUR). BUCHUNG: DATUM DER ZAHLUNG / BETRAG (EUR).
+ *  - DIVIDENDE (also WAHLDIVIDENDE, a cash-elected scrip dividend — same structure) —
+ *    dividend income. US decimal locale (`.` as decimal). Table columns:
+ *    POSITION / ANZAHL / ERTRAG / BETRAG, all in the instrument's native currency (any
+ *    3-letter code, not just USD — this era of TR's template covers ~2024Q3 onward; an
+ *    older, German-locale/`Stk.` template predates it and is not handled here).
+ *    ABRECHNUNG: Quellensteuer für <country>-Emittenten (native currency), Zwischensumme
+ *    (native, then its EUR conversion), Kapitalertragsteuer/-ssteuer, Solidaritätszuschlag,
+ *    Kirchensteuer (all EUR). BUCHUNG: DATUM DER ZAHLUNG / BETRAG (EUR). `fxRate` is derived
+ *    from the two Zwischensumme amounts (EUR ÷ native), not the printed ratio's label/direction.
  *
  * TR number locales (differ from DKB):
  *  - Trade PDFs: German decimal comma (`207,20 EUR`, `1.026,36 EUR`).
@@ -58,8 +63,10 @@ export function detectTrPdf(text: string): boolean {
   if (!TR_SIG_RE.test(text)) return false;
   // Trade settlement confirmation.
   if (/WERTPAPIERABRECHNUNG/.test(text) && /\bAUSFÜHRUNG\b/.test(text)) return true;
-  // Dividend income confirmation.
-  if (/\bDIVIDENDE\b/.test(text) && /Stücke/.test(text)) return true;
+  // Dividend income confirmation. Also matches WAHLDIVIDENDE (scrip/choice-dividend paid in
+  // cash — same structure) — a plain `\bDIVIDENDE\b` misses it because "WAHLDIVIDENDE" is one
+  // unbroken token, so there's no word boundary directly before "DIVIDENDE".
+  if (/\b(?:WAHL)?DIVIDENDE\b/.test(text) && /Stücke/.test(text)) return true;
   // Interest payout (Cash Zinsen) — "ABRECHNUNG ZINSEN" / "EINKOMMENSART ... ZINSEN".
   if (/ABRECHNUNG\s+ZINSEN/.test(text)) return true;
   // Tax-optimisation true-up (Steuerliche Optimierung — KapSt/Soli refund or charge).
@@ -335,11 +342,8 @@ function parseTrDividend(text: string): TrPdfResult {
   const headerDate = parseTrDate(headerDateStr);
 
   // ISIN: bare (no label) in dividend docs, sitting between the name and the quantity.
-  // Pattern: "<name> <ISIN_12> <qty> Stücke <ertrag> <currency>"
+  // Pattern: "<name> <ISIN_12> <qty> Stücke <perShare> <currency> <gross> <currency>"
   const isin = text.match(TR_ISIN_LABELED_RE)?.[1] ?? text.match(BARE_ISIN_RE)?.[1];
-  // Quantity (US decimal): "0.459173 Stücke" — captured for completeness; dividend tx uses price=netEur.
-  const qtyM = text.match(/([\d.]+)\s+Stücke/);
-  const _quantity = parseUs(qtyM?.[1]);
 
   // Name: everything before the bare ISIN (on the position line after BETRAG header).
   let name: string | undefined;
@@ -348,34 +352,75 @@ function parseTrDividend(text: string): TrPdfResult {
     name = m ? collapse(m[1]) : undefined;
   }
 
-  // FX rate: "Zwischensumme X.XXXX USD/EUR ..."
-  const fxM = text.match(/Zwischensumme\s+([\d.]+)\s+USD\/EUR/);
-  const fxRate = parseUs(fxM?.[1]);
+  // POSITION line: "<qty> Stücke <perShare> <CCY> <grossNative> <CCY>" — any currency (the
+  // instrument's native one; previously assumed to always be USD and discarded outright).
+  // `shares`/`perShare`/`nativeCurrency`/`grossNative` are informational display fields —
+  // `price` (net EUR credited) and `quantity` ("0") below keep their existing cash-flow
+  // semantics unchanged, so core/holdings/reconciliation are unaffected.
+  const posM = text.match(/([\d.]+)\s+Stücke\s+([\d.]+)\s+([A-Z]{3})\s+([\d.]+)\s+([A-Z]{3})/);
+  const shares = posM ? parseUs(posM[1]) : null;
+  const perShare = posM ? parseUs(posM[2]) : null;
+  const nativeCcy = posM?.[3];
+  const grossNativeAmt = posM ? parseUs(posM[4]) : null;
 
-  // Quellensteuer in USD: "Quellensteuer für US-Emittenten -X.XX USD"
-  // [\w-]+ matches country specifier including hyphen (e.g. "US-Emittenten").
-  const quellenM = text.match(/Quellensteuer für [\w-]+ -\s*([\d.]+)\s+USD/);
-  const quellenUsd = quellenM ? parseUs(quellenM[1]) : null;
-  // Convert to EUR using the FX rate (USD/EUR means 1 EUR = fxRate USD, so 1 USD = 1/fxRate EUR).
-  const quellenEur =
-    quellenUsd && fxRate && Number(fxRate) > 0
-      ? new Decimal(quellenUsd)
-          .div(new Decimal(fxRate))
-          .toDecimalPlaces(2)
-          .toString()
+  // FX: derive EUR-per-<native> from the two Zwischensumme AMOUNTS (foreign net-of-withholding,
+  // then its EUR equivalent) rather than trusting the printed "<rate> <CCY>/EUR" ratio's label
+  // direction — the previous code stored that printed ratio (foreign-per-EUR) directly as
+  // `fxRate`, the OPPOSITE convention used by every other import path (CSV/timeline store
+  // EUR-per-foreign, matching the column's own "units of currency per foreign" doc comment).
+  // Deriving from amounts also sidesteps needing the label's currency-pair order at all.
+  const fxM = text.match(
+    /Zwischensumme\s+([\d.]+)\s+[A-Z]{3}\s+Zwischensumme\s+[\d.]+\s+[A-Z]{3}\/EUR\s+([\d.]+)\s+EUR/,
+  );
+  const fxForeignNet = fxM ? parseUs(fxM[1]) : null;
+  const fxEurNet = fxM ? parseUs(fxM[2]) : null;
+  const fxRate =
+    fxForeignNet && fxEurNet && Number(fxForeignNet) > 0
+      ? new Decimal(fxEurNet).div(new Decimal(fxForeignNet)).toDecimalPlaces(6).toString()
       : null;
 
-  // Kapitalertragsteuer in EUR: "Kapitalertragsteuer X.XXXX USD/EUR -X.XX EUR"
-  const kapstM = text.match(/Kapitalertragsteuer\s+[\d.]+\s+USD\/EUR\s+-\s*([\d.]+)\s+EUR/);
-  const kapst = parseUs(kapstM?.[1]);
+  // Only a genuinely foreign-currency payment has a meaningful native currency / FX rate —
+  // a EUR-denominated dividend carries no Zwischensumme conversion line at all.
+  const isForeign = Boolean(nativeCcy) && nativeCcy !== "EUR" && Boolean(fxRate);
+
+  // Quellensteuer (source-country withholding), in the native currency: "Quellensteuer für
+  // <country>-Emittenten -X.XX <CCY>" — previously hardcoded to USD only.
+  // [\w-]+ matches the country specifier including hyphen (e.g. "US-Emittenten").
+  const quellenM = text.match(/Quellensteuer für [\w-]+ -\s*([\d.]+)\s+([A-Z]{3})/);
+  const quellenForeign = quellenM ? parseUs(quellenM[1]) : null;
+  const quellenEur =
+    quellenForeign && fxRate
+      ? new Decimal(quellenForeign).mul(new Decimal(fxRate)).toDecimalPlaces(2).toString()
+      : null;
+
+  // Kapitalertragsteuer / Solidaritätszuschlag / Kirchensteuer are always printed already in
+  // EUR; the "<rate> <CCY>/EUR" prefix only appears for foreign-currency dividends, so it's
+  // optional here — a EUR-native dividend's tax lines have no such prefix at all. Spelling
+  // varies across document eras (Kapitalertragsteuer / Kapitalertragssteuer).
+  const taxLine = (label: string): string | null =>
+    parseUs(
+      text.match(
+        new RegExp(`${label}(?:\\s+[\\d.]+\\s+[A-Z]{3}\\/EUR)?\\s+-\\s*([\\d.]+)\\s+EUR`),
+      )?.[1],
+    );
+  const kapst = taxLine("Kapitalertrags?steuer");
+  // Previously omitted entirely — a real undercount whenever a dividend actually carried a
+  // Solidaritätszuschlag component (it does on at least some real US-withholding dividends).
+  const soli = taxLine("Solidaritätszuschlag");
+  const kirche = taxLine("Kirchensteuer");
 
   // Tax rollup.
-  const tax = quellenEur || kapst ? addMoney(quellenEur, kapst) : undefined;
+  const tax =
+    quellenEur || kapst || soli || kirche
+      ? addMoney(quellenEur, kapst, soli, kirche)
+      : undefined;
   const taxNum = tax ? Number(tax) : 0;
 
   const taxComponents: TaxComponents = {};
   if (quellenEur && Number(quellenEur) > 0) taxComponents.quellensteuer = quellenEur;
   if (kapst && Number(kapst) > 0) taxComponents.kapitalertragsteuer = kapst;
+  if (soli && Number(soli) > 0) taxComponents.solidaritaetszuschlag = soli;
+  if (kirche && Number(kirche) > 0) taxComponents.kirchensteuer = kirche;
 
   // Net EUR payout from the BUCHUNG line: "<IBAN> <DD.MM.YYYY|YYYY-MM-DD> <amount> EUR".
   // Real docs put `DATUM DER ZAHLUNG BETRAG <IBAN> <German-date> <amount>` — the old regex
@@ -405,7 +450,11 @@ function parseTrDividend(text: string): TrPdfResult {
       total: total ?? undefined,
       tax: taxNum > 0 ? tax : undefined,
       taxComponents: Object.keys(taxComponents).length > 0 ? taxComponents : undefined,
-      fxRate: fxRate ?? undefined,
+      shares: shares ?? undefined,
+      perShare: perShare ?? undefined,
+      nativeCurrency: isForeign ? nativeCcy : undefined,
+      grossNative: isForeign ? (grossNativeAmt ?? undefined) : undefined,
+      fxRate: isForeign ? (fxRate ?? undefined) : undefined,
       currency: "EUR",
       executedAt: payDate ?? undefined,
       externalId,
@@ -537,7 +586,8 @@ function parseTrTaxOptimization(text: string): TrPdfResult {
 export function parseTrPdf(rawText: string): TrPdfResult {
   const text = collapse(rawText);
   if (/STEUERLICHE OPTIMIERUNG/i.test(text)) return parseTrTaxOptimization(text);
-  if (/\bDIVIDENDE\b/.test(text)) return parseTrDividend(text);
+  // Also routes WAHLDIVIDENDE (cash-elected scrip dividend) — see detectTrPdf's comment.
+  if (/\b(?:WAHL)?DIVIDENDE\b/.test(text)) return parseTrDividend(text);
   if (/ABRECHNUNG ZINSEN/.test(text)) return parseTrInterest(text);
   return parseTrTrade(text);
 }

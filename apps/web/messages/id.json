@@ -1044,6 +1044,7 @@
     "tax": "Pajak",
     "netAmount": "Nominal Bersih",
     "fxRate": "Kurs",
+    "grossNative": "Bruto (mata uang asli)",
     "source": "Sumber",
     "empty": "Tidak ada transaksi.",
     "searchPlaceholder": "Cari transaksi…",
