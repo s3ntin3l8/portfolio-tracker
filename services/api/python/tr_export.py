@@ -14,11 +14,20 @@ Contract (consumed by services/pytr/runner.ts):
 
 Each emitted line is the NORMALIZED event the Node mapper consumes:
   {id, timestamp, eventType, title, amount (signed), currency,
-   isin?, wkn?, shares?, fees?, savingsPlanId?, status?}
+   isin?, wkn?, shares?, fees?, savingsPlanId?, status?,
+   trueDistributionDate?, originalAmount?, correctionAmount?, dateResolutionFailed?}
 The WKN is fetched per distinct ISIN from the instrument-detail channel (timeline events
 carry only an ISIN); everything else comes from the timeline list + its detail payload.
 Extraction of isin/shares/fees from the timeline detail is best-effort and the part most
 sensitive to pytr/TR changes; the raw detail is scanned defensively.
+
+The trailing four fields are set only on a TR "Dividend correction" event (a same-day
+cancel+reissue restating an earlier distribution, observed live for Realty Income —
+1099-DIV recharacterization posted a year after the fact): trueDistributionDate/
+originalAmount/correctionAmount resolve the restated event's true period + the
+already-recognized-vs-genuinely-new amount split (see _extract_reclassification);
+dateResolutionFailed is set only when that resolution fails, so the Node mapper can fall
+back safely instead of silently mis-dating the booking.
 
 NOTE: targets pytr pinned to an exact upstream commit (see requirements.txt) for TR's
 June-2026 `compactPortfolioByType` rename; not yet validated against a live account. TR's
@@ -515,6 +524,131 @@ def _is_crypto_bonus(event):
     return "one_percent" in blob or "1% bonus" in blob or "1 % bonus" in blob
 
 
+_RECLASSIFICATION_SUBTITLES = {"bardividende korrigiert", "cash dividend corrected"}
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+)
+
+
+def _is_reclassification_correction(event):
+    """True for a TR 'Dividend correction' event — one instrument's monthly distribution
+    restated in a later period (observed live for Realty Income, March 2026: the prior
+    year's REIT 1099-DIV recharacterization, posted as a same-day cancel+reissue pair).
+
+    Two independent signals, both required (neither alone is proven stable enough on its
+    own): a `type: "banner"` detail section — present ONLY on these restatement events,
+    never on an ordinary dividend, so mere presence is a strong structural discriminator —
+    and the event's own `subtitle` matching TR's "corrected" label, the exact marker
+    pytr's own event.py subtitle table already distinguishes from plain "Bardividende".
+    Deliberately narrower than "has a banner" alone, to avoid misfiring on some other,
+    unrelated banner TR might one day attach to a normal dividend.
+    """
+    if (event.get("status") or "").upper() != "EXECUTED":
+        return False
+    details = event.get("details")
+    if not isinstance(details, dict):
+        return False
+    has_banner = any(
+        isinstance(s, dict) and s.get("type") == "banner"
+        for s in details.get("sections", []) or []
+    )
+    if not has_banner:
+        return False
+    subtitle = (event.get("subtitle") or "").strip().lower()
+    return subtitle in _RECLASSIFICATION_SUBTITLES
+
+
+def _extract_correction_components(details):
+    """('Original dividend', 'Correction') amounts a reclassification event's own detail
+    names explicitly (e.g. '8,27 €' / '0,49 €' — TR's own breakdown of the restated total
+    into an already-recognized-income portion and a genuinely-new delta). Either is None
+    if the row isn't present (e.g. a differently-shaped correction TR introduces later)."""
+    original = correction = None
+    for title, text in _walk_rows(details or {}):
+        if title in ("original dividend", "ursprüngliche dividende"):
+            original = _num(text)
+        elif title in ("correction", "korrektur"):
+            correction = _num(text)
+    return original, correction
+
+
+def _extract_original_dividend_id(details):
+    """The id of the event a reclassification event's 'Original dividend' row references
+    (its `action.payload`, a UUID) — the only place the true restated event is identified;
+    the row's own displayed amount is read separately via _extract_correction_components.
+    Walks the nested detail structure for this specific key, mirroring
+    _extract_savings_plan_id's pattern, rather than string-matching free text.
+    """
+
+    def walk(obj):
+        if isinstance(obj, dict):
+            title = (obj.get("title") or "").strip().lower()
+            if title in ("original dividend", "ursprüngliche dividende"):
+                detail = obj.get("detail")
+                if isinstance(detail, dict):
+                    payload = (detail.get("action") or {}).get("payload")
+                    if isinstance(payload, str) and _UUID_RE.match(payload):
+                        return payload
+            for value in obj.values():
+                found = walk(value)
+                if found:
+                    return found
+        elif isinstance(obj, list):
+            for item in obj:
+                found = walk(item)
+                if found:
+                    return found
+        return None
+
+    return walk(details or {})
+
+
+def _extract_reclassification(event, events_by_id):
+    """For a 'Dividend correction' event, resolve the true distribution date + the
+    Original/Correction amount split by looking up the referenced original in this
+    account's already-collected event set — NOT a fresh API call. The canceled original
+    lives on the same `timelineTransactions` feed `_collect_transactions` already pages,
+    and `_attach_details` already fetched its detail as part of the normal batch, so a
+    dict lookup is sufficient (confirmed empirically against real accounts before this was
+    written: the canceled original for every observed correction was already present).
+
+    Returns None if `event` isn't a reclassification correction at all. Otherwise a dict
+    with `trueDistributionDate` (None if unresolved), `originalAmount`, `correctionAmount`
+    (both read from the correction event's own detail, independent of resolution),  and
+    `dateResolutionFailed` (True only on failure — omitted/None on success, since a wrong
+    date must never be silently assumed).
+    """
+    if not _is_reclassification_correction(event):
+        return None
+    details = event.get("details")
+    original_amount, correction_amount = _extract_correction_components(details)
+    true_date = None
+    resolution_failed = True
+    current_id = _extract_original_dividend_id(details)
+    seen = set()
+    for _ in range(5):  # cap recursion for a correction-of-a-correction chain
+        if not current_id or current_id in seen:
+            break
+        seen.add(current_id)
+        referenced = events_by_id.get(current_id)
+        if referenced is None:
+            break  # not in this account's collected events; can't resolve further
+        referenced_details = referenced.get("details")
+        docs = _extract_documents(referenced_details) or []
+        date = next((d.get("date") for d in docs if d.get("date")), None)
+        if date:
+            true_date = date
+            resolution_failed = False
+            break
+        current_id = _extract_original_dividend_id(referenced_details)
+    return {
+        "trueDistributionDate": true_date,
+        "originalAmount": original_amount,
+        "correctionAmount": correction_amount,
+        "dateResolutionFailed": resolution_failed or None,
+    }
+
+
 def _extract_savings_plan_id(details):
     """The savings-plan id is carried only in the detail payload (a nested
     `openSavingsPlanOverview` action under the Sparplan section), NOT on the top-level
@@ -539,13 +673,15 @@ def _extract_savings_plan_id(details):
     return walk(details or {})
 
 
-def _normalize(event, wkn_by_isin=None, crypto_isin_by_ticker=None):
+def _normalize(event, wkn_by_isin=None, crypto_isin_by_ticker=None, events_by_id=None):
     """Flatten a raw timeline event into the shape the Node mapper consumes.
 
     Extraction of shares/fees from the detail sections is best-effort and the part most
     sensitive to TR/pytr changes; refine the keyword/number heuristics during live
     validation. `wkn_by_isin` maps each ISIN to its WKN (fetched separately from the
-    instrument-detail channel, since timeline events carry only an ISIN).
+    instrument-detail channel, since timeline events carry only an ISIN). `events_by_id`
+    maps every collected event's id to itself (details included) — used only to resolve a
+    "Dividend correction" event's referenced original (see _extract_reclassification).
     """
     amount = event.get("amount") or {}
     details = event.get("details")
@@ -563,6 +699,7 @@ def _normalize(event, wkn_by_isin=None, crypto_isin_by_ticker=None):
             shares = qty
         if isin is None:
             isin = (crypto_isin_by_ticker or {}).get(ticker)
+    reclass = _extract_reclassification(event, events_by_id or {})
     return {
         "id": event.get("id"),
         "timestamp": event.get("timestamp"),
@@ -592,6 +729,14 @@ def _normalize(event, wkn_by_isin=None, crypto_isin_by_ticker=None):
         # "1% bonus" trade is a reward-funded purchase (cash-neutral) — flagged here from the
         # detail since the timeline gives no distinguishing event type.
         "kind": "crypto_bonus" if _is_crypto_bonus(event) else None,
+        # Present only on a "Dividend correction" event (see _extract_reclassification);
+        # None for every ordinary event. trueDistributionDate is DD.MM.YYYY (TR's own
+        # format, parsed by the Node mapper) or None if unresolved — dateResolutionFailed
+        # then flags the fallback path rather than silently mis-dating the booking.
+        "trueDistributionDate": reclass["trueDistributionDate"] if reclass else None,
+        "originalAmount": reclass["originalAmount"] if reclass else None,
+        "correctionAmount": reclass["correctionAmount"] if reclass else None,
+        "dateResolutionFailed": reclass["dateResolutionFailed"] if reclass else None,
     }
 
 
@@ -734,12 +879,13 @@ async def _probe_timeline(tr, limit) -> int:
     """
     events = await _collect_transactions(tr)
     events = await _attach_details(tr, events)
+    events_by_id = {e["id"]: e for e in events if e.get("id")}
     picked = [e for e in events if _extract_isin(e)][:limit]
     for e in picked:
         out = {
             "id": e.get("id"),
             "eventType": e.get("eventType"),
-            "normalized": _normalize(e, {}),
+            "normalized": _normalize(e, {}, events_by_id=events_by_id),
             "rawDetails": e.get("details"),
         }
         sys.stdout.write(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
@@ -857,8 +1003,12 @@ async def _run(tr) -> int:
     isins = {isin for isin in (_extract_isin(e) for e in events) if isin}
     wkn_by_isin = await _collect_wkns(tr, isins)
     crypto_isin_by_ticker = _crypto_isin_by_ticker(events)
+    events_by_id = {e["id"]: e for e in events if e.get("id")}
     for event in events:
-        sys.stdout.write(json.dumps(_normalize(event, wkn_by_isin, crypto_isin_by_ticker)) + "\n")
+        sys.stdout.write(
+            json.dumps(_normalize(event, wkn_by_isin, crypto_isin_by_ticker, events_by_id))
+            + "\n"
+        )
     # A trailing, clearly-tagged summary line (not an event) carrying TR's reported balances.
     cash = await _fetch_cash(tr)
     positions = await _fetch_positions(tr)

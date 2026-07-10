@@ -35,6 +35,15 @@ const trEventSchema = z.object({
   documentRefs: z
     .array(z.object({ id: z.string(), type: z.string().nullish(), date: z.string().nullish() }))
     .nullish(),
+  // Present only on a TR "Dividend correction" event (tr_export.py's
+  // _extract_reclassification): resolves the restated event's true period + the
+  // already-recognized-vs-genuinely-new amount split. trueDistributionDate is TR's own
+  // DD.MM.YYYY document-date format (not ISO, unlike `timestamp`). dateResolutionFailed is
+  // true only when resolution failed — omitted/null on success or when not applicable.
+  trueDistributionDate: z.string().nullish(),
+  originalAmount: z.number().nullish(),
+  correctionAmount: z.number().nullish(),
+  dateResolutionFailed: z.boolean().nullish(),
 });
 
 // TR books crypto under synthetic ISINs (XF000<TICKER>…). Recognised at the source so the
@@ -258,6 +267,113 @@ export type MapResult =
       eventType?: string;
       raw?: ImportIssue["raw"];
     };
+
+// Suffix marking a "Dividend correction" event's backdated original-portion booking (see
+// buildReclassificationSplit). Exported so sync.ts/cancellation.ts/documents.ts — which
+// otherwise treat `transactions.externalId` as identical to the raw TR event id — can
+// strip it back to the raw id wherever that assumption matters (dedup gating,
+// cancellation matching, live document-id lookups). The correction leg deliberately keeps
+// externalId = the raw event id UNCHANGED (see buildReclassificationSplit) specifically so
+// none of those call sites need to know about the split at all; only this one suffixed,
+// synthetic row does.
+export const RECLASSIFICATION_ORIGINAL_SUFFIX = ":original";
+
+/** Strip a trailing RECLASSIFICATION_ORIGINAL_SUFFIX, if present — recovers the raw TR
+ * event id from a split draft/transaction's externalId. A no-op for every other
+ * externalId in the codebase (they never contain this suffix). */
+export function rawEventIdFromExternalId(externalId: string): string {
+  return externalId.endsWith(RECLASSIFICATION_ORIGINAL_SUFFIX)
+    ? externalId.slice(0, -RECLASSIFICATION_ORIGINAL_SUFFIX.length)
+    : externalId;
+}
+
+const TR_DOC_DATE_RE = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/;
+
+/** Parse TR's DD.MM.YYYY document-date format (used only for a resolved reclassification's
+ * true distribution date — every other date on the timeline is already an ISO timestamp). */
+function parseTrDocDate(text: string): Date | null {
+  const m = TR_DOC_DATE_RE.exec(text.trim());
+  if (!m) return null;
+  const [, day, month, year] = m;
+  const d = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Split a resolved TR "Dividend correction" event into two bookings: the "Original
+ * dividend" component (already-recognized income, re-attributed to its true period) and
+ * the "Correction" delta (genuinely new information, effective in the period discovered).
+ * Returns null if the event isn't a resolved reclassification (the caller falls through to
+ * the normal single-booking path).
+ *
+ * externalId scheme is deliberate: the correction leg keeps `ev.id` UNCHANGED — exactly
+ * what today's (pre-split) single booking already uses — so every mechanism that assumes
+ * `transactions.externalId === the raw TR event id` (sync dedup, the resolved-events
+ * ledger, cancellation matching) keeps working without modification, gated entirely by
+ * this one row's presence. Only the new "original" row, which has no pre-split
+ * equivalent, gets a synthetic `${ev.id}:original` id — the few call sites that must
+ * recognize it use rawEventIdFromExternalId to recover the raw id.
+ */
+function buildReclassificationSplit(ev: TrEvent): ParsedTransaction[] | null {
+  if (ev.originalAmount == null || ev.correctionAmount == null || !ev.trueDistributionDate) {
+    return null;
+  }
+  const trueDate = parseTrDocDate(ev.trueDistributionDate);
+  if (!trueDate) return null;
+
+  const assetClass: "crypto" | "equity" =
+    ev.isin && TR_CRYPTO_ISIN.test(ev.isin) ? "crypto" : "equity";
+  const shared = {
+    assetClass,
+    ticker: null,
+    isin: ev.isin ?? null,
+    wkn: ev.wkn ?? null,
+    name: ev.title ?? ev.isin ?? ev.eventType,
+    quantity: "0",
+    unit: "shares" as const,
+    fees: "0",
+    currency: ev.currency.toUpperCase(),
+    confidence: 1,
+    savingsPlanId: ev.savingsPlanId ?? null,
+    exchangeCode: null,
+    executedPrice: null,
+    fxRate: ev.fxRate != null ? formatDecimal(ev.fxRate) : null,
+    venue: ev.venue ?? null,
+    description: ev.description ?? null,
+  };
+  // Neither leg carries a per-component withholding split from the raw event (the
+  // correction event's own `tax` is null — the full withholding lived on the now-canceled
+  // original, which this booking replaces); left null here, same as the rest of this
+  // mapper's other income actions when `ev.tax` is absent. A later settlement-PDF
+  // enrichment pass may fill it in, same mechanism as any other dividend.
+  const original: ParsedTransaction = {
+    ...shared,
+    action: "dividend",
+    price: formatDecimal(Math.abs(ev.originalAmount)),
+    total: formatDecimal(Math.abs(ev.originalAmount)),
+    tax: null,
+    executedAt: trueDate,
+    externalId: `${ev.id}${RECLASSIFICATION_ORIGINAL_SUFFIX}`,
+    kind: "reclassification-original",
+    // Not `ev.documentRefs`: the one correction-event document links to the correction
+    // leg's transaction (its externalId is the raw id documents.ts's sourceEventId
+    // resolves to) — this leg would show a document reference in the UI it never
+    // actually stores/attaches.
+    documentRefs: null,
+  };
+  const correction: ParsedTransaction = {
+    ...shared,
+    action: "dividend",
+    price: formatDecimal(Math.abs(ev.correctionAmount)),
+    total: formatDecimal(Math.abs(ev.correctionAmount)),
+    tax: null,
+    executedAt: new Date(ev.timestamp),
+    externalId: ev.id,
+    kind: "reclassification-correction",
+    documentRefs: ev.documentRefs ?? null,
+  };
+  return [original, correction];
+}
 
 // Build a skip outcome, carrying the source event so the UI can offer to map it.
 function skip(
@@ -506,8 +622,28 @@ export function mapTrEvents(rawEvents: unknown[]): {
   const errors: ImportIssue[] = [];
   rawEvents.forEach((raw, i) => {
     const result = mapTrEventToDraft(raw);
-    if ("draft" in result) drafts.push(result.draft);
-    else
+    if ("draft" in result) {
+      // A resolved "Dividend correction" event expands one raw event into two bookings
+      // (see buildReclassificationSplit) — a batch-level transform, deliberately not done
+      // inside mapTrEventToDraft itself, so that function's single-draft contract (and the
+      // healing check in sync.ts that relies on it) stays untouched. `raw` is re-parsed
+      // here rather than threading the already-validated event back out of
+      // mapTrEventToDraft — cheap, and keeps that function's return type simple.
+      const parsed = trEventSchema.safeParse(raw);
+      const ev = parsed.success ? parsed.data : null;
+      const split = ev ? buildReclassificationSplit(ev) : null;
+      if (split) {
+        drafts.push(...split);
+      } else if (ev && ev.originalAmount != null && ev.correctionAmount != null) {
+        // Detected as a reclassification correction but the true date couldn't be
+        // resolved (dateResolutionFailed) — fall back to the normal single booking
+        // mapTrEventToDraft already produced (today's behavior: full amount, correction's
+        // own posting date) rather than silently mis-dating it, flagged for review.
+        drafts.push({ ...result.draft, kind: "reclassification-unresolved" });
+      } else {
+        drafts.push(result.draft);
+      }
+    } else
       errors.push({
         line: i,
         message: result.reason,

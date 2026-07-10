@@ -4,6 +4,7 @@ import { transactions, trResolvedEvents } from "@portfolio/db";
 import type { DB } from "../../db/client.js";
 import type { StorageProvider } from "../../storage/types.js";
 import { deleteReceiptsForTransactions } from "../../storage/receipts.js";
+import { RECLASSIFICATION_ORIGINAL_SUFFIX } from "./mapper.js";
 
 // A cancelled event keeps its id but flips status — these are removed, not re-imported.
 export function isCancelled(status: unknown): boolean {
@@ -28,13 +29,22 @@ export async function applyCancellations(opts: {
   const { db, portfolioId, cancelledIds, connectionId, storage, log } = opts;
   if (!cancelledIds.size) return 0;
 
+  // A cancelled raw event may have been booked as a single row (externalId = the raw id,
+  // the common case) OR — for a "Dividend correction" event that was split — as TWO rows,
+  // the correction leg (externalId = the raw id) and a backdated original-portion leg
+  // (externalId = `${rawId}:original`, see buildReclassificationSplit in mapper.ts). Match
+  // both forms so a cancellation removes the whole split pair, not just the correction leg.
+  const externalIdCandidates = [...cancelledIds].flatMap((id) => [
+    id,
+    `${id}${RECLASSIFICATION_ORIGINAL_SUFFIX}`,
+  ]);
   const removed = await db
     .delete(transactions)
     .where(
       and(
         eq(transactions.portfolioId, portfolioId),
         eq(transactions.source, "pytr"),
-        inArray(transactions.externalId, [...cancelledIds]),
+        inArray(transactions.externalId, externalIdCandidates),
       ),
     )
     .returning({ id: transactions.id, importId: transactions.importId });

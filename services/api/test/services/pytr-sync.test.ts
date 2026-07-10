@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Decimal } from "decimal.js";
 import crypto from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   users,
   portfolios,
@@ -285,6 +285,64 @@ describe("syncTrConnection", () => {
       .select()
       .from(transactions)
       .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("un-imports BOTH legs of a split 'Dividend correction' event when its source event is cancelled", async () => {
+    const conn = await makeConnection("cancel-split");
+    const db = getDb();
+
+    // Simulate a prior confirm that had already split into two bookings (see
+    // buildReclassificationSplit in mapper.ts): the correction leg keeps externalId = the
+    // raw event id unchanged, and the backdated original-portion leg is
+    // `${id}:original` — both must be removed if TR later cancels the raw event.
+    await db.insert(transactions).values([
+      {
+        portfolioId: conn.portfolioId!,
+        type: "dividend",
+        currency: "EUR",
+        executedAt: new Date("2026-03-27T10:00:00.000Z"),
+        source: "pytr",
+        externalId: "corr-evt",
+      },
+      {
+        portfolioId: conn.portfolioId!,
+        type: "dividend",
+        currency: "EUR",
+        executedAt: new Date("2025-01-15T00:00:00.000Z"),
+        source: "pytr",
+        externalId: "corr-evt:original",
+      },
+    ]);
+
+    const cancelledEvents = [
+      {
+        id: "corr-evt",
+        timestamp: "2026-03-27T10:00:00.000Z",
+        eventType: "SSP_CORPORATE_ACTION_CASH",
+        amount: 0.49,
+        isin: "US7561091049",
+        currency: "EUR",
+        status: "CANCELED",
+      },
+    ];
+    const result = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: cancelledEvents, sessionData: "JX" })),
+      conn,
+    );
+
+    expect(result.cancelled).toBe(2);
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.portfolioId, conn.portfolioId!),
+          inArray(transactions.externalId, ["corr-evt", "corr-evt:original"]),
+        ),
+      );
     expect(rows).toHaveLength(0);
   });
 
@@ -766,6 +824,64 @@ describe("syncTrConnection", () => {
     expect(storage.puts).toHaveLength(1);
     expect(storage.puts[0]).toContain("receipts/");
     expect(storage.puts[0]).toContain("doc-abc.pdf");
+  });
+
+  it("downloads a split 'Dividend correction' event's document once, keyed by the raw event id (not the synthetic :original id)", async () => {
+    const conn = await makeConnection("docs-reclassification-split");
+    const db = getDb();
+    await db
+      .update(portfolios)
+      .set({ documentRetention: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
+
+    const PDF = Buffer.from("%PDF-1.4 fake");
+    let downloadPairs: { eventId: string; docId: string }[] = [];
+
+    const runner = runnerWith(
+      async () => ({
+        events: [
+          {
+            id: "corr-evt",
+            timestamp: "2026-03-27T10:00:00.000Z",
+            eventType: "SSP_CORPORATE_ACTION_CASH",
+            amount: 8.76,
+            isin: "US7561091049",
+            currency: "EUR",
+            documentRefs: [{ id: "doc-correction", type: "CA_INCOME_INVOICE", date: "27.03.2026" }],
+            trueDistributionDate: "15.01.2025",
+            originalAmount: 8.27,
+            correctionAmount: 0.49,
+          },
+        ],
+        sessionData: "JAR",
+      }),
+      async (_session, pairs) => {
+        downloadPairs = pairs;
+        const docs = new Map<string, DocDownloadResult>();
+        for (const { docId } of pairs) {
+          docs.set(docId, { buf: PDF, mimeType: "application/pdf" });
+        }
+        return { docs, failures: [] };
+      },
+    );
+
+    const storage = makeTrackingStorage();
+    const result = await syncTrConnection(db, enc, runner, conn, undefined, storage);
+
+    expect(result.drafts).toBe(2); // the split original + correction bookings
+    // Both split legs shared documentRefs stripped down to ONE pair: the raw (unsuffixed)
+    // event id, not the original leg's synthetic "corr-evt:original" — TR would 404 on
+    // that id — and deduped rather than fetched twice.
+    expect(downloadPairs).toEqual([{ eventId: "corr-evt", docId: "doc-correction" }]);
+    const [imp] = await db
+      .select()
+      .from(screenshotImports)
+      .where(eq(screenshotImports.id, result.importId!));
+    const docs = await db.select().from(documents).where(eq(documents.importId, imp.id));
+    expect(docs).toHaveLength(1);
+    // Linked to the correction leg (the row that kept the raw externalId), not the
+    // original-portion leg.
+    expect(docs[0].sourceEventId).toBe("corr-evt");
   });
 
   it("never downloads or stores known-ancillary TR document types (cost info, order confirmation, plan notices)", async () => {

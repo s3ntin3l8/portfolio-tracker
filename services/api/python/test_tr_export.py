@@ -298,6 +298,52 @@ AGGREGATE_DETAIL = {
     ],
 }
 
+# A TR "Dividend correction" event — same-day cancel+reissue restating a prior period's
+# distribution (observed live for Realty Income, March 2026: a year-later REIT 1099-DIV
+# recharacterization). Shape verbatim from a real captured payload: a `type: "banner"`
+# section (present ONLY on this event shape, never an ordinary dividend) plus a table row
+# titled "Original dividend" whose `action.payload` references the canceled original event.
+DIV_CORRECTION_DETAIL = {
+    "sections": [
+        {"type": "header", "data": {"status": "executed"}},
+        {
+            "type": "banner",
+            "title": "Learn more about tax reclassification",
+            "description": (
+                "This is not a new dividend payment but a tax reclassification of a "
+                "prior distribution"
+            ),
+        },
+        {"type": "table", "title": "Overview", "data": [
+            {"title": "Status", "detail": {"text": "Executed", "type": "status"}},
+            {"title": "Event", "detail": {"text": "Dividend correction"}},
+        ]},
+        {"type": "table", "title": "Transaction", "data": [
+            {"title": "Original dividend", "detail": {
+                "text": "8,27 €",
+                "action": {"type": "timelineDetail", "payload": "7a4d4516-0291-33b8-8f92-19d09d242d90"},
+            }},
+            {"title": "Correction", "detail": {"text": "0,49 €"}},
+            {"title": "Total", "detail": {"text": "8,76 €"}},
+        ]},
+    ],
+}
+
+# The canceled original the correction above references: status CANCELED, and its own
+# document date is the true distribution month (here 15.01.2025) — the only place that
+# true date lives; the correction event's own documents carry only the posting date.
+DIV_CORRECTION_ORIGINAL_DETAIL = {
+    "sections": [
+        {"type": "header", "data": {"status": "canceled"}},
+        {"type": "table", "title": "Übersicht", "data": [
+            {"title": "Status", "detail": {"text": "Storniert", "type": "status"}},
+        ]},
+        {"type": "documents", "data": [
+            {"id": "orig-doc-1", "postboxType": "CA_INCOME_INVOICE", "detail": "15.01.2025"},
+        ]},
+    ],
+}
+
 
 class TestFieldExtractors:
     def test_fees_from_gebuehr(self):
@@ -358,6 +404,210 @@ class TestFieldExtractors:
             {"id": "doc-1", "type": "SECURITIES_SETTLEMENT", "date": "01.03.2026"},
         ]
         assert tx._extract_documents(DIV_DETAIL) is None
+
+
+class TestReclassification:
+    """The 'Dividend correction' detection + resolution used to split a reclassification
+    event into an original-portion (backdated) and correction-delta booking — see
+    mapper.ts's buildReclassificationSplit, which consumes these normalized fields."""
+
+    def test_is_reclassification_correction_true_for_banner_plus_subtitle(self):
+        ev = {
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        assert tx._is_reclassification_correction(ev) is True
+
+    def test_is_reclassification_correction_true_for_english_subtitle(self):
+        ev = {
+            "status": "EXECUTED",
+            "subtitle": "Cash dividend corrected",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        assert tx._is_reclassification_correction(ev) is True
+
+    def test_is_reclassification_correction_false_without_banner(self):
+        # Structural signal absent (no banner section at all) — an ordinary dividend must
+        # never be mistaken for a reclassification even with a coincidentally similar
+        # subtitle.
+        ev = {
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_DETAIL,
+        }
+        assert tx._is_reclassification_correction(ev) is False
+
+    def test_is_reclassification_correction_false_wrong_subtitle(self):
+        ev = {"status": "EXECUTED", "subtitle": "Bardividende", "details": DIV_CORRECTION_DETAIL}
+        assert tx._is_reclassification_correction(ev) is False
+
+    def test_is_reclassification_correction_false_when_not_executed(self):
+        ev = {
+            "status": "CANCELED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        assert tx._is_reclassification_correction(ev) is False
+
+    def test_extract_correction_components(self):
+        original, correction = tx._extract_correction_components(DIV_CORRECTION_DETAIL)
+        assert original == 8.27
+        assert correction == 0.49
+
+    def test_extract_correction_components_absent_on_ordinary_dividend(self):
+        assert tx._extract_correction_components(DIV_DETAIL) == (None, None)
+
+    def test_extract_original_dividend_id(self):
+        assert (
+            tx._extract_original_dividend_id(DIV_CORRECTION_DETAIL)
+            == "7a4d4516-0291-33b8-8f92-19d09d242d90"
+        )
+
+    def test_extract_original_dividend_id_rejects_non_uuid_payload(self):
+        # A row titled "Original dividend" whose payload isn't UUID-shaped is not trusted
+        # as a real event reference (defensive against a future TR shape change).
+        details = {"sections": [{"type": "table", "data": [
+            {"title": "Original dividend", "detail": {
+                "text": "8,27 €", "action": {"payload": "not-a-uuid"}}},
+        ]}]}
+        assert tx._extract_original_dividend_id(details) is None
+
+    def test_extract_original_dividend_id_none_when_absent(self):
+        assert tx._extract_original_dividend_id(DIV_DETAIL) is None
+
+    def test_extract_reclassification_resolves_true_date(self):
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": DIV_CORRECTION_ORIGINAL_DETAIL,
+        }
+        events_by_id = {original_ev["id"]: original_ev}
+        assert tx._extract_reclassification(correction_ev, events_by_id) == {
+            "trueDistributionDate": "15.01.2025",
+            "originalAmount": 8.27,
+            "correctionAmount": 0.49,
+            "dateResolutionFailed": None,
+        }
+
+    def test_extract_reclassification_none_for_ordinary_dividend(self):
+        ev = {"id": "x", "status": "EXECUTED", "subtitle": "Bardividende", "details": DIV_DETAIL}
+        assert tx._extract_reclassification(ev, {}) is None
+
+    def test_extract_reclassification_flags_failure_when_original_not_collected(self):
+        # The referenced original isn't in this account's collected event set at all (e.g.
+        # older than what the paginated feed returned) — must not silently guess a date.
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._extract_reclassification(correction_ev, {})
+        assert out == {
+            "trueDistributionDate": None,
+            "originalAmount": 8.27,
+            "correctionAmount": 0.49,
+            "dateResolutionFailed": True,
+        }
+
+    def test_extract_reclassification_flags_failure_when_original_has_no_document_date(self):
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": {"sections": []},
+        }
+        out = tx._extract_reclassification(correction_ev, {original_ev["id"]: original_ev})
+        assert out["dateResolutionFailed"] is True
+        assert out["trueDistributionDate"] is None
+        # Amount components still come from the correction event's own detail regardless
+        # of whether the date resolved — the caller's fallback needs the full total either
+        # way (see mapper.ts's dateResolutionFailed handling).
+        assert out["originalAmount"] == 8.27
+        assert out["correctionAmount"] == 0.49
+
+    def test_extract_reclassification_follows_correction_of_correction_chain(self):
+        # corr-evt references mid-evt (itself unresolved — no document date — but has its
+        # own "Original dividend" reference), which references true-orig-evt (the real
+        # original, carrying the true date). Resolution must follow the full chain.
+        # (Ids must be UUID-shaped — _extract_original_dividend_id rejects anything else.)
+        true_orig_id = "11111111-1111-1111-1111-111111111111"
+        mid_detail = {
+            "sections": [{"type": "table", "data": [
+                {"title": "Original dividend", "detail": {
+                    "text": "8,27 €",
+                    "action": {"payload": true_orig_id},
+                }},
+            ]}],
+        }
+        true_orig_detail = {
+            "sections": [{"type": "documents", "data": [
+                {"id": "d1", "postboxType": "CA_INCOME_INVOICE", "detail": "15.06.2024"},
+            ]}],
+        }
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,  # references 7a4d4516... (= "mid-evt" here)
+        }
+        mid_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": mid_detail,
+        }
+        true_orig_ev = {"id": true_orig_id, "status": "CANCELED", "details": true_orig_detail}
+        events_by_id = {mid_ev["id"]: mid_ev, true_orig_ev["id"]: true_orig_ev}
+        out = tx._extract_reclassification(correction_ev, events_by_id)
+        assert out["trueDistributionDate"] == "15.06.2024"
+        assert out["dateResolutionFailed"] is None
+
+    def test_extract_reclassification_recursion_capped(self):
+        # A pathological self-referencing chain must terminate, not loop forever.
+        loop_id = "22222222-2222-2222-2222-222222222222"
+        loop_detail = {
+            "sections": [{"type": "table", "data": [
+                {"title": "Original dividend", "detail": {
+                    "text": "1,00 €", "action": {"payload": loop_id}}},
+            ]}],
+        }
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        loop_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": loop_detail,  # references a DIFFERENT id (below) which loops back
+        }
+        loop_ev_2 = {
+            "id": loop_id,
+            "status": "CANCELED",
+            "details": {"sections": [{"type": "table", "data": [
+                {"title": "Original dividend", "detail": {
+                    "text": "1,00 €",
+                    "action": {"payload": "7a4d4516-0291-33b8-8f92-19d09d242d90"},
+                }},
+            ]}]},
+        }
+        events_by_id = {loop_ev["id"]: loop_ev, loop_ev_2["id"]: loop_ev_2}
+        out = tx._extract_reclassification(correction_ev, events_by_id)
+        assert out["dateResolutionFailed"] is True
+        assert out["trueDistributionDate"] is None
 
 
 class TestExtractSavingsPlanId:
@@ -453,6 +703,74 @@ class TestNormalize:
         assert out["currency"] == "EUR"
         assert out["isin"] is None
         assert out["wkn"] is None
+
+    def test_ordinary_dividend_has_no_reclassification_fields(self):
+        ev = {
+            "id": "evt-div",
+            "timestamp": "2026-03-02T10:00:00.000Z",
+            "eventType": "CREDIT",
+            "subtitle": "Bardividende",
+            "amount": {"value": 1.71, "currency": "EUR"},
+            "status": "EXECUTED",
+            "details": DIV_DETAIL,
+        }
+        out = tx._normalize(ev, events_by_id={})
+        assert out["trueDistributionDate"] is None
+        assert out["originalAmount"] is None
+        assert out["correctionAmount"] is None
+        assert out["dateResolutionFailed"] is None
+
+    def test_reclassification_correction_carries_resolved_fields(self):
+        correction_ev = {
+            "id": "corr-evt",
+            "timestamp": "2026-03-27T10:02:09.102+0000",
+            "eventType": "SSP_CORPORATE_ACTION_CASH",
+            "subtitle": "Bardividende korrigiert",
+            "amount": {"value": 8.76, "currency": "EUR"},
+            "status": "EXECUTED",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": DIV_CORRECTION_ORIGINAL_DETAIL,
+        }
+        out = tx._normalize(correction_ev, events_by_id={original_ev["id"]: original_ev})
+        assert out["trueDistributionDate"] == "15.01.2025"
+        assert out["originalAmount"] == 8.27
+        assert out["correctionAmount"] == 0.49
+        assert out["dateResolutionFailed"] is None
+
+    def test_reclassification_correction_unresolved_flags_failure(self):
+        correction_ev = {
+            "id": "corr-evt",
+            "timestamp": "2026-03-27T10:02:09.102+0000",
+            "eventType": "SSP_CORPORATE_ACTION_CASH",
+            "subtitle": "Bardividende korrigiert",
+            "amount": {"value": 8.76, "currency": "EUR"},
+            "status": "EXECUTED",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._normalize(correction_ev, events_by_id={})  # original not collected
+        assert out["trueDistributionDate"] is None
+        assert out["dateResolutionFailed"] is True
+        assert out["originalAmount"] == 8.27
+        assert out["correctionAmount"] == 0.49
+
+    def test_normalize_defaults_events_by_id_to_empty(self):
+        # events_by_id is optional (omitted at most call sites); a reclassification event
+        # with no lookup dict must degrade to the unresolved-fallback shape, not raise.
+        correction_ev = {
+            "id": "corr-evt",
+            "timestamp": "2026-03-27T10:02:09.102+0000",
+            "eventType": "SSP_CORPORATE_ACTION_CASH",
+            "subtitle": "Bardividende korrigiert",
+            "amount": {"value": 8.76, "currency": "EUR"},
+            "status": "EXECUTED",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._normalize(correction_ev)
+        assert out["dateResolutionFailed"] is True
 
 
 class TestCollectWkns:

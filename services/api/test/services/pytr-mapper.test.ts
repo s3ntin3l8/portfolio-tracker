@@ -5,6 +5,7 @@ import {
   categoryForEventType,
   isCashMovementEvent,
   isCashMovementAction,
+  rawEventIdFromExternalId,
 } from "../../src/services/pytr/mapper.js";
 
 const base = {
@@ -320,6 +321,22 @@ describe("mapTrEventToDraft", () => {
     expect(
       draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 2 }).action,
     ).toBe("deposit");
+  });
+
+  it("maps a 'Dividend correction' event to a single ordinary dividend when called directly (the split only happens at the mapTrEvents batch level — see the describe block below)", () => {
+    // mapTrEventToDraft's single-draft contract must stay unchanged regardless of the new
+    // reclassification fields: sync.ts's healing check (`"draft" in mapTrEventToDraft(raw)`)
+    // and every other single-event caller rely on it.
+    const draft = draftOf({
+      ...base,
+      eventType: "SSP_CORPORATE_ACTION_CASH",
+      amount: 8.76,
+      isin: "US7561091049",
+      trueDistributionDate: "15.01.2025",
+      originalAmount: 8.27,
+      correctionAmount: 0.49,
+    });
+    expect(draft).toMatchObject({ action: "dividend", price: "8.76", externalId: "evt-1" });
   });
 
   it("resolves ambiguous transfers by the sign of the amount", () => {
@@ -640,5 +657,96 @@ describe("mapTrEvents", () => {
     });
     // The raw event is carried so the UI can offer to map it.
     expect(errors[0].raw).toMatchObject({ name: null });
+  });
+
+  describe("Dividend correction splitting", () => {
+    // Shaped after the real 2026-03-27 Realty Income batch event (id 8d8816df…,
+    // referencing canceled original 7a4d4516… dated 15.01.2025).
+    const reclassificationEvent = {
+      ...base,
+      id: "corr-evt",
+      eventType: "SSP_CORPORATE_ACTION_CASH",
+      isin: "US7561091049",
+      amount: 8.76,
+      documentRefs: [{ id: "doc-1", type: "CA_INCOME_INVOICE", date: "27.03.2026" }],
+      trueDistributionDate: "15.01.2025",
+      originalAmount: 8.27,
+      correctionAmount: 0.49,
+    };
+
+    it("splits a resolved reclassification event into two bookings", () => {
+      const { drafts, errors } = mapTrEvents([reclassificationEvent]);
+      expect(errors).toHaveLength(0);
+      expect(drafts).toHaveLength(2);
+
+      const original = drafts.find((d) => d.kind === "reclassification-original");
+      const correction = drafts.find((d) => d.kind === "reclassification-correction");
+      expect(original).toBeDefined();
+      expect(correction).toBeDefined();
+
+      expect(original).toMatchObject({
+        action: "dividend",
+        isin: "US7561091049",
+        price: "8.27",
+        total: "8.27",
+        tax: null,
+        externalId: "corr-evt:original",
+      });
+      expect(original!.executedAt).toEqual(new Date(Date.UTC(2025, 0, 15)));
+      // Doesn't claim a document it never gets linked to (see documents.ts's
+      // sourceEventId, which resolves to the raw/correction id only).
+      expect(original!.documentRefs).toBeNull();
+
+      expect(correction).toMatchObject({
+        action: "dividend",
+        isin: "US7561091049",
+        price: "0.49",
+        total: "0.49",
+        tax: null,
+        // Unchanged from today's single-booking externalId — every mechanism that
+        // assumes externalId === the raw TR event id keeps working for this leg.
+        externalId: "corr-evt",
+      });
+      expect(correction!.executedAt).toEqual(new Date(base.timestamp));
+      expect(correction!.documentRefs).toEqual(reclassificationEvent.documentRefs);
+    });
+
+    it("falls back to the normal single booking, tagged for review, when the true date can't be resolved", () => {
+      const { drafts, errors } = mapTrEvents([
+        {
+          ...reclassificationEvent,
+          trueDistributionDate: null,
+          dateResolutionFailed: true,
+        },
+      ]);
+      expect(errors).toHaveLength(0);
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0]).toMatchObject({
+        action: "dividend",
+        price: "8.76", // full amount, same as today's pre-split behavior
+        externalId: "corr-evt", // unsuffixed — no split occurred
+        kind: "reclassification-unresolved",
+      });
+    });
+
+    it("leaves an ordinary dividend (no originalAmount/correctionAmount) untouched", () => {
+      const { drafts } = mapTrEvents([
+        { ...base, id: "plain-div", eventType: "SSP_CORPORATE_ACTION_CASH", amount: 5, isin: "US7561091049" },
+      ]);
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0]).toMatchObject({ externalId: "plain-div", kind: null });
+    });
+  });
+});
+
+describe("rawEventIdFromExternalId", () => {
+  it("strips the reclassification-original suffix", () => {
+    expect(rawEventIdFromExternalId("corr-evt:original")).toBe("corr-evt");
+  });
+
+  it("is a no-op for any other externalId", () => {
+    expect(rawEventIdFromExternalId("corr-evt")).toBe("corr-evt");
+    expect(rawEventIdFromExternalId("evt-1")).toBe("evt-1");
+    expect(rawEventIdFromExternalId("import:abc:0")).toBe("import:abc:0");
   });
 });

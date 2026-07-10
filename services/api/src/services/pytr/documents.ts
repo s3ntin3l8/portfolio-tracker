@@ -4,6 +4,7 @@ import type { PytrRunner, DownloadDocumentsResult } from "./runner.js";
 import type { DB } from "../../db/client.js";
 import type { StorageProvider } from "../../storage/types.js";
 import { storeReceipt } from "../../storage/receipts.js";
+import { rawEventIdFromExternalId } from "./mapper.js";
 
 /** Outcome of a postbox-document download attempt. All fields are absent when no download
  *  was applicable (no storage / no importId / retention off / no documentRefs). */
@@ -78,13 +79,25 @@ export async function downloadNewDraftDocuments(opts: {
   // Collect (eventId, docId) pairs from new drafts' documentRefs, skipping known-ancillary
   // document types (cost info, order confirmation, ex-ante sheets, plan/benefit notices) —
   // never fetched or stored, so they never appear as a "Data sources" entry either.
+  //
+  // `eventId` is stripped back to the raw TR event id (rawEventIdFromExternalId): a split
+  // "Dividend correction" event's original-portion draft has a synthetic
+  // `${rawId}:original` externalId TR itself doesn't recognize — using it as-is would 404
+  // the live document-detail lookup. Both split legs share the same documentRefs (they
+  // reference the one correction event's documents), so this can also produce duplicate
+  // (eventId, docId) pairs once stripped — deduped below rather than double-fetching.
+  const seenPairs = new Set<string>();
   const pairs: { eventId: string; docId: string }[] = [];
   for (const draft of newDrafts) {
     if (!draft.externalId || !draft.documentRefs) continue;
+    const eventId = rawEventIdFromExternalId(draft.externalId);
     for (const ref of draft.documentRefs) {
       if (!ref?.id) continue;
       if (isDiscardableTrDocType(ref.type)) continue;
-      pairs.push({ eventId: draft.externalId, docId: ref.id });
+      const key = `${eventId} ${ref.id}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+      pairs.push({ eventId, docId: ref.id });
     }
   }
   if (pairs.length === 0) return {};
