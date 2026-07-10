@@ -83,8 +83,12 @@ describe("mapFlexToDrafts — dividends and withholding tax", () => {
     expect(div.action).toBe("dividend");
     expect(div.ticker).toBe("AAPL");
     expect(div.isin).toBe("US0378331005");
-    expect(div.price).toBe("2.13"); // net amount reported by IBKR
+    // IBKR's "Dividends" row (2.13) is GROSS; price must hold the NET cash actually
+    // credited (gross − withholding) so downstream gross = price + tax reproduces it
+    // exactly once, matching the TR/DKB convention (see packages/core/src/tax.ts).
+    expect(div.price).toBe("1.81"); // net = 2.13 gross − 0.32 withholding
     expect(div.tax).toBe("0.32"); // withholding tax folded in (abs value)
+    expect((Number(div.price) + Number(div.tax)).toFixed(2)).toBe("2.13"); // price + tax = gross
     expect(div.fees).toBe("0");
     expect(div.currency).toBe("USD");
     expect(div.executedAt).toEqual(new Date("2024-05-16"));

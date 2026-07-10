@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { Decimal } from "decimal.js";
 import {
   parsedTransactionSchema,
   type AssetClass,
@@ -217,6 +218,17 @@ export function mapFlexToDrafts(
       ? `ibkr:cash:${tx.transactionID}`
       : `ibkr:cash:${shortHash([tx.symbol ?? "", date, tx.amount ?? ""].join("|"))}`;
 
+    // The Flex "Dividends" cash-transaction amount is GROSS (before withholding);
+    // a separate "Withholding Tax" row carries the tax, which we've already merged
+    // into `taxAmt` above. `price` must hold the NET cash actually credited so that
+    // downstream FSA/income logic (which computes gross = price + tax, matching the
+    // TR/DKB convention — see packages/core/src/tax.ts) doesn't double-count the
+    // withholding. When taxAmt is 0 (no matching withholding row — e.g. tax handled
+    // via the annual return instead), net === gross, so this is a no-op in that case.
+    const grossAmount = absStr(tx.amount);
+    const netPrice =
+      taxAmt > 0 ? Decimal.max(0, new Decimal(grossAmount).minus(taxAmt)).toFixed(2) : grossAmount;
+
     push(
       {
         assetClass: assetClass(tx.assetCategory),
@@ -226,11 +238,7 @@ export function mapFlexToDrafts(
         name: tx.description || tx.symbol || undefined,
         quantity: "0",
         unit: "shares",
-        // Dividend amount = gross amount before withholding tax (absolute value).
-        // Flex reports the NET cash (after IBKR has withheld); gross = net + taxAmt.
-        // However, many accounts receive gross dividends (tax handled via annual return),
-        // so when taxAmt is 0 we just use the reported amount directly.
-        price: absStr(tx.amount),
+        price: netPrice,
         fees: "0",
         tax: taxAmt > 0 ? String(taxAmt) : undefined,
         currency: tx.currency ?? "USD",
