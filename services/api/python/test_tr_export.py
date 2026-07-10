@@ -329,9 +329,14 @@ DIV_CORRECTION_DETAIL = {
     ],
 }
 
-# The canceled original the correction above references: status CANCELED, and its own
-# document date is the true distribution month (here 15.01.2025) — the only place that
-# true date lives; the correction event's own documents carry only the posting date.
+# The canceled original the correction above references: status CANCELED. Shape verbatim
+# from a real captured payload (confirmed live across all 12 Realty Income correction
+# events, March 2026): its "Dokumente" section carries TWO documents — a reissue TR
+# generates at cancellation time (dated the SAME day as the correction, always listed
+# FIRST) and the original distribution's own document (the true date, here 15.01.2025,
+# always listed SECOND). Taking the array's first entry silently picks the reissue date —
+# the same day as the correction, zero backdating benefit; the true date must be resolved
+# by earliest-date, not array position (see _parse_doc_date_sortkey).
 DIV_CORRECTION_ORIGINAL_DETAIL = {
     "sections": [
         {"type": "header", "data": {"status": "canceled"}},
@@ -339,6 +344,7 @@ DIV_CORRECTION_ORIGINAL_DETAIL = {
             {"title": "Status", "detail": {"text": "Storniert", "type": "status"}},
         ]},
         {"type": "documents", "data": [
+            {"id": "reissue-doc", "postboxType": "CA_INCOME_INVOICE", "detail": "27.03.2026"},
             {"id": "orig-doc-1", "postboxType": "CA_INCOME_INVOICE", "detail": "15.01.2025"},
         ]},
     ],
@@ -453,6 +459,19 @@ class TestReclassification:
     event into an original-portion (backdated) and correction-delta booking — see
     mapper.ts's buildReclassificationSplit, which consumes these normalized fields."""
 
+    def test_parse_doc_date_sortkey_orders_chronologically_not_lexically(self):
+        jan = tx._parse_doc_date_sortkey("15.01.2025")
+        feb = tx._parse_doc_date_sortkey("14.02.2025")
+        nov = tx._parse_doc_date_sortkey("30.11.2025")
+        jan_2026 = tx._parse_doc_date_sortkey("28.01.2026")
+        assert jan < feb  # chronological, even though "15..." > "14..." lexically
+        assert nov < jan_2026  # chronological, even though "30..." > "28..." lexically
+
+    def test_parse_doc_date_sortkey_none_for_unparseable(self):
+        assert tx._parse_doc_date_sortkey("not-a-date") is None
+        assert tx._parse_doc_date_sortkey(None) is None
+        assert tx._parse_doc_date_sortkey("") is None
+
     def test_is_reclassification_correction_true_for_banner_plus_subtitle(self):
         ev = {
             "status": "EXECUTED",
@@ -537,6 +556,83 @@ class TestReclassification:
             "correctionAmount": 0.49,
             "dateResolutionFailed": None,
         }
+
+    def test_extract_reclassification_picks_earliest_date_regardless_of_array_order(self):
+        # Same two documents as DIV_CORRECTION_ORIGINAL_DETAIL but in the OPPOSITE array
+        # order (true date first, reissue second). If the resolution logic picked
+        # array-index-0 (the bug this fix replaces) it would now wrongly return the
+        # reissue date instead of the true one — proving the fix keys off the parsed date,
+        # not position.
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": {"sections": [{"type": "documents", "data": [
+                {"id": "orig-doc-1", "postboxType": "CA_INCOME_INVOICE", "detail": "15.01.2025"},
+                {"id": "reissue-doc", "postboxType": "CA_INCOME_INVOICE", "detail": "27.03.2026"},
+            ]}]},
+        }
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._extract_reclassification(correction_ev, {original_ev["id"]: original_ev})
+        assert out["trueDistributionDate"] == "15.01.2025"
+        assert out["dateResolutionFailed"] is None
+
+    def test_extract_reclassification_string_sort_would_get_this_wrong(self):
+        # A regression guard for the specific trap noted in review: naive string comparison
+        # of "DD.MM.YYYY" gets Jan-vs-Feb backwards ("15.01.2025" < "14.02.2025" lexically,
+        # but Jan 15 is chronologically BEFORE Feb 14 — so string-min would coincidentally
+        # still pick the right one here). Use a pair where string order and chronological
+        # order actually disagree: "05.12.2025" (Dec 5) vs "28.01.2026" (Jan 28) — as
+        # strings "05.12.2025" < "28.01.2026", but Jan 28 2026 is chronologically AFTER
+        # Dec 5 2025, so the true earliest date is "05.12.2025" either way here; the real
+        # trap is the reverse pairing below where string order picks the LATER date.
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": {"sections": [{"type": "documents", "data": [
+                # String-min of these two would pick "28.01.2026" ('2' < '3' at the tens-
+                # of-day digit is irrelevant here — compare day-first: "28.01.2026" vs
+                # "30.11.2025": lexically "28..." < "30..." even though Nov 30 2025 is
+                # chronologically BEFORE Jan 28 2026.
+                {"id": "reissue-doc", "postboxType": "CA_INCOME_INVOICE", "detail": "28.01.2026"},
+                {"id": "orig-doc-1", "postboxType": "CA_INCOME_INVOICE", "detail": "30.11.2025"},
+            ]}]},
+        }
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._extract_reclassification(correction_ev, {original_ev["id"]: original_ev})
+        # Chronologically earliest is 30.11.2025; a plain string min() would wrongly
+        # return 28.01.2026 ("2" < "3" as the first character).
+        assert out["trueDistributionDate"] == "30.11.2025"
+
+    def test_extract_reclassification_ignores_unparseable_document_dates(self):
+        # A malformed/unexpected date string among the documents must be skipped, not
+        # crash the comparison or get silently treated as "earliest".
+        original_ev = {
+            "id": "7a4d4516-0291-33b8-8f92-19d09d242d90",
+            "status": "CANCELED",
+            "details": {"sections": [{"type": "documents", "data": [
+                {"id": "bad-doc", "postboxType": "CA_INCOME_INVOICE", "detail": "not-a-date"},
+                {"id": "orig-doc-1", "postboxType": "CA_INCOME_INVOICE", "detail": "15.01.2025"},
+            ]}]},
+        }
+        correction_ev = {
+            "id": "corr-evt",
+            "status": "EXECUTED",
+            "subtitle": "Bardividende korrigiert",
+            "details": DIV_CORRECTION_DETAIL,
+        }
+        out = tx._extract_reclassification(correction_ev, {original_ev["id"]: original_ev})
+        assert out["trueDistributionDate"] == "15.01.2025"
+        assert out["dateResolutionFailed"] is None
 
     def test_extract_reclassification_none_for_ordinary_dividend(self):
         ev = {"id": "x", "status": "EXECUTED", "subtitle": "Bardividende", "details": DIV_DETAIL}
