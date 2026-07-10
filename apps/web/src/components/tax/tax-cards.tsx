@@ -13,8 +13,8 @@ import { StatCard } from "@/components/stat-card";
 import { MonogramBadge } from "@/components/monogram-badge";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
-import type { TaxCurrencyTotal, TaxDisposalRow, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
-import type { IdDisposalTax, IdDividendTax, IdYearTax } from "@portfolio/core";
+import type { TaxCurrencyTotal, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
+import type { IdDividendTax, IdYearTax } from "@portfolio/core";
 import { formatMoney } from "@/lib/utils";
 
 /** Loosely-typed next-intl translator scoped to the `Tax` namespace — the same shape as
@@ -51,75 +51,6 @@ export function EstimatedTaxHero({
       <p className="tabular mt-1 text-[28px] font-extrabold">{value}</p>
       <p className="mt-1 text-xs font-medium text-white/80">{description}</p>
     </div>
-  );
-}
-
-/** "Realized gains · Abgeltungsteuer" disposal table — reuses the trade log's per-leg
- *  proceeds/gain (no recomputation); `rows` is already scoped to the selected tax year. */
-export function DisposalTable({
-  rows,
-  totalProceeds,
-  totalGain,
-  money,
-  t,
-  year,
-}: {
-  rows: TaxDisposalRow[];
-  totalProceeds: string;
-  totalGain: string;
-  money: (n: string | number) => string;
-  t: TaxTranslator;
-  year: number;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("disposals.title")}</CardTitle>
-        <p className="text-xs text-muted-foreground">{t("disposals.subtitle")}</p>
-      </CardHeader>
-      <CardContent className="px-0 pt-0">
-        {rows.length === 0 ? (
-          <p className="px-6 text-sm text-muted-foreground">{t("disposals.empty", { year })}</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("disposals.disposal")}</TableHead>
-                <TableHead className="text-right">{t("disposals.proceeds")}</TableHead>
-                <TableHead className="text-right">{t("disposals.gain")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <span className="font-medium">{r.symbol}</span>{" "}
-                    <span className="text-xs text-muted-foreground">{r.when}</span>
-                  </TableCell>
-                  <TableCell className="tabular text-right text-muted-foreground">
-                    {money(r.proceeds)}
-                  </TableCell>
-                  <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                    {money(r.gain)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell className="font-semibold">{t("disposals.total")}</TableCell>
-                <TableCell className="tabular text-right font-semibold">
-                  {money(totalProceeds)}
-                </TableCell>
-                <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                  {money(totalGain)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -428,72 +359,12 @@ export function HarvestRow({
 // PROCEEDS/GROSS at flat 0.1%/10% rates (no allowance, no Teilfreistellung, no
 // harvesting). Labels come from the "id.*" keys under the shared "Tax" namespace so
 // both regimes' strings live side by side (see TaxScreen.dc.html's ID branch).
+//
+// `IdSalesTable` (the disposals table) lives in ./disposal-table.tsx alongside its
+// German counterpart `DisposalTable` — both need client-side row-expansion state for
+// the aggregate-disposal/per-lot-detail view, so they're split into their own
+// "use client" module and this file stays a server component.
 // ---------------------------------------------------------------------------
-
-/** "Share sales · 0.1% final" table — one row per disposal, tax = proceeds × 0.1%. */
-export function IdSalesTable({
-  rows,
-  totalProceeds,
-  totalSalesTax,
-  money,
-  t,
-  year,
-}: {
-  rows: IdDisposalTax[];
-  totalProceeds: string;
-  totalSalesTax: string;
-  money: (n: string | number) => string;
-  t: TaxTranslator;
-  year: number;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("id.sales.title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-0 pt-0">
-        {rows.length === 0 ? (
-          <p className="px-6 text-sm text-muted-foreground">{t("id.sales.empty", { year })}</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("id.sales.disposal")}</TableHead>
-                <TableHead className="text-right">{t("id.sales.proceeds")}</TableHead>
-                <TableHead className="text-right">{t("id.sales.tax")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <span className="font-medium">{r.symbol}</span>{" "}
-                    <span className="text-xs text-muted-foreground">{r.when}</span>
-                  </TableCell>
-                  <TableCell className="tabular text-right text-muted-foreground">
-                    {money(r.proceeds)}
-                  </TableCell>
-                  <TableCell className="tabular text-right font-semibold">{money(r.tax)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell className="font-semibold">{t("id.sales.total")}</TableCell>
-                <TableCell className="tabular text-right font-semibold text-muted-foreground">
-                  {money(totalProceeds)}
-                </TableCell>
-                <TableCell className="tabular text-right font-semibold">
-                  {money(totalSalesTax)}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 /** "Dividends & coupons · 10% final" table — tax/net computed as a flat 10% of gross
  *  (not the broker-recorded withholding — see `indonesianFinalTax`'s doc comment). */

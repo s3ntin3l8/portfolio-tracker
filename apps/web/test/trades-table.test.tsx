@@ -151,4 +151,54 @@ describe("TradesTable", () => {
     fireEvent.click(screen.getAllByText("TLKM")[1]);
     expect(screen.getByText(/Closed 2021-06-01/)).toBeInTheDocument();
   });
+
+  describe("status chips + search", () => {
+    it("shows every trade under the 'All' chip by default", () => {
+      renderTable([open, closed]);
+      expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("TLKM").length).toBeGreaterThan(0);
+    });
+
+    it("filters to open trades only", () => {
+      renderTable([open, closed]);
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+      expect(screen.queryByText("TLKM")).toBeNull();
+    });
+
+    it("filters to closed trades only", () => {
+      renderTable([open, closed]);
+      fireEvent.click(screen.getByRole("button", { name: "Closed" }));
+      expect(screen.getAllByText("TLKM").length).toBeGreaterThan(0);
+      expect(screen.queryByText("BBCA")).toBeNull();
+    });
+
+    it("narrows rows by search text (symbol match)", () => {
+      renderTable([open, closed]);
+      fireEvent.change(screen.getByPlaceholderText("Search trades…"), {
+        target: { value: "tlkm" },
+      });
+      expect(screen.getAllByText("TLKM").length).toBeGreaterThan(0);
+      expect(screen.queryByText("BBCA")).toBeNull();
+    });
+
+    it("shows an empty-filters message when nothing matches", () => {
+      renderTable([open, closed]);
+      fireEvent.change(screen.getByPlaceholderText("Search trades…"), {
+        target: { value: "nonexistent" },
+      });
+      expect(screen.getByText("No trades match your filters.")).toBeInTheDocument();
+      expect(screen.queryByText("BBCA")).toBeNull();
+      expect(screen.queryByText("TLKM")).toBeNull();
+    });
+
+    it("clears the search query via the clear button", () => {
+      renderTable([open, closed]);
+      const input = screen.getByPlaceholderText("Search trades…");
+      fireEvent.change(input, { target: { value: "tlkm" } });
+      expect(screen.queryByText("BBCA")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+      expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
+    });
+  });
 });

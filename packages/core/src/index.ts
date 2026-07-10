@@ -122,6 +122,7 @@ export {
   type IndonesianFinalTaxInput,
   type IdDisposalInput,
   type IdDisposalTax,
+  type IdDisposalLot,
   type IdDividendInput,
   type IdDividendTax,
   type IdYearInput,

@@ -7,18 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
 import {
   EstimatedTaxHero,
-  DisposalTable,
   DividendsTable,
   ByYearTable,
   AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
-  IdSalesTable,
   IdDividendsTable,
   IdByYearTable,
   type TaxTranslator,
 } from "@/components/tax/tax-cards";
+import { DisposalTable, IdSalesTable } from "@/components/tax/disposal-table";
 import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
@@ -135,9 +134,23 @@ function TaxHolderSection({
       </div>
 
       {regime === "ID" ? (
-        <TaxHolderSectionId detail={detail} money={money} year={year} t={t} />
+        <TaxHolderSectionId
+          detail={detail}
+          money={money}
+          currency={currency}
+          locale={locale}
+          year={year}
+          t={t}
+        />
       ) : (
-        <TaxHolderSectionDe entry={entry} detail={detail} money={money} locale={locale} t={t} />
+        <TaxHolderSectionDe
+          entry={entry}
+          detail={detail}
+          money={money}
+          currency={currency}
+          locale={locale}
+          t={t}
+        />
       )}
     </section>
   );
@@ -149,11 +162,15 @@ function TaxHolderSection({
 function TaxHolderSectionId({
   detail,
   money,
+  currency,
+  locale,
   year,
   t,
 }: {
   detail: TaxYearDetail | null;
   money: (n: string | number) => string;
+  currency: string;
+  locale: string;
   year: number;
   t: TaxTranslator;
 }) {
@@ -162,6 +179,10 @@ function TaxHolderSectionId({
       symbol: d.symbol,
       when: d.when,
       proceeds: d.proceeds,
+      quantity: d.quantity,
+      avgBuyPrice: d.avgBuyPrice,
+      sellPrice: d.sellPrice,
+      lots: d.lots,
     })),
     dividends: (detail?.dividendRows ?? []).map((d) => ({
       symbol: d.symbol,
@@ -198,8 +219,8 @@ function TaxHolderSectionId({
           rows={idTax.disposals}
           totalProceeds={idTax.totalProceeds}
           totalSalesTax={idTax.totalSalesTax}
-          money={money}
-          t={t}
+          currency={currency}
+          locale={locale}
           year={year}
         />
         <IdDividendsTable
@@ -224,12 +245,14 @@ function TaxHolderSectionDe({
   entry,
   detail,
   money,
+  currency,
   locale,
   t,
 }: {
   entry: TaxSummaryHolder;
   detail: TaxYearDetail | null;
   money: (n: string | number) => string;
+  currency: string;
   locale: string;
   t: TaxTranslator;
 }) {
@@ -283,8 +306,8 @@ function TaxHolderSectionDe({
             rows={detail.disposals}
             totalProceeds={detail.totalProceeds}
             totalGain={detail.totalGain}
-            money={money}
-            t={t}
+            currency={currency}
+            locale={locale}
             year={entry.year}
           />
           <DividendsTable

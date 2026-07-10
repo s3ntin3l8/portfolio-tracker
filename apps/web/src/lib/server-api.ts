@@ -1036,11 +1036,35 @@ export async function loadNetworthTax(
   }
 }
 
-export interface TaxDisposalRow {
-  symbol: string;
-  when: string; // YYYY-MM-DD
+/** One FIFO buy-lot consumed by an aggregate disposal — the expandable detail behind
+ *  a `TaxDisposalRow` (see its doc comment). */
+export interface TaxDisposalLot {
+  acqDate: string; // YYYY-MM-DD
+  quantity: string;
+  buyPrice: string; // this lot's cost per share
+  sellPrice: string; // this lot's proceeds per share
   proceeds: string;
   gain: string;
+  holdingDays: number;
+  longTerm: boolean;
+}
+
+/**
+ * One aggregate disposal — all FIFO legs for the same instrument sold on the same
+ * date, rolled into a single row (an ETF bought in several tranches then sold in one
+ * order would otherwise emit one near-identical row per consumed lot). `avgBuyPrice`/
+ * `sellPrice` are per-share, Σcost/Σqty and Σproceeds/Σqty respectively; `lots` carries
+ * the individual consumed lots for an expandable detail view.
+ */
+export interface TaxDisposalRow {
+  symbol: string;
+  when: string; // YYYY-MM-DD (the shared sell date)
+  proceeds: string;
+  gain: string;
+  quantity: string;
+  avgBuyPrice: string;
+  sellPrice: string;
+  lots: TaxDisposalLot[];
 }
 
 export interface TaxDividendRow {
@@ -1149,17 +1173,66 @@ export async function loadTaxYearDetail(
           Promise.all(pfs.map((p) => api.listTransactions(p.id))),
         ]);
 
-        // Disposals: FIFO legs closed in the target year.
-        const legs = tradeLog.trades.flatMap((t) =>
-          t.legs
-            .filter((l) => l.taxYear === targetYear)
-            .map((l) => ({
+        // Disposals: FIFO legs closed in the target year, grouped into one aggregate
+        // row per (instrument, sell date) — a multi-lot sale (e.g. an ETF bought in
+        // several tranches, sold in one order) would otherwise emit one row per
+        // consumed lot. Aggregate avg buy/sell price = Σcost/Σqty, Σproceeds/Σqty;
+        // the individual lots are kept on `.lots` for an expandable detail view.
+        const disposalGroups = new Map<
+          string,
+          {
+            symbol: string;
+            when: string;
+            proceeds: number;
+            gain: number;
+            quantity: number;
+            cost: number;
+            lots: TaxDisposalLot[];
+          }
+        >();
+        for (const t of tradeLog.trades) {
+          for (const l of t.legs) {
+            if (l.taxYear !== targetYear) continue;
+            const key = `${t.instrumentId}:${l.sellDate}`;
+            const qty = Number(l.quantity);
+            const cost = Number(l.cost);
+            const proceeds = Number(l.proceeds);
+            const group = disposalGroups.get(key) ?? {
               symbol: t.instrument?.symbol ?? t.instrumentId.slice(0, 8),
               when: l.sellDate,
+              proceeds: 0,
+              gain: 0,
+              quantity: 0,
+              cost: 0,
+              lots: [],
+            };
+            group.proceeds += proceeds;
+            group.gain += Number(l.gain);
+            group.quantity += qty;
+            group.cost += cost;
+            group.lots.push({
+              acqDate: l.acqDate,
+              quantity: l.quantity,
+              buyPrice: qty > 0 ? (cost / qty).toString() : "0",
+              sellPrice: qty > 0 ? (proceeds / qty).toString() : "0",
               proceeds: l.proceeds,
               gain: l.gain,
-            })),
-        );
+              holdingDays: l.holdingDays,
+              longTerm: l.longTerm,
+            });
+            disposalGroups.set(key, group);
+          }
+        }
+        const legs: TaxDisposalRow[] = [...disposalGroups.values()].map((g) => ({
+          symbol: g.symbol,
+          when: g.when,
+          proceeds: g.proceeds.toFixed(2),
+          gain: g.gain.toFixed(2),
+          quantity: g.quantity.toString(),
+          avgBuyPrice: g.quantity > 0 ? (g.cost / g.quantity).toString() : "0",
+          sellPrice: g.quantity > 0 ? (g.proceeds / g.quantity).toString() : "0",
+          lots: g.lots.sort((a, b) => a.acqDate.localeCompare(b.acqDate)),
+        }));
         const totalProceeds = legs.reduce((s, l) => s + Number(l.proceeds), 0);
         const totalGain = legs.reduce((s, l) => s + Number(l.gain), 0);
 
@@ -1290,7 +1363,7 @@ export async function loadTaxYearDetail(
 
         result.set(holderId, {
           currency: tradeLog.displayCurrency,
-          disposals: legs.map(({ symbol, when, proceeds, gain }) => ({ symbol, when, proceeds, gain })),
+          disposals: legs,
           totalProceeds: totalProceeds.toFixed(2),
           totalGain: totalGain.toFixed(2),
           dividendRows,

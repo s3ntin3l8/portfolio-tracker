@@ -3,14 +3,12 @@ import { render, screen } from "@testing-library/react";
 import messages from "../messages/en.json";
 import {
   EstimatedTaxHero,
-  DisposalTable,
   DividendsTable,
   ByYearTable,
   AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
-  IdSalesTable,
   IdDividendsTable,
   IdByYearTable,
   type TaxTranslator,
@@ -51,41 +49,6 @@ describe("EstimatedTaxHero", () => {
     expect(screen.getByText("Estimated tax · 2026")).toBeInTheDocument();
     expect(screen.getByText("Rp 140,580")).toBeInTheDocument();
     expect(screen.getByText("Abgeltungsteuer 25% on Rp 562,320")).toBeInTheDocument();
-  });
-});
-
-describe("DisposalTable", () => {
-  it("renders one row per disposal plus a total row", () => {
-    render(
-      <DisposalTable
-        rows={[
-          { symbol: "NVDA", when: "2026-03-12", proceeds: "1240", gain: "430" },
-          { symbol: "SAP", when: "2026-06-19", proceeds: "980", gain: "270" },
-        ]}
-        totalProceeds="2220"
-        totalGain="700"
-        money={money}
-        t={t}
-        year={2026}
-      />,
-    );
-    expect(screen.getByText("NVDA")).toBeInTheDocument();
-    expect(screen.getByText("2026-03-12")).toBeInTheDocument();
-    expect(screen.getByText("Rp 1,240")).toBeInTheDocument();
-    expect(screen.getByText("SAP")).toBeInTheDocument();
-    expect(screen.getByText("Total")).toBeInTheDocument();
-    expect(screen.getByText("Rp 2,220")).toBeInTheDocument();
-    expect(screen.getByText("Rp 700")).toBeInTheDocument();
-    // Flags that this table is gross/pre-Teilfreistellung, unlike the Tf-adjusted hero card.
-    expect(screen.getByText(/before Teilfreistellung/)).toBeInTheDocument();
-  });
-
-  it("renders the empty state when there are no disposals", () => {
-    render(
-      <DisposalTable rows={[]} totalProceeds="0" totalGain="0" money={money} t={t} year={2026} />,
-    );
-    expect(screen.getByText(/No disposals/)).toBeInTheDocument();
-    expect(screen.queryByText("Total")).not.toBeInTheDocument();
   });
 });
 
@@ -284,41 +247,8 @@ describe("HarvestSummaryNote", () => {
 // ---------------------------------------------------------------------------
 // Indonesian final-tax components
 // ---------------------------------------------------------------------------
-
-describe("IdSalesTable", () => {
-  it("renders one row per disposal (proceeds + 0.1% tax) plus a total row", () => {
-    render(
-      <IdSalesTable
-        rows={[
-          { symbol: "BBNI", when: "2026-05-18", proceeds: "1640000", tax: "1640.00" },
-          { symbol: "TLKM", when: "2026-06-24", proceeds: "602000", tax: "602.00" },
-        ]}
-        totalProceeds="2242000"
-        totalSalesTax="2242.00"
-        money={money}
-        t={t}
-        year={2026}
-      />,
-    );
-    expect(screen.getByText("BBNI")).toBeInTheDocument();
-    expect(screen.getByText("2026-05-18")).toBeInTheDocument();
-    expect(screen.getByText("Rp 1,640,000")).toBeInTheDocument();
-    expect(screen.getByText("Rp 1,640")).toBeInTheDocument();
-    expect(screen.getByText("Total")).toBeInTheDocument();
-    expect(screen.getByText("Rp 2,242,000")).toBeInTheDocument();
-    expect(screen.getByText("Rp 2,242")).toBeInTheDocument();
-    // Design-fidelity: labeled "Share sales · 0.1% final", not the German title.
-    expect(screen.getByText("Share sales · 0.1% final")).toBeInTheDocument();
-  });
-
-  it("renders the empty state when there are no disposals", () => {
-    render(
-      <IdSalesTable rows={[]} totalProceeds="0" totalSalesTax="0" money={money} t={t} year={2026} />,
-    );
-    expect(screen.getByText(/No disposals/)).toBeInTheDocument();
-    expect(screen.queryByText("Total")).not.toBeInTheDocument();
-  });
-});
+// IdSalesTable now lives in ./disposal-table.tsx alongside its German counterpart
+// DisposalTable — see disposal-table.test.tsx for both.
 
 describe("IdDividendsTable", () => {
   it("renders gross/tax(10%)/net per source plus a total row", () => {

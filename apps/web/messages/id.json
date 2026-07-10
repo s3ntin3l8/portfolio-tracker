@@ -317,7 +317,13 @@
     "est": "perk.",
     "yearReceivedForecast": "diterima + perkiraan",
     "yearForecast": "perkiraan",
-    "yearReceived": "diterima"
+    "yearReceived": "diterima",
+    "filter_all": "Semua",
+    "filterYear": "Tahun",
+    "allYears": "Semua tahun",
+    "searchPlaceholder": "Cari pendapatan…",
+    "searchClear": "Hapus pencarian",
+    "noMatches": "Tidak ada pembayaran yang cocok dengan filter Anda."
   },
   "Savings": {
     "title": "Tabungan",
@@ -1419,6 +1425,9 @@
     "filter_closed": "Tertutup",
     "status_open": "Terbuka",
     "status_closed": "Tertutup",
+    "searchPlaceholder": "Cari transaksi…",
+    "searchClear": "Hapus pencarian",
+    "noMatches": "Tidak ada transaksi yang cocok dengan filter Anda.",
     "instrument": "Instrumen",
     "period": "Periode",
     "held": "Ditahan",
@@ -1580,7 +1589,8 @@
       "proceeds": "Hasil",
       "gain": "Untung",
       "total": "Total",
-      "empty": "Tidak ada pelepasan di {year}."
+      "empty": "Tidak ada pelepasan di {year}.",
+      "lotsLine": "rata-rata {buy} → {sell} · {count, plural, other {# lot}}"
     },
     "dividendsTable": {
       "title": "Dividen dipotong pajak",

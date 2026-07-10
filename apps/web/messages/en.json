@@ -317,7 +317,13 @@
     "est": "est.",
     "yearReceivedForecast": "received + forecast",
     "yearForecast": "forecast",
-    "yearReceived": "received"
+    "yearReceived": "received",
+    "filter_all": "All",
+    "filterYear": "Year",
+    "allYears": "All years",
+    "searchPlaceholder": "Search income…",
+    "searchClear": "Clear search",
+    "noMatches": "No payments match your filters."
   },
   "Savings": {
     "title": "Savings",
@@ -1421,6 +1427,9 @@
     "filter_closed": "Closed",
     "status_open": "Open",
     "status_closed": "Closed",
+    "searchPlaceholder": "Search trades…",
+    "searchClear": "Clear search",
+    "noMatches": "No trades match your filters.",
     "instrument": "Instrument",
     "period": "Period",
     "held": "Held",
@@ -1582,7 +1591,8 @@
       "proceeds": "Proceeds",
       "gain": "Gain",
       "total": "Total",
-      "empty": "No disposals in {year}."
+      "empty": "No disposals in {year}.",
+      "lotsLine": "avg {buy} → {sell} · {count, plural, one {# lot} other {# lots}}"
     },
     "dividendsTable": {
       "title": "Dividends withheld",

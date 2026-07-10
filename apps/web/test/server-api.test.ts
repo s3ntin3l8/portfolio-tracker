@@ -756,8 +756,30 @@ describe("loadTaxYearDetail", () => {
     expect(detail).toBeDefined();
     // Only the 2026 leg — the 2025 leg is excluded from the disposal table (scoped to
     // the selected tax year), but still folds into the by-year rollup below.
+    // A single-lot disposal — grouped, but with only one leg in `.lots` (a multi-lot
+    // disposal is covered separately below).
     expect(detail!.disposals).toEqual([
-      { symbol: "NVDA", when: "2026-03-12", proceeds: "1240", gain: "240" },
+      {
+        symbol: "NVDA",
+        when: "2026-03-12",
+        proceeds: "1240.00",
+        gain: "240.00",
+        quantity: "10",
+        avgBuyPrice: "100",
+        sellPrice: "124",
+        lots: [
+          {
+            acqDate: "2025-01-01",
+            quantity: "10",
+            buyPrice: "100",
+            sellPrice: "124",
+            proceeds: "1240",
+            gain: "240",
+            holdingDays: 100,
+            longTerm: false,
+          },
+        ],
+      },
     ]);
     expect(detail!.totalProceeds).toBe("1240.00");
     expect(detail!.totalGain).toBe("240.00");
@@ -780,6 +802,81 @@ describe("loadTaxYearDetail", () => {
       // *current* allowance uniformly: taxable = max(0, 100 + 227 − 1000) = 0.
       { year: 2025, realized: "100", dividends: "227.00", tax: "0.00" },
     ]);
+  });
+
+  it("groups multi-lot disposals into one aggregate row with a per-lot breakdown", async () => {
+    // An ETF bought in two tranches then sold in a single order — FIFO emits one leg
+    // per consumed lot, both sharing the sell date. The loader must group same-
+    // instrument/same-sell-date legs into ONE disposal row (an aggregate avg buy →
+    // sell price) rather than one row per lot — see loadTaxYearDetail's doc comment.
+    h.client.listPortfolios = async () => PF;
+    h.cookies = { pf: "p1" };
+    h.client.getTrades = async () => ({
+      displayCurrency: "IDR",
+      trades: [
+        {
+          instrumentId: "i-iwda",
+          instrument: {
+            symbol: "IWDA",
+            name: "iShares MSCI World",
+            assetClass: "equity",
+            market: "US",
+          },
+          legs: [
+            {
+              acqDate: "2022-06-10",
+              sellDate: "2026-04-01",
+              quantity: "8",
+              cost: "644",
+              proceeds: "771.2",
+              gain: "127.2",
+              holdingDays: 1400,
+              longTerm: true,
+              taxYear: 2026,
+            },
+            {
+              // Listed second in the feed — the loader sorts lots by acqDate, so this
+              // earlier-acquired lot must still come first in the grouped `.lots`.
+              acqDate: "2021-01-15",
+              sellDate: "2026-04-01",
+              quantity: "12",
+              cost: "853.2",
+              proceeds: "1156.8",
+              gain: "303.6",
+              holdingDays: 1900,
+              longTerm: true,
+              taxYear: 2026,
+            },
+          ],
+        },
+      ],
+      realizedByYear: [],
+      dividendsByYear: [],
+    });
+    h.client.listTransactions = async () => [];
+
+    const holders = [
+      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+    ] as unknown as TaxSummaryHolder[];
+
+    const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;
+    // ONE row, not two — the two legs (same instrument, same sell date) collapse.
+    expect(detail.disposals).toHaveLength(1);
+    const [row] = detail.disposals;
+    expect(row.symbol).toBe("IWDA");
+    expect(row.when).toBe("2026-04-01");
+    expect(row.quantity).toBe("20"); // 12 + 8
+    expect(row.proceeds).toBe("1928.00"); // 1156.8 + 771.2
+    expect(row.gain).toBe("430.80"); // 303.6 + 127.2
+    // avg buy price = Σcost/Σqty = (853.2+644)/20 = 74.86; sell price = Σproceeds/Σqty = 96.4
+    expect(Number(row.avgBuyPrice)).toBeCloseTo(74.86, 2);
+    expect(Number(row.sellPrice)).toBeCloseTo(96.4, 2);
+    // Both lots retained, sorted oldest-acquired first.
+    expect(row.lots).toHaveLength(2);
+    expect(row.lots.map((l) => l.acqDate)).toEqual(["2021-01-15", "2022-06-10"]);
+    expect(row.lots[0].quantity).toBe("12");
+    expect(row.lots[0].proceeds).toBe("1156.8");
+    expect(row.lots[0].gain).toBe("303.6");
   });
 
   it("groups dividend rows per currency instead of mislabeling/summing across currencies", async () => {

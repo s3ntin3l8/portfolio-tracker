@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight, Info, Search, X } from "lucide-react";
 import type { Trade } from "@portfolio/api-client";
 import {
   Table,
@@ -19,11 +19,14 @@ import {
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { MonogramBadge } from "@/components/monogram-badge";
 import { Link } from "@/i18n/navigation";
 import { TradeDetailSheet } from "@/components/trade-detail-sheet";
 import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
+
+type StatusFilter = "all" | "open" | "closed";
 
 const COLS: ColDef<Trade>[] = [
   { key: "instrument", get: (t) => t.instrument?.symbol ?? "", type: "text" },
@@ -56,13 +59,25 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
   // Closed trades open the detail sheet (matches the design); open positions have no
   // exit date/price, so they keep the inline leg-expansion below instead.
   const [detailTrade, setDetailTrade] = useState<Trade | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [query, setQuery] = useState("");
 
   const heldLabel = (days: number) =>
     days >= 365 ? `${(days / 365).toFixed(1)}${t("yearsAbbr")}` : `${days}${t("daysAbbr")}`;
   const money = (n: number, ccy = currency) => formatMoney(n, ccy, locale);
   const signed = (n: number) => formatSignedMoney(n, currency, locale);
 
-  const visible = useMemo(() => sort(trades), [trades, sort]);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return trades.filter((tr) => {
+      if (statusFilter !== "all" && tr.status !== statusFilter) return false;
+      if (!q) return true;
+      const symbol = tr.instrument?.symbol?.toLowerCase() ?? "";
+      const name = (tr.instrument?.displayName ?? tr.instrument?.name ?? "").toLowerCase();
+      return symbol.includes(q) || name.includes(q);
+    });
+  }, [trades, statusFilter, query]);
+  const visible = useMemo(() => sort(filtered), [filtered, sort]);
 
   // Totals footer — closed trades only (an open position's realized P&L isn't final).
   const closedTotal = useMemo(
@@ -88,6 +103,60 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center">
+        {/* Chips scroll horizontally on mobile (no awkward multi-line wrap); wrap on
+            desktop. Same reference pattern as the Activity/transactions filter row. */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden">
+          {(
+            [
+              ["all", t("filter_all")],
+              ["open", t("filter_open")],
+              ["closed", t("filter_closed")],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              aria-pressed={statusFilter === key}
+              className={cn(
+                "whitespace-nowrap rounded-full px-3.5 py-[7px] text-xs",
+                statusFilter === key
+                  ? "bg-pill font-bold text-white"
+                  : "border border-border bg-card font-semibold text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex items-center sm:ml-auto">
+          <Search className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder={t("searchPlaceholder")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-8 w-full pl-7 pr-7 text-xs sm:w-44"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("searchClear")}
+              className="absolute right-2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="rounded-xl bg-card p-8 text-center text-sm text-muted-foreground shadow-card">
+          {t("noMatches")}
+        </div>
+      ) : (
       <div className="rounded-xl bg-card shadow-card">
         {/* ── Desktop table (lg+) ── */}
         <div className="hidden overflow-x-auto lg:block">
@@ -315,6 +384,7 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
           })}
         </div>
       </div>
+      )}
 
       <TradeDetailSheet
         trade={detailTrade}

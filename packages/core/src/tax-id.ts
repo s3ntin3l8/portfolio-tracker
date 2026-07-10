@@ -31,10 +31,32 @@ export const ID_DIVIDEND_TAX_RATE = "0.10";
 // Public types
 // ---------------------------------------------------------------------------
 
+/** One FIFO buy-lot consumed by a disposal — carried through for an expandable
+ *  per-lot detail view on the disposals table (see `IdDisposalInput.lots`). */
+export interface IdDisposalLot {
+  acqDate: string; // YYYY-MM-DD
+  quantity: string;
+  buyPrice: string; // this lot's cost per share
+  sellPrice: string; // this lot's proceeds per share
+  proceeds: string;
+  gain: string; // informational only under ID's proceeds-based final tax
+  holdingDays: number;
+  longTerm: boolean;
+}
+
 export interface IdDisposalInput {
   symbol: string;
   when: string; // YYYY-MM-DD
   proceeds: string;
+  /** Aggregate quantity/price fields + the individual consumed lots — all optional,
+   *  pure pass-through (not used in the 0.1% tax computation below, which only needs
+   *  `proceeds`). Populated by the web tier when a disposal spans multiple FIFO lots
+   *  (e.g. an ETF bought in several tranches, sold in one order) so the UI can show an
+   *  aggregate "avg buy → sell" row with a collapsible per-lot breakdown. */
+  quantity?: string;
+  avgBuyPrice?: string;
+  sellPrice?: string;
+  lots?: IdDisposalLot[];
 }
 
 export interface IdDisposalTax extends IdDisposalInput {
