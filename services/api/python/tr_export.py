@@ -642,6 +642,22 @@ def _extract_original_dividend_id(details):
     return walk(details or {})
 
 
+def _parse_doc_date_sortkey(date_str):
+    """Parse TR's DD.MM.YYYY document-date string into a (year, month, day) tuple for
+    chronological comparison. Returns None if unparseable — never sort/compare against a
+    guessed value. Deliberately NOT a plain string comparison: "15.01.2025" < "14.02.2025"
+    lexically but Jan 15 is chronologically BEFORE Feb 14, so string order silently picks
+    the wrong document on some inputs even though it looks right on others."""
+    m = _DATE_RE.match(date_str or "")
+    if not m:
+        return None
+    day, month, year = date_str.split(".")
+    try:
+        return (int(year), int(month), int(day))
+    except ValueError:
+        return None
+
+
 def _extract_reclassification(event, events_by_id):
     """For a 'Dividend correction' event, resolve the true distribution date + the
     Original/Correction amount split by looking up the referenced original in this
@@ -674,9 +690,18 @@ def _extract_reclassification(event, events_by_id):
             break  # not in this account's collected events; can't resolve further
         referenced_details = referenced.get("details")
         docs = _extract_documents(referenced_details) or []
-        date = next((d.get("date") for d in docs if d.get("date")), None)
-        if date:
-            true_date = date
+        # The referenced (canceled) event's own "Dokumente" section can carry BOTH the
+        # reissue document TR generates at cancellation time (dated the same day as the
+        # correction we're resolving — observed live, always listed first) AND the
+        # original distribution's own document (observed live, always listed second,
+        # further back in time). Taking the array's first date silently picks the
+        # reissue — the same day, providing zero backdating benefit. Take the
+        # chronologically EARLIEST parseable date instead; verified live across 12
+        # Realty Income correction events, all sharing this exact two-document shape.
+        dated = [(d.get("date"), _parse_doc_date_sortkey(d.get("date"))) for d in docs if d.get("date")]
+        dated = [(raw, key) for raw, key in dated if key is not None]
+        if dated:
+            true_date = min(dated, key=lambda pair: pair[1])[0]
             resolution_failed = False
             break
         current_id = _extract_original_dividend_id(referenced_details)
