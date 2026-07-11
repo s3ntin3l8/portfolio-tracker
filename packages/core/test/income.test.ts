@@ -294,6 +294,27 @@ describe("projectDividends", () => {
     expect(Number(result[0].amount)).toBeCloseTo(12.8, 4);
     expect(Number(result[0].perShare)).toBeCloseTo(0.8, 4);
   });
+
+  it("nets same-month correction fragments into one payment before replay (US-REIT reclassification)", () => {
+    // A real monthly ~8.00 payment in Sep, but Nov is a reclassification month split into
+    // 3 small legs (5.00 - 3.00 + 6.00 = 8.00, the same true economic payment). Without
+    // bucketing this would emit 4 projected entries (3 for Nov alone, tiny/diluted); with
+    // bucketing it must emit exactly 2 — one per calendar month, each netted to 8.00.
+    const past = [
+      hist("msft", "2025-09-12", "8.00"),
+      hist("msft", "2025-11-03", "5.00"),
+      hist("msft", "2025-11-14", "-3.00"),
+      hist("msft", "2025-11-27", "6.00"),
+    ];
+    const heldQty = new Map([["msft", "10"]]);
+    const result = projectDividends(past, heldQty, () => "10", NOW);
+    expect(result).toHaveLength(2);
+    expect(result[0].date).toBe("2026-09-12");
+    expect(Number(result[0].amount)).toBeCloseTo(8.0);
+    // The Nov bucket's representative date is the LATEST leg (11-27) shifted a year.
+    expect(result[1].date).toBe("2026-11-27");
+    expect(Number(result[1].amount)).toBeCloseTo(8.0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -563,6 +584,32 @@ describe("projectNextYearDividends", () => {
     // The 2024-03-01 qty=0 entry must NOT inflate the base
     expect(Number(result[0].perShare)).toBeCloseTo(10.0, 4);
     expect(Number(result[0].amount)).toBeCloseTo(110, 1);
+  });
+
+  it("does not let a same-month correction burst dilute the trailing-12mo per-share base", () => {
+    // A monthly REIT payer at 7.40/month (perShare 0.074 on qty=100). One month (Sep) is a
+    // US-REIT 1099-DIV reclassification split into 3 small legs that net to the SAME true
+    // 7.40 payment (5.00 - 3.00 + 5.40 = 7.40). Without bucketing, the trailing-12mo mean
+    // would average all 6 raw rows (≈4.93/month, a ~33% understatement); bucketed, each
+    // calendar month counts once and the base stays at the true 7.40/month rate.
+    const past = [
+      hist("reit", "2025-07-15", "7.40"),
+      hist("reit", "2025-08-15", "7.40"),
+      hist("reit", "2025-09-03", "5.00"),
+      hist("reit", "2025-09-14", "-3.00"),
+      hist("reit", "2025-09-27", "5.40"),
+      hist("reit", "2025-10-15", "7.40"),
+    ];
+    const heldQty = new Map([["reit", "100"]]);
+    const result = projectNextYearDividends(past, heldQty, () => "100", NOW, {
+      applyGrowth: false,
+    });
+    expect(result.length).toBeGreaterThan(0);
+    // Bucketed base: mean of 4 monthly totals (7.40 each) = 7.40 → perShare = 0.074.
+    // Unbucketed (buggy) base would be ≈4.933/100 = 0.04933 — must NOT match that.
+    for (const r of result) {
+      expect(Number(r.perShare)).toBeCloseTo(0.074, 4);
+    }
   });
 
   it("feeds forecastNextYear via projectedDividendsNextYear in aggregateIncome", () => {

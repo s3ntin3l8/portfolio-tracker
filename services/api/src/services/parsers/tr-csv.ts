@@ -18,6 +18,11 @@ import { collapsePerkFundedAcquisitions } from "./perk-pairing.js";
 //                cashFlow/XIRR); `tax` stored as −csv_tax (positive = withheld, negative =
 //                refund) to match the DKB/manual convention. A reversal row has a negative
 //                `amount` and positive `tax`, yielding a negative net and negative stored tax.
+//                `executedAt` uses the `date` column (economic day), not `datetime` (posting
+//                timestamp) — the two diverge by months for a US-REIT 1099-DIV
+//                recharacterization (e.g. Realty Income every March), where TR reverses and
+//                reissues a prior distribution and keeps `date` pinned to the original payment
+//                day. Every other row type posts same-day, so they keep using `datetime`.
 //   • Promos:    BENEFITS_SAVEBACK/BONUS/KINDERGELD_BONUS/STOCKPERK → action `bonus_cash`,
 //                then collapsePerkFundedAcquisitions folds each reward credit into the
 //                savings-plan buy it funds (0–4 days later) → one `bonus` free-share row (a
@@ -122,6 +127,7 @@ export function parseTrCsv(content: string): CsvParseResult {
   const idx = (name: string) => header.indexOf(name);
   const cols = {
     datetime: idx("datetime"),
+    date: idx("date"),
     type: idx("type"),
     assetClass: idx("asset_class"),
     name: idx("name"),
@@ -201,8 +207,15 @@ export function parseTrCsv(content: string): CsvParseResult {
       // produces a negative price (cash out) and a negative stored_tax (refund tag).
       const taxSigned = tax ?? 0; // CSV: negative = withheld, positive = refunded
       const net = amount + taxSigned; // signed net cash credited
+      // A US-REIT 1099-DIV recharacterization (e.g. Realty Income every March) reverses and
+      // reissues a prior distribution; TR posts these MONTHS after the true payment but keeps
+      // `date` pinned to the original economic day while `datetime` carries the late posting
+      // timestamp — `date` and `datetime` can differ by up to a year. `datetime` is right for
+      // every other row type (posted same-day), so only dividends fall back to `date`.
+      const economicDate = get(cols.date).trim();
       candidate = {
         ...base,
+        ...(economicDate ? { executedAt: economicDate } : {}),
         ...instrument,
         action: "dividend",
         quantity: "0", // the CSV `shares` here is the holding/rate, not a traded quantity

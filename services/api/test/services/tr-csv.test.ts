@@ -93,6 +93,15 @@ const ROWS: Record<string, string>[] = [
   { datetime: "2025-11-15T10:00:00.000000Z", category: "CASH", type: "DIVIDEND", asset_class: "STOCK",
     name: "Altria Group", symbol: "US02209S1033", shares: "11.0000000000", amount: "-0.10",
     tax: "0.03", currency: "EUR", transaction_id: id(24) },
+  // US-REIT 1099-DIV recharacterization: `datetime` (late posting) diverges from `date` (the
+  // true original payment day) by nearly a year — a reversal leg of a prior Realty Income
+  // distribution, posted 2026-03-01 but economically belonging to 2025-02-15. (Illustrative
+  // round numbers, not a real dividend payment — the shape being tested is the date/datetime
+  // divergence, not any specific amount.)
+  { datetime: "2026-03-01T09:00:00.000000Z", date: "2025-02-15", category: "CASH", type: "DIVIDEND",
+    asset_class: "STOCK", name: "Realty Income", symbol: "US7561091049", shares: "40.0000000000",
+    amount: "-9.000000", tax: "2.00", currency: "EUR", original_amount: "-8.50", original_currency: "USD",
+    fx_rate: "1.100000", description: "Cash Dividend for ISIN US7561091049", transaction_id: id(28) },
   // Vorabpauschale (advance fund tax): gross 0, only tax withheld → negative-cash income leg
   { datetime: "2026-01-28T07:42:17.274554Z", category: "CASH", type: "EARNINGS", asset_class: "FUND",
     name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", amount: "0.000000", tax: "-0.06",
@@ -127,8 +136,8 @@ describe("parseTrCsv", () => {
   const byId = new Map(drafts.map((d) => [d.externalId, d]));
   const draft = (n: number) => byId.get(`tr-csv:${id(n)}`);
 
-  it("maps 23 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
-    expect(drafts).toHaveLength(23);
+  it("maps 24 representable rows to drafts and surfaces 4 unmappable rows as issues", () => {
+    expect(drafts).toHaveLength(24);
     expect(errors).toHaveLength(4);
     expect(errors.map((e) => e.message)).toEqual([
       expect.stringContaining("TAX_OPTIMIZATION"),
@@ -255,6 +264,23 @@ describe("parseTrCsv", () => {
       tax: "-0.03", // negative = refund/payback, not a fresh withholding
       fees: "0",
     });
+  });
+
+  it("dates a US-REIT reclassification dividend by the economic `date` column, not the late `datetime` posting", () => {
+    // Row 28: datetime=2026-03-01 (posting), date=2025-02-15 (true payment day). Must use `date`
+    // so the corrected/reversed amount lands in the year it actually belongs to.
+    expect(draft(28)).toMatchObject({
+      action: "dividend",
+      isin: "US7561091049",
+      price: "-7", // -9.00 amount + 2.00 tax = net cash reversed
+      tax: "-2",
+    });
+    expect(draft(28)?.executedAt).toEqual(new Date("2025-02-15"));
+  });
+
+  it("falls back to `datetime` for a dividend whose `date` column is blank", () => {
+    // Every other dividend fixture row leaves `date` empty — same-day posting, no divergence.
+    expect(draft(5)?.executedAt).toEqual(new Date("2025-05-09T01:10:00.000000Z"));
   });
 
   it("maps EARNINGS (Vorabpauschale) to a standalone `tax` debit: cash & gain drop, not contribution", () => {
