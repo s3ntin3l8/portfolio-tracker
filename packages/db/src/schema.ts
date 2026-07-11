@@ -614,10 +614,12 @@ export const documents = pgTable(
     // Parser/source label (claude | ollama | dkb | csv | tr-csv | pytr | …).
     source: text("source"),
     // TR postbox sync→confirm join key: the TR timeline event id whose documentRefs entry
-    // triggered this download. For "tax_report"-category rows (see below) it's instead the
-    // idempotency key for the report-fetch job (the TR postbox event id), enforced unique
-    // per user via documents_user_source_event_unique_idx. Null for upload-family docs
-    // (screenshot/DKB/CSV) and for user-uploaded inbox documents.
+    // triggered this download. Not unique for "receipt"-category rows (a split settlement's
+    // multiple PDF legs, or a delete-then-re-fetch, can legitimately share one). For
+    // "tax_report"-category rows it's instead the idempotency key for the report-fetch job
+    // (the TR postbox event id) or, for uploads, a content-hash-derived key — enforced
+    // unique per user WITHIN that category via documents_user_source_event_unique_idx. Null
+    // for upload-family receipt docs (screenshot/DKB/CSV).
     sourceEventId: text("source_event_id"),
     // Discriminates the per-transaction/import "receipt" documents above (the default, and
     // the only category before this column existed) from account-level "inbox" documents
@@ -636,11 +638,16 @@ export const documents = pgTable(
     index("documents_transaction_id_idx").on(t.transactionId),
     index("documents_user_id_idx").on(t.userId),
     // Idempotency for the pytr report-fetch job: re-syncing the same postbox event must not
-    // duplicate the document. Partial so upload-family/receipt docs (sourceEventId=null) are
-    // unconstrained.
+    // duplicate the inbox document. Scoped to category="tax_report" (not just
+    // sourceEventId is not null): "receipt" docs legitimately share a (userId,
+    // sourceEventId) pair today — a split settlement can produce multiple PDF legs for the
+    // same TR event, and a delete-then-re-fetch can leave more than one retained row behind
+    // (see getDocumentForTransaction's "most recent wins" comment in receipts.ts). A
+    // blanket unique index on sourceEventId alone fails to apply against that real,
+    // pre-existing data.
     uniqueIndex("documents_user_source_event_unique_idx")
       .on(t.userId, t.sourceEventId)
-      .where(sql`${t.sourceEventId} is not null`),
+      .where(sql`${t.sourceEventId} is not null and ${t.category} = 'tax_report'`),
   ],
 ).enableRLS();
 

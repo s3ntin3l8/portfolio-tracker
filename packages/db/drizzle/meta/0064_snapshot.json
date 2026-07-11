@@ -1,5 +1,5 @@
 {
-  "id": "53be2b41-4006-4ff6-b30d-613734d6d7f3",
+  "id": "977e4a11-bc41-40c6-af09-dc506ffa408f",
   "prevId": "2f3b0ea4-a4ad-4e2d-ac52-f2735bde9c51",
   "version": "7",
   "dialect": "postgresql",
@@ -876,7 +876,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"documents\".\"source_event_id\" is not null",
+          "where": "\"documents\".\"source_event_id\" is not null and \"documents\".\"category\" = 'tax_report'",
           "concurrently": false,
           "method": "btree",
           "with": {}
