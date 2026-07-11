@@ -97,12 +97,12 @@ describe("DividendsTable", () => {
 });
 
 describe("ByYearTable", () => {
-  it("renders newest-first rows with realized/dividends/tax columns", () => {
+  it("renders newest-first rows with realized/dividends/FSA used/tax columns", () => {
     render(
       <ByYearTable
         rows={[
-          { year: 2026, realized: "240", dividends: "168", tax: "0.00" },
-          { year: 2025, realized: "100", dividends: "227", tax: "0.00" },
+          { year: 2026, realized: "240", dividends: "168", fsaUsed: "408.00", tax: "0.00" },
+          { year: 2025, realized: "100", dividends: "227", fsaUsed: "327.00", tax: "0.00" },
         ]}
         money={money}
         t={t}
@@ -110,6 +110,9 @@ describe("ByYearTable", () => {
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
     expect(years).toEqual(["2026", "2025"]);
+    expect(screen.getByText("FSA used")).toBeInTheDocument();
+    expect(screen.getByText("Rp 408")).toBeInTheDocument();
+    expect(screen.getByText("Rp 327")).toBeInTheDocument();
   });
 
   it("renders nothing when there are no years", () => {
@@ -195,31 +198,82 @@ describe("HarvestRow", () => {
 });
 
 describe("HarvestSummaryNote", () => {
-  it("aggregates every suggestion into one sentence", () => {
-    const suggestions: HarvestSuggestion[] = [
-      {
-        instrumentId: "i1",
-        unrealizedGross: "-184",
-        tfRate: "0",
-        unrealizedAdjusted: "-184",
-        harvestableGross: "184",
-        taxSaving: "49",
-        instrument: null,
-      },
-      {
-        instrumentId: "i2",
-        unrealizedGross: "-96",
-        tfRate: "0",
-        unrealizedAdjusted: "-96",
-        harvestableGross: "96",
-        taxSaving: "25",
-        instrument: null,
-      },
-    ];
-    render(<HarvestSummaryNote suggestions={suggestions} money={money} t={t} />);
-    expect(screen.getByText(/Harvest all 2/)).toBeInTheDocument();
+  const amd: HarvestSuggestion = {
+    instrumentId: "i1",
+    unrealizedGross: "3360.35",
+    tfRate: "0",
+    unrealizedAdjusted: "3360.35",
+    harvestableGross: "148.46",
+    taxSaving: "37.12",
+    instrument: { symbol: "AMD", name: "AMD Inc.", assetClass: "equity", market: "US" },
+  };
+  const msft: HarvestSuggestion = {
+    instrumentId: "i2",
+    unrealizedGross: "-96",
+    tfRate: "0",
+    unrealizedAdjusted: "-96",
+    harvestableGross: "96",
+    taxSaving: "25",
+    instrument: { symbol: "MSFT", name: "Microsoft Corp.", assetClass: "equity", market: "US" },
+  };
+  const googl: HarvestSuggestion = {
+    instrumentId: "i3",
+    unrealizedGross: "50",
+    tfRate: "0",
+    unrealizedAdjusted: "50",
+    harvestableGross: "50",
+    taxSaving: "12",
+    instrument: { symbol: "GOOGL", name: "Alphabet Inc.", assetClass: "equity", market: "US" },
+  };
+
+  it("names only the position(s) actually in the plan — not every listed suggestion (the reported bug)", () => {
+    // 3 suggestions listed, but the plan only needed AMD — reproduces the live scenario
+    // that prompted this fix: the old copy said "Harvest all 3" even though 2 of them
+    // (MSFT, GOOGL) were never touched.
+    render(
+      <HarvestSummaryNote
+        suggestions={[amd, msft, googl]}
+        combined={{
+          positionsUsed: 1,
+          combinedHarvestableGross: "148.46",
+          combinedTaxSaving: "37.12",
+          plan: [{ instrumentId: "i1", grossTake: "148.46", adjustedTake: "148.46" }],
+        }}
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText(/Sell part of AMD/)).toBeInTheDocument();
+    expect(screen.getByText(/Rp 148/)).toBeInTheDocument();
+    expect(screen.getByText(/Rp 37/)).toBeInTheDocument();
+    // The other two positions are named as untouched, not folded into the plan.
+    expect(screen.getByText(/other 2 positions/)).toBeInTheDocument();
+    expect(screen.queryByText(/MSFT/)).toBeNull();
+    expect(screen.queryByText(/GOOGL/)).toBeNull();
+    expect(screen.queryByText(/Harvest all/)).toBeNull();
+  });
+
+  it("uses the 'harvest all' phrasing when every listed suggestion is actually in the plan", () => {
+    render(
+      <HarvestSummaryNote
+        suggestions={[amd, msft]}
+        combined={{
+          positionsUsed: 2,
+          combinedHarvestableGross: "280",
+          combinedTaxSaving: "74",
+          plan: [
+            { instrumentId: "i1", grossTake: "184", adjustedTake: "184" },
+            { instrumentId: "i2", grossTake: "96", adjustedTake: "96" },
+          ],
+        }}
+        money={money}
+        t={t}
+      />,
+    );
+    expect(screen.getByText(/Harvest all 2 positions \(AMD, MSFT\)/)).toBeInTheDocument();
     expect(screen.getByText(/Rp 280/)).toBeInTheDocument();
     expect(screen.getByText(/Rp 74/)).toBeInTheDocument();
+    expect(screen.queryByText(/Sell part of/)).toBeNull();
   });
 
   it("renders nothing when there's nothing harvestable", () => {
@@ -236,6 +290,7 @@ describe("HarvestSummaryNote", () => {
             instrument: null,
           },
         ]}
+        combined={{ positionsUsed: 0, combinedHarvestableGross: "0", combinedTaxSaving: "0", plan: [] }}
         money={money}
         t={t}
       />,

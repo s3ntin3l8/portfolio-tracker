@@ -140,12 +140,17 @@ export function DisposalTable({
         {rows.length === 0 ? (
           <p className="px-6 text-sm text-muted-foreground">{t("disposals.empty", { year })}</p>
         ) : (
-          <Table>
+          // table-fixed: column widths are set ONCE from the header row and never
+          // recomputed from later content. Without this, table-layout:auto (the
+          // default) reflows all columns whenever a wide cell enters the DOM — e.g.
+          // expanding a multi-lot row's long "date · qty @ buy → sell" text, or the
+          // Tf-adjusted sub-line under Gain — visibly shifting Proceeds/Gain sideways.
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>{t("disposals.disposal")}</TableHead>
-                <TableHead className="text-right">{t("disposals.proceeds")}</TableHead>
-                <TableHead className="text-right">{t("disposals.gain")}</TableHead>
+                <TableHead className="w-[46%]">{t("disposals.disposal")}</TableHead>
+                <TableHead className="w-[27%] text-right">{t("disposals.proceeds")}</TableHead>
+                <TableHead className="w-[27%] text-right">{t("disposals.gain")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -163,8 +168,18 @@ export function DisposalTable({
                       <TableCell className="tabular text-right text-muted-foreground">
                         {money(r.proceeds)}
                       </TableCell>
-                      <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                        {money(r.gain)}
+                      <TableCell className="tabular text-right">
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {money(r.gain)}
+                        </span>
+                        {Number(r.tfRate) > 0 && (
+                          <div className="text-xs font-normal text-muted-foreground">
+                            {t("disposals.tfAdjusted", {
+                              adjusted: money(r.gainAdjusted),
+                              pct: Math.round(Number(r.tfRate) * 100),
+                            })}
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                     {isOpen &&
@@ -234,12 +249,13 @@ export function IdSalesTable({
         {rows.length === 0 ? (
           <p className="px-6 text-sm text-muted-foreground">{t("id.sales.empty", { year })}</p>
         ) : (
-          <Table>
+          // table-fixed — see DisposalTable's identical comment above.
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>{t("id.sales.disposal")}</TableHead>
-                <TableHead className="text-right">{t("id.sales.proceeds")}</TableHead>
-                <TableHead className="text-right">{t("id.sales.tax")}</TableHead>
+                <TableHead className="w-[46%]">{t("id.sales.disposal")}</TableHead>
+                <TableHead className="w-[27%] text-right">{t("id.sales.proceeds")}</TableHead>
+                <TableHead className="w-[27%] text-right">{t("id.sales.tax")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -260,6 +276,10 @@ export function IdSalesTable({
                           when: r.when,
                           proceeds: r.proceeds,
                           gain: "0",
+                          // Indonesian final tax has no Teilfreistellung concept — this
+                          // row shape only exists to satisfy DisposalCell's prop type.
+                          tfRate: "0",
+                          gainAdjusted: "0",
                           quantity: r.quantity ?? "0",
                           avgBuyPrice: r.avgBuyPrice ?? "0",
                           sellPrice: r.sellPrice ?? "0",

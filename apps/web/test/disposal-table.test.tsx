@@ -23,6 +23,8 @@ const singleLot: TaxDisposalRow = {
   when: "2026-03-12",
   proceeds: "1240",
   gain: "430",
+  tfRate: "0",
+  gainAdjusted: "430",
   quantity: "10",
   avgBuyPrice: "81",
   sellPrice: "124",
@@ -41,11 +43,15 @@ const singleLot: TaxDisposalRow = {
 };
 
 // A multi-lot disposal — an ETF bought in three tranches, sold together.
+// IWDA is an equity ETF — 30% Teilfreistellung, so it exercises the Tf-adjusted
+// sub-line (unlike singleLot's plain stock, tfRate 0).
 const multiLot: TaxDisposalRow = {
   symbol: "IWDA",
   when: "2026-04-01",
   proceeds: "2892",
   gain: "546",
+  tfRate: "0.30",
+  gainAdjusted: "382.20",
   quantity: "25",
   avgBuyPrice: "78.2",
   sellPrice: "96.4",
@@ -100,6 +106,22 @@ describe("DisposalTable (German)", () => {
     expect(screen.getAllByText("€1,240.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("€430.00").length).toBeGreaterThan(0);
     expect(screen.queryByText(/lot/)).toBeNull();
+    // tfRate=0 (a plain stock) — no Tf-adjusted sub-line.
+    expect(screen.queryByText(/after.*% TF/)).toBeNull();
+  });
+
+  it("shows a Tf-adjusted sub-line under the gain for a partially-exempt instrument (ETF)", () => {
+    wrap(
+      <DisposalTable
+        rows={[multiLot]}
+        totalProceeds="2892"
+        totalGain="546"
+        currency="EUR"
+        locale="en"
+        year={2026}
+      />,
+    );
+    expect(screen.getByText(/€382\.20 after 30% TF/)).toBeInTheDocument();
   });
 
   it("collapses a multi-lot disposal into one aggregate row with an avg buy → sell summary", () => {

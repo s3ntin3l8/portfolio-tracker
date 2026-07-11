@@ -165,6 +165,37 @@ export interface HarvestSuggestion {
   taxSaving: string;
 }
 
+/** One step of the concrete sequential-allocation plan — how much of ONE position to
+ *  realize. Order matches the order `plan` steps were allocated in (best-first, since
+ *  `harvestSuggestions` already sorts that way). */
+export interface HarvestPlanStep {
+  instrumentId: string;
+  /** Gross gain to realize from THIS position (display currency). */
+  grossTake: string;
+  /** Tf-adjusted amount this step draws from the remaining allowance. */
+  adjustedTake: string;
+}
+
+export interface HarvestSummary {
+  /** = plan.length. How many of the input suggestions actually received any allowance
+   *  (fully-exempt positions, tfRate=1, always count even once the allowance is
+   *  exhausted). Kept as its own field (redundant with plan.length) since callers that
+   *  only need the count shouldn't have to re-derive it. */
+  positionsUsed: number;
+  /** Combined gross gain realizable across ALL suggestions TOGETHER, sequentially capped
+   *  against the SHARED remaining allowance — see {@link harvestSummary}'s doc comment
+   *  for why this differs from Σ harvestableGross. */
+  combinedHarvestableGross: string;
+  /** Tax saved if exactly `combinedHarvestableGross` (spread across these positions) is
+   *  realized. Always ≤ remaining × taxRate. */
+  combinedTaxSaving: string;
+  /** The concrete plan: which position(s), and how much of each, to realize the combined
+   *  totals above. Typically MUCH shorter than the input suggestions list — often just
+   *  the single best position, since one large-enough gain can exhaust the whole
+   *  remaining allowance on its own. Empty when nothing is harvestable. */
+  plan: HarvestPlanStep[];
+}
+
 // ---------------------------------------------------------------------------
 // Input types
 // ---------------------------------------------------------------------------
@@ -445,6 +476,74 @@ export function harvestSuggestions(input: HarvestSuggestionsInput): HarvestSugge
   suggestions.sort((a, b) => D(b.unrealizedAdjusted).cmp(D(a.unrealizedAdjusted)));
 
   return suggestions;
+}
+
+/**
+ * Combined "harvest ALL of these together" totals.
+ *
+ * Each `HarvestSuggestion.harvestableGross`/`taxSaving` is deliberately computed
+ * INDEPENDENTLY against the FULL `remaining` allowance (see `harvestSuggestions`'s doc
+ * comment — "no sequential allocation is done, the user decides which to act on"), which
+ * is correct for a single row read in isolation ("if I harvest ONLY this one, this is the
+ * ceiling"). Naively summing those per-row values across N suggestions is wrong: it
+ * implies the same remaining allowance can be spent once per position, so the total can
+ * come out to N× the real ceiling. This function instead walks `suggestions` in the order
+ * given (harvestSuggestions already sorts best-first) and allocates the SHARED allowance
+ * sequentially, so `combinedTaxSaving` is always ≤ `remaining × taxRate` — the true
+ * maximum possible saving from harvesting some or all of the list together.
+ */
+export function harvestSummary(
+  suggestions: HarvestSuggestion[],
+  remaining: string,
+  taxRate: string,
+): HarvestSummary {
+  const rate = D(taxRate);
+  let allowanceLeft = D(remaining);
+  let combinedGross = ZERO;
+  let combinedAdjusted = ZERO;
+  const plan: HarvestPlanStep[] = [];
+
+  for (const s of suggestions) {
+    const tfRate = D(s.tfRate);
+    const ONE = D(1);
+    const exemptFraction = Decimal.min(ONE, Decimal.max(ZERO, tfRate));
+    const multiplier = ONE.minus(exemptFraction);
+    const unrealizedGross = D(s.unrealizedGross);
+
+    if (multiplier.isZero()) {
+      // Fully tax-exempt position (tfRate=1): harvestable regardless of remaining
+      // allowance — mirrors harvestSuggestions' own guard for this degenerate case.
+      combinedGross = combinedGross.plus(unrealizedGross);
+      plan.push({
+        instrumentId: s.instrumentId,
+        grossTake: unrealizedGross.toFixed(2),
+        adjustedTake: "0.00",
+      });
+      continue;
+    }
+
+    if (allowanceLeft.lte(ZERO)) continue;
+
+    const adjustedTake = Decimal.min(D(s.unrealizedAdjusted), allowanceLeft);
+    if (adjustedTake.lte(ZERO)) continue;
+
+    const grossTake = Decimal.min(unrealizedGross, adjustedTake.div(multiplier));
+    combinedGross = combinedGross.plus(grossTake);
+    combinedAdjusted = combinedAdjusted.plus(adjustedTake);
+    allowanceLeft = allowanceLeft.minus(adjustedTake);
+    plan.push({
+      instrumentId: s.instrumentId,
+      grossTake: grossTake.toFixed(2),
+      adjustedTake: adjustedTake.toFixed(2),
+    });
+  }
+
+  return {
+    positionsUsed: plan.length,
+    combinedHarvestableGross: combinedGross.toFixed(2),
+    combinedTaxSaving: combinedAdjusted.times(rate).toFixed(2),
+    plan,
+  };
 }
 
 // Re-export Trade type so callers don't need a separate import.

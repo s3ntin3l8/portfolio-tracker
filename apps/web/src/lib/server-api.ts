@@ -971,6 +971,7 @@ export async function loadNetworthTax(
             harvestSuggestions: [],
             carryForwardApplied: false,
             distribution: zeroDistribution,
+            tfRatesByInstrument: {},
           },
         ];
       }
@@ -1000,6 +1001,7 @@ export async function loadNetworthTax(
           harvestSuggestions: [],
           carryForwardApplied: false,
           distribution: zeroDistribution,
+          tfRatesByInstrument: {},
         },
       ];
     }
@@ -1032,6 +1034,7 @@ export async function loadNetworthTax(
         harvestSuggestions: result.harvestSuggestions,
         carryForwardApplied: result.carryForwardApplied,
         distribution: result.holderDistribution,
+        tfRatesByInstrument: result.tfRatesByInstrument,
       };
       return [holderEntry];
     }
@@ -1069,6 +1072,13 @@ export interface TaxDisposalRow {
   when: string; // YYYY-MM-DD (the shared sell date)
   proceeds: string;
   gain: string;
+  /** Teilfreistellung rate applied to this row's instrument (0–1), from the backend's
+   *  tfRatesByInstrument — the same rate allowanceUsage/harvestSuggestions use. */
+  tfRate: string;
+  /** Tf-adjusted gain = gain × (1 − tfRate) — what actually counts against the FSA,
+   *  as opposed to `gain` (the gross economic gain shown by default). Equal to `gain`
+   *  when tfRate is 0 (the common case: stocks, bonds, gold). */
+  gainAdjusted: string;
   quantity: string;
   avgBuyPrice: string;
   sellPrice: string;
@@ -1098,6 +1108,11 @@ export interface TaxYearRow {
   realized: string;
   dividends: string;
   tax: string;
+  /** Sparerpauschbetrag (FSA) consumed that year. The selected year uses the backend's
+   *  exact `allowanceUsage.usedYtd` (Teilfreistellung + Vorabpauschale + two-pot netting
+   *  already applied); other years are estimated the same way the `tax` column already
+   *  is — see this interface's doc comment on `loadTaxYearDetail` for the caveat. */
+  fsaUsed: string;
 }
 
 export interface TaxYearDetail {
@@ -1195,6 +1210,11 @@ export async function loadTaxYearDetail(
             gain: number;
             quantity: number;
             cost: number;
+            /** Teilfreistellung rate for this row's instrument (0–1), from the SAME
+             *  tfRatesByInstrument map the backend's allowanceUsage/harvestSuggestions
+             *  were computed with — see TaxYearRow.fsaUsed's caveat for why this must
+             *  come from the backend rather than a client-side asset-class guess. */
+            tfRate: number;
             lots: TaxDisposalLot[];
           }
         >();
@@ -1212,6 +1232,7 @@ export async function loadTaxYearDetail(
               gain: 0,
               quantity: 0,
               cost: 0,
+              tfRate: Number(entry.tfRatesByInstrument?.[t.instrumentId] ?? "0"),
               lots: [],
             };
             group.proceeds += proceeds;
@@ -1236,6 +1257,8 @@ export async function loadTaxYearDetail(
           when: g.when,
           proceeds: g.proceeds.toFixed(2),
           gain: g.gain.toFixed(2),
+          tfRate: g.tfRate.toString(),
+          gainAdjusted: (g.gain * (1 - g.tfRate)).toFixed(2),
           quantity: g.quantity.toString(),
           avgBuyPrice: g.quantity > 0 ? (g.cost / g.quantity).toString() : "0",
           sellPrice: g.quantity > 0 ? (g.proceeds / g.quantity).toString() : "0",
@@ -1322,6 +1345,7 @@ export async function loadTaxYearDetail(
               realized: u.realizedGainsAdjusted,
               dividends: u.incomeYtd,
               tax: (taxable * taxRate).toFixed(2),
+              fsaUsed: u.usedYtd,
             };
           }
 
@@ -1329,11 +1353,17 @@ export async function loadTaxYearDetail(
           const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
           const dividendsGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
           const taxable = Math.max(0, Number(realized) + dividendsGross - allowanceAnnual);
+          // FSA-used estimate for a non-selected year: the allowance-consuming complement
+          // of `taxable` above (same inputs, no Teilfreistellung/Vorabpauschale/loss-pot
+          // precision — see this file's loadTaxYearDetail doc comment for the caveat this
+          // inherits), clamped to the annual cap since usage can never exceed it.
+          const fsaUsed = Math.min(allowanceAnnual, Math.max(0, Number(realized) + dividendsGross));
           return {
             year: y,
             realized,
             dividends: dividendsGross.toFixed(2),
             tax: (taxable * taxRate).toFixed(2),
+            fsaUsed: fsaUsed.toFixed(2),
           };
         });
 

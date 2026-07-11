@@ -349,6 +349,9 @@ describe("tax routes", () => {
       expect(body.allowanceUsage.realizedGainsAdjusted).toBe("700.00");
       expect(body.allowanceUsage.usedYtd).toBe("700.00");
       expect(body.allowanceUsage.remaining).toBe("300.00");
+      // The same 30% asset-class-fallback rate, exposed so the frontend can Tf-adjust a
+      // per-disposal figure without re-deriving this fallback logic itself.
+      expect(body.tfRatesByInstrument[etf.id]).toBe("0.30");
     });
   });
 
@@ -461,6 +464,7 @@ describe("tax routes", () => {
           currency: string;
         };
         harvestSuggestions: unknown[];
+        tfRatesByInstrument: Record<string, string>;
       }>;
       expect(entry.holder.name).toBe("Shape Holder");
       expect(entry.holder.taxAllowanceAnnual).toBe("1000");
@@ -471,6 +475,9 @@ describe("tax routes", () => {
       expect(entry.allowanceUsage.taxRate).toBe("0.25");
       expect(entry.allowanceUsage.currency).toBeDefined();
       expect(Array.isArray(entry.harvestSuggestions)).toBe(true);
+      // No open positions in this fixture, so the map is empty — but the field itself
+      // must always be present (object, not undefined).
+      expect(entry.tfRatesByInstrument).toEqual({});
     });
 
     it("distribution field carries FSA allocation breakdown against the cap", async () => {

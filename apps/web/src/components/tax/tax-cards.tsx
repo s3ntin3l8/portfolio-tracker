@@ -14,7 +14,7 @@ import { MonogramBadge } from "@/components/monogram-badge";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
 import type { TaxCurrencyTotal, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
-import type { IdDividendTax, IdYearTax } from "@portfolio/core";
+import type { IdDividendTax, IdYearTax, HarvestSummary } from "@portfolio/core";
 import { formatMoney } from "@/lib/utils";
 
 /** Loosely-typed next-intl translator scoped to the `Tax` namespace — the same shape as
@@ -150,6 +150,7 @@ export function ByYearTable({ rows, money, t }: {
               <TableHead>{t("byYear.year")}</TableHead>
               <TableHead className="text-right">{t("byYear.realized")}</TableHead>
               <TableHead className="text-right">{t("byYear.dividends")}</TableHead>
+              <TableHead className="text-right">{t("byYear.fsaUsed")}</TableHead>
               <TableHead className="text-right">{t("byYear.tax")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -162,6 +163,9 @@ export function ByYearTable({ rows, money, t }: {
                 </TableCell>
                 <TableCell className="tabular text-right text-muted-foreground">
                   {money(y.dividends)}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">
+                  {money(y.fsaUsed)}
                 </TableCell>
                 <TableCell className="tabular text-right font-semibold">{money(y.tax)}</TableCell>
               </TableRow>
@@ -290,27 +294,64 @@ export function DistributionCard({
 /** Footer sentence aggregating every harvestable position currently shown. */
 export function HarvestSummaryNote({
   suggestions,
+  combined,
   money,
   t,
 }: {
   suggestions: HarvestSuggestion[];
+  /** Combined "harvest all of these together" totals from core's `harvestSummary` —
+   *  sequentially allocates the SHARED remaining allowance across `suggestions`, unlike
+   *  each row's own `harvestableGross`/`taxSaving`, which are independently capped
+   *  against the FULL remaining allowance (correct in isolation, wrong summed — see
+   *  `harvestSummary`'s doc comment in packages/core/src/tax.ts). `combined.plan` names
+   *  the SPECIFIC position(s) actually needed — usually far fewer than `suggestions`,
+   *  since one large-enough gain can exhaust the whole remaining allowance on its own. */
+  combined: HarvestSummary;
   money: (n: string | number) => string;
   t: TaxTranslator;
 }) {
-  const totalHarvestable = suggestions.reduce((s, h) => s + Number(h.harvestableGross), 0);
-  const totalSaving = suggestions.reduce((s, h) => s + Number(h.taxSaving), 0);
+  const totalHarvestable = Number(combined.combinedHarvestableGross);
+  const totalSaving = Number(combined.combinedTaxSaving);
   if (totalHarvestable <= 0) return null;
+
+  // Name the plan's position(s) by symbol — same fallback HarvestRow uses, so a
+  // suggestion referenced here reads identically to its row further down. Joined with a
+  // plain comma (no locale-specific "and") — mirrors the dividendTotalsByCurrency
+  // "joined, not summed" precedent elsewhere on this page.
+  const nameById = new Map(
+    suggestions.map((s) => [s.instrumentId, s.instrument?.symbol ?? s.instrumentId.slice(0, 8)]),
+  );
+  const positionNames = combined.plan
+    .map((step) => nameById.get(step.instrumentId) ?? step.instrumentId.slice(0, 8))
+    .join(", ");
+  const remainingCount = suggestions.length - combined.plan.length;
+
+  // Partial: some suggestions weren't needed at all — the common case, since the first
+  // (best) position(s) usually exhaust the remaining allowance alone. Full: every listed
+  // suggestion is part of the plan (either because together they exactly cover the
+  // allowance, or because total available gains fall short of it). Two partial variants
+  // (not an ICU plural) — `t` here is a directly-injected translator (see TaxTranslator's
+  // doc comment), not guaranteed to run through next-intl's real ICU MessageFormat in
+  // every caller (e.g. this component's unit tests use a plain-substitution stub).
+  const summaryText =
+    remainingCount > 0
+      ? t(remainingCount === 1 ? "harvest.summary.partialOne" : "harvest.summary.partialMany", {
+          positions: positionNames,
+          offset: money(totalHarvestable),
+          saving: money(totalSaving),
+          remainingCount,
+        })
+      : t("harvest.summary.full", {
+          count: combined.plan.length,
+          positions: positionNames,
+          offset: money(totalHarvestable),
+          saving: money(totalSaving),
+        });
 
   return (
     <div className="flex items-start gap-2.5 border-t border-card-2 bg-success/10 px-[22px] py-3.5">
       <CircleCheck className="mt-px size-[17px] shrink-0 text-success" />
-      <p className="text-xs font-medium leading-relaxed text-text-mute">
-        {t("harvest.summary", {
-          count: suggestions.length,
-          offset: money(totalHarvestable),
-          saving: money(totalSaving),
-        })}
-      </p>
+      <p className="text-xs font-medium leading-relaxed text-text-mute">{summaryText}</p>
     </div>
   );
 }

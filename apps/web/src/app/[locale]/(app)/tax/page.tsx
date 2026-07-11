@@ -21,7 +21,7 @@ import { DisposalTable, IdSalesTable } from "@/components/tax/disposal-table";
 import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
-import { indonesianFinalTax } from "@portfolio/core";
+import { indonesianFinalTax, harvestSummary } from "@portfolio/core";
 
 export default async function TaxPage({
   params,
@@ -272,14 +272,28 @@ function TaxHolderSectionDe({
   const estimatedTax = taxable * taxRate;
   const ratePct = (taxRate * 100).toLocaleString(locale, { maximumFractionDigits: 3 });
 
+  // Combined "harvest all of these together" totals — sequentially allocates the SAME
+  // remaining allowance the per-row suggestions are each independently capped against
+  // (harvestSuggestions uses projectedRemaining when available, so this must match).
+  // See harvestSummary's doc comment: summing each row's own harvestableGross/taxSaving
+  // instead would overstate the total by up to (positions × the per-row cap).
+  const harvestRemaining = u.projectedRemaining ?? u.remaining;
+  const combinedHarvest = harvestSummary(harvestSuggestions, harvestRemaining, u.taxRate);
+
   return (
     <>
-      {/* Hero row: estimated tax + realized gains YTD + dividends YTD */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+      {/* Hero row: estimated tax + FSA used + realized gains YTD + dividends YTD.
+          2/2 on mobile, all four in one line from `sm` up. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         <EstimatedTaxHero
           label={t("hero.estimatedTax", { year: entry.year })}
           value={money(estimatedTax)}
           description={t("hero.estimatedTaxDesc", { rate: ratePct, taxable: money(taxable) })}
+        />
+        <StatCard
+          label={t("hero.fsaUsed")}
+          value={money(u.usedYtd)}
+          delta={t("hero.fsaUsedDesc", { allowance: money(u.allowanceAnnual) })}
         />
         <StatCard
           label={t("hero.realizedGains")}
@@ -396,7 +410,12 @@ function TaxHolderSectionDe({
                 <HarvestRow key={s.instrumentId} s={s} money={money} t={t} />
               ))}
             </div>
-            <HarvestSummaryNote suggestions={harvestSuggestions} money={money} t={t} />
+            <HarvestSummaryNote
+              suggestions={harvestSuggestions}
+              combined={combinedHarvest}
+              money={money}
+              t={t}
+            />
           </>
         ) : (
           <p className="px-[22px] pb-5 pt-1 text-sm text-muted-foreground">{t("harvest.none")}</p>

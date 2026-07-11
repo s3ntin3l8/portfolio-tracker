@@ -1569,7 +1569,11 @@
       "taxSaving": "Penghematan pajak",
       "tfApplied": "TF {pct}% diterapkan",
       "button": "Panen",
-      "summary": "Panen semua {count} untuk mengimbangi {offset} keuntungan terealisasi — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
+      "summary": {
+        "partialOne": "Jual sebagian {positions} — hingga {offset} keuntungan belum terealisasi bebas pajak — untuk memanfaatkan sisa batas bebas pajak Anda, menghemat sekitar ~{saving}. Tidak perlu menyentuh posisi lainnya. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
+        "partialMany": "Jual sebagian {positions} — hingga {offset} keuntungan belum terealisasi bebas pajak — untuk memanfaatkan sisa batas bebas pajak Anda, menghemat sekitar ~{saving}. Tidak perlu menyentuh {remainingCount} posisi lainnya. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
+        "full": "Panen semua {count} posisi ({positions}) untuk merealisasikan hingga {offset} keuntungan belum terealisasi bebas pajak — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera."
+      },
       "none": "Tidak ada keuntungan yang bisa dipanen saat ini.",
       "positionsEyebrow": "Posisi yang bisa direalisasikan",
       "metaLine": "{offset} bisa direalisasi · hemat ~{saving}"
@@ -1580,17 +1584,20 @@
       "realizedGains": "Keuntungan terealisasi · YTD",
       "realizedGainsDesc": "{count} pelepasan · disesuaikan Tf",
       "dividendsYtd": "Dividen · YTD",
-      "dividendsYtdDesc": "kotor · batas {allowance} diterapkan"
+      "dividendsYtdDesc": "kotor · batas {allowance} diterapkan",
+      "fsaUsed": "FSA terpakai",
+      "fsaUsedDesc": "dari batas {allowance}"
     },
     "disposals": {
       "title": "Keuntungan terealisasi · Abgeltungsteuer",
-      "subtitle": "Angka kotor, sebelum Teilfreistellung — kartu di atas sudah disesuaikan Tf.",
+      "subtitle": "Untung yang ditampilkan adalah kotor; baris dengan tarif Teilfreistellung menampilkan jumlah yang disesuaikan Tf yang benar-benar mengurangi batas bebas pajak Anda di bawahnya.",
       "disposal": "Pelepasan",
       "proceeds": "Hasil",
       "gain": "Untung",
       "total": "Total",
       "empty": "Tidak ada pelepasan di {year}.",
-      "lotsLine": "rata-rata {buy} → {sell} · {count, plural, other {# lot}}"
+      "lotsLine": "rata-rata {buy} → {sell} · {count, plural, other {# lot}}",
+      "tfAdjusted": "→ {adjusted} setelah TF {pct}%"
     },
     "dividendsTable": {
       "title": "Dividen dipotong pajak",
@@ -1612,6 +1619,7 @@
       "year": "Tahun",
       "realized": "Keuntungan terealisasi",
       "dividends": "Dividen",
+      "fsaUsed": "FSA terpakai",
       "tax": "Abgeltungsteuer"
     },
     "footnote": "Jerman mengenakan pajak penghasilan investasi sebesar {rate}% flat (Abgeltungsteuer + Solidaritätszuschlag). Sparer-Pauschbetrag {allowance} Anda diterapkan lebih dulu, lalu kerugian mengimbangi keuntungan dalam tahun yang sama. Hanya perkiraan, bukan nasihat pajak.",

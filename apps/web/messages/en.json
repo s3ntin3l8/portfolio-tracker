@@ -1571,7 +1571,11 @@
       "taxSaving": "Tax saving",
       "tfApplied": "TF {pct}% applied",
       "button": "Harvest",
-      "summary": "Harvest all {count} to offset {offset} of realized gains — about ~{saving} saved. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
+      "summary": {
+        "partialOne": "Sell part of {positions} — up to {offset} of unrealized gains tax-free — to use your remaining allowance, saving about ~{saving}. No need to touch the other position. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
+        "partialMany": "Sell part of {positions} — up to {offset} of unrealized gains tax-free — to use your remaining allowance, saving about ~{saving}. No need to touch the other {remainingCount} positions. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
+        "full": "Harvest all {count} positions ({positions}) to realize up to {offset} of unrealized gains tax-free — saving about ~{saving}. Germany has no 30-day wash-sale rule, so you can buy back immediately."
+      },
       "none": "No harvestable gains right now.",
       "positionsEyebrow": "Positions you could realize",
       "metaLine": "{offset} realizable · saves ~{saving}"
@@ -1582,17 +1586,20 @@
       "realizedGains": "Realized gains · YTD",
       "realizedGainsDesc": "{count} disposals · Tf-adjusted",
       "dividendsYtd": "Dividends · YTD",
-      "dividendsYtdDesc": "gross · {allowance} allowance applied"
+      "dividendsYtdDesc": "gross · {allowance} allowance applied",
+      "fsaUsed": "FSA used",
+      "fsaUsedDesc": "of {allowance} allowance"
     },
     "disposals": {
       "title": "Realized gains · Abgeltungsteuer",
-      "subtitle": "Gross figures, before Teilfreistellung — the hero card above is Tf-adjusted.",
+      "subtitle": "Gain shown is gross; rows with a Teilfreistellung rate show the Tf-adjusted amount that actually counts against your allowance underneath.",
       "disposal": "Disposal",
       "proceeds": "Proceeds",
       "gain": "Gain",
       "total": "Total",
       "empty": "No disposals in {year}.",
-      "lotsLine": "avg {buy} → {sell} · {count, plural, one {# lot} other {# lots}}"
+      "lotsLine": "avg {buy} → {sell} · {count, plural, one {# lot} other {# lots}}",
+      "tfAdjusted": "→ {adjusted} after {pct}% TF"
     },
     "dividendsTable": {
       "title": "Dividends withheld",
@@ -1614,6 +1621,7 @@
       "year": "Year",
       "realized": "Realized gains",
       "dividends": "Dividends",
+      "fsaUsed": "FSA used",
       "tax": "Abgeltungsteuer"
     },
     "footnote": "Germany taxes investment income at a flat {rate}% (Abgeltungsteuer + Solidaritätszuschlag). Your {allowance} Sparer-Pauschbetrag is applied first, then losses offset gains within the same year. Estimate only, not tax advice.",

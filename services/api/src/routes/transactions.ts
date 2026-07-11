@@ -2861,6 +2861,12 @@ export async function transactionsRoute(app: FastifyInstance) {
           ...s,
           instrument: metaById.get(s.instrumentId) ?? null,
         })),
+        // The same Teilfreistellung rates `usage`/`suggestions` were computed with,
+        // keyed by instrumentId — so the frontend can Tf-adjust a per-disposal-row gain
+        // WITHOUT re-deriving the asset-class-default logic (which would silently
+        // disagree with this response whenever a manual per-instrument override is set;
+        // tfRatesFor() above is the single source of truth for this rate).
+        tfRatesByInstrument: tfRates,
         // Whether this response applied the holder's seeded loss carry-forward — false
         // for a multi-depot holder (see the comment above); the frontend should show a
         // disclaimer pointing to the holder-aggregated /networth/tax view in that case.
@@ -2995,6 +3001,9 @@ export async function transactionsRoute(app: FastifyInstance) {
             ...s,
             instrument: meta.get(s.instrumentId) ?? null,
           })),
+          // See /portfolios/:id/tax's identical field for why this is returned rather
+          // than re-derived client-side.
+          tfRatesByInstrument: tfRates,
           // Always true here — this route aggregates every depot for the holder, the
           // correct scope for a per-person carry-forward (see /portfolios/:id/tax's
           // conditional version of this same flag).
