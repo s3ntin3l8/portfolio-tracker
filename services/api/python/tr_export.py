@@ -41,13 +41,15 @@ NOTE: targets pytr pinned to an exact upstream commit (see requirements.txt) for
 June-2026 `compactPortfolioByType` rename; not yet validated against a live account. TR's
 private protocol can change.
 
-Account-level report events (the annual tax report, "Jährlicher Steuerreport") are
+Account-level report events (the annual tax report, "Jährlicher Steuerbericht") are
 informational — SKIP_EVENTS on the Node mapper side — but are collected here from BOTH
 `timelineTransactions` and `timelineActivityLog` (see `_is_report_event` /
-`_collect_transactions`) since there's no captured live evidence pinning them to one feed;
-their `documentRefs` (populated the same way as any other event's) are what the Node
-mapper's `extractReportDocuments` turns into a tax-reports-inbox fetch. Unverified against
-a live account.
+`_collect_transactions`): validated against a real captured account, every observed
+instance (5 events, 2021-2025) lived on `timelineActivityLog`, none on
+`timelineTransactions`, so both are merged rather than assuming one. Their `documentRefs`
+(populated the same way as any other event's) are what the Node mapper's
+`extractReportDocuments` turns into a tax-reports-inbox fetch. The end-to-end download
+(actual TR API calls via tr_documents.py) is still unverified against a live account.
 """
 
 import argparse
@@ -130,12 +132,14 @@ _TRANSFER_EVENT_TYPES.update(_CRYPTO_TRANSFER_EVENT_TYPES)
 _SECURITIES_TRANSFER_SUBTITLE = "wertpapiertransfer"
 
 # Account-level report events (annual tax report; siblings added here as they're
-# classified) are informational — no cash/shares — and, like transfers, may live on the
-# activity-log feed instead of timelineTransactions. There's no captured live evidence
-# pinning them to one feed over the other, so — mirroring how pytr's OWN Timeline/dl.py
-# gets these same documents (it merges timeline_transactions + timeline_activity_log
-# wholesale before fetching details, not filtered to any subset — see vendored
-# pytr/timeline.py's tl_loop) — merge them from BOTH feeds rather than assume one.
+# classified) are informational — no cash/shares — and live on the activity-log feed, NOT
+# timelineTransactions: validated against a real captured account (5 YEAR_END_TAX_REPORT /
+# TAX_YEAR_END_REPORT_CREATED events across 2021-2025, every one tagged
+# source="timelineActivity", each carrying a "documents" section). Matches how pytr's OWN
+# Timeline/dl.py gets these same documents (it merges timeline_transactions +
+# timeline_activity_log wholesale before fetching details — see vendored
+# pytr/timeline.py's tl_loop) — merge from BOTH feeds rather than assume one, so a form
+# that does turn up on timelineTransactions (unobserved so far) is still caught.
 # `eventType`/`title` are kept as-is (unlike a transfer's synthetic override): the Node
 # mapper's extractReportDocuments (services/pytr/mapper.ts) matches on the real eventType
 # or, for legacy null-eventType events, the title.
@@ -144,17 +148,23 @@ _REPORT_EVENT_TYPES = {
     "TAX_YEAR_END_REPORT_CREATED",
     "YEAR_END_TAX_REPORT",
 }
-_REPORT_TITLES = {"jährlicher steuerreport"}
+# Titles always carry the covered year as a suffix ("Jährlicher Steuerbericht 2021"),
+# hence a prefix match rather than exact equality. The real observed title is "Jährlicher
+# Steuerbericht" (validated live, see above) — NOT "Jährlicher Steuerreport", which is what
+# pytr's own dl.py title_subfolder_mapping uses (stale or a different legacy variant). Both
+# are kept: the live-confirmed form as the primary signal, pytr's form as a defensive
+# fallback for whatever legacy shape it was written against.
+_REPORT_TITLE_PREFIXES = ("jährlicher steuerbericht", "jährlicher steuerreport")
 
 
 def _is_report_event(event):
     """True for an account-level report event (by eventType, or by title for the legacy
-    null-eventType form) — see _REPORT_EVENT_TYPES/_REPORT_TITLES above."""
+    null-eventType form) — see _REPORT_EVENT_TYPES/_REPORT_TITLE_PREFIXES above."""
     et = event.get("eventType") or ""
     if et in _REPORT_EVENT_TYPES:
         return True
     title = (event.get("title") or "").strip().lower()
-    return title in _REPORT_TITLES
+    return title.startswith(_REPORT_TITLE_PREFIXES)
 
 
 def _transfer_event_type(event):

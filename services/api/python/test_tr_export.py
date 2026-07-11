@@ -1325,6 +1325,9 @@ class TestTransfers:
         assert tx._is_report_event({"eventType": None, "title": "Jährlicher Steuerreport"}) is True
         # Case-insensitive title match (legacy events carry no eventType at all).
         assert tx._is_report_event({"eventType": None, "title": "JÄHRLICHER STEUERREPORT"}) is True
+        # Real observed shape (validated live): a year suffix — must be a prefix match, not
+        # exact equality, or every real title would silently fail to match.
+        assert tx._is_report_event({"eventType": None, "title": "Jährlicher Steuerbericht 2021"}) is True
         assert tx._is_report_event({"eventType": "ORDER_EXECUTED", "title": "Kauforder"}) is False
         assert tx._is_report_event({"eventType": None, "title": None}) is False
         assert tx._is_report_event({}) is False
@@ -1338,8 +1341,9 @@ class TestTransfers:
         feeds = {
             "timelineTransactions": [{"items": [{"id": "t1", "eventType": "ORDER_EXECUTED"}]}],
             "timelineActivityLog": [
+                # Real observed shape (validated live against a captured account).
                 {"items": [
-                    {"id": "rep1", "eventType": "TAX_YEAR_END_REPORT", "title": "Jährlicher Steuerreport 2025"},
+                    {"id": "rep1", "eventType": "YEAR_END_TAX_REPORT", "title": "Jährlicher Steuerbericht 2021"},
                     {"id": "rep2", "eventType": None, "title": "Jährlicher Steuerreport"},  # legacy, title-only
                     {"id": "noise", "eventType": None, "subtitle": "Some notification"},
                 ]},
@@ -1348,7 +1352,7 @@ class TestTransfers:
         tr = FakeFeedTr(feeds=feeds)
         out = asyncio.run(tx._collect_transactions(tr))
         by_id = {e["id"]: e for e in out}
-        assert by_id["rep1"]["eventType"] == "TAX_YEAR_END_REPORT"  # unchanged, unlike a transfer
+        assert by_id["rep1"]["eventType"] == "YEAR_END_TAX_REPORT"  # unchanged, unlike a transfer
         assert by_id["rep2"]["title"] == "Jährlicher Steuerreport"
         assert "noise" not in by_id
 

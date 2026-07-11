@@ -233,21 +233,27 @@ const ATTENTION_SKIPS = new Set<string>();
 
 // --- Account-level report documents ---------------------------------------------------
 //
-// TR's annual tax report ("Jährlicher Steuerreport") and its siblings are SKIP_EVENTS
-// above — they carry no cash/share movement and never become a draft transaction — but
-// tr_export.py still attaches their postbox `documentRefs` to the normalized event just
-// like any other (see tr_export.py's _extract_documents, called unconditionally in
-// _normalize). extractReportDocuments() below reads that already-fetched data straight
-// out of the raw event batch the sync path already has in memory, so pulling these into
-// the tax-reports inbox needs no separate pytr session/entrypoint.
+// TR's annual tax report ("Jährlicher Steuerbericht") and its siblings are SKIP_EVENTS
+// above — they carry no cash/share movement and never become a draft transaction. They
+// live on the activity-log feed, not timelineTransactions — validated against a real
+// captured account (5 YEAR_END_TAX_REPORT/TAX_YEAR_END_REPORT_CREATED events, 2021-2025,
+// every one on the activity log) — so tr_export.py's _collect_transactions merges them in
+// from there explicitly (see tr_export.py's _is_report_event); their postbox
+// `documentRefs` are attached the same way as any other event's (_extract_documents,
+// called unconditionally in _normalize). extractReportDocuments() below reads that
+// already-fetched data straight out of the raw event batch the sync path has in memory,
+// so pulling these into the tax-reports inbox needs no separate pytr session/entrypoint.
 
 // Newer events carry an explicit eventType.
 const REPORT_EVENT_TYPES = new Set(["TAX_YEAR_END_REPORT", "TAX_YEAR_END_REPORT_CREATED", "YEAR_END_TAX_REPORT"]);
 
 // Legacy events (pre-eventType migration) carry eventType=null and only a German title —
-// mirrors pytr's own `title_subfolder_mapping` (vendored pytr/dl.py), the one place
-// upstream documents this title→category mapping.
-const REPORT_TITLES = new Set(["Jährlicher Steuerreport"]);
+// always suffixed with the covered year ("Jährlicher Steuerbericht 2021"), hence a prefix
+// match rather than exact equality. "Jährlicher Steuerbericht" is the live-confirmed title
+// (see above); "Jährlicher Steuerreport" is kept too as a defensive fallback — it's what
+// pytr's own `title_subfolder_mapping` (vendored pytr/dl.py) uses, a possibly-stale or
+// differently worded legacy variant.
+const REPORT_TITLE_PREFIXES = ["Jährlicher Steuerbericht", "Jährlicher Steuerreport"];
 
 const REPORT_TITLE_YEAR_RE = /\b(20\d{2})\b/;
 
@@ -292,7 +298,9 @@ export function extractReportDocuments(rawEvents: unknown[]): ReportDocumentRef[
     if (!parsed.success) continue;
     const ev = parsed.data;
     const title = ev.title?.trim() ?? null;
-    const isReport = REPORT_EVENT_TYPES.has(ev.eventType ?? "") || (title != null && REPORT_TITLES.has(title));
+    const isReport =
+      REPORT_EVENT_TYPES.has(ev.eventType ?? "") ||
+      (title != null && REPORT_TITLE_PREFIXES.some((prefix) => title.startsWith(prefix)));
     if (!isReport || !ev.documentRefs || ev.documentRefs.length === 0) continue;
 
     const titleYear = title ? REPORT_TITLE_YEAR_RE.exec(title)?.[1] : undefined;

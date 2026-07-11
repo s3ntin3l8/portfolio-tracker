@@ -833,6 +833,25 @@ describe("extractReportDocuments", () => {
     ]);
   });
 
+  it("matches a legacy event with no eventType by title prefix, real title carries a year suffix", () => {
+    // Real observed shape (validated live): title is "Jährlicher Steuerbericht {year}" — a
+    // prefix match, not exact equality, since an exact match against the bare "Jährlicher
+    // Steuerbericht" string would never hit a real title.
+    const refs = extractReportDocuments([
+      {
+        ...base,
+        id: "evt-report-legacy-2021",
+        eventType: undefined,
+        title: "Jährlicher Steuerbericht 2021",
+        amount: 0,
+        documentRefs: [{ id: "doc-legacy" }],
+      },
+    ]);
+    expect(refs).toEqual([
+      { eventId: "evt-report-legacy-2021", docId: "doc-legacy", taxYear: 2021, title: "Jährlicher Steuerbericht 2021" },
+    ]);
+  });
+
   it("matches a legacy event with no eventType by its title", () => {
     const refs = extractReportDocuments([
       {
