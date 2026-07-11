@@ -231,6 +231,47 @@ export interface ProjectedDividend {
 }
 
 /**
+ * Collapse same-instrument, same-type payments into one synthetic payment per calendar
+ * month (summing `price`) before either forecast engine below computes a per-share
+ * average or infers cadence. Both engines assume one row = one distribution period; a
+ * single true distribution can be booked as several small legs (e.g. a US-REIT 1099-DIV
+ * recharacterization, where TR reverses and reissues a prior payment across many partial
+ * legs within one month) — without this, a month with N correction fragments dilutes the
+ * per-share average roughly N-fold instead of counting as the one payment it economically
+ * is. A no-op for the normal case of ≤1 payment per instrument per month (every payer that
+ * isn't mid-reclassification), so it doesn't change behavior for ordinary history.
+ *
+ * Representative `executedAt` = the bucket's latest date (the final settled leg, closest
+ * to the payment being "done"); other metadata (symbol/name/currency/assetClass) is taken
+ * from the bucket's first entry. Keyed by (instrumentId, type, year-month) — `type` keeps
+ * dividends and coupons on the same instrument from ever merging.
+ */
+function bucketMonthly(entries: IncomeEntry[]): IncomeEntry[] {
+  const buckets = new Map<string, IncomeEntry[]>();
+  for (const e of entries) {
+    const yearMonth = e.executedAt.toISOString().slice(0, 7); // YYYY-MM (UTC)
+    const key = `${e.instrumentId ?? ""}|${e.type}|${yearMonth}`;
+    const list = buckets.get(key);
+    if (list) list.push(e);
+    else buckets.set(key, [e]);
+  }
+  const out: IncomeEntry[] = [];
+  for (const list of buckets.values()) {
+    if (list.length === 1) {
+      out.push(list[0]);
+      continue;
+    }
+    const totalPrice = list.reduce(
+      (sum, e) => sum.add(new Decimal(e.price)),
+      new Decimal(0),
+    );
+    const latest = list.reduce((a, b) => (b.executedAt > a.executedAt ? b : a));
+    out.push({ ...list[0], executedAt: latest.executedAt, price: totalPrice.toString() });
+  }
+  return out;
+}
+
+/**
  * Project equity dividends for the rest of the current year by replaying
  * each instrument's actual payments from last year's same window (now → Dec 31)
  * shifted forward one year, scaled by the quantity change.
@@ -242,6 +283,10 @@ export interface ProjectedDividend {
  * Only instruments still held (`heldQty` with qty > 0) are projected.
  * Instruments with no last-year payment in the window are skipped — they
  * will be covered by announced data once that feature lands.
+ *
+ * Payments are bucketed to one-per-instrument-per-calendar-month (see
+ * `bucketMonthly`) before replay, so a multi-leg correction month counts as one
+ * shifted payment rather than N diluted fragments.
  */
 export function projectDividends(
   pastDividends: IncomeEntry[],
@@ -263,8 +308,9 @@ export function projectDividends(
   const nowStr = now.toISOString().slice(0, 10);
 
   const out: ProjectedDividend[] = [];
+  const bucketed = bucketMonthly(pastDividends);
 
-  for (const e of pastDividends) {
+  for (const e of bucketed) {
     if (e.type !== "dividend" || !e.instrumentId) continue;
 
     // Filter to the source window (pastStart, lastYearEnd].
@@ -359,6 +405,10 @@ export function projectDividends(
  *
  * Only instruments still held (`heldQty` with qty > 0) are projected. Instruments
  * with no payment in the trailing 24 months are skipped.
+ *
+ * Payments are bucketed to one-per-instrument-per-calendar-month (see `bucketMonthly`)
+ * before any per-share/cadence/growth math, so a multi-leg correction month counts as
+ * one payment rather than N diluted fragments.
  */
 export function projectNextYearDividends(
   pastDividends: IncomeEntry[],
@@ -379,9 +429,11 @@ export function projectNextYearDividends(
   const windowStart = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
   const windowEnd = new Date(Date.UTC(nextYear, 11, 31, 23, 59, 59, 999));
 
-  // Group past dividend payments by instrument.
+  // Group past dividend payments by instrument. Bucketed to one payment per calendar
+  // month first (see `bucketMonthly`) so a multi-leg correction month (e.g. a US-REIT
+  // 1099-DIV recharacterization) counts as one payment, not N diluted fragments.
   const byInstrument = new Map<string, IncomeEntry[]>();
-  for (const e of pastDividends) {
+  for (const e of bucketMonthly(pastDividends)) {
     if (e.type !== "dividend" || !e.instrumentId) continue;
     const list = byInstrument.get(e.instrumentId) ?? [];
     list.push(e);
