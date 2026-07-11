@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { providerUsage } from "@portfolio/db";
 import {
+  PROVIDER_REGISTRY,
   resolveProviderConfig,
   goldSources,
   getMarketData,
@@ -11,6 +12,12 @@ import {
   type ProviderDescriptor,
 } from "../../src/services/market-data.js";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
+import {
+  ANTAM_BUYBACK_KEY,
+  GALERI24_BUYBACK_KEY,
+  navKey,
+  upsertScrapedQuote,
+} from "../../src/services/scrapers/store.js";
 
 // A deterministic registry so the merge can be tested without touching env/network.
 const REGISTRY: ProviderDescriptor[] = [
@@ -123,6 +130,82 @@ describe("getMarketData / invalidateMarketData", () => {
     invalidateMarketData();
     const c = await getMarketData();
     expect(c).not.toBe(a);
+  });
+});
+
+describe("default scraped-quote providers", () => {
+  const antamRef = {
+    symbol: "ANTAM",
+    market: "ANTAM",
+    assetClass: "gold" as const,
+    currency: "IDR",
+  };
+  const galeri24Ref = {
+    symbol: "GALERI24",
+    market: "GALERI24",
+    assetClass: "gold" as const,
+    currency: "IDR",
+  };
+  const navRef = {
+    symbol: "RDPU",
+    market: "ID",
+    assetClass: "mutual_fund" as const,
+    currency: "IDR",
+  };
+
+  beforeAll(async () => {
+    await ensureDb();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.ANTAM_BUYBACK_URL;
+    delete process.env.GALERI24_BUYBACK_URL;
+    delete process.env.NAV_BASE_URL;
+  });
+
+  afterAll(async () => {
+    await closeDb();
+  });
+
+  it("reads Antam, Galeri24, and NAV defaults from scraped_quotes without HTTP", async () => {
+    await upsertScrapedQuote(getDb(), ANTAM_BUYBACK_KEY, 2591100, "harga-emas");
+    await upsertScrapedQuote(getDb(), GALERI24_BUYBACK_KEY, 2549000, "galeri24");
+    await upsertScrapedQuote(getDb(), navKey("RDPU"), 1234.56, "bibit");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const antam = PROVIDER_REGISTRY.find((p) => p.id === "antam")!.create();
+    const galeri24 = PROVIDER_REGISTRY.find((p) => p.id === "galeri24")!.create();
+    const nav = PROVIDER_REGISTRY.find((p) => p.id === "nav")!.create();
+
+    expect((await antam.getQuote(antamRef))?.price).toBe("2591100");
+    expect((await galeri24.getQuote(galeri24Ref))?.price).toBe("2549000");
+    expect((await nav.getQuote(navRef))?.price).toBe("1234.56");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps external URL overrides on the HTTP provider path", async () => {
+    process.env.ANTAM_BUYBACK_URL = "https://example.test/antam";
+    process.env.GALERI24_BUYBACK_URL = "https://example.test/galeri24";
+    process.env.NAV_BASE_URL = "https://example.test/nav";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const href = String(url);
+      return {
+        ok: true,
+        json: async () => (href.includes("/nav/") ? { nav: 1000.5 } : { buyback: 1234567 }),
+      } as Response;
+    });
+
+    const antam = PROVIDER_REGISTRY.find((p) => p.id === "antam")!.create();
+    const galeri24 = PROVIDER_REGISTRY.find((p) => p.id === "galeri24")!.create();
+    const nav = PROVIDER_REGISTRY.find((p) => p.id === "nav")!.create();
+
+    expect((await antam.getQuote(antamRef))?.price).toBe("1234567");
+    expect((await galeri24.getQuote(galeri24Ref))?.price).toBe("1234567");
+    expect((await nav.getQuote(navRef))?.price).toBe("1000.5");
+    expect(fetchSpy).toHaveBeenCalledWith("https://example.test/antam");
+    expect(fetchSpy).toHaveBeenCalledWith("https://example.test/galeri24");
+    expect(fetchSpy).toHaveBeenCalledWith("https://example.test/nav/RDPU");
   });
 });
 

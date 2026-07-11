@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 
 /**
  * Scraper for Indonesian reksa-dana (mutual fund) NAV — IDR per unit — from Bibit (#110).
- * Feeds the existing `NavProvider` via the internal `/internal/nav/:symbol` route.
+ * Writes into `scraped_quotes`, read in-process by the default NAV provider (or via the
+ * authenticated `/internal/nav/:symbol` route for an external URL override).
  *
  * There is no clean per-fund API. Bibit's own catalogue endpoint, `products/list`, returns
  * an AES-CBC-encrypted envelope whose key/IV are embedded in the payload (scheme cribbed

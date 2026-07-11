@@ -57,6 +57,10 @@ const schema = {
       type: "string",
       default: "1 minute",
     },
+    TRUSTED_PROXY_CIDRS: {
+      type: "string",
+      default: "",
+    },
     // How long a cached last-price stays fresh before a live re-fetch (ms).
     MARKET_DATA_TTL_MS: {
       type: "number",
@@ -177,6 +181,7 @@ declare module "fastify" {
       CORS_ORIGIN: string;
       RATE_LIMIT_MAX: number;
       RATE_LIMIT_WINDOW: string;
+      TRUSTED_PROXY_CIDRS: string;
       MARKET_DATA_TTL_MS: number;
       PYTR_PYTHON_BIN: string;
       PYTR_WAF_STRATEGY: "awswaf" | "playwright";

@@ -3,8 +3,9 @@ import { BROWSER_HEADERS } from "./http.js";
 
 /**
  * Scraper for the Galeri24 (Pegadaian certified gold) **buyback** price — IDR per gram,
- * used to price Galeri24 physical-gold holdings (market `GALERI24`). Feeds the registered
- * `BuybackProvider` via the internal `/internal/gold/galeri24-buyback` route (#121).
+ * used to price Galeri24 physical-gold holdings (market `GALERI24`). Writes into
+ * `scraped_quotes`, read in-process by the default Galeri24 provider (or via the
+ * authenticated `/internal/gold/galeri24-buyback` route for an external URL override) (#121).
  *
  * Source: the official Galeri24 page serves the prices in static (server-rendered Nuxt) HTML
  * — HTTP 200 to a plain server fetch with browser headers, no JS/API needed. Each brand is a
