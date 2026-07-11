@@ -22,6 +22,13 @@ import {
 } from "@portfolio/db";
 import { eq } from "drizzle-orm";
 import { getDb, getEncryption } from "../db/client.js";
+import {
+  ANTAM_BUYBACK_KEY,
+  GALERI24_BUYBACK_KEY,
+  getScrapedQuote,
+  navKey,
+} from "./scrapers/store.js";
+import type { AssetClass, InstrumentRef, Quote } from "@portfolio/market-data";
 
 /**
  * Resolved secrets for a provider: the DB key/url overrides the env value.
@@ -72,21 +79,53 @@ export interface ProviderDescriptor {
   keyEnvVar?: string;
 }
 
-/**
- * Base URL the Antam/NAV providers fetch their data from. They consume a JSON endpoint;
- * by default that endpoint is this API's own internal market-data routes, which serve the
- * values our scrapers cache (see routes/internal-market-data.ts, services/scrapers/*).
- * Override `MARKET_DATA_SELF_URL` if the API isn't reachable at localhost:PORT (e.g. behind
- * a different internal hostname). The per-provider env vars below still win when set, so the
- * URLs can be repointed at an external scraper without code changes.
- */
-function selfBaseUrl(): string {
-  return process.env.MARKET_DATA_SELF_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3000}`;
+export class ScrapedBuybackProvider implements MarketDataProvider {
+  readonly name: string;
+  private readonly market: string;
+  private readonly key: string;
+
+  constructor(opts: { name: string; market: string; key: string }) {
+    this.name = opts.name;
+    this.market = opts.market;
+    this.key = opts.key;
+  }
+
+  supports(assetClass: AssetClass, market: string): boolean {
+    return assetClass === "gold" && market === this.market;
+  }
+
+  async getQuote(ref: InstrumentRef): Promise<Quote | null> {
+    const buyback = await getScrapedQuote(getDb(), this.key);
+    if (buyback === null) return null;
+    return {
+      price: String(buyback),
+      currency: ref.currency,
+      asOf: new Date().toISOString(),
+    };
+  }
+}
+
+export class ScrapedNavProvider implements MarketDataProvider {
+  readonly name = "nav";
+
+  supports(assetClass: AssetClass): boolean {
+    return assetClass === "mutual_fund";
+  }
+
+  async getQuote(ref: InstrumentRef): Promise<Quote | null> {
+    const nav = await getScrapedQuote(getDb(), navKey(ref.symbol));
+    if (nav === null) return null;
+    return {
+      price: String(nav),
+      currency: ref.currency,
+      asOf: new Date().toISOString(),
+    };
+  }
 }
 
 // Registration order matches the historical hardcoded chain: keyed primaries first,
 // keyless Yahoo fallback last. DB credentials win over env (see resolveCredentials);
-// the scraped Antam/NAV sources default to this API's internal routes (see selfBaseUrl).
+// the scraped Antam/NAV sources default to in-process reads from scraped_quotes.
 export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
   {
     id: "twelvedata",
@@ -109,46 +148,49 @@ export const PROVIDER_REGISTRY: ProviderDescriptor[] = [
     label: "Antam buyback",
     defaultPriority: 3,
     goldMarket: "ANTAM",
-    // Always available: defaults to the internal route fed by the buyback scraper, served
-    // from the scraped_quotes cache. 404 until the first scrape, which the provider treats
-    // as "no quote" (falls through to spot / fixture).
+    // Always available: defaults to the local scraped_quotes cache. URL overrides keep the
+    // historical HTTP-provider contract for external scraper endpoints.
     configured: () => true,
-    create: (s) =>
-      new BuybackProvider({
-        name: "antam",
-        market: "ANTAM",
-        baseUrl:
-          s?.url ?? process.env.ANTAM_BUYBACK_URL ?? `${selfBaseUrl()}/internal/gold/antam-buyback`,
-      }),
+    create: (s) => {
+      const baseUrl = s?.url ?? process.env.ANTAM_BUYBACK_URL;
+      return baseUrl
+        ? new BuybackProvider({ name: "antam", market: "ANTAM", baseUrl })
+        : new ScrapedBuybackProvider({
+            name: "antam",
+            market: "ANTAM",
+            key: ANTAM_BUYBACK_KEY,
+          });
+    },
   },
   {
     id: "galeri24",
     label: "Galeri24 buyback",
     defaultPriority: 4,
     goldMarket: "GALERI24",
-    // Always available: defaults to the internal route fed by the Galeri24 buyback scraper.
-    // Serves a disjoint market from Antam, so its priority only affects display order.
+    // Always available: defaults to the local scraped_quotes cache. Serves a disjoint market
+    // from Antam, so its priority only affects display order.
     configured: () => true,
-    create: (s) =>
-      new BuybackProvider({
-        name: "galeri24",
-        market: "GALERI24",
-        baseUrl:
-          s?.url ??
-          process.env.GALERI24_BUYBACK_URL ??
-          `${selfBaseUrl()}/internal/gold/galeri24-buyback`,
-      }),
+    create: (s) => {
+      const baseUrl = s?.url ?? process.env.GALERI24_BUYBACK_URL;
+      return baseUrl
+        ? new BuybackProvider({ name: "galeri24", market: "GALERI24", baseUrl })
+        : new ScrapedBuybackProvider({
+            name: "galeri24",
+            market: "GALERI24",
+            key: GALERI24_BUYBACK_KEY,
+          });
+    },
   },
   {
     id: "nav",
     label: "Reksa Dana NAV",
     defaultPriority: 5,
-    // Always available: defaults to the internal route fed by the Bibit NAV scraper.
+    // Always available: defaults to the local scraped_quotes cache.
     configured: () => true,
-    create: (s) =>
-      new NavProvider({
-        baseUrl: s?.url ?? process.env.NAV_BASE_URL ?? `${selfBaseUrl()}/internal/nav`,
-      }),
+    create: (s) => {
+      const baseUrl = s?.url ?? process.env.NAV_BASE_URL;
+      return baseUrl ? new NavProvider({ baseUrl }) : new ScrapedNavProvider();
+    },
   },
   {
     id: "eodhd",

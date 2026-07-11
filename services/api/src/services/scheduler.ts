@@ -450,8 +450,8 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(IBKR_SYNC_QUEUE, ibkrSyncCron);
 
-  // Scrape the gold buyback rates (Antam + Galeri24) into scraped_quotes; served back to the
-  // BuybackProviders via /internal/gold/<brand>-buyback. Each scraper self-handles failures
+  // Scrape the gold buyback rates (Antam + Galeri24) into scraped_quotes; read in-process by
+  // the default BuybackProviders (see market-data.ts). Each scraper self-handles failures
   // (returns null), so one dead source doesn't block the other.
   await boss.createQueue(ANTAM_QUEUE);
   await boss.work(ANTAM_QUEUE, async () => {
@@ -465,8 +465,8 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   });
   await boss.schedule(ANTAM_QUEUE, ANTAM_CRON);
 
-  // Scrape the reksa-dana NAV catalogue (Bibit) into scraped_quotes; served back to the
-  // NavProvider via /internal/nav/:symbol.
+  // Scrape the reksa-dana NAV catalogue (Bibit) into scraped_quotes; read in-process by the
+  // default NavProvider (see market-data.ts).
   await boss.createQueue(NAV_QUEUE);
   await boss.work(NAV_QUEUE, async () => {
     try {

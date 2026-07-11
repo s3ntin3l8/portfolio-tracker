@@ -4,6 +4,7 @@ import { buildApp } from "../../src/app.js";
 describe("security plugin", () => {
   afterEach(() => {
     delete process.env.RATE_LIMIT_MAX;
+    delete process.env.TRUSTED_PROXY_CIDRS;
     delete process.env.CORS_ORIGIN;
   });
 
@@ -26,6 +27,47 @@ describe("security plugin", () => {
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
     expect(third.statusCode).toBe(429);
+    await app.close();
+  });
+
+  it("uses forwarded IPs as independent buckets only from trusted proxies", async () => {
+    process.env.RATE_LIMIT_MAX = "1";
+    process.env.TRUSTED_PROXY_CIDRS = "127.0.0.1";
+    const app = await buildApp();
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { "x-forwarded-for": "203.0.113.11" },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("ignores forwarded IPs when no trusted proxy is configured", async () => {
+    process.env.RATE_LIMIT_MAX = "1";
+    const app = await buildApp();
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { "x-forwarded-for": "203.0.113.11" },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
     await app.close();
   });
 

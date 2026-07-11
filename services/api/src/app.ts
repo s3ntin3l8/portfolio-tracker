@@ -59,6 +59,15 @@ export type BuildAppOptions = AuthPluginOptions & {
   logStream?: DestinationStream;
 };
 
+function trustedProxyConfig(): string[] | undefined {
+  const raw = process.env.TRUSTED_PROXY_CIDRS?.trim();
+  if (!raw) return undefined;
+  return raw
+    .split(",")
+    .map((cidr) => cidr.trim())
+    .filter((cidr) => cidr.length > 0);
+}
+
 /**
  * Resolve the pino destination stream.
  * - Tests pass an explicit logStream (in-memory capture) — returned as-is.
@@ -127,38 +136,33 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   // Cast to FastifyBaseLogger: pino.Logger is a superset of FastifyBaseLogger. The cast
   // ensures Fastify infers `FastifyInstance<..., FastifyBaseLogger, ...>` consistently
   // with the rest of the codebase (server.ts, tests). Runtime behaviour is identical.
-  const app = Fastify({ loggerInstance: loggerInstance as FastifyBaseLogger });
+  const app = Fastify({
+    loggerInstance: loggerInstance as FastifyBaseLogger,
+    trustProxy: trustedProxyConfig(),
+  });
 
   // Tolerate an empty application/json body. Fastify's default parser rejects a
   // request that advertises application/json with no body (FST_ERR_CTP_EMPTY_JSON_BODY
   // → 400), which breaks bodyless DELETEs from clients that always set the header.
   // Genuinely malformed JSON still surfaces as a 400.
-  app.addContentTypeParser(
-    "application/json",
-    { parseAs: "string" },
-    (_req, body, done) => {
-      if (body === "" || body == null) return done(null, undefined);
-      try {
-        done(null, JSON.parse(body as string));
-      } catch (err) {
-        (err as { statusCode?: number }).statusCode = 400;
-        done(err as Error, undefined);
-      }
-    },
-  );
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    if (body === "" || body == null) return done(null, undefined);
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      (err as { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  });
 
   // Surface zod validation failures as 400s instead of 500s.
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
-      return reply
-        .code(400)
-        .send({ error: "validation_error", issues: error.issues });
+      return reply.code(400).send({ error: "validation_error", issues: error.issues });
     }
     app.log.error(error);
     const err = error as { statusCode?: number; message?: string };
-    return reply
-      .code(err.statusCode ?? 500)
-      .send({ error: err.message || "internal_error" });
+    return reply.code(err.statusCode ?? 500).send({ error: err.message || "internal_error" });
   });
 
   await app.register(envPlugin);
@@ -171,7 +175,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);
 
-  const screenshotParser = opts.screenshotParser ?? await getScreenshotParser();
+  const screenshotParser = opts.screenshotParser ?? (await getScreenshotParser());
   app.decorate("screenshotParser", screenshotParser);
   // Log the selected vision provider once at startup (only for the real singleton, not
   // test-injected mocks — those are controlled by the test and shouldn't pollute logs).
@@ -186,8 +190,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   app.decorate("pytr", opts.pytr ?? getPytrRunner(app.config, app.log));
   app.decorate(
     "ibkrFlex",
-    opts.ibkrFlex ??
-      createFlexClient({ baseUrl: app.config.IBKR_FLEX_BASE_URL }),
+    opts.ibkrFlex ?? createFlexClient({ baseUrl: app.config.IBKR_FLEX_BASE_URL }),
   );
 
   // Storage — injectable in tests (pass opts.storage); the real plugin handles

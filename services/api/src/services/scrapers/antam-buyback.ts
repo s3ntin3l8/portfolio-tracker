@@ -3,8 +3,9 @@ import { BROWSER_HEADERS } from "./http.js";
 
 /**
  * Scraper for the Antam (Logam Mulia) gold **buyback** price — IDR per gram, the value
- * used to price physical / Pegadaian Tabungan Emas holdings (market `ANTAM`). Feeds the
- * existing `AntamProvider` via the internal `/internal/gold/antam-buyback` route (#109).
+ * used to price physical / Pegadaian Tabungan Emas holdings (market `ANTAM`). Writes into
+ * `scraped_quotes`, read in-process by the default Antam provider (or via the authenticated
+ * `/internal/gold/antam-buyback` route for an external URL override) (#109).
  *
  * Source: the official Antam page (logammulia.com/id/sell/gold) is the canonical buyback
  * but is served behind anti-bot protection that returns HTTP 403 to non-browser clients,

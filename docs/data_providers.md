@@ -16,16 +16,16 @@ Both are appended unconditionally after the configurable chain.
 Priority is the default tried-first order (lower = earlier). Cells reflect each provider's
 `supports()` logic — ✓ = priced, — = not served.
 
-| Provider       | Priority | Equity | ETF | Gold (spot) | Gold (buyback) | Mutual fund | Crypto | Markets         | Env gate             | Keyed? |
-| -------------- | -------- | ------ | --- | ----------- | -------------- | ----------- | ------ | --------------- | -------------------- | ------ |
-| Twelve Data    | 1        | ✓      | ✓   | ✓           | —              | —           | —      | IDX, US, XAU    | `TWELVEDATA_API_KEY` | Yes    |
-| GoldAPI        | 2        | —      | —   | ✓           | —              | —           | —      | XAU             | `GOLDAPI_KEY`        | Yes    |
-| Antam          | 3        | —      | —   | —           | ✓              | —           | —      | ANTAM           | `ANTAM_BUYBACK_URL`  | Scraper|
-| Galeri24       | 4        | —      | —   | —           | ✓              | —           | —      | GALERI24        | `GALERI24_BUYBACK_URL` | Scraper|
-| Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | —      | (any)           | `NAV_BASE_URL`       | Scraper|
-| EODHD          | 6        | ✓      | ✓   | —           | —              | —           | —      | US, XETRA, …    | `EODHD_API_KEY`      | Yes    |
-| CoinGecko      | 7        | —      | —   | —           | —              | —           | ✓      | CRYPTO          | — (optional `COINGECKO_API_KEY`) | Optional |
-| Yahoo Finance  | 8        | ✓      | ✓   | ✓           | —              | —           | ✓      | (any, suffixed), XAU | — (keyless)     | No     |
+| Provider       | Priority | Equity | ETF | Gold (spot) | Gold (buyback) | Mutual fund | Crypto | Markets              | Env gate                         | Keyed?   |
+| -------------- | -------- | ------ | --- | ----------- | -------------- | ----------- | ------ | -------------------- | -------------------------------- | -------- |
+| Twelve Data    | 1        | ✓      | ✓   | ✓           | —              | —           | —      | IDX, US, XAU         | `TWELVEDATA_API_KEY`             | Yes      |
+| GoldAPI        | 2        | —      | —   | ✓           | —              | —           | —      | XAU                  | `GOLDAPI_KEY`                    | Yes      |
+| Antam          | 3        | —      | —   | —           | ✓              | —           | —      | ANTAM                | `ANTAM_BUYBACK_URL`              | Scraper  |
+| Galeri24       | 4        | —      | —   | —           | ✓              | —           | —      | GALERI24             | `GALERI24_BUYBACK_URL`           | Scraper  |
+| Reksa Dana NAV | 5        | —      | —   | —           | —              | ✓           | —      | (any)                | `NAV_BASE_URL`                   | Scraper  |
+| EODHD          | 6        | ✓      | ✓   | —           | —              | —           | —      | US, XETRA, …         | `EODHD_API_KEY`                  | Yes      |
+| CoinGecko      | 7        | —      | —   | —           | —              | —           | ✓      | CRYPTO               | — (optional `COINGECKO_API_KEY`) | Optional |
+| Yahoo Finance  | 8        | ✓      | ✓   | ✓           | —              | —           | ✓      | (any, suffixed), XAU | — (keyless)                      | No       |
 
 Antam and Galeri24 are both **gold buyback** sources backed by one shared `BuybackProvider`
 (`packages/market-data/src/buyback.ts`), one instance per brand/market.
@@ -89,34 +89,34 @@ Each routable provider is gated by an environment variable. If the gate is unset
 provider is **silently skipped** — it simply drops out of the chain. Yahoo, CoinGecko and
 Fixture need no configuration (CoinGecko's key is optional — it works keyless).
 
-| Env var              | Provider       | Required | Notes                                                       |
-| -------------------- | -------------- | -------- | ----------------------------------------------------------- |
-| `TWELVEDATA_API_KEY` | Twelve Data    | No       | IDX/US equities & ETFs, gold spot.                          |
-| `GOLDAPI_KEY`        | GoldAPI        | No       | Gold spot (XAU).                                            |
-| `ANTAM_BUYBACK_URL`  | Antam          | No       | Override the built-in scraper with an external JSON endpoint. Blank ⇒ internal scraper route (see below). |
-| `GALERI24_BUYBACK_URL` | Galeri24     | No       | Override the built-in scraper with an external JSON endpoint. Blank ⇒ internal scraper route (see below). |
-| `NAV_BASE_URL`       | Reksa Dana NAV | No       | Override the built-in scraper with an external `<base>/<fund-symbol>` endpoint. Blank ⇒ internal scraper route. |
-| `MARKET_DATA_SELF_URL` | Antam / Galeri24 / NAV | No | Base URL the providers use to reach this API's internal scraper routes. Default `http://127.0.0.1:$PORT`. |
-| `EODHD_API_KEY`      | EODHD          | No       | US/XETRA equities & ETFs (EU / Trade Republic instruments). |
-| `COINGECKO_API_KEY`  | CoinGecko      | No       | Crypto. Keyless works at a low rate limit; a free Demo key raises it and enables live quota reporting (`/key`). |
-| `OPENFIGI_API_KEY`   | OpenFIGI       | No       | Optional; only raises the discovery rate limit.             |
+| Env var                | Provider       | Required | Notes                                                                                                                         |
+| ---------------------- | -------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `TWELVEDATA_API_KEY`   | Twelve Data    | No       | IDX/US equities & ETFs, gold spot.                                                                                            |
+| `GOLDAPI_KEY`          | GoldAPI        | No       | Gold spot (XAU).                                                                                                              |
+| `ANTAM_BUYBACK_URL`    | Antam          | No       | Override the built-in scraper cache with an external JSON endpoint. Blank ⇒ read `scraped_quotes` directly.                   |
+| `GALERI24_BUYBACK_URL` | Galeri24       | No       | Override the built-in scraper cache with an external JSON endpoint. Blank ⇒ read `scraped_quotes` directly.                   |
+| `NAV_BASE_URL`         | Reksa Dana NAV | No       | Override the built-in scraper cache with an external `<base>/<fund-symbol>` endpoint. Blank ⇒ read `scraped_quotes` directly. |
+| `EODHD_API_KEY`        | EODHD          | No       | US/XETRA equities & ETFs (EU / Trade Republic instruments).                                                                   |
+| `COINGECKO_API_KEY`    | CoinGecko      | No       | Crypto. Keyless works at a low rate limit; a free Demo key raises it and enables live quota reporting (`/key`).               |
+| `OPENFIGI_API_KEY`     | OpenFIGI       | No       | Optional; only raises the discovery rate limit.                                                                               |
 
 Unlike the keyed providers, **Antam, Galeri24, Reksa Dana NAV and CoinGecko are always on**:
-the gold/NAV scrapers fetch their built-in internal routes (next section) when their env var
-is blank, and CoinGecko falls back to keyless access — none of them drop out of the chain.
+the gold/NAV providers read the built-in `scraped_quotes` cache when their env var is blank,
+and CoinGecko falls back to keyless access — none of them drop out of the chain.
 
 ## Built-in scrapers
 
 Gold buyback (Antam, Galeri24) and reksa-dana NAV have no official free API, so the API
-scrapes them itself (scheduler jobs → `scraped_quotes` cache → internal routes the providers
-fetch). Failures degrade gracefully: a missing/stale value just makes the provider fall
-through to Fixture.
+scrapes them itself (scheduler jobs → `scraped_quotes` cache → in-process providers).
+Failures degrade gracefully: a missing/stale value just makes the provider fall through to
+Fixture. The internal routes below expose the same cached values for authenticated callers
+and external integrations.
 
-| Source        | Scrapes                                         | Cache key          | Internal route                  | Schedule            |
-| ------------- | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------- |
-| harga-emas.org | Antam LM buyback (`Harga pembelian kembali`)   | `gold:antam-buyback` | `GET /internal/gold/antam-buyback` | every 4h (`0 */4 * * *`) |
-| galeri24.co.id | Galeri24 buyback (1 g `Harga Buyback`)          | `gold:galeri24-buyback` | `GET /internal/gold/galeri24-buyback` | every 4h (`0 */4 * * *`) |
-| api.bibit.id  | Reksa-dana NAV catalogue (`symbol` → `nav.value`) | `nav:<symbol>`     | `GET /internal/nav/:symbol`     | 16:00 & 01:00 UTC (`0 1,16 * * *`) |
+| Source         | Scrapes                                           | Cache key               | Internal route                        | Schedule                           |
+| -------------- | ------------------------------------------------- | ----------------------- | ------------------------------------- | ---------------------------------- |
+| harga-emas.org | Antam LM buyback (`Harga pembelian kembali`)      | `gold:antam-buyback`    | `GET /internal/gold/antam-buyback`    | every 4h (`0 */4 * * *`)           |
+| galeri24.co.id | Galeri24 buyback (1 g `Harga Buyback`)            | `gold:galeri24-buyback` | `GET /internal/gold/galeri24-buyback` | every 4h (`0 */4 * * *`)           |
+| api.bibit.id   | Reksa-dana NAV catalogue (`symbol` → `nav.value`) | `nav:<symbol>`          | `GET /internal/nav/:symbol`           | 16:00 & 01:00 UTC (`0 1,16 * * *`) |
 
 - **Gold source (Antam):** the canonical Antam page (`logammulia.com/id/sell/gold`) sits
   behind anti-bot protection that 403s non-browser clients, so it is unusable server-side. We
@@ -132,8 +132,8 @@ through to Fixture.
   resolves. Per-unit NAV is `nav.value`.
 - Code: `services/api/src/services/scrapers/*`, routes in
   `services/api/src/routes/internal-market-data.ts`, scheduled in
-  `services/api/src/services/scheduler.ts`. The internal routes are unauthenticated (they
-  expose only already-public prices and are the providers' own data source).
+  `services/api/src/services/scheduler.ts`. The internal routes require a valid Bearer JWT
+  or personal access token.
 
 **Run the scrapers on demand** (e.g. right after a deploy, so you don't wait for the cron):
 

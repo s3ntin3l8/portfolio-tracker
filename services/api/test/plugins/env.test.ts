@@ -11,6 +11,7 @@ describe("env plugin", () => {
     delete process.env.CORS_ORIGIN;
     delete process.env.RATE_LIMIT_MAX;
     delete process.env.RATE_LIMIT_WINDOW;
+    delete process.env.TRUSTED_PROXY_CIDRS;
   });
 
   it("loads with default values (NODE_ENV may be set by test runner)", async () => {
@@ -20,13 +21,12 @@ describe("env plugin", () => {
     const app = await buildApp();
     expect(app.config.PORT).toBe(3000);
     expect(app.config.LOG_LEVEL).toBe("info");
-    expect(app.config.DATABASE_URL).toBe(
-      "postgres://postgres:postgres@localhost:5432/portfolio",
-    );
+    expect(app.config.DATABASE_URL).toBe("postgres://postgres:postgres@localhost:5432/portfolio");
     expect(app.config.DB_ENCRYPTION_KEY).toBe("");
     expect(app.config.CORS_ORIGIN).toBe("");
     expect(app.config.RATE_LIMIT_MAX).toBe(100);
     expect(app.config.RATE_LIMIT_WINDOW).toBe("1 minute");
+    expect(app.config.TRUSTED_PROXY_CIDRS).toBe("");
     expect(app.config.MARKET_DATA_TTL_MS).toBe(900000);
     // Storage defaults
     expect(app.config.STORAGE_ENDPOINT).toBe("");
