@@ -1361,6 +1361,16 @@ export interface ScreenshotImportResult {
   portfolioId?: string;
   /** Number of draft transactions materialized. */
   materializedCount?: number;
+  /** Set when the uploaded PDF was recognized as an account-level report (e.g. the annual
+   *  TR tax report) rather than a transaction statement — detected before the vision-LLM
+   *  fallback ever runs, so no import row is created and no bytes are persisted. `drafts`/
+   *  `contracts`/`errors`/`importId` are absent/meaningless on this branch; the caller
+   *  should re-upload the same file to `uploadDocument()` (with a chosen portfolioId) to
+   *  actually save it into the tax-reports inbox. */
+  isReport?: boolean;
+  reportCategory?: DocumentCategory;
+  reportTaxYear?: number | null;
+  reportTitle?: string;
 }
 
 /** Brief summary of a retained source document, embedded on ImportRecord (#231). */
@@ -2288,25 +2298,29 @@ export function createApiClient(config: ApiClientConfig) {
 
     // --- Tax-reports inbox: account-level documents (TR postbox fetch + user uploads) that
     // don't belong to any single transaction — see storage/inbox.ts on the API side. -------
-    /** List the current user's inbox documents, newest first (defaults to tax reports). */
-    listDocuments: (category?: DocumentCategory) =>
-      request<InboxDocument[]>(
-        "GET",
-        `/documents${category ? `?category=${encodeURIComponent(category)}` : ""}`,
-      ),
+    /** List the current user's inbox documents, newest first (defaults to tax reports).
+     *  `portfolioId` scopes to one account (e.g. the app-wide portfolio switcher). */
+    listDocuments: (category?: DocumentCategory, portfolioId?: string) => {
+      const params = new URLSearchParams();
+      if (category) params.set("category", category);
+      if (portfolioId) params.set("portfolioId", portfolioId);
+      const qs = params.toString();
+      return request<InboxDocument[]>("GET", `/documents${qs ? `?${qs}` : ""}`);
+    },
     /** Signed URL for downloading an inbox document. */
     getDocumentUrl: (documentId: string) =>
       request<DocumentUrlResponse>("GET", `/documents/${documentId}/url`),
-    /** Upload a tax PDF straight into the inbox. `portfolioId` is optional (account label). */
+    /** Upload a tax PDF straight into the inbox. `portfolioId` is required — every inbox
+     *  document must be associated with the account it covers. */
     uploadDocument: (
       file: File | Blob,
-      opts: { category?: DocumentCategory; taxYear?: number; portfolioId?: string } = {},
+      opts: { category?: DocumentCategory; taxYear?: number; portfolioId: string },
     ) => {
       const form = new FormData();
       form.append("file", file, (file as File).name ?? "document.pdf");
       if (opts.category) form.append("category", opts.category);
       if (opts.taxYear != null) form.append("taxYear", String(opts.taxYear));
-      if (opts.portfolioId) form.append("portfolioId", opts.portfolioId);
+      form.append("portfolioId", opts.portfolioId);
       return request<{ id: string; duplicate: boolean; category: DocumentCategory; taxYear: number | null }>(
         "POST",
         "/documents",

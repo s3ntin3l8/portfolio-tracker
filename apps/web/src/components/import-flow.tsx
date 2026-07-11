@@ -8,6 +8,7 @@ import {
   Upload,
   AlertCircle,
   ChevronDown,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +20,7 @@ import type {
   AccountMismatch,
   ImportIssue,
   LikelyDuplicate,
+  DocumentCategory,
 } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
 import {
@@ -110,6 +112,13 @@ export interface ImportResult {
   materialized?: boolean;
   /** Number of draft transactions materialized (Phase 2). */
   materializedCount?: number;
+  /** Set when the uploaded PDF was recognized as an account-level report (e.g. the annual
+   *  TR tax report) rather than a transaction statement — see ScreenshotImportResult in
+   *  @portfolio/api-client for the full contract. */
+  isReport?: boolean;
+  reportCategory?: DocumentCategory;
+  reportTaxYear?: number | null;
+  reportTitle?: string;
 }
 
 /**
@@ -181,6 +190,13 @@ export interface ImportClient {
   checkAccounts(
     units: MaterializeUnit[],
   ): Promise<{ mismatches: ({ importId: string } & AccountMismatch)[] }>;
+  /** Save a file recognized as an account-level report (isReport:true) into the
+   *  tax-reports inbox — the confirm step after detection short-circuits the normal
+   *  transaction-import parse. */
+  uploadDocument(
+    file: File | Blob,
+    opts: { category?: DocumentCategory; taxYear?: number; portfolioId: string },
+  ): Promise<{ id: string; duplicate: boolean }>;
 }
 
 /** One portfolio target for a backgrounded materialize (one per import group). */
@@ -211,7 +227,11 @@ export interface ImportTask {
   portfolioId?: string;
 }
 
-type Step = "upload" | "parsing" | "review";
+// "report" is a single-file-only interstitial: the uploaded PDF was recognized as an
+// account-level report (not a transaction statement) — confirm a portfolio, then save it
+// into the tax-reports inbox. Not part of STEPS (mirrors "parsing" — an alternate path,
+// not a numbered step of the normal flow).
+type Step = "upload" | "parsing" | "review" | "report";
 type CsvFormat = "auto" | "generic" | "dkb" | "ibkr" | "coinbase";
 
 export interface ImportTargetPortfolio {
@@ -259,6 +279,7 @@ const demoClient: ImportClient = {
     enrichedCount: 0,
   }),
   checkAccounts: async () => ({ mismatches: [] }),
+  uploadDocument: async () => ({ id: "demo", duplicate: false }),
 };
 
 /** Type map for per-import-group portfolio selection (importId → portfolioId). */
@@ -304,7 +325,11 @@ interface SkippedFile {
 type ParseOutcome =
   | { status: "ok"; importId: string; filename: string; result: ImportResult }
   | { status: "materialized"; count: number }
-  | { status: "skipped"; skip: SkippedFile };
+  | { status: "skipped"; skip: SkippedFile }
+  // A file recognized as an account-level report — auto-saved to the tax-reports inbox
+  // under the batch's default portfolio (no per-file portfolio prompt in multi-file mode;
+  // see handleFiles' single-file branch for the interactive "report" step instead).
+  | { status: "report"; file: string; title: string };
 
 /** Per-file parse status (shown during multi-file parsing). */
 interface FileStatus {
@@ -371,13 +396,26 @@ export function ImportFlow({
   // True while the confirm-time account-mismatch pre-flight is in flight — disables the
   // Confirm button so the async round-trip can't be double-submitted.
   const [submitting, setSubmitting] = useState(false);
+  // Single-file report detection (step === "report"): the file + its recognized metadata,
+  // and the portfolio the user confirms before it's saved to the tax-reports inbox.
+  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [reportMeta, setReportMeta] = useState<{
+    category: DocumentCategory;
+    taxYear: number | null;
+    title: string;
+  } | null>(null);
+  const [reportPortfolioId, setReportPortfolioId] = useState("");
+  const [savingReport, setSavingReport] = useState(false);
+  // Multi-file batch: files auto-saved to the inbox (no per-file prompt — see ParseOutcome's
+  // "report" case), shown as a small success note alongside the skipped-files banner.
+  const [savedReports, setSavedReports] = useState<{ file: string; title: string }[]>([]);
   // Per-file status list (shown when parsing multiple files).
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
   // Drag-and-drop hover state for the dropzone.
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const activeIndex = step === "parsing" ? 0 : STEPS.indexOf(step);
+  const activeIndex = step === "parsing" || step === "report" ? 0 : STEPS.indexOf(step);
 
   function errorMessage(err: unknown): string {
     const info = classifyImportError(err);
@@ -411,6 +449,32 @@ export function ImportFlow({
     });
   }
 
+  /** Confirm step for a detected report PDF (step === "report"): save the same in-memory
+   *  File to the tax-reports inbox under the chosen portfolio, then close. */
+  async function handleSaveReport() {
+    if (!reportFile || !reportMeta || !reportPortfolioId) return;
+    setSavingReport(true);
+    try {
+      await client.uploadDocument(reportFile, {
+        category: reportMeta.category,
+        taxYear: reportMeta.taxYear ?? undefined,
+        portfolioId: reportPortfolioId,
+      });
+      router.refresh();
+      toast.success(t("report.saved"), {
+        action: {
+          label: t("report.viewInbox"),
+          onClick: () => router.push("/reports/documents"),
+        },
+      });
+      onClose?.();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSavingReport(false);
+    }
+  }
+
   /**
    * Parse one or more files sequentially. For a single file the behaviour is
    * identical to the old `handleFile` path (same error messages, same state
@@ -437,6 +501,7 @@ export function ImportFlow({
     setError(null);
     setReImportFile(null);
     setSkipped([]);
+    setSavedReports([]);
     setFileStatuses([]);
     setStep("parsing");
 
@@ -450,6 +515,20 @@ export function ImportFlow({
         const result = isCsvFile(file)
           ? await client.importCsv(await fileToText(file), file.name, "auto", force)
           : await client.importScreenshot(file, force);
+        // Recognized as an account-level report (e.g. the annual TR tax report) rather than
+        // a transaction statement — no drafts to review; confirm a portfolio, then save it
+        // straight to the tax-reports inbox (handleSaveReport).
+        if (result.isReport) {
+          setReportFile(file);
+          setReportMeta({
+            category: result.reportCategory ?? "tax_report",
+            taxYear: result.reportTaxYear ?? null,
+            title: result.reportTitle ?? file.name,
+          });
+          setReportPortfolioId(defaultPid);
+          setStep("report");
+          return;
+        }
         if (result.alreadyConfirmed) {
           setError(t("errors.alreadyConfirmed"));
           // Offer a manual override: the file was already imported, but the user may have
@@ -510,6 +589,24 @@ export function ImportFlow({
         const result = isCsvFile(file)
           ? await client.importCsv(await fileToText(file), file.name, "auto", force, batchId)
           : await client.importScreenshot(file, force, batchId);
+        // Recognized as an account-level report — auto-save under the batch's default
+        // portfolio (no per-file prompt in multi-file mode; see handleFiles' single-file
+        // branch for the interactive confirm step). A save failure surfaces like any other
+        // per-file skip reason rather than being silently swallowed.
+        if (result.isReport) {
+          try {
+            await client.uploadDocument(file, {
+              category: result.reportCategory ?? "tax_report",
+              taxYear: result.reportTaxYear ?? undefined,
+              portfolioId: defaultPid,
+            });
+            setStatus(i, "done");
+            return { status: "report", file: file.name, title: result.reportTitle ?? file.name };
+          } catch {
+            setStatus(i, "failed");
+            return { status: "skipped", skip: { file: file.name, reason: "reportSaveFailed" } };
+          }
+        }
         if (result.alreadyConfirmed) {
           setStatus(i, "failed");
           // Keep the original File so the per-file "Re-import anyway" button can force-reimport it.
@@ -549,6 +646,7 @@ export function ImportFlow({
     const newGroups: GroupMap = new Map();
     const newIssueMap: IssueMap = new Map();
     const newSkipped: SkippedFile[] = [];
+    const newSavedReports: { file: string; title: string }[] = [];
     const newPortfolioByImport: PortfolioByImportMap = new Map();
     const newMatchedImports = new Set<string>();
     let materializedTotal = 0;
@@ -558,6 +656,10 @@ export function ImportFlow({
     for (const o of outcomes) {
       if (o.status === "materialized") {
         materializedTotal += o.count;
+        continue;
+      }
+      if (o.status === "report") {
+        newSavedReports.push({ file: o.file, title: o.title });
         continue;
       }
       if (o.status === "skipped") {
@@ -581,12 +683,21 @@ export function ImportFlow({
     }
 
     setSkipped(newSkipped);
+    setSavedReports(newSavedReports);
 
-    // If some files materialized straight into the table and nothing remains to review,
-    // close + toast (Phase 2). If there are also drafts to review, fall through to the
-    // review screen for those — the materialized rows already landed.
-    if (mergedDrafts.length === 0 && pickedContracts.length === 0 && materializedTotal > 0) {
-      notifyMaterialized(materializedTotal);
+    // If some files materialized straight into the table / saved to the inbox and nothing
+    // remains to review, close + toast (Phase 2). If there are also drafts to review, fall
+    // through to the review screen for those — the materialized rows/reports already landed.
+    if (
+      mergedDrafts.length === 0 &&
+      pickedContracts.length === 0 &&
+      (materializedTotal > 0 || newSavedReports.length > 0)
+    ) {
+      if (materializedTotal > 0) notifyMaterialized(materializedTotal);
+      if (newSavedReports.length > 0) {
+        router.refresh();
+        toast.success(t("report.savedMulti", { count: newSavedReports.length }));
+      }
       onClose?.();
       return;
     }
@@ -903,6 +1014,54 @@ export function ImportFlow({
         </Card>
       )}
 
+      {step === "report" && reportMeta && (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+            <span className="flex size-12 items-center justify-center rounded-2xl bg-secondary">
+              <FileText className="size-6 text-primary" />
+            </span>
+            <div>
+              <p className="font-medium">{t("report.detected", { title: reportMeta.title })}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("report.hint")}</p>
+            </div>
+            {portfolios.length > 1 && (
+              <div className="w-full max-w-xs space-y-1.5 text-left">
+                <Label>{t("report.portfolioPicker")}</Label>
+                <PortfolioPicker
+                  portfolios={portfolios}
+                  value={reportPortfolioId}
+                  onChange={setReportPortfolioId}
+                  ariaLabel={t("report.portfolioPicker")}
+                  triggerClassName="w-full"
+                />
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingReport}
+                onClick={() => {
+                  setReportFile(null);
+                  setReportMeta(null);
+                  setStep("upload");
+                }}
+              >
+                {t("report.cancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={savingReport || !reportPortfolioId}
+                onClick={() => void handleSaveReport()}
+              >
+                {savingReport ? <Loader2 className="animate-spin" /> : null}
+                {t("report.save")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {step === "review" && (
         <div className="space-y-6">
           {/* Account-mismatch warning (#197): the file looks like it belongs elsewhere. */}
@@ -977,6 +1136,19 @@ export function ImportFlow({
                 ))}
               </ul>
             </details>
+          )}
+
+          {/* Files auto-saved to the tax-reports inbox during this batch (ParseOutcome's
+              "report" case) — a small success note, separate from the skip banner above. */}
+          {savedReports.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2.5 text-sm text-success">
+              <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+              <ul className="flex-1 space-y-1">
+                {savedReports.map((r) => (
+                  <li key={r.file}>{t("report.savedFile", { title: r.title })}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {contracts.length > 0 && (

@@ -658,16 +658,21 @@ export const userPreferencesSchema = z.object({
 export const documentCategorySchema = z.enum(["receipt", "tax_report"]);
 export type DocumentCategory = z.infer<typeof documentCategorySchema>;
 
-// Multipart form fields alongside the uploaded file for POST /documents.
+// Multipart form fields alongside the uploaded file for POST /documents. portfolioId is
+// required — every inbox document must be associated with the portfolio/account it covers
+// (pytr-fetched reports already always carry one; this brings uploads to the same bar).
 export const documentUploadFieldsSchema = z.object({
   category: documentCategorySchema.default("tax_report"),
   taxYear: z.coerce.number().int().min(1990).max(2100).optional(),
+  portfolioId: z.string().uuid(),
 });
 export type DocumentUploadFields = z.infer<typeof documentUploadFieldsSchema>;
 
 // Query params for GET /documents.
 export const documentListQuerySchema = z.object({
   category: documentCategorySchema.optional(),
+  /** Scope the list to one portfolio/account (e.g. the app-wide switcher selection). */
+  portfolioId: z.string().uuid().optional(),
 });
 export type DocumentListQuery = z.infer<typeof documentListQuerySchema>;
 export type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;

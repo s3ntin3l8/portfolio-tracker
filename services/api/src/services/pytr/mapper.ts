@@ -253,9 +253,13 @@ const REPORT_EVENT_TYPES = new Set(["TAX_YEAR_END_REPORT", "TAX_YEAR_END_REPORT_
 // (see above); "Jährlicher Steuerreport" is kept too as a defensive fallback — it's what
 // pytr's own `title_subfolder_mapping` (vendored pytr/dl.py) uses, a possibly-stale or
 // differently worded legacy variant.
-const REPORT_TITLE_PREFIXES = ["Jährlicher Steuerbericht", "Jährlicher Steuerreport"];
+//
+// Exported for reuse by services/parsers/report-pdf.ts, which sniffs the SAME title out of
+// an uploaded PDF's extracted text (the general Add-Transaction upload flow) — one source
+// of truth for what counts as "the annual TR tax report" across both surfaces.
+export const REPORT_TITLE_PREFIXES = ["Jährlicher Steuerbericht", "Jährlicher Steuerreport"];
 
-const REPORT_TITLE_YEAR_RE = /\b(20\d{2})\b/;
+export const REPORT_TITLE_YEAR_RE = /\b(20\d{2})\b/;
 
 // Deliberately NOT trEventSchema: that schema requires `eventType` as a non-empty string,
 // which rejects exactly the legacy (pre-eventType-migration) events this function needs to

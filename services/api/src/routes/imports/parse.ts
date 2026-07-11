@@ -15,6 +15,7 @@ import { parseCsv } from "../../services/parsers/csv.js";
 import { parseDkb } from "../../services/parsers/dkb.js";
 import { detectDkbPdf, parseDkbPdf } from "../../services/parsers/dkb-pdf.js";
 import { detectTrPdf, parseTrPdf } from "../../services/parsers/tr-pdf.js";
+import { detectReportPdf } from "../../services/parsers/report-pdf.js";
 import { extractPdfText } from "../../services/parsers/pdf-text.js";
 import { parseIbkr } from "../../services/parsers/ibkr.js";
 import { parseCoinbase } from "../../services/parsers/coinbase.js";
@@ -643,6 +644,30 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           }
         } catch (err) {
           request.log.warn({ err }, "pdf text extraction for dedup failed; using raw-byte hash");
+        }
+      }
+
+      // Account-level report PDF (e.g. Trade Republic's annual tax report), recognized
+      // before anything else: this class of document has no transactions to extract, and
+      // previously silently produced a zero-draft screenshot_imports row plus a dead-end
+      // "no transactions found" error (no deterministic parser matches it, and the
+      // vision-LLM fallback returns empty drafts). Detection-only here — no import row, no
+      // bytes persisted, unconditional regardless of importStrategy (a report should never
+      // reach the vision parser). The client re-uploads the same file to POST /documents
+      // (with a user-chosen portfolioId) once the user confirms.
+      if (pdfText) {
+        const reportMatch = detectReportPdf(pdfText);
+        if (reportMatch) {
+          request.log.info(
+            { category: reportMatch.category, taxYear: reportMatch.taxYear },
+            "PDF recognized as an account-level report",
+          );
+          return {
+            isReport: true,
+            reportCategory: reportMatch.category,
+            reportTaxYear: reportMatch.taxYear,
+            reportTitle: reportMatch.title,
+          };
         }
       }
 

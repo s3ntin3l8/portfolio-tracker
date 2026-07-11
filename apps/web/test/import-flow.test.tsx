@@ -59,6 +59,7 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
     materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 })),
     checkAccounts: vi.fn(async () => ({ mismatches: [] })),
+    uploadDocument: vi.fn(async () => ({ id: "doc1", duplicate: false })),
     ...overrides,
   };
 }
@@ -90,6 +91,10 @@ function renderFlow(
 
 function pngFile() {
   return new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+}
+
+function pdfFile(name = "report.pdf") {
+  return new File([new Uint8Array([1, 2, 3])], name, { type: "application/pdf" });
 }
 
 function csvFile(name: string, content = "date,action\n2026-01-01,buy") {
@@ -153,6 +158,82 @@ describe("ImportFlow", () => {
     await waitFor(() => expect(client.importCsv).toHaveBeenCalled());
     expect(client.importCsv).toHaveBeenCalledWith(expect.any(String), "t.csv", "auto", false);
     expect(client.importScreenshot).not.toHaveBeenCalled();
+  });
+
+  it("recognizes a report PDF, saves it to the inbox with the sole portfolio, and closes", async () => {
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "",
+        drafts: [],
+        errors: [],
+        isReport: true,
+        reportCategory: "tax_report" as const,
+        reportTaxYear: 2025,
+        reportTitle: "Jährlicher Steuerbericht 2025",
+      })),
+    });
+    const { container, onClose } = renderFlow(client);
+
+    fireEvent.change(fileInput(container), { target: { files: [pdfFile()] } });
+
+    // No draft table / confirm-portfolio step — the report card instead, with no picker
+    // shown (sole portfolio, matching new-entry-tabs.tsx's convention).
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          messages.Import.report.detected.replace("{title}", "Jährlicher Steuerbericht 2025"),
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(messages.Import.confirmPortfolio.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(messages.Import.report.portfolioPicker)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.report.save }));
+
+    await waitFor(() =>
+      expect(client.uploadDocument).toHaveBeenCalledWith(expect.any(File), {
+        category: "tax_report",
+        taxYear: 2025,
+        portfolioId: "p1",
+      }),
+    );
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // A report never reaches the normal materialize/confirm write path.
+    expect(client.checkAccounts).not.toHaveBeenCalled();
+  });
+
+  it("shows a portfolio picker for a report PDF when there's more than one portfolio", async () => {
+    const client = makeClient({
+      importScreenshot: vi.fn(async () => ({
+        importId: "",
+        drafts: [],
+        errors: [],
+        isReport: true,
+        reportCategory: "tax_report" as const,
+        reportTaxYear: null,
+        reportTitle: "Jährlicher Steuerbericht",
+      })),
+    });
+    const portfolios = [
+      { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      { id: "p2", name: "Second", brokerage: null, accountHolder: null },
+    ];
+    const { container } = renderFlow(client, portfolios);
+
+    fireEvent.change(fileInput(container), { target: { files: [pdfFile()] } });
+    await waitFor(() =>
+      expect(screen.getByText(messages.Import.report.portfolioPicker)).toBeInTheDocument(),
+    );
+
+    // Save is disabled until the (pre-filled) portfolio is confirmed — the default is the
+    // flow's defaultPortfolioId (p1), so Save is already enabled without any interaction.
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.report.save }));
+    await waitFor(() =>
+      expect(client.uploadDocument).toHaveBeenCalledWith(
+        expect.any(File),
+        expect.objectContaining({ portfolioId: "p1" }),
+      ),
+    );
   });
 
   it("pre-selects the suggested portfolio and targets it in the task", async () => {

@@ -81,6 +81,39 @@ function multipartUpload(
   };
 }
 
+/** Same as multipartUpload but with the file part FIRST and fields after — this is the
+ *  order the real client (`api-client`'s `uploadDocument`) actually sends
+ *  (`form.append("file", ...)` before `form.append("portfolioId", ...)`), unlike
+ *  `multipartUpload` above which puts fields first. Regression guard: `@fastify/multipart`
+ *  only finishes populating `part.fields` once the file stream has been fully drained, so
+ *  a route that reads fields declared after the file in the wire order needs to await
+ *  `part.toBuffer()` first — verifies that actually works end-to-end. */
+function multipartUploadFileFirst(
+  buf: Buffer,
+  contentType: string,
+  fields: Record<string, string> = {},
+  filename = "report.pdf",
+) {
+  const boundary = "----PortfolioTestBoundaryFileFirst";
+  const parts: Buffer[] = [
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
+    ),
+    buf,
+    Buffer.from(`\r\n`),
+  ];
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`),
+    );
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+  return {
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    payload: Buffer.concat(parts),
+  };
+}
+
 async function makeToken(privateKey: CryptoKey, sub: string) {
   return new SignJWT({ email: `${sub}@test.example` })
     .setProtectedHeader({ alg: "ES256" })
@@ -119,11 +152,23 @@ afterAll(async () => {
 async function setup(sub: string) {
   const t = await makeToken(privateKey, sub);
   await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert user
-  return { t };
+  const portRes = await app.inject({
+    method: "POST",
+    url: "/portfolios",
+    headers: auth(t),
+    payload: { name: "Test", baseCurrency: "IDR" },
+  });
+  const portfolioId = (portRes.json() as { id: string }).id;
+  return { t, portfolioId };
 }
 
-async function upload(t: string, fields: Record<string, string> = {}) {
-  const { headers, payload } = multipartUpload(Buffer.from("%PDF-1.4 fake pdf"), "application/pdf", fields);
+// portfolioId defaults to the owning user's own portfolio; pass `fields.portfolioId` to
+// override (e.g. testing a cross-user portfolio id, or omitting it to test the 400).
+async function upload(t: string, portfolioId: string, fields: Record<string, string> = {}) {
+  const { headers, payload } = multipartUpload(Buffer.from("%PDF-1.4 fake pdf"), "application/pdf", {
+    portfolioId,
+    ...fields,
+  });
   return app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
 }
 
@@ -138,20 +183,53 @@ describe("GET /documents", () => {
   it("scopes results to the calling user only", async () => {
     const userA = await setup("doc-list-a");
     const userB = await setup("doc-list-b");
-    await upload(userA.t, { taxYear: "2025" });
+    await upload(userA.t, userA.portfolioId, { taxYear: "2025" });
 
     const resA = await app.inject({ method: "GET", url: "/documents", headers: auth(userA.t) });
     const resB = await app.inject({ method: "GET", url: "/documents", headers: auth(userB.t) });
     expect(resA.json()).toHaveLength(1);
     expect(resB.json()).toEqual([]);
   });
+
+  it("filters to one portfolio via ?portfolioId=, when the user has more than one", async () => {
+    const { t, portfolioId: firstPortfolioId } = await setup("doc-list-multi-portfolio");
+    const secondPortRes = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Second", baseCurrency: "IDR" },
+    });
+    const secondPortfolioId = (secondPortRes.json() as { id: string }).id;
+
+    // Distinct byte content per upload — same bytes would content-hash-dedup regardless of
+    // portfolioId (storeInboxDocument's idempotency is keyed on (userId, sourceEventId)
+    // only), which would defeat this test's "two real documents" premise.
+    await upload(t, firstPortfolioId, { taxYear: "2024" });
+    const second = multipartUpload(Buffer.from("%PDF-1.4 a different fake pdf"), "application/pdf", {
+      portfolioId: secondPortfolioId,
+      taxYear: "2025",
+    });
+    await app.inject({ method: "POST", url: "/documents", headers: { ...second.headers, ...auth(t) }, payload: second.payload });
+
+    const scoped = await app.inject({
+      method: "GET",
+      url: `/documents?portfolioId=${firstPortfolioId}`,
+      headers: auth(t),
+    });
+    const rows = scoped.json() as Array<{ portfolioId: string; taxYear: number }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ portfolioId: firstPortfolioId, taxYear: 2024 });
+
+    const all = await app.inject({ method: "GET", url: "/documents", headers: auth(t) });
+    expect((all.json() as unknown[])).toHaveLength(2);
+  });
 });
 
 describe("POST /documents", () => {
   it("uploads a PDF and stores a retained document + a storage object", async () => {
-    const { t } = await setup("doc-upload-1");
+    const { t, portfolioId } = await setup("doc-upload-1");
     const putsBefore = store.puts.length;
-    const res = await upload(t, { taxYear: "2025" });
+    const res = await upload(t, portfolioId, { taxYear: "2025" });
     expect(res.statusCode).toBe(201);
     const body = res.json() as { id: string; duplicate: boolean; category: string; taxYear: number };
     expect(body.duplicate).toBe(false);
@@ -160,21 +238,53 @@ describe("POST /documents", () => {
     expect(store.puts.slice(putsBefore).some((k) => k.startsWith("inbox/"))).toBe(true);
 
     const list = await app.inject({ method: "GET", url: "/documents", headers: auth(t) });
-    const rows = list.json() as Array<{ id: string; taxYear: number | null; source: string }>;
-    expect(rows.find((r) => r.id === body.id)).toMatchObject({ taxYear: 2025, source: "upload" });
+    const rows = list.json() as Array<{ id: string; taxYear: number | null; source: string; portfolioId: string }>;
+    expect(rows.find((r) => r.id === body.id)).toMatchObject({ taxYear: 2025, source: "upload", portfolioId });
+  });
+
+  it("accepts fields sent after the file part, matching the real client's field order", async () => {
+    // The api-client appends the file part before category/taxYear/portfolioId — the
+    // opposite order from this suite's `upload()` helper. Confirms the route (which awaits
+    // part.toBuffer() before reading part.fields) actually handles that production order.
+    const { t, portfolioId } = await setup("doc-upload-file-first-order");
+    const { headers, payload } = multipartUploadFileFirst(Buffer.from("%PDF-1.4 fake pdf, file-first order"), "application/pdf", {
+      portfolioId,
+      taxYear: "2025",
+    });
+    const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
+    expect(res.statusCode).toBe(201);
+    const body = res.json() as { category: string; taxYear: number };
+    expect(body.category).toBe("tax_report");
+    expect(body.taxYear).toBe(2025);
   });
 
   it("rejects a non-PDF upload with 415", async () => {
-    const { t } = await setup("doc-upload-reject");
-    const { headers, payload } = multipartUpload(Buffer.from("not a pdf"), "image/png", {}, "photo.png");
+    const { t, portfolioId } = await setup("doc-upload-reject");
+    const { headers, payload } = multipartUpload(Buffer.from("not a pdf"), "image/png", { portfolioId }, "photo.png");
     const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
     expect(res.statusCode).toBe(415);
   });
 
+  it("rejects an upload with no portfolioId with 400", async () => {
+    const { t } = await setup("doc-upload-no-portfolio");
+    const { headers, payload } = multipartUpload(Buffer.from("%PDF-1.4 fake pdf"), "application/pdf", {});
+    const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: "invalid_fields" });
+  });
+
+  it("rejects an upload targeting another user's portfolio with 404", async () => {
+    const userA = await setup("doc-upload-cross-a");
+    const userB = await setup("doc-upload-cross-b");
+    const res = await upload(userB.t, userA.portfolioId);
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ error: "portfolio_not_found" });
+  });
+
   it("re-uploading the identical bytes is a no-op (content-hash dedup)", async () => {
-    const { t } = await setup("doc-upload-dedup");
-    const first = await upload(t, { taxYear: "2024" });
-    const second = await upload(t, { taxYear: "2024" });
+    const { t, portfolioId } = await setup("doc-upload-dedup");
+    const first = await upload(t, portfolioId, { taxYear: "2024" });
+    const second = await upload(t, portfolioId, { taxYear: "2024" });
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(200);
     expect((second.json() as { duplicate: boolean }).duplicate).toBe(true);
@@ -187,8 +297,8 @@ describe("POST /documents", () => {
 
 describe("GET /documents/:documentId/url", () => {
   it("returns a signed URL for the owner", async () => {
-    const { t } = await setup("doc-url-owner");
-    const uploaded = await upload(t);
+    const { t, portfolioId } = await setup("doc-url-owner");
+    const uploaded = await upload(t, portfolioId);
     const documentId = (uploaded.json() as { id: string }).id;
 
     const res = await app.inject({ method: "GET", url: `/documents/${documentId}/url`, headers: auth(t) });
@@ -199,7 +309,7 @@ describe("GET /documents/:documentId/url", () => {
   it("returns 403 for another user's document (IDOR guard)", async () => {
     const userA = await setup("doc-url-idor-a");
     const userB = await setup("doc-url-idor-b");
-    const uploaded = await upload(userA.t);
+    const uploaded = await upload(userA.t, userA.portfolioId);
     const documentId = (uploaded.json() as { id: string }).id;
 
     const res = await app.inject({
@@ -223,8 +333,8 @@ describe("GET /documents/:documentId/url", () => {
 
 describe("DELETE /documents/:documentId", () => {
   it("removes both the row and the storage object", async () => {
-    const { t } = await setup("doc-delete-1");
-    const uploaded = await upload(t);
+    const { t, portfolioId } = await setup("doc-delete-1");
+    const uploaded = await upload(t, portfolioId);
     const documentId = (uploaded.json() as { id: string }).id;
 
     // Resolve this specific document's storage key via its signed URL (the fake provider
@@ -245,7 +355,7 @@ describe("DELETE /documents/:documentId", () => {
   it("returns 403 when another user attempts the delete", async () => {
     const userA = await setup("doc-delete-idor-a");
     const userB = await setup("doc-delete-idor-b");
-    const uploaded = await upload(userA.t);
+    const uploaded = await upload(userA.t, userA.portfolioId);
     const documentId = (uploaded.json() as { id: string }).id;
 
     const res = await app.inject({

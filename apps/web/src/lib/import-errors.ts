@@ -18,6 +18,7 @@ export type ImportSkipReason =
   | "fileRead" // browser FileReader failure
   | "alreadyConfirmed"
   | "noDrafts"
+  | "reportSaveFailed" // recognized as an account-level report, but the inbox save failed
   | "generic";
 
 /** Richer classification result: the reason plus optional context the UI can surface. */

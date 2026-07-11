@@ -33,7 +33,9 @@ export async function fetchReportDocuments(opts: {
   runner: PytrRunner;
   storage?: StorageProvider;
   connection: { id: string; userId: string };
-  portfolioId: string | null;
+  /** Guaranteed non-null: syncTrConnection (sync.ts) never calls this without a connection
+   *  that has a resolved portfolioId (early-returns otherwise). */
+  portfolioId: string;
   reportRefs: ReportDocumentRef[];
   session: { phone: string; pin: string; sessionData: string };
   log?: FastifyBaseLogger;

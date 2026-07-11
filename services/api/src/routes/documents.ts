@@ -32,8 +32,8 @@ export async function documentsRoute(app: FastifyInstance) {
   // (the only category today) — see listInboxDocuments.
   app.get("/documents", { preHandler: app.authenticate }, async (request) => {
     const { id: userId } = requireUser(request);
-    const { category } = documentListQuerySchema.parse(request.query);
-    const docs = await listInboxDocuments(app, { userId, category });
+    const { category, portfolioId } = documentListQuerySchema.parse(request.query);
+    const docs = await listInboxDocuments(app, { userId, category, portfolioId });
 
     // Batch-resolve portfolio labels (which account/connection a report covers) in one query.
     const portfolioIds = [...new Set(docs.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
@@ -59,9 +59,10 @@ export async function documentsRoute(app: FastifyInstance) {
     }));
   });
 
-  // Upload a tax PDF straight into the inbox — no import/portfolio required at upload time
-  // (portfolioId is optional, purely for account labeling). Mirrors POST /imports/screenshot's
-  // multipart handling (routes/imports/parse.ts), scoped to PDF only.
+  // Upload a tax PDF straight into the inbox — no import required at upload time, but
+  // portfolioId IS required: every inbox document must be associated with the account it
+  // covers. Mirrors POST /imports/screenshot's multipart handling
+  // (routes/imports/parse.ts), scoped to PDF only.
   app.post("/documents", { preHandler: app.authenticate }, async (request, reply) => {
     const { id: userId } = requireUser(request);
 
@@ -92,19 +93,17 @@ export async function documentsRoute(app: FastifyInstance) {
     const parsedFields = documentUploadFieldsSchema.safeParse({
       category: fieldValue(part.fields.category),
       taxYear: fieldValue(part.fields.taxYear),
+      portfolioId: fieldValue(part.fields.portfolioId),
     });
     if (!parsedFields.success) {
       return reply.code(400).send({ error: "invalid_fields" });
     }
-    const { category, taxYear } = parsedFields.data;
+    const { category, taxYear, portfolioId: requestedPortfolioId } = parsedFields.data;
 
-    let portfolioId: string | null = null;
-    const portfolioField = fieldValue(part.fields.portfolioId);
-    if (portfolioField) {
-      const p = await ownedPortfolio(app, userId, portfolioField);
-      if (!p) return reply.code(404).send({ error: "portfolio_not_found" });
-      portfolioId = p.id;
-    }
+    // IDOR guard: the portfolio must belong to the uploading user.
+    const portfolio = await ownedPortfolio(app, userId, requestedPortfolioId);
+    if (!portfolio) return reply.code(404).send({ error: "portfolio_not_found" });
+    const portfolioId = portfolio.id;
 
     // Content-hash dedup (mirrors the screenshot import path's rawHash): re-uploading the
     // exact same PDF is a no-op rather than a duplicate inbox row. Reuses storeInboxDocument's

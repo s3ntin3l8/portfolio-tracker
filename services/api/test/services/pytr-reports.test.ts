@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
+import { portfolios } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 import type { StorageProvider } from "../../src/storage/types.js";
@@ -88,6 +89,12 @@ async function ensureUser(sub: string): Promise<string> {
   return (res.json() as { id: string }).id;
 }
 
+/** Insert a bare portfolio for a user — portfolioId is required on fetchReportDocuments. */
+async function ensurePortfolio(userId: string): Promise<string> {
+  const [row] = await app.db.insert(portfolios).values({ userId, name: "Test" }).returning({ id: portfolios.id });
+  return row.id;
+}
+
 const session = { phone: "+491234", pin: "1234", sessionData: "jar" };
 
 const REFS: ReportDocumentRef[] = [
@@ -97,13 +104,14 @@ const REFS: ReportDocumentRef[] = [
 describe("fetchReportDocuments", () => {
   it("returns {} (no-op) when no storage is configured", async () => {
     const userId = await ensureUser("fetch-no-storage");
+    const portfolioId = await ensurePortfolio(userId);
     const runner = runnerWith(async () => ({ docs: new Map(), failures: [] }));
     const result = await fetchReportDocuments({
       db: app.db,
       runner,
       storage: undefined,
       connection: { id: "conn-1", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: REFS,
       session,
     });
@@ -112,21 +120,23 @@ describe("fetchReportDocuments", () => {
 
   it("returns {} (no-op) when there are no report refs", async () => {
     const userId = await ensureUser("fetch-no-refs");
+    const portfolioId = await ensurePortfolio(userId);
     const runner = runnerWith(async () => ({ docs: new Map(), failures: [] }));
     const result = await fetchReportDocuments({
       db: app.db,
       runner,
       storage: store,
       connection: { id: "conn-1", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: [],
       session,
     });
     expect(result).toEqual({});
   });
 
-  it("downloads and stores a report document, tagging category/taxYear/sourceEventId", async () => {
+  it("downloads and stores a report document, tagging category/taxYear/sourceEventId/portfolioId", async () => {
     const userId = await ensureUser("fetch-1");
+    const portfolioId = await ensurePortfolio(userId);
     let calledWith: unknown;
     const runner = runnerWith(async (_session, pairs) => {
       calledWith = pairs;
@@ -141,7 +151,7 @@ describe("fetchReportDocuments", () => {
       runner,
       storage: store,
       connection: { id: "conn-fetch-1", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: REFS,
       session,
     });
@@ -155,11 +165,13 @@ describe("fetchReportDocuments", () => {
       category: "tax_report",
       taxYear: 2025,
       source: "pytr",
+      portfolioId,
     });
   });
 
   it("is idempotent: a second fetch with the same sourceEventId stores nothing new", async () => {
     const userId = await ensureUser("fetch-2");
+    const portfolioId = await ensurePortfolio(userId);
     const runner = runnerWith(async () => ({
       docs: new Map([["doc-2", { buf: Buffer.from("bytes"), mimeType: "application/pdf" }]]),
       failures: [],
@@ -170,7 +182,7 @@ describe("fetchReportDocuments", () => {
       runner,
       storage: store,
       connection: { id: "conn-fetch-2", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: refs,
       session,
     };
@@ -186,6 +198,7 @@ describe("fetchReportDocuments", () => {
 
   it("counts per-doc download failures without throwing", async () => {
     const userId = await ensureUser("fetch-3");
+    const portfolioId = await ensurePortfolio(userId);
     const runner = runnerWith(async () => ({
       docs: new Map(),
       failures: [{ docId: "doc-3", error: "404 from TR" }],
@@ -197,7 +210,7 @@ describe("fetchReportDocuments", () => {
       runner,
       storage: store,
       connection: { id: "conn-fetch-3", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: refs,
       session,
     });
@@ -207,6 +220,7 @@ describe("fetchReportDocuments", () => {
 
   it("is best-effort: a process-level downloadDocuments failure never throws, is surfaced in .error", async () => {
     const userId = await ensureUser("fetch-4");
+    const portfolioId = await ensurePortfolio(userId);
     const runner = runnerWith(async () => {
       throw new Error("session expired");
     });
@@ -216,7 +230,7 @@ describe("fetchReportDocuments", () => {
       runner,
       storage: store,
       connection: { id: "conn-fetch-4", userId },
-      portfolioId: null,
+      portfolioId,
       reportRefs: REFS,
       session,
     });

@@ -118,6 +118,8 @@
     "headerSubtitle": "Laporan pajak tahunan dan dokumen tingkat akun lainnya",
     "subtitle": "Diambil otomatis dari Trade Republic, atau unggah sendiri.",
     "upload": "Unggah",
+    "portfolioPicker": "Portofolio",
+    "noPortfolio": "Buat portofolio terlebih dahulu untuk mengunggah dokumen.",
     "uploadSuccess": "Dokumen diunggah",
     "uploadError": "Gagal mengunggah dokumen. Silakan coba lagi.",
     "downloadError": "Gagal mendapatkan tautan unduhan. Silakan coba lagi.",
@@ -610,6 +612,7 @@
       "rateLimited": "{file}: batas laju/pemakaian {provider} tercapai — dilewati.",
       "providerAuth": "{file}: kunci API {provider} ditolak — dilewati.",
       "providerDown": "{file}: {provider} sementara tidak tersedia — dilewati.",
+      "reportSaveFailed": "{file}: dikenali sebagai laporan, tetapi gagal disimpan ke kotak masuk — dilewati.",
       "generic": "{file}: terjadi kesalahan — dilewati."
     },
     "reviewHint": "Periksa detailnya sebelum konfirmasi — tidak ada yang disimpan sampai Anda konfirmasi.",
@@ -716,7 +719,19 @@
       "rateLimited": "Pembaca {provider} mencapai batas laju atau pemakaian. Tunggu sebentar lalu coba lagi.",
       "providerAuth": "Pembaca {provider} menolak kunci API-nya. Periksa pengaturan provider.",
       "providerDown": "Pembaca {provider} sementara tidak tersedia. Coba lagi sebentar.",
-      "portfolioRequired": "Pilih portofolio tujuan impor."
+      "portfolioRequired": "Pilih portofolio tujuan impor.",
+      "reportSaveFailed": "Berkas itu tampak seperti laporan, tetapi gagal disimpan ke kotak masuk laporan pajak Anda. Silakan coba lagi."
+    },
+    "report": {
+      "detected": "Ini tampak seperti {title} Anda",
+      "hint": "Ini dokumen tingkat akun, bukan daftar transaksi — simpan ke kotak masuk laporan pajak Anda.",
+      "portfolioPicker": "Portofolio",
+      "cancel": "Batal",
+      "save": "Simpan ke kotak masuk",
+      "saved": "Tersimpan ke kotak masuk laporan pajak Anda",
+      "savedMulti": "{count, plural, one {# laporan tersimpan} other {# laporan tersimpan}} ke kotak masuk laporan pajak Anda",
+      "savedFile": "{title}: tersimpan ke kotak masuk laporan pajak Anda.",
+      "viewInbox": "Lihat kotak masuk"
     },
     "confirmPortfolio": {
       "title": "Konfirmasi portofolio",

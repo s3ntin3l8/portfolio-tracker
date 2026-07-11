@@ -118,6 +118,8 @@
     "headerSubtitle": "Annual tax reports and other account-level documents",
     "subtitle": "Fetched automatically from Trade Republic, or upload your own.",
     "upload": "Upload",
+    "portfolioPicker": "Portfolio",
+    "noPortfolio": "Create a portfolio first to upload a document.",
     "uploadSuccess": "Document uploaded",
     "uploadError": "Couldn't upload the document. Please try again.",
     "downloadError": "Couldn't get a download link. Please try again.",
@@ -610,6 +612,7 @@
       "rateLimited": "{file}: {provider} rate/usage limit reached — skipped.",
       "providerAuth": "{file}: {provider} API key rejected — skipped.",
       "providerDown": "{file}: {provider} temporarily unavailable — skipped.",
+      "reportSaveFailed": "{file}: recognized as a report, but saving it to the inbox failed — skipped.",
       "generic": "{file}: something went wrong — skipped."
     },
     "reviewHint": "Check the details before confirming — nothing is saved until you do.",
@@ -718,7 +721,19 @@
       "rateLimited": "The {provider} parser hit its rate or usage limit. Wait a moment and retry.",
       "providerAuth": "The {provider} parser rejected its API key. Check the provider settings.",
       "providerDown": "The {provider} parser is temporarily unavailable. Try again shortly.",
-      "portfolioRequired": "Choose a portfolio to import into."
+      "portfolioRequired": "Choose a portfolio to import into.",
+      "reportSaveFailed": "That looked like a report, but saving it to your tax-reports inbox failed. Please try again."
+    },
+    "report": {
+      "detected": "This looks like your {title}",
+      "hint": "It's an account-level document, not a list of transactions — save it to your tax-reports inbox instead.",
+      "portfolioPicker": "Portfolio",
+      "cancel": "Cancel",
+      "save": "Save to inbox",
+      "saved": "Saved to your tax-reports inbox",
+      "savedMulti": "{count, plural, one {# report saved} other {# reports saved}} to your tax-reports inbox",
+      "savedFile": "{title}: saved to your tax-reports inbox.",
+      "viewInbox": "View inbox"
     },
     "confirmPortfolio": {
       "title": "Confirm portfolio",

@@ -702,7 +702,11 @@ export async function loadDocuments(category?: DocumentCategory): Promise<InboxD
   const api = await getServerApi();
   if (!api) return [];
   try {
-    return await api.listDocuments(category);
+    // Scope to the switcher-selected portfolio when one is active (mirrors
+    // loadContributions()); undefined in the aggregate "all portfolios" / holder scope,
+    // which lists every portfolio's documents.
+    const portfolioId = await getSelectedPortfolioId();
+    return await api.listDocuments(category, portfolioId ?? undefined);
   } catch {
     return [];
   }

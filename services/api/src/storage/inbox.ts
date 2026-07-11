@@ -48,8 +48,9 @@ export function buildInboxKey(
 
 export interface StoreInboxDocumentOptions {
   userId: string;
-  /** The portfolio/TR connection this report covers, when known — for account labeling. */
-  portfolioId?: string | null;
+  /** The portfolio/TR connection this report covers — required (see documents' plan doc
+   *  comment: every inbox document must be associated with an account). */
+  portfolioId: string;
   category: DocumentCategory;
   taxYear?: number | null;
   buf: Buffer;
@@ -118,7 +119,7 @@ export async function storeInboxDocument(
       .insert(documents)
       .values({
         userId,
-        portfolioId: portfolioId ?? null,
+        portfolioId,
         storageKey: key,
         mimeType,
         originalFilename: originalFilename ?? null,
@@ -167,21 +168,23 @@ export async function deleteInboxDocument(
 
 /**
  * List a user's inbox documents (category != "receipt"), optionally filtered to one
- * category. Ordered newest first.
+ * category and/or one portfolio (e.g. the app-wide portfolio-switcher selection). Ordered
+ * newest first.
  */
 export async function listInboxDocuments(
   app: AppLikeDb,
-  opts: { userId: string; category?: DocumentCategory },
+  opts: { userId: string; category?: DocumentCategory; portfolioId?: string },
 ): Promise<InboxDocumentMeta[]> {
-  const { userId, category } = opts;
+  const { userId, category, portfolioId } = opts;
+  const conditions = [
+    eq(documents.userId, userId),
+    eq(documents.category, category ?? "tax_report"),
+  ];
+  if (portfolioId) conditions.push(eq(documents.portfolioId, portfolioId));
   const rows = await db(app)
     .select()
     .from(documents)
-    .where(
-      category
-        ? and(eq(documents.userId, userId), eq(documents.category, category))
-        : and(eq(documents.userId, userId), eq(documents.category, "tax_report")),
-    );
+    .where(and(...conditions));
   return (rows as InboxDocumentMeta[]).sort(
     (a, b) => b.storedAt.getTime() - a.storedAt.getTime(),
   );

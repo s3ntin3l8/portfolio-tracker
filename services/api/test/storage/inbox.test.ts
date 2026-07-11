@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
+import { portfolios } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 import type { StorageProvider } from "../../src/storage/types.js";
@@ -98,6 +99,12 @@ async function ensureUser(sub: string): Promise<string> {
   return (res.json() as { id: string }).id;
 }
 
+/** Insert a bare portfolio for a user — portfolioId is now required on every inbox doc. */
+async function ensurePortfolio(userId: string): Promise<string> {
+  const [row] = await app.db.insert(portfolios).values({ userId, name: "Test" }).returning({ id: portfolios.id });
+  return row.id;
+}
+
 const appLike = () => app as unknown as Parameters<typeof storeInboxDocument>[0];
 
 describe("buildInboxKey", () => {
@@ -123,8 +130,10 @@ describe("buildInboxKey", () => {
 describe("storeInboxDocument", () => {
   it("stores a document directly as status=retained (not staged)", async () => {
     const userId = await ensureUser("inbox-store-1");
+    const portfolioId = await ensurePortfolio(userId);
     const result = await storeInboxDocument(appLike(), {
       userId,
+      portfolioId,
       category: "tax_report",
       taxYear: 2025,
       buf: Buffer.from("pdf bytes"),
@@ -138,6 +147,7 @@ describe("storeInboxDocument", () => {
     const doc = await getInboxDocument(app, result.documentId);
     expect(doc).toMatchObject({
       userId,
+      portfolioId,
       category: "tax_report",
       taxYear: 2025,
       source: "pytr",
@@ -146,8 +156,10 @@ describe("storeInboxDocument", () => {
 
   it("is idempotent on (userId, sourceEventId): a re-fetch is a no-op, no duplicate row", async () => {
     const userId = await ensureUser("inbox-store-2");
+    const portfolioId = await ensurePortfolio(userId);
     const opts = {
       userId,
+      portfolioId,
       category: "tax_report" as const,
       taxYear: 2025,
       buf: Buffer.from("pdf bytes"),
@@ -170,8 +182,10 @@ describe("storeInboxDocument", () => {
 
   it("uploads (no sourceEventId) are independent rows, not deduped against each other", async () => {
     const userId = await ensureUser("inbox-store-3");
+    const portfolioId = await ensurePortfolio(userId);
     const a = await storeInboxDocument(appLike(), {
       userId,
+      portfolioId,
       category: "tax_report",
       buf: Buffer.from("a"),
       mimeType: "application/pdf",
@@ -179,6 +193,7 @@ describe("storeInboxDocument", () => {
     });
     const b = await storeInboxDocument(appLike(), {
       userId,
+      portfolioId,
       category: "tax_report",
       buf: Buffer.from("b"),
       mimeType: "application/pdf",
@@ -193,8 +208,10 @@ describe("storeInboxDocument", () => {
 describe("deleteInboxDocument", () => {
   it("removes both the storage object and the row", async () => {
     const userId = await ensureUser("inbox-delete-1");
+    const portfolioId = await ensurePortfolio(userId);
     const result = await storeInboxDocument(appLike(), {
       userId,
+      portfolioId,
       category: "tax_report",
       buf: Buffer.from("to be deleted"),
       mimeType: "application/pdf",
@@ -217,8 +234,10 @@ describe("deleteInboxDocument", () => {
 describe("gcStagedReceipts does not sweep inbox documents", () => {
   it("a retained tax_report document survives a GC run (only status=staged is swept)", async () => {
     const userId = await ensureUser("inbox-gc-1");
+    const portfolioId = await ensurePortfolio(userId);
     const result = await storeInboxDocument(appLike(), {
       userId,
+      portfolioId,
       category: "tax_report",
       buf: Buffer.from("survives gc"),
       mimeType: "application/pdf",

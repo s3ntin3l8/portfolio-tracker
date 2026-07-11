@@ -43,6 +43,7 @@ export function useImportClient(): ImportClient {
       materializeImport: (importId, portfolioId, acknowledgeAccountMismatch) =>
         api.materializeImport(importId, portfolioId, acknowledgeAccountMismatch),
       checkAccounts: (units) => api.checkAccounts(units),
+      uploadDocument: (file, opts) => api.uploadDocument(file, opts),
     }),
     [api],
   );

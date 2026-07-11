@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
+import { PortfolioPicker, type PickablePortfolio } from "@/components/portfolio-picker";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 
@@ -32,8 +33,20 @@ function SourceBadge({ source }: { source: string | null }) {
  * plus user uploads) that don't belong to any single transaction. Mirrors the visual
  * language of ImportHistory (badges, table + mobile cards) at a much smaller scope: no
  * batching/multi-select, since inbox docs are independent rows, not a parse-review flow.
+ *
+ * portfolioId is required on every uploaded document (see routes/documents.ts) — the same
+ * rich {@link PortfolioPicker} used by new-entry-tabs.tsx picks the target, hidden when
+ * there's only one portfolio (matching that component's convention).
  */
-export function TaxReportsInbox({ initialDocuments }: { initialDocuments: InboxDocument[] }) {
+export function TaxReportsInbox({
+  initialDocuments,
+  portfolios,
+  initialPortfolioId,
+}: {
+  initialDocuments: InboxDocument[];
+  portfolios: PickablePortfolio[];
+  initialPortfolioId: string;
+}) {
   const t = useTranslations("TaxReports");
   const locale = useLocale();
   const api = useApiClient();
@@ -42,7 +55,9 @@ export function TaxReportsInbox({ initialDocuments }: { initialDocuments: InboxD
   const [documents, setDocuments] = useState(initialDocuments);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const canUpload = Boolean(portfolioId) && !uploading;
 
   async function refresh() {
     try {
@@ -53,9 +68,10 @@ export function TaxReportsInbox({ initialDocuments }: { initialDocuments: InboxD
   }
 
   async function handleUpload(file: File) {
+    if (!portfolioId) return;
     setUploading(true);
     try {
-      await api.uploadDocument(file, { category: "tax_report" });
+      await api.uploadDocument(file, { category: "tax_report", portfolioId });
       toast.success(t("uploadSuccess"));
       await refresh();
       router.refresh();
@@ -89,14 +105,31 @@ export function TaxReportsInbox({ initialDocuments }: { initialDocuments: InboxD
     }
   }
 
+  // Only shown with more than one portfolio (matches new-entry-tabs.tsx's convention) —
+  // with exactly one, portfolioId is already set from initialPortfolioId and stays fixed.
+  const portfolioPicker =
+    portfolios.length > 1 ? (
+      <div className="space-y-1.5">
+        <span className="block text-sm font-medium">{t("portfolioPicker")}</span>
+        <PortfolioPicker
+          portfolios={portfolios}
+          value={portfolioId}
+          onChange={setPortfolioId}
+          ariaLabel={t("portfolioPicker")}
+          triggerClassName="w-full sm:max-w-xs"
+        />
+      </div>
+    ) : null;
+
   const uploadButton = (
-    <>
+    <div className="space-y-2">
+      {portfolioPicker}
       <input
         ref={fileInputRef}
         type="file"
         accept="application/pdf"
         className="hidden"
-        disabled={uploading}
+        disabled={!canUpload}
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
@@ -105,13 +138,16 @@ export function TaxReportsInbox({ initialDocuments }: { initialDocuments: InboxD
       />
       <Button
         size="sm"
-        disabled={uploading}
+        disabled={!canUpload}
         onClick={() => fileInputRef.current?.click()}
       >
         {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
         {t("upload")}
       </Button>
-    </>
+      {portfolios.length === 0 && (
+        <p className="text-xs text-muted-foreground">{t("noPortfolio")}</p>
+      )}
+    </div>
   );
 
   if (documents.length === 0) {
