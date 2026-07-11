@@ -1582,7 +1582,9 @@
       "realizedGains": "Realized gains · YTD",
       "realizedGainsDesc": "{count} disposals · Tf-adjusted",
       "dividendsYtd": "Dividends · YTD",
-      "dividendsYtdDesc": "gross · {allowance} allowance applied"
+      "dividendsYtdDesc": "gross · {allowance} allowance applied",
+      "fsaUsed": "FSA used",
+      "fsaUsedDesc": "of {allowance} allowance"
     },
     "disposals": {
       "title": "Realized gains · Abgeltungsteuer",
@@ -1614,6 +1616,7 @@
       "year": "Year",
       "realized": "Realized gains",
       "dividends": "Dividends",
+      "fsaUsed": "FSA used",
       "tax": "Abgeltungsteuer"
     },
     "footnote": "Germany taxes investment income at a flat {rate}% (Abgeltungsteuer + Solidaritätszuschlag). Your {allowance} Sparer-Pauschbetrag is applied first, then losses offset gains within the same year. Estimate only, not tax advice.",

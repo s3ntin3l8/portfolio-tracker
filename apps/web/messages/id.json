@@ -1580,7 +1580,9 @@
       "realizedGains": "Keuntungan terealisasi · YTD",
       "realizedGainsDesc": "{count} pelepasan · disesuaikan Tf",
       "dividendsYtd": "Dividen · YTD",
-      "dividendsYtdDesc": "kotor · batas {allowance} diterapkan"
+      "dividendsYtdDesc": "kotor · batas {allowance} diterapkan",
+      "fsaUsed": "FSA terpakai",
+      "fsaUsedDesc": "dari batas {allowance}"
     },
     "disposals": {
       "title": "Keuntungan terealisasi · Abgeltungsteuer",
@@ -1612,6 +1614,7 @@
       "year": "Tahun",
       "realized": "Keuntungan terealisasi",
       "dividends": "Dividen",
+      "fsaUsed": "FSA terpakai",
       "tax": "Abgeltungsteuer"
     },
     "footnote": "Jerman mengenakan pajak penghasilan investasi sebesar {rate}% flat (Abgeltungsteuer + Solidaritätszuschlag). Sparer-Pauschbetrag {allowance} Anda diterapkan lebih dulu, lalu kerugian mengimbangi keuntungan dalam tahun yang sama. Hanya perkiraan, bukan nasihat pajak.",

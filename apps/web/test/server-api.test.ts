@@ -796,12 +796,14 @@ describe("loadTaxYearDetail", () => {
     ]);
 
     // By year, newest first. The selected year (2026) ties out to the already-loaded
-    // allowanceUsage figures: taxable = max(0, 240 + 168 − 408) = 0 → tax "0.00".
+    // allowanceUsage figures: taxable = max(0, 240 + 168 − 408) = 0 → tax "0.00",
+    // fsaUsed = allowanceUsage.usedYtd = "408".
     expect(detail!.byYear).toEqual([
-      { year: 2026, realized: "240", dividends: "168", tax: "0.00" },
+      { year: 2026, realized: "240", dividends: "168", fsaUsed: "408", tax: "0.00" },
       // 2025 uses the plain (non-TF-adjusted) trade-log figures and applies the
-      // *current* allowance uniformly: taxable = max(0, 100 + 227 − 1000) = 0.
-      { year: 2025, realized: "100", dividends: "227.00", tax: "0.00" },
+      // *current* allowance uniformly: taxable = max(0, 100 + 227 − 1000) = 0,
+      // fsaUsed = min(1000, max(0, 100 + 227)) = 327.00.
+      { year: 2025, realized: "100", dividends: "227.00", fsaUsed: "327.00", tax: "0.00" },
     ]);
   });
 

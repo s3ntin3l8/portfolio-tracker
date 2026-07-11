@@ -274,8 +274,9 @@ function TaxHolderSectionDe({
 
   return (
     <>
-      {/* Hero row: estimated tax + realized gains YTD + dividends YTD */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+      {/* Hero row: estimated tax + realized gains YTD + dividends YTD + FSA used.
+          2/2 on mobile, all four in one line from `sm` up. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         <EstimatedTaxHero
           label={t("hero.estimatedTax", { year: entry.year })}
           value={money(estimatedTax)}
@@ -290,6 +291,11 @@ function TaxHolderSectionDe({
           label={t("hero.dividendsYtd")}
           value={money(u.incomeYtd)}
           delta={t("hero.dividendsYtdDesc", { allowance: money(u.allowanceAnnual) })}
+        />
+        <StatCard
+          label={t("hero.fsaUsed")}
+          value={money(u.usedYtd)}
+          delta={t("hero.fsaUsedDesc", { allowance: money(u.allowanceAnnual) })}
         />
       </div>
 

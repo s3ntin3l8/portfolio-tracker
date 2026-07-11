@@ -150,6 +150,7 @@ export function ByYearTable({ rows, money, t }: {
               <TableHead>{t("byYear.year")}</TableHead>
               <TableHead className="text-right">{t("byYear.realized")}</TableHead>
               <TableHead className="text-right">{t("byYear.dividends")}</TableHead>
+              <TableHead className="text-right">{t("byYear.fsaUsed")}</TableHead>
               <TableHead className="text-right">{t("byYear.tax")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -162,6 +163,9 @@ export function ByYearTable({ rows, money, t }: {
                 </TableCell>
                 <TableCell className="tabular text-right text-muted-foreground">
                   {money(y.dividends)}
+                </TableCell>
+                <TableCell className="tabular text-right text-muted-foreground">
+                  {money(y.fsaUsed)}
                 </TableCell>
                 <TableCell className="tabular text-right font-semibold">{money(y.tax)}</TableCell>
               </TableRow>

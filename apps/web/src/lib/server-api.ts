@@ -1098,6 +1098,11 @@ export interface TaxYearRow {
   realized: string;
   dividends: string;
   tax: string;
+  /** Sparerpauschbetrag (FSA) consumed that year. The selected year uses the backend's
+   *  exact `allowanceUsage.usedYtd` (Teilfreistellung + Vorabpauschale + two-pot netting
+   *  already applied); other years are estimated the same way the `tax` column already
+   *  is — see this interface's doc comment on `loadTaxYearDetail` for the caveat. */
+  fsaUsed: string;
 }
 
 export interface TaxYearDetail {
@@ -1322,6 +1327,7 @@ export async function loadTaxYearDetail(
               realized: u.realizedGainsAdjusted,
               dividends: u.incomeYtd,
               tax: (taxable * taxRate).toFixed(2),
+              fsaUsed: u.usedYtd,
             };
           }
 
@@ -1329,11 +1335,17 @@ export async function loadTaxYearDetail(
           const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
           const dividendsGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
           const taxable = Math.max(0, Number(realized) + dividendsGross - allowanceAnnual);
+          // FSA-used estimate for a non-selected year: the allowance-consuming complement
+          // of `taxable` above (same inputs, no Teilfreistellung/Vorabpauschale/loss-pot
+          // precision — see this file's loadTaxYearDetail doc comment for the caveat this
+          // inherits), clamped to the annual cap since usage can never exceed it.
+          const fsaUsed = Math.min(allowanceAnnual, Math.max(0, Number(realized) + dividendsGross));
           return {
             year: y,
             realized,
             dividends: dividendsGross.toFixed(2),
             tax: (taxable * taxRate).toFixed(2),
+            fsaUsed: fsaUsed.toFixed(2),
           };
         });
 

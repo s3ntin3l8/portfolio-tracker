@@ -97,12 +97,12 @@ describe("DividendsTable", () => {
 });
 
 describe("ByYearTable", () => {
-  it("renders newest-first rows with realized/dividends/tax columns", () => {
+  it("renders newest-first rows with realized/dividends/FSA used/tax columns", () => {
     render(
       <ByYearTable
         rows={[
-          { year: 2026, realized: "240", dividends: "168", tax: "0.00" },
-          { year: 2025, realized: "100", dividends: "227", tax: "0.00" },
+          { year: 2026, realized: "240", dividends: "168", fsaUsed: "408.00", tax: "0.00" },
+          { year: 2025, realized: "100", dividends: "227", fsaUsed: "327.00", tax: "0.00" },
         ]}
         money={money}
         t={t}
@@ -110,6 +110,9 @@ describe("ByYearTable", () => {
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
     expect(years).toEqual(["2026", "2025"]);
+    expect(screen.getByText("FSA used")).toBeInTheDocument();
+    expect(screen.getByText("Rp 408")).toBeInTheDocument();
+    expect(screen.getByText("Rp 327")).toBeInTheDocument();
   });
 
   it("renders nothing when there are no years", () => {
