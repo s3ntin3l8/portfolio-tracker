@@ -109,8 +109,10 @@ export {
 export {
   allowanceUsageYTD,
   harvestSuggestions,
+  harvestSummary,
   type AllowanceUsage,
   type HarvestSuggestion,
+  type HarvestSummary,
   type AllowanceUsageInput,
   type HarvestSuggestionsInput,
 } from "./tax.js";

@@ -219,7 +219,14 @@ describe("HarvestSummaryNote", () => {
         instrument: null,
       },
     ];
-    render(<HarvestSummaryNote suggestions={suggestions} money={money} t={t} />);
+    render(
+      <HarvestSummaryNote
+        suggestions={suggestions}
+        combined={{ combinedHarvestableGross: "280", combinedTaxSaving: "74" }}
+        money={money}
+        t={t}
+      />,
+    );
     expect(screen.getByText(/Harvest all 2/)).toBeInTheDocument();
     expect(screen.getByText(/Rp 280/)).toBeInTheDocument();
     expect(screen.getByText(/Rp 74/)).toBeInTheDocument();
@@ -239,6 +246,7 @@ describe("HarvestSummaryNote", () => {
             instrument: null,
           },
         ]}
+        combined={{ combinedHarvestableGross: "0", combinedTaxSaving: "0" }}
         money={money}
         t={t}
       />,

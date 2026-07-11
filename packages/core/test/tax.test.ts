@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { allowanceUsageYTD, harvestSuggestions } from "../src/tax.js";
-import type { TradeLog } from "../src/tax.js";
+import { allowanceUsageYTD, harvestSuggestions, harvestSummary } from "../src/tax.js";
+import type { TradeLog, HarvestSuggestion } from "../src/tax.js";
 
 // ---------------------------------------------------------------------------
 // Helpers to build minimal TradeLog fixtures
@@ -1283,5 +1283,111 @@ describe("harvestSuggestions with forecast-aware projectedRemaining", () => {
       usage,
     });
     expect(result).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// harvestSummary
+// ---------------------------------------------------------------------------
+
+describe("harvestSummary", () => {
+  /** A pure-equity suggestion (tfRate=0) with a given unrealized gross gain — each
+   *  independently "harvestable" up to the full remaining allowance, per
+   *  harvestSuggestions' per-row semantics. */
+  function equitySuggestion(instrumentId: string, unrealizedGross: string): HarvestSuggestion {
+    return {
+      instrumentId,
+      unrealizedGross,
+      tfRate: "0",
+      unrealizedAdjusted: unrealizedGross,
+      harvestableGross: unrealizedGross, // as harvestSuggestions would compute it standalone
+      taxSaving: "0", // not used by harvestSummary — recomputed from scratch
+    };
+  }
+
+  it("caps the combined saving at remaining × taxRate — reproduces the reported bug", () => {
+    // 10 positions, each individually harvestable up to the full €322 remaining
+    // (per-row semantics). The OLD (buggy) web code summed each row's independently-
+    // capped harvestableGross/taxSaving, so it would report ~10× the true ceiling.
+    const suggestions = Array.from({ length: 10 }, (_, i) =>
+      equitySuggestion(`stock-${i}`, "500"),
+    );
+    const remaining = "322";
+    const taxRate = "0.25";
+
+    const naiveSum = suggestions.length * Math.min(500, 322) * 0.25; // what the old bug computed
+    expect(naiveSum).toBeCloseTo(805, 0); // ~2.5× over the true ceiling — illustrates the bug
+
+    const result = harvestSummary(suggestions, remaining, taxRate);
+
+    // True ceiling: you can never save more than remaining × taxRate, no matter how
+    // many positions you spread it across.
+    expect(parseFloat(result.combinedTaxSaving)).toBeLessThanOrEqual(322 * 0.25 + 0.01);
+    expect(result.combinedTaxSaving).toBe("80.50"); // 322 × 0.25
+    expect(result.combinedHarvestableGross).toBe("322.00");
+    // Only the first position is needed to exhaust the allowance (500 > 322).
+    expect(result.positionsUsed).toBe(1);
+    expect(parseFloat(result.combinedTaxSaving)).toBeLessThan(naiveSum);
+  });
+
+  it("spreads allocation sequentially across multiple smaller positions", () => {
+    const suggestions = [
+      equitySuggestion("a", "100"),
+      equitySuggestion("b", "150"),
+      equitySuggestion("c", "1000"),
+    ];
+    const result = harvestSummary(suggestions, "200", "0.25");
+
+    // a takes 100 (100 left → 100), b takes the remaining 100 of its 150, c gets 0.
+    expect(result.combinedHarvestableGross).toBe("200.00");
+    expect(result.combinedTaxSaving).toBe("50.00"); // 200 × 0.25
+    expect(result.positionsUsed).toBe(2);
+  });
+
+  it("Tf-adjusts before allocating, so an ETF consumes less allowance per € of gross gain", () => {
+    const suggestions: HarvestSuggestion[] = [
+      {
+        instrumentId: "etf-1",
+        unrealizedGross: "1000",
+        tfRate: "0.30",
+        unrealizedAdjusted: "700",
+        harvestableGross: "1000",
+        taxSaving: "0",
+      },
+    ];
+    // Full 1000 gross gain only consumes 700 of allowance (30% Teilfreistellung).
+    const result = harvestSummary(suggestions, "700", "0.25");
+    expect(result.combinedHarvestableGross).toBe("1000.00");
+    expect(result.combinedTaxSaving).toBe("175.00"); // 700 × 0.25
+  });
+
+  it("fully tax-exempt positions (tfRate=1) are harvestable even with zero remaining allowance", () => {
+    const suggestions: HarvestSuggestion[] = [
+      {
+        instrumentId: "exempt-1",
+        unrealizedGross: "500",
+        tfRate: "1",
+        unrealizedAdjusted: "0",
+        harvestableGross: "500",
+        taxSaving: "0",
+      },
+    ];
+    const result = harvestSummary(suggestions, "0", "0.25");
+    expect(result.combinedHarvestableGross).toBe("500.00");
+    expect(result.combinedTaxSaving).toBe("0.00");
+    expect(result.positionsUsed).toBe(1);
+  });
+
+  it("returns zero when there are no suggestions or no remaining allowance", () => {
+    expect(harvestSummary([], "1000", "0.25")).toEqual({
+      positionsUsed: 0,
+      combinedHarvestableGross: "0.00",
+      combinedTaxSaving: "0.00",
+    });
+    expect(harvestSummary([equitySuggestion("a", "500")], "0", "0.25")).toEqual({
+      positionsUsed: 0,
+      combinedHarvestableGross: "0.00",
+      combinedTaxSaving: "0.00",
+    });
   });
 });

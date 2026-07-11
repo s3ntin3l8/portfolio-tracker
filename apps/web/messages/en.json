@@ -1571,7 +1571,7 @@
       "taxSaving": "Tax saving",
       "tfApplied": "TF {pct}% applied",
       "button": "Harvest",
-      "summary": "Harvest all {count} to offset {offset} of realized gains — about ~{saving} saved. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
+      "summary": "Harvest all {count} to realize up to {offset} of unrealized gains tax-free within your remaining allowance — saving about ~{saving}. Germany has no 30-day wash-sale rule, so you can buy back immediately.",
       "none": "No harvestable gains right now.",
       "positionsEyebrow": "Positions you could realize",
       "metaLine": "{offset} realizable · saves ~{saving}"
@@ -1588,13 +1588,14 @@
     },
     "disposals": {
       "title": "Realized gains · Abgeltungsteuer",
-      "subtitle": "Gross figures, before Teilfreistellung — the hero card above is Tf-adjusted.",
+      "subtitle": "Gain shown is gross; rows with a Teilfreistellung rate show the Tf-adjusted amount that actually counts against your allowance underneath.",
       "disposal": "Disposal",
       "proceeds": "Proceeds",
       "gain": "Gain",
       "total": "Total",
       "empty": "No disposals in {year}.",
-      "lotsLine": "avg {buy} → {sell} · {count, plural, one {# lot} other {# lots}}"
+      "lotsLine": "avg {buy} → {sell} · {count, plural, one {# lot} other {# lots}}",
+      "tfAdjusted": "→ {adjusted} after {pct}% TF"
     },
     "dividendsTable": {
       "title": "Dividends withheld",

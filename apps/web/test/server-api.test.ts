@@ -765,6 +765,10 @@ describe("loadTaxYearDetail", () => {
         when: "2026-03-12",
         proceeds: "1240.00",
         gain: "240.00",
+        // No tfRatesByInstrument entry for this instrument in the fixture → defaults to
+        // 0, so gainAdjusted equals the gross gain.
+        tfRate: "0",
+        gainAdjusted: "240.00",
         quantity: "10",
         avgBuyPrice: "100",
         sellPrice: "124",
@@ -859,7 +863,15 @@ describe("loadTaxYearDetail", () => {
     h.client.listTransactions = async () => [];
 
     const holders = [
-      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "p1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+        // 30% Teilfreistellung for this ETF, same map allowanceUsage was computed with.
+        tfRatesByInstrument: { "i-iwda": "0.30" },
+      },
     ] as unknown as TaxSummaryHolder[];
 
     const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;
@@ -871,6 +883,8 @@ describe("loadTaxYearDetail", () => {
     expect(row.quantity).toBe("20"); // 12 + 8
     expect(row.proceeds).toBe("1928.00"); // 1156.8 + 771.2
     expect(row.gain).toBe("430.80"); // 303.6 + 127.2
+    expect(row.tfRate).toBe("0.3");
+    expect(row.gainAdjusted).toBe("301.56"); // 430.80 × 0.70
     // avg buy price = Σcost/Σqty = (853.2+644)/20 = 74.86; sell price = Σproceeds/Σqty = 96.4
     expect(Number(row.avgBuyPrice)).toBeCloseTo(74.86, 2);
     expect(Number(row.sellPrice)).toBeCloseTo(96.4, 2);

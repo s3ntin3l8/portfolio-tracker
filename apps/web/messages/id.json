@@ -1569,7 +1569,7 @@
       "taxSaving": "Penghematan pajak",
       "tfApplied": "TF {pct}% diterapkan",
       "button": "Panen",
-      "summary": "Panen semua {count} untuk mengimbangi {offset} keuntungan terealisasi — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
+      "summary": "Panen semua {count} untuk merealisasikan hingga {offset} keuntungan belum terealisasi bebas pajak dalam batas bebas pajak Anda yang tersisa — menghemat sekitar ~{saving}. Jerman tidak memiliki aturan wash-sale 30 hari, jadi Anda bisa membeli kembali segera.",
       "none": "Tidak ada keuntungan yang bisa dipanen saat ini.",
       "positionsEyebrow": "Posisi yang bisa direalisasikan",
       "metaLine": "{offset} bisa direalisasi · hemat ~{saving}"
@@ -1586,13 +1586,14 @@
     },
     "disposals": {
       "title": "Keuntungan terealisasi · Abgeltungsteuer",
-      "subtitle": "Angka kotor, sebelum Teilfreistellung — kartu di atas sudah disesuaikan Tf.",
+      "subtitle": "Untung yang ditampilkan adalah kotor; baris dengan tarif Teilfreistellung menampilkan jumlah yang disesuaikan Tf yang benar-benar mengurangi batas bebas pajak Anda di bawahnya.",
       "disposal": "Pelepasan",
       "proceeds": "Hasil",
       "gain": "Untung",
       "total": "Total",
       "empty": "Tidak ada pelepasan di {year}.",
-      "lotsLine": "rata-rata {buy} → {sell} · {count, plural, other {# lot}}"
+      "lotsLine": "rata-rata {buy} → {sell} · {count, plural, other {# lot}}",
+      "tfAdjusted": "→ {adjusted} setelah TF {pct}%"
     },
     "dividendsTable": {
       "title": "Dividen dipotong pajak",

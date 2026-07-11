@@ -294,15 +294,22 @@ export function DistributionCard({
 /** Footer sentence aggregating every harvestable position currently shown. */
 export function HarvestSummaryNote({
   suggestions,
+  combined,
   money,
   t,
 }: {
   suggestions: HarvestSuggestion[];
+  /** Combined "harvest all of these together" totals from core's `harvestSummary` —
+   *  sequentially allocates the SHARED remaining allowance across `suggestions`, unlike
+   *  each row's own `harvestableGross`/`taxSaving`, which are independently capped
+   *  against the FULL remaining allowance (correct in isolation, wrong summed — see
+   *  `harvestSummary`'s doc comment in packages/core/src/tax.ts). */
+  combined: { combinedHarvestableGross: string; combinedTaxSaving: string };
   money: (n: string | number) => string;
   t: TaxTranslator;
 }) {
-  const totalHarvestable = suggestions.reduce((s, h) => s + Number(h.harvestableGross), 0);
-  const totalSaving = suggestions.reduce((s, h) => s + Number(h.taxSaving), 0);
+  const totalHarvestable = Number(combined.combinedHarvestableGross);
+  const totalSaving = Number(combined.combinedTaxSaving);
   if (totalHarvestable <= 0) return null;
 
   return (

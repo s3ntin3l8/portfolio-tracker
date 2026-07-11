@@ -356,6 +356,11 @@ export interface PortfolioTaxSummary {
   carryForwardApplied: boolean;
   /** Distribution context for the holder's full FSA allocation (used by the edit-portfolio modal). */
   holderDistribution: TaxDistribution;
+  /** Teilfreistellung rate per instrumentId, the same map `allowanceUsage`/
+   *  `harvestSuggestions` were computed with — lets the frontend Tf-adjust a per-disposal
+   *  figure without re-deriving the asset-class-default rate (which could silently
+   *  disagree whenever a manual per-instrument override is set on the backend). */
+  tfRatesByInstrument: Record<string, string>;
 }
 
 /** One holder's entry in the GET /networth/tax response. */
@@ -377,6 +382,8 @@ export interface TaxSummaryHolder {
   carryForwardApplied: boolean;
   /** Distribution summary across this holder's depots. */
   distribution: TaxDistribution;
+  /** See {@link PortfolioTaxSummary.tfRatesByInstrument}'s doc comment. */
+  tfRatesByInstrument: Record<string, string>;
 }
 
 export interface Portfolio {

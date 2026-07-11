@@ -971,6 +971,7 @@ export async function loadNetworthTax(
             harvestSuggestions: [],
             carryForwardApplied: false,
             distribution: zeroDistribution,
+            tfRatesByInstrument: {},
           },
         ];
       }
@@ -1000,6 +1001,7 @@ export async function loadNetworthTax(
           harvestSuggestions: [],
           carryForwardApplied: false,
           distribution: zeroDistribution,
+          tfRatesByInstrument: {},
         },
       ];
     }
@@ -1032,6 +1034,7 @@ export async function loadNetworthTax(
         harvestSuggestions: result.harvestSuggestions,
         carryForwardApplied: result.carryForwardApplied,
         distribution: result.holderDistribution,
+        tfRatesByInstrument: result.tfRatesByInstrument,
       };
       return [holderEntry];
     }
@@ -1069,6 +1072,13 @@ export interface TaxDisposalRow {
   when: string; // YYYY-MM-DD (the shared sell date)
   proceeds: string;
   gain: string;
+  /** Teilfreistellung rate applied to this row's instrument (0–1), from the backend's
+   *  tfRatesByInstrument — the same rate allowanceUsage/harvestSuggestions use. */
+  tfRate: string;
+  /** Tf-adjusted gain = gain × (1 − tfRate) — what actually counts against the FSA,
+   *  as opposed to `gain` (the gross economic gain shown by default). Equal to `gain`
+   *  when tfRate is 0 (the common case: stocks, bonds, gold). */
+  gainAdjusted: string;
   quantity: string;
   avgBuyPrice: string;
   sellPrice: string;
@@ -1200,6 +1210,11 @@ export async function loadTaxYearDetail(
             gain: number;
             quantity: number;
             cost: number;
+            /** Teilfreistellung rate for this row's instrument (0–1), from the SAME
+             *  tfRatesByInstrument map the backend's allowanceUsage/harvestSuggestions
+             *  were computed with — see TaxYearRow.fsaUsed's caveat for why this must
+             *  come from the backend rather than a client-side asset-class guess. */
+            tfRate: number;
             lots: TaxDisposalLot[];
           }
         >();
@@ -1217,6 +1232,7 @@ export async function loadTaxYearDetail(
               gain: 0,
               quantity: 0,
               cost: 0,
+              tfRate: Number(entry.tfRatesByInstrument?.[t.instrumentId] ?? "0"),
               lots: [],
             };
             group.proceeds += proceeds;
@@ -1241,6 +1257,8 @@ export async function loadTaxYearDetail(
           when: g.when,
           proceeds: g.proceeds.toFixed(2),
           gain: g.gain.toFixed(2),
+          tfRate: g.tfRate.toString(),
+          gainAdjusted: (g.gain * (1 - g.tfRate)).toFixed(2),
           quantity: g.quantity.toString(),
           avgBuyPrice: g.quantity > 0 ? (g.cost / g.quantity).toString() : "0",
           sellPrice: g.quantity > 0 ? (g.proceeds / g.quantity).toString() : "0",
