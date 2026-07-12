@@ -121,11 +121,18 @@ networks:
   # auto-assigned subnet can drift across recreation, which would silently break the
   # TRUSTED_PROXY_CIDRS match above. If you change this subnet, update
   # API_TRUSTED_PROXY_CIDRS (or the default above) to match.
+  # enable_ipv6 + the ULA subnet below give containers real IPv6 (NAT66) egress — needed
+  # for Supabase's IPv6-only direct-connection DATABASE_URL (see .env.prod). Requires the
+  # Docker host to have net.ipv6.conf.all.forwarding=1 and "ip6tables": true in
+  # /etc/docker/daemon.json (daemon restart required); without those, containers get an
+  # IPv6 address but packets never get masqueraded out and egress still fails.
   backend:
     driver: bridge
+    enable_ipv6: true
     ipam:
       config:
         - subnet: 172.28.0.0/24
+        - subnet: fd00:172:28::/64
 
 volumes:
   apilogs:

@@ -37,6 +37,8 @@ COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/package.json
 COPY --from=build /app/packages/schema/dist ./packages/schema/dist
 COPY --from=build /app/packages/schema/package.json ./packages/schema/package.json
+COPY --from=build /app/packages/market-data/dist ./packages/market-data/dist
+COPY --from=build /app/packages/market-data/package.json ./packages/market-data/package.json
 
 # --- Trade Republic sync (pytr) runs as a Python subprocess ---
 # Install pytr into an isolated venv (sidesteps PEP-668 on slim). DELIBERATELY do NOT
