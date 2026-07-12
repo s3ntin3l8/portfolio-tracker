@@ -1622,6 +1622,108 @@ describe("auth + portfolios + transactions", () => {
     expect(denied.statusCode).toBe(404);
   });
 
+  it("surfaces cash interest as a separate subtotal without polluting dividend totals", async () => {
+    const { fxRates } = await import("@portfolio/db");
+    const t = await token("income-interest-user");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) }); // upsert
+    // /networth/income uses the user's displayCurrency; /portfolios/:id/income uses
+    // the portfolio's baseCurrency. Align both to EUR so a single set of expected
+    // totals holds for both endpoints below.
+    await app.inject({
+      method: "PATCH",
+      url: "/me",
+      headers: auth(t),
+      payload: { displayCurrency: "eur" },
+    });
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Interest test", baseCurrency: "EUR" },
+      })
+    ).json().id;
+
+    const [instr] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "INTTEST",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Interest Test Co",
+      })
+      .returning();
+
+    const post = (payload: object) =>
+      app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload,
+      });
+
+    // One dividend (position-linked) this year.
+    await post({
+      type: "dividend",
+      instrumentId: instr.id,
+      quantity: "0",
+      price: "246.72",
+      currency: "EUR",
+      executedAt: "2026-03-01T00:00:00.000Z",
+    });
+
+    // Cash interest — no instrument, same-currency (EUR) for the base case.
+    await post({
+      type: "interest",
+      price: "20.00",
+      currency: "EUR",
+      executedAt: "2026-02-01T00:00:00.000Z",
+    });
+    await post({
+      type: "interest",
+      price: "13.04",
+      currency: "EUR",
+      executedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    // A second, multi-currency interest payment guards the FX-prefetch widening —
+    // its currency (USD) never appears among the dividend transactions.
+    await app.db
+      .insert(fxRates)
+      .values({ base: "USD", quote: "EUR", rate: "0.9", date: new Date().toISOString().slice(0, 10) })
+      .onConflictDoNothing();
+    await post({
+      type: "interest",
+      price: "10.00",
+      currency: "USD",
+      executedAt: "2026-05-01T00:00:00.000Z",
+    });
+
+    for (const url of ["/networth/income", `/portfolios/${portfolioId}/income`]) {
+      const res = await app.inject({ method: "GET", url, headers: auth(t) });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      // Interest subtotal: 20.00 + 13.04 + (10.00 × 0.9) = 42.04, all in the display
+      // currency — FX-converted even though USD never fed the dividend set.
+      expect(body.interest).toMatchObject({ ytd: "42.04", ttm: "42.04", lifetime: "42.04", currency: "EUR" });
+
+      // The dividend headline is untouched by interest.
+      expect(body.thisYear).toBe("246.72");
+      expect(body.ttm).toBe("246.72");
+      expect(body.lifetimeTotal).toBe("246.72");
+      expect(body.byYear).toEqual([{ year: "2026", total: "246.72", paymentCount: 1 }]);
+      expect(body.byCurrency).toEqual([
+        { currency: "EUR", totalNative: "246.72", totalNormalized: "246.72" },
+      ]);
+
+      // No interest row leaks into the dividend/coupon event log.
+      expect(body.events).toHaveLength(1);
+      expect(body.events.some((e: { type: string }) => e.type === "interest")).toBe(false);
+    }
+  });
+
   it("normalizes income yields for a non-display-currency holding (#93)", async () => {
     const { fxRates } = await import("@portfolio/db");
     const t = await token("income-fx-user");

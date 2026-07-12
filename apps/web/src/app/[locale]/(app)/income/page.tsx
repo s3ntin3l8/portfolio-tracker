@@ -20,6 +20,7 @@ import {
   TABLE_VALUE_STRONG,
 } from "@/components/ui/table";
 import { IncomeTimeline } from "@/components/income/income-timeline";
+import { CashInterestLine } from "@/components/income/cash-interest-line";
 import type { IncomeEventRow } from "@/components/income/income-events-table";
 import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent, cn } from "@/lib/utils";
@@ -145,6 +146,20 @@ export default async function IncomePage({
           delta={t("avgPerPayment", { avg: m(Number(s.averagePerPayment)) })}
         />
       </div>
+
+      {/* Cash interest — a standalone subtotal (per user decision), not folded into
+          the dividend/coupon headline above. Hidden entirely when there's none. */}
+      {Number(s.interest.lifetime) > 0 && (
+        <CashInterestLine
+          label={t("cashInterest")}
+          ytdLabel={t("thisYear")}
+          ttmLabel={t("ttm")}
+          lifetimeLabel={t("lifetime")}
+          ytd={m(Number(s.interest.ytd))}
+          ttm={m(Number(s.interest.ttm))}
+          lifetime={m(Number(s.interest.lifetime))}
+        />
+      )}
 
       {s.byYear.length > 0 && (
         <Card>

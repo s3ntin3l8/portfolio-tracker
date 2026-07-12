@@ -317,6 +317,7 @@
     "assumptionsContributions": "Assumes savings-plan purchases continue at their recent rate.",
     "emptyTitle": "No income yet",
     "emptyBody": "Dividends and coupons appear here once you record them as transactions.",
+    "cashInterest": "Cash interest",
     "thisYear": "This year",
     "ttm": "Trailing 12 months",
     "forecast": "Forecast (next year)",

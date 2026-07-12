@@ -1028,6 +1028,17 @@ export interface CurrencyIncome {
 }
 
 /**
+ * Cash-interest subtotal — a standalone figure, NOT part of the dividend/coupon
+ * headline totals on IncomeStats. All amounts are in `currency` (the display currency).
+ */
+export interface IncomeInterest {
+  ytd: string;
+  ttm: string;
+  lifetime: string;
+  currency: string;
+}
+
+/**
  * Dividend/coupon analytics + forward outlook for the active scope. All monetary
  * fields are in `displayCurrency` unless noted; `byCurrency` keeps the native sums.
  */
@@ -1055,6 +1066,9 @@ export interface IncomeStats {
   /** Upcoming bond coupons (next 12 months) and projected dividends (now → Dec 31). */
   upcoming: UpcomingPayment[];
   events: IncomeEvent[];
+  /** Cash interest — a standalone subtotal, NOT part of the dividend/coupon headline
+   *  totals above. Amounts in `displayCurrency`. */
+  interest: IncomeInterest;
 }
 
 /** Contribution analytics + forecast seed for a savings/Sparplan account. */

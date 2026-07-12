@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { Decimal } from "decimal.js";
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import {
   accountHolders,
@@ -447,8 +448,12 @@ export async function transactionsRoute(app: FastifyInstance) {
   ) {
     const now = new Date();
     const incomeTxns = coreTxns.filter((t) => t.type === "dividend" || t.type === "coupon");
+    // Cash interest is genuine investment income but reported as its own subtotal
+    // (`interest` below) — never merged into `incomeTxns`/`enriched`, so it can't leak
+    // into the dividend/coupon headline totals produced by aggregateIncome() downstream.
+    const interestTxns = coreTxns.filter((t) => t.type === "interest");
 
-    const ccys = [...new Set(incomeTxns.map((t) => t.currency))];
+    const ccys = [...new Set([...incomeTxns, ...interestTxns].map((t) => t.currency))];
     const rates = await getFxRates(app.db, ccys, display);
     const fx = makeFxRateFn(rates, display);
 
@@ -481,6 +486,26 @@ export async function transactionsRoute(app: FastifyInstance) {
     const since = new Date(now);
     since.setUTCFullYear(since.getUTCFullYear() - 1);
     const trailing = trailingIncomeByInstrument(coreTxns, since, display, fx);
+
+    // Cash-interest subtotal (YTD/TTM/lifetime), FX-converted to `display` — a standalone
+    // figure alongside (not inside) the dividend/coupon headline above. Same TTM anchor
+    // (`since`) and date basis (`executedAt`) as the dividend TTM for presentation parity.
+    const sumInterest = (rows: typeof interestTxns) =>
+      rows
+        .reduce(
+          (sum, t) => sum.plus(new Decimal(convert(t.price, t.currency, display, fx))),
+          new Decimal(0),
+        )
+        .toString();
+    const interest = {
+      ytd: sumInterest(
+        interestTxns.filter((t) => t.executedAt.getUTCFullYear() === now.getUTCFullYear()),
+      ),
+      ttm: sumInterest(interestTxns.filter((t) => t.executedAt >= since)),
+      lifetime: sumInterest(interestTxns),
+      currency: display,
+    };
+
     const yields = summary.holdings
       .filter(
         (h) =>
@@ -823,7 +848,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 
-    return { displayCurrency: display, ...stats, yields, upcoming, events };
+    return { displayCurrency: display, ...stats, yields, upcoming, events, interest };
   }
 
   // List a portfolio's transactions, each enriched with instrument metadata.
