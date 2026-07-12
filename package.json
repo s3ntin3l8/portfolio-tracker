@@ -23,10 +23,12 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:sharded": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --coverage.thresholds.statements=0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.61.1",
     "@types/node": "^26.1.0",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.6.0",

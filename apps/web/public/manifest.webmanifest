@@ -68,5 +68,35 @@
     "params": {
       "files": [{ "name": "image", "accept": ["image/*"] }]
     }
-  }
+  },
+  "screenshots": [
+    {
+      "src": "/screenshots/holdings-dark-narrow.png",
+      "sizes": "828x1792",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Net worth, allocation and positions across every brokerage"
+    },
+    {
+      "src": "/screenshots/insights-dark-narrow.png",
+      "sizes": "828x1792",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "XIRR, rebalancing drift and concentration at a glance"
+    },
+    {
+      "src": "/screenshots/holdings-dark-wide.png",
+      "sizes": "2560x1440",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Net worth, allocation and positions across every brokerage"
+    },
+    {
+      "src": "/screenshots/tax-dark-wide.png",
+      "sizes": "2560x1440",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Capital gains, allowance usage and harvest suggestions"
+    }
+  ]
 }
