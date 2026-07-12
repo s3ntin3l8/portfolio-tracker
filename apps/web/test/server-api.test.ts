@@ -169,7 +169,7 @@ describe("loadHoldings", () => {
 
     const res = await api.loadHoldings();
     expect(res).toMatchObject({ status: "ok", displayCurrency: "EUR" });
-    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
+    expect(getSummary).toHaveBeenCalledWith("p2", "purchase_price");
     expect(h.client.getNetWorth).not.toHaveBeenCalled();
   });
 
@@ -200,7 +200,7 @@ describe("loadHoldings", () => {
 
     const res = await api.loadHoldings(undefined, "p2"); // override says p2
     expect(res).toMatchObject({ status: "ok", displayCurrency: "EUR" });
-    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
+    expect(getSummary).toHaveBeenCalledWith("p2", "purchase_price");
     expect(h.client.getNetWorth).not.toHaveBeenCalled();
   });
 
@@ -216,7 +216,7 @@ describe("loadHoldings", () => {
     h.client.getSummary = getSummary;
 
     await api.loadHoldings(undefined, "ghost"); // stale override
-    expect(getSummary).toHaveBeenCalledWith("p1", undefined); // falls back to cookie
+    expect(getSummary).toHaveBeenCalledWith("p1", "purchase_price"); // falls back to cookie
   });
 });
 
@@ -365,7 +365,7 @@ describe("aggregate + misc loaders", () => {
       expect(res.data.portfolioCount).toBe(1);
       expect(res.data.asOf).toBe("2026-01-01");
     }
-    expect(getSummary).toHaveBeenCalledWith("p2", undefined);
+    expect(getSummary).toHaveBeenCalledWith("p2", "purchase_price");
     expect(getPerformance).toHaveBeenCalledWith("p2");
     expect(h.client.getNetWorth).not.toHaveBeenCalled();
   });

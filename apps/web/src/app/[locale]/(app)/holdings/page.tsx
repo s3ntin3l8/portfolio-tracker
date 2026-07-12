@@ -64,15 +64,24 @@ export default async function HoldingsPage({
   // toggle — threaded into every cost-basis-sensitive loader below, including
   // loadNetWorth (previously called with no costBasis at all, silently defaulting to
   // purchase_price and disagreeing with the holdings table).
-  const prefs = await loadPreferences();
+  //
+  // loadPreferences() used to be awaited before starting anything else — a full serial
+  // round trip blocking the whole page. The loaders that don't need costBasis are kicked
+  // off immediately instead; only the two that do (loadHoldings, loadNetWorth) wait on it.
+  const prefsPromise = loadPreferences();
+  const anomaliesPromise = loadAnomalies(portfolioParam);
+  const historyPromise = loadNetWorthHistory(HERO_INITIAL_RANGE);
+  const selectedIdPromise = getSelectedPortfolioId();
+
+  const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
-  const [result, anomalies, netWorthResult, history, selectedId] = await Promise.all([
+  const [result, netWorthResult, anomalies, history, selectedId] = await Promise.all([
     loadHoldings(costBasis, portfolioParam),
-    loadAnomalies(portfolioParam),
     loadNetWorth(costBasis),
-    loadNetWorthHistory(HERO_INITIAL_RANGE),
-    getSelectedPortfolioId(),
+    anomaliesPromise,
+    historyPromise,
+    selectedIdPromise,
   ]);
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).

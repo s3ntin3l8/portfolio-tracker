@@ -39,6 +39,7 @@ import { createFlexClient } from "./services/ibkr/flex-client.js";
 import type { IbkrFlexClient } from "./services/ibkr/flex-client.js";
 import type { StorageProvider } from "./storage/types.js";
 import { storagePlugin } from "./plugins/storage.js";
+import { clearValuationCache } from "./services/valuation.js";
 
 export type BuildAppOptions = AuthPluginOptions & {
   // Injectable so tests can supply a mock parser instead of hitting Anthropic.
@@ -182,6 +183,21 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(securityPlugin);
   await app.register(dbPlugin);
   await app.register(authPlugin, opts);
+
+  // Bust the whole valuation derivation cache (see services/valuation.ts) after any
+  // write. There's no cheap per-portfolio version marker to invalidate precisely (no
+  // `updatedAt` column on transactions — see valuePortfolioCached's doc comment), and
+  // the routes that mutate portfolio data are spread across many files/shapes (some,
+  // like undoing an import, key off an importId rather than a portfolioId in the URL),
+  // so a global "any write clears everything" hook is the only invalidation that's
+  // reliably correct rather than correct-until-someone-adds-a-route-that-forgets-to-
+  // invalidate. Clearing the whole cache is cheap (a few Map entries) and only costs one
+  // extra recompute per portfolio on the next read — never a staleness risk.
+  app.addHook("onResponse", async (request) => {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      clearValuationCache();
+    }
+  });
 
   // requireAdmin-gated routes (admin/*, instrument PATCH, corporate-actions writes)
   // become unreachable — including to the deployment's own owner — if no Authentik

@@ -37,14 +37,22 @@ export default async function InstrumentPage({
   // which previously silently defaulted to purchase_price regardless of the user's
   // choice on Holdings (a real correctness gap: instrument P&L could disagree with
   // holdings P&L on cost basis).
-  const prefs = await loadPreferences();
+  // loadPreferences() used to be awaited before anything else — a full serial round trip
+  // blocking the whole page. The loaders that don't need costBasis are kicked off
+  // immediately instead; only loadInstrumentScope waits on it.
+  const prefsPromise = loadPreferences();
+  const instrumentPromise = loadInstrument(id);
+  const anomaliesPromise = loadAnomalies();
+  const incomeStatsPromise = loadIncomeStats();
+
+  const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
   const [data, scope, allAnomalies, incomeStatsResult] = await Promise.all([
-    loadInstrument(id),
+    instrumentPromise,
     loadInstrumentScope(id, costBasis),
-    loadAnomalies(),
-    loadIncomeStats(),
+    anomaliesPromise,
+    incomeStatsPromise,
   ]);
   // Filter anomalies to those affecting this specific instrument. Portfolio-scoped
   // anomalies (reconciliation_gap, position_gap) are NOT instrument-specific — they used to

@@ -76,7 +76,7 @@ import {
   type ReconciliationGap,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
-import { valuePortfolio, type InstrumentMeta } from "../services/valuation.js";
+import { valuePortfolioCached, type InstrumentMeta } from "../services/valuation.js";
 import { toCoreTxns } from "../services/tx-core.js";
 import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
 import { rangeStart } from "../services/snapshots.js";
@@ -87,11 +87,19 @@ import { mergeTransactions, previewMerge, MergeBlockedError } from "../services/
 import { needsSectorEnrichment, needsNameEnrichment } from "../services/instrument-metadata.js";
 import { loadSparklines } from "../services/sparklines.js";
 import { flattenJoinRow } from "../lib/portfolio.js";
+import { mapPool } from "../lib/promise-pool.js";
 import { netManualAdjustments } from "../services/pytr/reconcile.js";
 
 interface PortfolioParams {
   portfolioId: string;
 }
+
+// Per-portfolio valuation loops (`/networth`, and its snapshot/period-XIRR sub-loops)
+// used to `await` one portfolio at a time. Each iteration issues several DB queries
+// (see `valuePortfolio`), so running them fully concurrently for a user with many
+// portfolios could saturate the postgres-js pool (`max: 10` in `db/client.ts`, shared
+// with pg-boss's own `max: 5`) and self-starve. Bounded via `mapPool` instead.
+const PORTFOLIO_VALUATION_CONCURRENCY = 4;
 
 const bulkDeleteSchema = z.object({
   ids: z.array(z.guid()).min(1),
@@ -152,13 +160,15 @@ export async function transactionsRoute(app: FastifyInstance) {
 
   // Value a portfolio (holdings priced + cash + net worth) in `displayCurrency`.
   // Shared by /summary, /performance and /networth via the valuation service.
+  // Cached (see valuePortfolioCached's doc comment) — every route in this file reads
+  // through here, so they all benefit from the short-TTL derivation cache uniformly.
   async function loadValuation(
     portfolioId: string,
     displayCurrency: string,
     costBasisMode?: CostBasisMode,
     cashCounted = true,
   ) {
-    return valuePortfolio(
+    return valuePortfolioCached(
       app.db,
       await getMarketData(),
       app.config.MARKET_DATA_TTL_MS,
@@ -1540,21 +1550,27 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      const summaries = [];
-      const instrumentIds = new Set<string>();
       // Each portfolio's money-weighted flows are computed under its own boundary
       // (cash-inside vs cash-outside), then concatenated — the aggregate spans
       // portfolios with different boundaries, so there is no single boundary to pass.
-      const flows: CashFlowPoint[] = [];
-      for (const p of pfs) {
+      // Bounded-concurrency (see PORTFOLIO_VALUATION_CONCURRENCY): each portfolio is
+      // independent, so this used to be a serial `for` await — one portfolio's DB round
+      // trips blocked the next's. mapPool preserves input order, so the merge below is
+      // byte-for-byte identical to the old sequential push loop.
+      const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
         const { coreTxns, summary } = await loadValuation(
           p.id,
           display,
           costBasisMode,
           p.cashCounted,
         );
-        summaries.push(summary);
-        flows.push(...(await boundaryFlows(coreTxns, p.cashCounted ? "inside" : "outside", display)));
+        const flows = await boundaryFlows(coreTxns, p.cashCounted ? "inside" : "outside", display);
+        return { summary, flows };
+      });
+      const summaries = perPortfolio.map((r) => r.summary);
+      const instrumentIds = new Set<string>();
+      const flows: CashFlowPoint[] = perPortfolio.flatMap((r) => r.flows);
+      for (const { summary } of perPortfolio) {
         for (const h of summary.holdings) instrumentIds.add(h.instrumentId);
       }
 
@@ -1594,10 +1610,10 @@ export async function transactionsRoute(app: FastifyInstance) {
       let anchorDate: Date | null = null; // actual snapshot date (may lag periodStart by a day or two)
       if (periodStart !== null && pfs.length > 0) {
         const periodStartStr = periodStart.toISOString().slice(0, 10);
-        let totalStartNav = 0;
-        let missingPortfolios = 0;
-        let latestSnapDate: string | null = null;
-        for (const pf of pfs) {
+        // Per-portfolio snapshot + FX fetch is independent — bounded-concurrency instead
+        // of a serial `for` await. The reduction below (sum, count, max-date) is
+        // order-independent, so parallelizing the I/O doesn't change the result.
+        const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (pf) => {
           // Fetch the earliest snapshot at or after periodStart for this portfolio.
           const [snap] = await app.db
             .select()
@@ -1607,16 +1623,29 @@ export async function transactionsRoute(app: FastifyInstance) {
             .limit(1);
           if (!snap) {
             // Portfolio has no snapshot at or after periodStart (brand-new or no history).
-            missingPortfolios++;
-            continue;
+            return null;
           }
           const ratesByDate = await getFxRatesForDates(app.db, [snap.currency], display, [snap.date]);
           const fx = makeFxRateFn(ratesByDate.get(snap.date) ?? {}, display);
-          totalStartNav += Number(convert(snap.netWorth, snap.currency, display, fx));
+          return {
+            nav: Number(convert(snap.netWorth, snap.currency, display, fx)),
+            date: snap.date,
+          };
+        });
+
+        let totalStartNav = 0;
+        let missingPortfolios = 0;
+        let latestSnapDate: string | null = null;
+        for (const r of perPortfolio) {
+          if (!r) {
+            missingPortfolios++;
+            continue;
+          }
+          totalStartNav += r.nav;
           // Use the latest snapshot date across all portfolios as the flow-filter anchor.
           // This ensures no portfolio's snapshot embeds flows that are then re-added.
-          if (latestSnapDate === null || snap.date > latestSnapDate) {
-            latestSnapDate = snap.date;
+          if (latestSnapDate === null || r.date > latestSnapDate) {
+            latestSnapDate = r.date;
           }
         }
         // Only produce a startNav when all portfolios contributed — partial sums would
@@ -1694,15 +1723,19 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      const summaries = [];
-      const allTxns: CoreTransaction[] = [];
-      const txPortfolioId = new Map<string, string>();
-      for (const p of pfs) {
+      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so the
+      // merge below is identical to the old sequential push loop.
+      const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
         const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-        summaries.push(summary);
-        allTxns.push(...coreTxns);
+        return { portfolioId: p.id, coreTxns, summary };
+      });
+      const summaries = perPortfolio.map((r) => r.summary);
+      const allTxns: CoreTransaction[] = perPortfolio.flatMap((r) => r.coreTxns);
+      const txPortfolioId = new Map<string, string>();
+      for (const { portfolioId, coreTxns } of perPortfolio) {
         for (const t of coreTxns) {
-          if (t.id) txPortfolioId.set(t.id, p.id);
+          if (t.id) txPortfolioId.set(t.id, portfolioId);
         }
       }
       const aggregated = aggregatePortfolios(summaries, display);
@@ -1747,16 +1780,23 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      const logs: TradeLog[] = [];
-      const meta = new Map<string, InstrumentMeta>();
-      for (const p of pfs) {
+      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so merging
+      // `meta` maps below in order reproduces the same last-write-wins behavior the old
+      // sequential loop had for an instrument shared across portfolios.
+      const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
         const { coreTxns, prices, metaById } = await loadValuation(
           p.id,
           display,
           costBasisMode,
           p.cashCounted,
         );
-        logs.push(await buildTradeLog(coreTxns, prices, display, method, costBasisMode, metaById));
+        const log = await buildTradeLog(coreTxns, prices, display, method, costBasisMode, metaById);
+        return { log, metaById };
+      });
+      const logs: TradeLog[] = perPortfolio.map((r) => r.log);
+      const meta = new Map<string, InstrumentMeta>();
+      for (const { metaById } of perPortfolio) {
         for (const [k, v] of metaById) meta.set(k, v);
       }
       return attachInstruments(mergeTradeLogs(logs, display, method), meta);
@@ -1990,15 +2030,18 @@ export async function transactionsRoute(app: FastifyInstance) {
         );
 
       // Detect per portfolio in the display currency, then merge (not concatenate).
-      const perPortfolio: SparplanStats[] = [];
-      const allInstrumentIds = new Set<string>();
-      for (const p of pfs) {
+      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order.
+      const portfolioResults = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
         const { coreTxns } = await loadValuation(p.id, display, undefined, p.cashCounted);
         const ccys = [...new Set(coreTxns.map((t) => t.currency))];
         const rates = await getFxRates(app.db, ccys, display);
         const fx = makeFxRateFn(rates, display);
-        const stats = detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
-        perPortfolio.push(stats);
+        return detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
+      });
+      const perPortfolio: SparplanStats[] = portfolioResults;
+      const allInstrumentIds = new Set<string>();
+      for (const stats of perPortfolio) {
         for (const plan of stats.plans) allInstrumentIds.add(plan.instrumentId);
       }
 
@@ -2056,15 +2099,18 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      const summaries: PortfolioSummary[] = [];
-      const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = [];
-      const allTxns: CoreTransaction[] = [];
-      for (const p of pfs) {
+      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so the
+      // merge below is identical to the old sequential push loop.
+      const perPortfolioLoad = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
         const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-        summaries.push(summary);
-        loaded.push({ txns: coreTxns, boundary: p.cashCounted ? "inside" : "outside" });
-        allTxns.push(...coreTxns);
-      }
+        return { summary, txns: coreTxns, boundary: p.cashCounted ? ("inside" as const) : ("outside" as const) };
+      });
+      const summaries: PortfolioSummary[] = perPortfolioLoad.map((r) => r.summary);
+      const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = perPortfolioLoad.map(
+        (r) => ({ txns: r.txns, boundary: r.boundary }),
+      );
+      const allTxns: CoreTransaction[] = perPortfolioLoad.flatMap((r) => r.txns);
       const fx = makeFxRateFn(
         await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
         display,
@@ -2074,11 +2120,12 @@ export async function transactionsRoute(app: FastifyInstance) {
       const perPortfolio = loaded.map(({ txns, boundary }) =>
         contributionStats({ txns, displayCurrency: display, fx, boundary }),
       );
-      // Money-weighted flows: each portfolio under its boundary, concatenated.
-      const flows: CashFlowPoint[] = [];
-      for (const { txns, boundary } of loaded) {
-        flows.push(...(await boundaryFlows(txns, boundary, display)));
-      }
+      // Money-weighted flows: each portfolio under its boundary, concatenated. Independent
+      // per portfolio — bounded-concurrency instead of a serial `for` await.
+      const flowsByPortfolio = await mapPool(loaded, PORTFOLIO_VALUATION_CONCURRENCY, ({ txns, boundary }) =>
+        boundaryFlows(txns, boundary, display),
+      );
+      const flows: CashFlowPoint[] = flowsByPortfolio.flat();
       const aggregated = aggregatePortfolios(summaries, display);
       return enrichContributions(
         mergeContributionStats(perPortfolio, display),
@@ -2938,16 +2985,24 @@ export async function transactionsRoute(app: FastifyInstance) {
         if (totalAllocated === 0) continue;
 
         // Merge trade logs across all portfolios; accumulate rest-of-year income forecast.
+        // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+        // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so
+        // merging `logs`/`meta` below in order reproduces the old sequential loop's
+        // behavior exactly (including last-write-wins for a shared instrument's meta),
+        // and summing the forecast is order-independent.
         const now = new Date();
-        const logs: TradeLog[] = [];
+        const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
+          const { coreTxns, prices, metaById, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
+          const log = await buildTradeLog(coreTxns, prices, display, "fifo", undefined, metaById);
+          const pfForecast = await restOfYearForecastGross(coreTxns, summary, display, year, now);
+          return { log, metaById, forecast: Number(pfForecast) };
+        });
+        const logs: TradeLog[] = perPortfolio.map((r) => r.log);
         const meta = new Map<string, InstrumentMeta>();
         let totalForecastGross = 0;
-        for (const p of pfs) {
-          const { coreTxns, prices, metaById, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-          logs.push(await buildTradeLog(coreTxns, prices, display, "fifo", undefined, metaById));
+        for (const { metaById, forecast } of perPortfolio) {
           for (const [k, v] of metaById) meta.set(k, v);
-          const pfForecast = await restOfYearForecastGross(coreTxns, summary, display, year, now);
-          totalForecastGross += Number(pfForecast);
+          totalForecastGross += forecast;
         }
         const mergedLog = mergeTradeLogs(logs, display, "fifo");
 

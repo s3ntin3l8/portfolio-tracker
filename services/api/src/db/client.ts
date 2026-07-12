@@ -77,6 +77,28 @@ export function getDb(): DB {
   return dbInstance;
 }
 
+// How many pool connections to open eagerly at boot (see warmPool below). Matches the
+// bounded concurrency used elsewhere for per-portfolio fan-out (mapPool/
+// PORTFOLIO_VALUATION_CONCURRENCY in the /networth routes) — covers a typical page's
+// concurrent request handlers while leaving headroom under the shared max:10 pool cap
+// (plus pg-boss's own max:5) against Postgres/Supavisor's connection ceiling.
+export const WARM_POOL_SIZE = 4;
+
+/**
+ * Fire `count` trivial concurrent queries so postgres-js opens that many real
+ * connections eagerly, before the first user request arrives. postgres-js opens pool
+ * connections lazily on first use, so without this, whichever request happens to need
+ * the Nth connection pays a fresh TCP+TLS handshake to the remote Postgres inline —
+ * live-measured on a self-hosted deployment at ~500-600ms on top of the steady-state
+ * per-query network cost. Best-effort via `allSettled`: a failed connection just stays
+ * lazy (today's behavior) rather than blocking boot.
+ */
+export async function warmPool(count = WARM_POOL_SIZE): Promise<void> {
+  if (!sql) return; // No-op for PGlite (tests) — nothing to warm.
+  const conn = sql;
+  await Promise.allSettled(Array.from({ length: count }, () => conn`SELECT 1`));
+}
+
 // Drizzle's default migrate() runs all pending migrations in a single transaction.
 // That breaks when migration N does `ALTER TYPE ADD VALUE` and migration N+1 uses
 // the new value: Postgres requires the ALTER TYPE to be committed first (PG error

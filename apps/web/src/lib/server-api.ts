@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   createApiClient,
@@ -7,6 +8,8 @@ import {
   type AccountHolder,
   type User,
   type NetWorth,
+  type PortfolioSummary,
+  type PortfolioPerformance,
   type PerformancePoint,
   type HistoryPoint,
   type Instrument,
@@ -91,8 +94,17 @@ const authConfigured = Boolean(
   process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER,
 );
 
-/** A server-bound api-client carrying the current session's access token, or null. */
-async function getServerApi(): Promise<ApiClient | null> {
+/**
+ * A server-bound api-client carrying the current session's access token, or null.
+ *
+ * Wrapped in React's `cache()` — request-scoped memoization that survives despite the
+ * `(app)` layout being `force-dynamic` (it dedupes *within* one render, it doesn't add
+ * cross-request caching). Without this, every one of the ~30 loaders below independently
+ * re-read every cookie and re-ran `accessTokenFromCookieHeader`'s JWT decrypt; a single
+ * page render calls this 4-5+ times. `cache()` only memoizes the *successful* result — a
+ * rejected/null-returning call is retried on the next call, so failures never get stuck.
+ */
+const getServerApi = cache(async (): Promise<ApiClient | null> => {
   if (!authConfigured) return null;
   const cookieHeader = (await cookies())
     .getAll()
@@ -106,7 +118,84 @@ async function getServerApi(): Promise<ApiClient | null> {
   // the same-origin proxy, which re-resolves the token on every request. Don't copy this
   // snapshot pattern into a long-lived context.
   return createApiClient({ baseUrl: apiBaseUrl, getToken: () => token });
+});
+
+/**
+ * Cost basis is a single global preference; several loaders below accept it as an
+ * optional param that the API defaults to `"purchase_price"` when omitted (see
+ * `getSummary`'s `costBasis ? "...&costBasis=..." : "..."` branch in the api-client —
+ * omitting the query param and passing `"purchase_price"` explicitly are the same
+ * request server-side). Resolving to the explicit default *before* it reaches a
+ * `cache()`-wrapped call below means two call sites that differ only in "omitted" vs
+ * "purchase_price" — e.g. the `(app)` layout's `loadNetWorth()` and a page's
+ * `loadNetWorth(costBasis)` — collapse onto the same cache entry instead of each
+ * paying its own round trip.
+ */
+function normalizeCostBasis(
+  costBasis?: "purchase_price" | "total_paid",
+): "purchase_price" | "total_paid" {
+  return costBasis ?? "purchase_price";
 }
+
+/**
+ * Request-scoped dedup for the portfolio/account-holder/user catalog reads — each is
+ * called from many independent loaders per page (e.g. `listPortfolios` from ~13 call
+ * sites) with no shared cache today, so a single page render issued one round trip per
+ * call site. `cache()` collapses repeats within one render into a single call.
+ */
+const listPortfoliosCached = cache(async (): Promise<Portfolio[]> => {
+  const api = await getServerApi();
+  if (!api) return [];
+  return api.listPortfolios();
+});
+
+const listAccountHoldersCached = cache(async (): Promise<AccountHolder[]> => {
+  const api = await getServerApi();
+  if (!api) return [];
+  return api.listAccountHolders();
+});
+
+const meCached = cache(async (): Promise<User | null> => {
+  const api = await getServerApi();
+  if (!api) return null;
+  return api.me();
+});
+
+/**
+ * Cached valuation reads, keyed by their resolved (normalized) arguments. Both the
+ * `(app)` layout and several pages independently load net worth / a portfolio summary
+ * for the same scope — these collapse those into one round trip per distinct scope.
+ */
+const getSummaryCached = cache(
+  async (
+    portfolioId: string,
+    costBasis: "purchase_price" | "total_paid",
+  ): Promise<PortfolioSummary> => {
+    const api = await getServerApi();
+    if (!api) throw new Error("api unavailable");
+    return api.getSummary(portfolioId, costBasis);
+  },
+);
+
+const getPerformanceCached = cache(
+  async (portfolioId: string): Promise<PortfolioPerformance> => {
+    const api = await getServerApi();
+    if (!api) throw new Error("api unavailable");
+    return api.getPerformance(portfolioId);
+  },
+);
+
+const getNetWorthCached = cache(
+  async (
+    costBasis: "purchase_price" | "total_paid",
+    holderId: string | undefined,
+    period: string,
+  ): Promise<NetWorth> => {
+    const api = await getServerApi();
+    if (!api) throw new Error("api unavailable");
+    return api.getNetWorth(costBasis, holderId, period);
+  },
+);
 
 export type NetWorthResult =
   | { status: "ok"; data: NetWorth }
@@ -125,8 +214,9 @@ export async function loadNetWorth(
 ): Promise<NetWorthResult> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
+  const resolvedCostBasis = normalizeCostBasis(costBasis);
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -134,8 +224,8 @@ export async function loadNetWorth(
       // Single-portfolio scope: period filter not yet supported via getSummary/getPerformance.
       // We pass period=max implicitly — PeriodSelector only renders in aggregate scope.
       const [summary, perf] = await Promise.all([
-        api.getSummary(selected.id, costBasis),
-        api.getPerformance(selected.id),
+        getSummaryCached(selected.id, resolvedCostBasis),
+        getPerformanceCached(selected.id),
       ]);
       return {
         status: "ok",
@@ -143,7 +233,7 @@ export async function loadNetWorth(
       };
     }
     const holderId = await resolveHolderScope(portfolios);
-    const data = await api.getNetWorth(costBasis, holderId, period);
+    const data = await getNetWorthCached(resolvedCostBasis, holderId, period);
     if (data.portfolioCount === 0) return { status: "empty" };
     return { status: "ok", data };
   } catch {
@@ -171,7 +261,7 @@ export async function loadNetWorthHistory(
   const api = await getServerApi();
   if (!api) return [];
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
     if (selected) return await api.getPortfolioHistory(selected.id, range);
@@ -195,7 +285,7 @@ export async function loadPortfolios(): Promise<{
   const api = await getServerApi();
   if (!api) return { status: "unavailable", portfolios: [] };
   try {
-    const [list, values] = await Promise.all([api.listPortfolios(), api.listPortfolioValues()]);
+    const [list, values] = await Promise.all([listPortfoliosCached(), api.listPortfolioValues()]);
     const valueMap = new Map(values.map((v) => [v.id, v.netWorth]));
     const portfolios = list.map((portfolio) => ({
       portfolio,
@@ -226,8 +316,8 @@ export async function resolveSelection(): Promise<Selection> {
   if (!api) return { status: "unavailable", portfolios: [], selectedId: null, selectedHolderId: null };
   try {
     const [portfolios, holders] = await Promise.all([
-      api.listPortfolios(),
-      api.listAccountHolders(),
+      listPortfoliosCached(),
+      listAccountHoldersCached(),
     ]);
     const rawScope = await getRawScope();
 
@@ -285,7 +375,7 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
   const api = await getServerApi();
   if (!api) return { status: "unavailable", transactions: [] };
   try {
-    const allPortfolios = await api.listPortfolios();
+    const allPortfolios = await listPortfoliosCached();
     if (allPortfolios.length === 0) return { status: "empty", transactions: [] };
     // When a holder scope is active (and still valid), narrow to that holder's portfolios.
     const holderId = await resolveHolderScope(allPortfolios);
@@ -340,7 +430,7 @@ export async function loadHoldings(
       cashTracked: false,
     };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) {
       return {
         status: "empty",
@@ -357,9 +447,13 @@ export async function loadHoldings(
     const wanted = overrideId ?? (await getSelectedPortfolioId());
     const selected = portfolios.find((p) => p.id === wanted);
     const holderId = selected ? undefined : await resolveHolderScope(portfolios);
+    const resolvedCostBasis = normalizeCostBasis(costBasis);
+    // period "max" is the same request as omitting it (see getNetWorthCached's doc
+    // comment) — passed explicitly so this call collapses onto loadNetWorth's cache
+    // entry for the same scope instead of paying its own round trip.
     const data = selected
-      ? await api.getSummary(selected.id, costBasis)
-      : await api.getNetWorth(costBasis, holderId);
+      ? await getSummaryCached(selected.id, resolvedCostBasis)
+      : await getNetWorthCached(resolvedCostBasis, holderId, "max");
     return {
       status: "ok",
       holdings: data.holdings,
@@ -415,7 +509,7 @@ export async function loadContributions(): Promise<ContributionsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -457,7 +551,7 @@ export async function loadSparplan(): Promise<SparplanView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -487,7 +581,7 @@ export async function loadTrades(
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -527,7 +621,7 @@ export async function loadAccountHolders(): Promise<AccountHolder[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {
-    return await api.listAccountHolders();
+    return await listAccountHoldersCached();
   } catch {
     return [];
   }
@@ -688,7 +782,7 @@ export async function loadIncomeStats(): Promise<IncomeStatsView> {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const selected = portfolios.find((p) => p.id === wanted);
@@ -759,7 +853,7 @@ export async function loadPortfolioList(): Promise<Portfolio[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {
-    return await api.listPortfolios();
+    return await listPortfoliosCached();
   } catch {
     return [];
   }
@@ -770,7 +864,7 @@ export async function loadMe(): Promise<User | null> {
   const api = await getServerApi();
   if (!api) return null;
   try {
-    return await api.me();
+    return await meCached();
   } catch {
     return null;
   }
@@ -889,7 +983,7 @@ export async function loadPortfolio<T>(
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return { status: "empty" };
     const wanted = await getSelectedPortfolioId();
     const portfolio = portfolios.find((p) => p.id === wanted) ?? portfolios[0];
@@ -932,7 +1026,7 @@ export async function loadNetworthTax(
   const api = await getServerApi();
   if (!api) return [];
   try {
-    const portfolios = await api.listPortfolios();
+    const portfolios = await listPortfoliosCached();
     if (portfolios.length === 0) return [];
 
     const wanted = await getSelectedPortfolioId();
@@ -1003,7 +1097,7 @@ export async function loadNetworthTax(
       const holderId = await resolveHolderScope(portfolios);
       let holderName = "";
       if (holderId) {
-        const holders = await api.listAccountHolders();
+        const holders = await listAccountHoldersCached();
         holderName = holders.find((h) => h.id === holderId)?.name ?? "";
       }
 
@@ -1190,7 +1284,7 @@ export async function loadTaxYearDetail(
   let portfolios: Portfolio[];
   let selected: Portfolio | undefined;
   try {
-    portfolios = await api.listPortfolios();
+    portfolios = await listPortfoliosCached();
     const wanted = await getSelectedPortfolioId();
     selected = portfolios.find((p) => p.id === wanted);
   } catch {
