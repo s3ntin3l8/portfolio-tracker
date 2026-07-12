@@ -27,6 +27,10 @@ export function DisplayCurrency({ current }: { current: string }) {
     try {
       await api.updateMe({ displayCurrency: ccy });
       setValue(ccy);
+      // Mirror the choice into a cookie (1y) so the logged-out landing page can format its
+      // demo figure in a returning user's currency — `user_preferences` stays the source of
+      // truth for every authed page, this is purely a pre-login cosmetic fallback.
+      document.cookie = `display_currency=${ccy}; path=/; max-age=31536000; samesite=lax`;
       router.refresh();
     } finally {
       setPending(null);

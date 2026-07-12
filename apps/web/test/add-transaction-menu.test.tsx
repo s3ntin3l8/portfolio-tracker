@@ -86,6 +86,41 @@ describe("AddTransactionMenu", () => {
     expect(
       screen.queryByRole("dialog", { name: messages.Manage.addMenu.title }),
     ).not.toBeInTheDocument();
+    expect(screen.getByTestId("import-flow")).toBeInTheDocument();
+  });
+
+  // Regression test for #471: the CSV card called the same `openImport()` path as
+  // screenshot but closing one Drawer.Root and opening a second in the same tick raced
+  // vaul's body-scroll-lock cleanup, so the import sheet never became interactive.
+  it("opens the import sheet from the CSV card too", async () => {
+    renderMenu();
+    openMenu();
+    fireEvent.click(screen.getByText(messages.Manage.addMenu.csv));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("dialog", { name: messages.Import.title }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("import-flow")).toBeInTheDocument();
+  });
+
+  it("returns from the import step to the method cards via back, without closing the sheet", async () => {
+    renderMenu();
+    openMenu();
+    fireEvent.click(screen.getByText(messages.Manage.addMenu.screenshot));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("dialog", { name: messages.Import.title }),
+      ).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: messages.Manage.back }));
+
+    expect(
+      screen.getByRole("dialog", { name: messages.Manage.addMenu.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(messages.Manage.addMenu.csv)).toBeInTheDocument();
   });
 
   it("keeps the import sheet closed without a share/import param", () => {

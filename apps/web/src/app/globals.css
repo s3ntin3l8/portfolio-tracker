@@ -210,4 +210,12 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* Recharts (e.g. AllocationDonut) attaches an onClick to each Pie sector, making the
+     SVG path focusable — tapping a slice then shows the browser's default focus ring as
+     a white box around the sector's bounding box. Scoped to recharts so we don't strip
+     focus rings app-wide. */
+  .recharts-wrapper :focus,
+  .recharts-wrapper :focus-visible {
+    outline: none;
+  }
 }

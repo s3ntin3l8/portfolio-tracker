@@ -1,20 +1,45 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { signIn } from "next-auth/react";
 import { Wallet, Shield, Lock, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Representative "portfolio glance" amount per demo currency — keeps the figure realistic
+// per currency rather than converting one hardcoded number. Same +18.2% delta throughout;
+// only its punctuation/percent formatting follows locale.
+const DEMO_AMOUNT_BY_CURRENCY: Record<string, number> = {
+  IDR: 40_650_000,
+  EUR: 24_180,
+  USD: 26_400,
+  SGD: 35_600,
+};
+const DEMO_GAIN = 0.182;
+
 // Pocket "1A — Split Hero" sign-in (the chosen login concept). Brand panel + auth panel;
 // stacks to a compact brand band above the form on mobile. Authentik OIDC is the only real
 // auth, so both the SSO button and the email form route through it.
-export function Landing() {
+export function Landing({ initialCurrency = "IDR" }: { initialCurrency?: string }) {
   const t = useTranslations("Landing");
+  const locale = useLocale();
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
+
+  const demoCurrency =
+    DEMO_AMOUNT_BY_CURRENCY[initialCurrency] !== undefined ? initialCurrency : "IDR";
+  const demoAmount = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: demoCurrency,
+    maximumFractionDigits: 0,
+  }).format(DEMO_AMOUNT_BY_CURRENCY[demoCurrency]);
+  const demoGain = new Intl.NumberFormat(locale, {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(DEMO_GAIN);
 
   const start = () => {
     setBusy(true);
@@ -55,10 +80,10 @@ export function Landing() {
             <div className="text-sm text-white/60">{t("glanceLabel")}</div>
             <div className="mt-1 flex items-center gap-3">
               <span className="font-mono text-3xl font-extrabold tabular-nums">
-                Rp 40.650.000
+                {demoAmount}
               </span>
               <span className="rounded-full bg-[rgba(56,225,164,0.18)] px-2 py-0.5 text-sm font-semibold text-[#5FEAB6]">
-                ▲ 18,2%
+                ▲ {demoGain}
               </span>
             </div>
             <svg
