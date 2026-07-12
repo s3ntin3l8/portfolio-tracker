@@ -26,6 +26,7 @@ jobs:
       # ~5m30s to ~2m, live-validated via a smoke-test PR (#408) before adopting here.
       test-shards: "4"
       turbo-cache: true
+      strict-checks: true
     secrets: inherit
 
   test-python:
