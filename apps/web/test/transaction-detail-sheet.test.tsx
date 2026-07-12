@@ -108,6 +108,30 @@ describe("TransactionDetailSheet", () => {
     expect(screen.getAllByText(/IDR/).length).toBeGreaterThan(0);
   });
 
+  it("#465: shows a secondary ≈ amount in the scope currency when it differs from the row's own currency", () => {
+    renderSheet({
+      tx: { ...TX, currency: "USD", displayCurrency: "EUR", displayRate: "0.9" },
+    });
+    // netAmount = -(10*100 + 5) = -1005 USD -> * 0.9 = -904.5 EUR.
+    expect(screen.getByText(/≈.*904\.50/)).toBeInTheDocument();
+  });
+
+  it("hides the secondary amount when the row is already in the scope currency", () => {
+    renderSheet({
+      tx: { ...TX, currency: "EUR", displayCurrency: "EUR", displayRate: "1" },
+    });
+    expect(screen.queryByText(/≈/)).toBeNull();
+  });
+
+  it("hides the secondary amount when displayRate is the unconverted fallback (unknown FX pair)", () => {
+    // currency !== displayCurrency but rate="1" here means "no rate found", not "already
+    // converted" — must not mislabel the unconverted amount as EUR.
+    renderSheet({
+      tx: { ...TX, currency: "SGD", displayCurrency: "EUR", displayRate: "1" },
+    });
+    expect(screen.queryByText(/≈/)).toBeNull();
+  });
+
   it("renders the Breakdown and Details section headings", () => {
     renderSheet();
     expect(screen.getByText(messages.Transactions.breakdown)).toBeInTheDocument();

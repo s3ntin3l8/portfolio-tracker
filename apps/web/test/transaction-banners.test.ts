@@ -59,7 +59,7 @@ describe("ACTIVITY_INCOME_TYPES", () => {
 
 describe("computeAllBanner", () => {
   it("returns null when there are no rows", () => {
-    expect(computeAllBanner([], "en", allLabels, NOW)).toBeNull();
+    expect(computeAllBanner([], "IDR", "en", allLabels, NOW)).toBeNull();
   });
 
   it("sums buys and sells (all-time) and income (current year only) into 3 tiles", () => {
@@ -72,7 +72,7 @@ describe("computeAllBanner", () => {
       // ...but one from last year should NOT be included in the YTD tile.
       row({ type: "dividend", price: "500", executedAt: "2025-01-15T00:00:00Z" }),
     ];
-    const data = computeAllBanner(rows, "en", allLabels, NOW)!;
+    const data = computeAllBanner(rows, "IDR", "en", allLabels, NOW)!;
     expect(data).not.toBeNull();
     // Invested = 10*100 + 5*200 = 2000; 2 buys.
     expect(data.tiles[0].value).toContain("2,000");
@@ -88,23 +88,59 @@ describe("computeAllBanner", () => {
     expect(data.mix.map((m) => m.label)).toEqual(["Buys", "Sells", "Income"]);
   });
 
-  it("scopes to the dominant currency when rows are mixed", () => {
+  it("#465: includes every row (converted via displayRate) instead of dropping non-scope currencies", () => {
     const rows: TxRow[] = [
-      row({ type: "buy", quantity: "1", price: "100", executedAt: "2026-01-01T00:00:00Z", currency: "IDR" }),
-      row({ type: "buy", quantity: "1", price: "100", executedAt: "2026-01-02T00:00:00Z", currency: "IDR" }),
-      row({ type: "buy", quantity: "1", price: "999", executedAt: "2026-01-03T00:00:00Z", currency: "USD" }),
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        executedAt: "2026-01-01T00:00:00Z",
+        currency: "IDR",
+        displayCurrency: "EUR",
+        displayRate: "1", // already the scope currency
+      }),
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        executedAt: "2026-01-02T00:00:00Z",
+        currency: "IDR",
+        displayCurrency: "EUR",
+        displayRate: "1",
+      }),
+      // A minority-currency row: previously dropped from both the total AND the count.
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "10",
+        executedAt: "2026-01-03T00:00:00Z",
+        currency: "USD",
+        displayCurrency: "EUR",
+        displayRate: "0.9", // 10 USD -> 9 EUR
+      }),
     ];
-    const data = computeAllBanner(rows, "en", allLabels, NOW)!;
-    expect(data.currency).toBe("IDR");
-    // Only the two IDR rows (200 total) count; the USD row is dropped.
-    expect(data.tiles[0].sub).toBe("2 buys");
+    const data = computeAllBanner(rows, "EUR", "en", allLabels, NOW)!;
+    expect(data.currency).toBe("EUR");
+    // All 3 buys count, not just the 2 IDR-denominated ones.
+    expect(data.tiles[0].sub).toBe("3 buys");
+    // 100 + 100 + (10 * 0.9) = 209.
+    expect(data.tiles[0].value).toContain("209");
+  });
+
+  it("treats a row with no displayRate as unconverted (rate 1), not dropped", () => {
+    const rows: TxRow[] = [
+      row({ type: "buy", quantity: "1", price: "50", executedAt: "2026-01-01T00:00:00Z", currency: "SGD" }),
+    ];
+    const data = computeAllBanner(rows, "SGD", "en", allLabels, NOW)!;
+    expect(data.tiles[0].sub).toBe("1 buys");
+    expect(data.tiles[0].value).toContain("50");
   });
 });
 
 describe("computeIncomeBanner", () => {
   it("returns null when there is no income at all", () => {
     const rows: TxRow[] = [row({ type: "buy", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" })];
-    expect(computeIncomeBanner(rows, "en", incomeLabels, NOW)).toBeNull();
+    expect(computeIncomeBanner(rows, "IDR", "en", incomeLabels, NOW)).toBeNull();
   });
 
   it("computes YTD, a trailing-12mo projection, and a by-source split that foots to YTD", () => {
@@ -114,7 +150,7 @@ describe("computeIncomeBanner", () => {
       // Outside the trailing-12mo window (> 365 days before NOW) — excluded from Projected.
       row({ type: "dividend", price: "5000", executedAt: "2024-01-01T00:00:00Z" }),
     ];
-    const data = computeIncomeBanner(rows, "en", incomeLabels, NOW)!;
+    const data = computeIncomeBanner(rows, "IDR", "en", incomeLabels, NOW)!;
     expect(data).not.toBeNull();
     expect(data.ytd).toContain("1,000"); // 700 + 300
     expect(data.trendLabel).toBe("New"); // no 2025 income to compare against
@@ -128,17 +164,33 @@ describe("computeIncomeBanner", () => {
       row({ type: "dividend", price: "200", executedAt: "2025-06-01T00:00:00Z" }),
       row({ type: "dividend", price: "300", executedAt: "2026-06-01T00:00:00Z" }),
     ];
-    const data = computeIncomeBanner(rows, "en", incomeLabels, NOW)!;
+    const data = computeIncomeBanner(rows, "IDR", "en", incomeLabels, NOW)!;
     // (300 - 200) / 200 = +50%
     expect(data.trendLabel).toBe("+50.00% vs last year");
     expect(data.trendTone).toBe("up");
+  });
+
+  it("#465: includes minority-currency income rows via displayRate", () => {
+    const rows: TxRow[] = [
+      row({ type: "dividend", price: "700", executedAt: "2026-02-01T00:00:00Z", currency: "EUR", displayRate: "1" }),
+      row({
+        type: "dividend",
+        price: "100",
+        executedAt: "2026-03-01T00:00:00Z",
+        currency: "USD",
+        displayRate: "0.9",
+      }),
+    ];
+    const data = computeIncomeBanner(rows, "EUR", "en", incomeLabels, NOW)!;
+    // 700 + (100 * 0.9) = 790.
+    expect(data.ytd).toContain("790");
   });
 });
 
 describe("computeTradeBanner", () => {
   it("returns null when there are no rows of that type", () => {
     const rows: TxRow[] = [row({ type: "sell", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" })];
-    expect(computeTradeBanner(rows, "buy", "en")).toBeNull();
+    expect(computeTradeBanner(rows, "buy", "IDR", "en")).toBeNull();
   });
 
   it("ranks the per-symbol breakdown by amount, largest first", () => {
@@ -158,7 +210,7 @@ describe("computeTradeBanner", () => {
         instrument: { symbol: "TLKM", name: "Telkom" },
       }),
     ];
-    const data = computeTradeBanner(rows, "buy", "en")!;
+    const data = computeTradeBanner(rows, "buy", "IDR", "en")!;
     expect(data.count).toBe(2);
     expect(data.total).toContain("6,000");
     expect(data.avg).toContain("3,000");
@@ -166,5 +218,16 @@ describe("computeTradeBanner", () => {
     expect(data.bySymbol[0].pct).toBe(100);
     expect(data.bySymbol[1].label).toBe("BBCA");
     expect(data.bySymbol[1].pct).toBe(20); // 1000 / 5000
+  });
+
+  it("#465: counts and converts a minority-currency buy instead of dropping it", () => {
+    const rows: TxRow[] = [
+      row({ type: "buy", quantity: "1", price: "100", executedAt: "2026-01-01T00:00:00Z", currency: "EUR", displayRate: "1" }),
+      row({ type: "buy", quantity: "1", price: "10", executedAt: "2026-01-02T00:00:00Z", currency: "USD", displayRate: "0.9" }),
+    ];
+    const data = computeTradeBanner(rows, "buy", "EUR", "en")!;
+    expect(data.count).toBe(2);
+    // 100 + (10 * 0.9) = 109.
+    expect(data.total).toContain("109");
   });
 });

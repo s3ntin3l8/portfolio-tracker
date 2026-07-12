@@ -676,6 +676,12 @@ export interface Transaction {
   needsReview?: boolean;
   /** All source-provenance rows for this transaction; empty when none have been written yet. */
   sources: SourceSummary[];
+  /** Present only when the list was fetched with `?convertTo=` (#465): the rate to
+   *  multiply an amount in `currency` by to get `displayCurrency`, at this row's own
+   *  trade date. `"1"` for same-currency rows and unknown FX pairs (unconverted). */
+  displayRate?: string;
+  /** The scope currency `displayRate` converts into; present alongside `displayRate`. */
+  displayCurrency?: string;
 }
 
 /** Result of a read-only merge simulation (`previewMergeTransactions`). `ok: false` means the
@@ -1901,8 +1907,15 @@ export function createApiClient(config: ApiClientConfig) {
     deleteAccountHolder: (holderId: string) =>
       request<void>("DELETE", `/account-holders/${holderId}`),
 
-    listTransactions: (portfolioId: string) =>
-      request<Transaction[]>("GET", `/portfolios/${portfolioId}/transactions`),
+    /** `convertTo` requests a per-row `displayRate`/`displayCurrency` (trade-date FX into
+     *  that currency) alongside each row's native amount — see issue #465. */
+    listTransactions: (portfolioId: string, convertTo?: string) =>
+      request<Transaction[]>(
+        "GET",
+        convertTo
+          ? `/portfolios/${portfolioId}/transactions?convertTo=${encodeURIComponent(convertTo)}`
+          : `/portfolios/${portfolioId}/transactions`,
+      ),
     createTransaction: (portfolioId: string, input: Omit<TransactionInput, "portfolioId">) =>
       request<Transaction>("POST", `/portfolios/${portfolioId}/transactions`, input),
     updateTransaction: (

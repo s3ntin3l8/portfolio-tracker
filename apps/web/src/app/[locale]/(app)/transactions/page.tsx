@@ -40,14 +40,20 @@ export default async function TransactionsPage({
   let rows: TxRow[] = [];
   let singlePortfolio: { id: string; name: string; documentRetention: boolean } | null = null;
   let anomalies: Anomaly[] | null = null;
+  // "Scope currency" (#465): single portfolio → its baseCurrency; aggregate/holder → the
+  // display-currency selector. Drives the Activity banners (which must include every
+  // transaction, converted, rather than dropping non-dominant currencies) and the row
+  // detail sheets' secondary converted amount.
+  let scopeCurrency = "IDR";
 
   if (aggregate) {
     const result = await loadTransactionsAcrossPortfolios();
     status = result.status;
     rows = result.transactions;
+    scopeCurrency = result.scopeCurrency;
   } else {
     const [txResult, anomalyResult] = await Promise.all([
-      loadPortfolio((api, portfolio) => api.listTransactions(portfolio.id)),
+      loadPortfolio((api, portfolio) => api.listTransactions(portfolio.id, portfolio.baseCurrency)),
       loadAnomalies(),
     ]);
     status = txResult.status;
@@ -59,6 +65,7 @@ export default async function TransactionsPage({
         name: txResult.portfolio.name,
         documentRetention: txResult.portfolio.documentRetention,
       };
+      scopeCurrency = txResult.portfolio.baseCurrency;
     }
   }
 
@@ -187,6 +194,7 @@ export default async function TransactionsPage({
         showPortfolio={aggregate}
         anomalies={anomalies ?? []}
         portfolios={portfolioList}
+        scopeCurrency={scopeCurrency}
       />
       {importsSection}
     </div>

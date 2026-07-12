@@ -983,7 +983,7 @@
       "id": "Bahasa Indonesia"
     },
     "displayCurrency": "Mata uang tampilan",
-    "displayCurrencyHint": "Kekayaan bersih dan total ditampilkan dalam mata uang ini.",
+    "displayCurrencyHint": "Digunakan untuk tampilan gabungan (Semua portofolio / satu pemilik akun). Satu portofolio tunggal selalu menampilkan mata uangnya sendiri.",
     "save": "Simpan perubahan",
     "saving": "Menyimpan…",
     "saved": "Tersimpan",
@@ -1105,6 +1105,7 @@
     "netAmount": "Nominal Bersih",
     "fxRate": "Kurs",
     "grossNative": "Bruto (mata uang asli)",
+    "approxDisplay": "≈ {amount}",
     "source": "Sumber",
     "empty": "Tidak ada transaksi.",
     "searchPlaceholder": "Cari transaksi…",

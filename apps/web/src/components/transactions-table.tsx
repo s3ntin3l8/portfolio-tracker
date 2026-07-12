@@ -234,6 +234,12 @@ export interface TxRow {
   /** Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax. */
   grossNative?: string | null;
   currency: string;
+  /** Present only when the list was fetched with a scope currency (#465): the rate to
+   *  multiply an amount in `currency` by to land in `displayCurrency`, at this row's own
+   *  trade date. `"1"` for same-currency rows and unknown FX pairs (unconverted). */
+  displayRate?: string | null;
+  /** The scope currency `displayRate` converts into; present alongside `displayRate`. */
+  displayCurrency?: string | null;
   executedAt: string;
   source: string;
   instrument: {
@@ -295,6 +301,24 @@ export function txAmount(tx: TxRow): number {
     : price + (tx.tax ? Number(tx.tax) : 0); // income/cash: gross
 }
 
+/** `tx.displayRate` as a number, or `1` when absent (row currency === scope currency, or
+ *  the list wasn't fetched with a scope currency at all). See {@link TxRow.displayRate}. */
+export function displayRate(tx: TxRow): number {
+  return tx.displayRate ? Number(tx.displayRate) : 1;
+}
+
+/** {@link txAmount}, converted into the row's `displayCurrency` (the scope currency) at its
+ *  own trade-date rate — used by cross-row aggregators (the Activity banners) so every row
+ *  contributes, never dropped for being in a non-dominant currency (#465). */
+export function txAmountDisplay(tx: TxRow): number {
+  return txAmount(tx) * displayRate(tx);
+}
+
+/** {@link txNetAmount}, converted the same way as {@link txAmountDisplay}. */
+export function txNetAmountDisplay(tx: TxRow): number {
+  return txNetAmount(tx) * displayRate(tx);
+}
+
 /**
  * Quantity/price cells fall back to "—" for income rows because `quantity` is always "0" by
  * convention (see TxRow doc comments) — but a dividend/coupon parsed from a settlement PDF may
@@ -339,6 +363,7 @@ export function TransactionsTable({
   anomalies = [],
   portfolios = [],
   showFilterBanners = true,
+  scopeCurrency = "IDR",
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
@@ -352,6 +377,10 @@ export function TransactionsTable({
    *  Instrument-detail page embeds this same table for its own "Transactions" section,
    *  which the design shows as a plain list with no banners. */
   showFilterBanners?: boolean;
+  /** The active scope's currency (#465): a portfolio's `baseCurrency` when one is selected,
+   *  else the aggregate/holder display-currency selector. Drives the banner totals (each
+   *  row is pre-converted via `displayRate`) and the detail sheet's secondary amount. */
+  scopeCurrency?: string;
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -513,7 +542,7 @@ export function TransactionsTable({
   const allBanner = useMemo(
     () =>
       activeBannerMode === "all"
-        ? computeAllBanner(rows, locale, {
+        ? computeAllBanner(rows, scopeCurrency, locale, {
             invested: tBanner("invested"),
             proceeds: tBanner("proceeds"),
             incomeYtd: tBanner("incomeYtd"),
@@ -525,12 +554,12 @@ export function TransactionsTable({
             income: tBanner("income"),
           })
         : null,
-    [activeBannerMode, rows, locale, tBanner],
+    [activeBannerMode, rows, scopeCurrency, locale, tBanner],
   );
   const incomeBanner = useMemo(
     () =>
       activeBannerMode === "income"
-        ? computeIncomeBanner(rows, locale, {
+        ? computeIncomeBanner(rows, scopeCurrency, locale, {
             vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
             new: tBanner("newIncome"),
             perMonth: (amount) => tBanner("perMonth", { amount }),
@@ -539,14 +568,14 @@ export function TransactionsTable({
             other: tBanner("otherIncome"),
           })
         : null,
-    [activeBannerMode, rows, locale, tBanner],
+    [activeBannerMode, rows, scopeCurrency, locale, tBanner],
   );
   const tradeBanner = useMemo(
     () =>
       activeBannerMode === "buy" || activeBannerMode === "sell"
-        ? computeTradeBanner(rows, activeBannerMode, locale)
+        ? computeTradeBanner(rows, activeBannerMode, scopeCurrency, locale)
         : null,
-    [activeBannerMode, rows, locale],
+    [activeBannerMode, rows, scopeCurrency, locale],
   );
 
   // Anomalies with no transactionId (reconciliation_gap, position_gap, …) never drive the

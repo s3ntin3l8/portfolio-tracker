@@ -45,7 +45,12 @@ import {
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import { cn, formatMoney, formatSignedMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
-import { txAmount, txNetAmount, SOURCE_ICON } from "@/components/transactions-table";
+import {
+  txAmount,
+  txNetAmount,
+  txNetAmountDisplay,
+  SOURCE_ICON,
+} from "@/components/transactions-table";
 import type { TxRow } from "@/components/transactions-table";
 import type { PickablePortfolio } from "@/components/portfolio-picker";
 import type { Anomaly, TransactionStatus } from "@portfolio/api-client";
@@ -203,6 +208,18 @@ export function TransactionDetailSheet({
 
   const amount = txAmount(tx);
   const netAmount = txNetAmount(tx);
+  // Secondary "≈ in {scope currency}" line (#465) — only when the row's own currency
+  // differs from the scope currency it was fetched against (else it's a redundant
+  // duplicate of the hero amount above it) AND there's an actual rate for the pair.
+  // `displayRate` is overloaded: "1" means either "same currency" (excluded above) or
+  // "unknown FX pair, left unconverted" — the latter must NOT render as a converted
+  // amount mislabeled with the scope currency.
+  const showApproxDisplay =
+    tx.displayCurrency != null &&
+    tx.displayCurrency !== tx.currency &&
+    tx.displayRate != null &&
+    tx.displayRate !== "1";
+  const netAmountDisplay = showApproxDisplay ? txNetAmountDisplay(tx) : null;
   const qty = Number(tx.quantity);
   const badge = TYPE_BADGE[tx.type] ?? DEFAULT_BADGE;
   const BadgeIcon = badge.icon;
@@ -382,6 +399,11 @@ export function TransactionDetailSheet({
             >
               {formatSignedMoney(netAmount, tx.currency, locale)}
             </div>
+            {showApproxDisplay && netAmountDisplay !== null && (
+              <div className="tabular mt-0.5 text-[13px] font-medium text-text-2">
+                {t("approxDisplay", { amount: m(netAmountDisplay, tx.displayCurrency!) })}
+              </div>
+            )}
             <div className="mt-2.5">
               <span
                 className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.04em]"

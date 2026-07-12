@@ -985,7 +985,7 @@
       "id": "Bahasa Indonesia"
     },
     "displayCurrency": "Display currency",
-    "displayCurrencyHint": "Net worth and totals are shown in this currency.",
+    "displayCurrencyHint": "Used for combined views (All portfolios / an account holder). A single portfolio always shows its own currency.",
     "save": "Save changes",
     "saving": "Saving…",
     "saved": "Saved",
@@ -1107,6 +1107,7 @@
     "netAmount": "Net Amount",
     "fxRate": "FX Rate",
     "grossNative": "Gross (native currency)",
+    "approxDisplay": "≈ {amount}",
     "source": "Source",
     "empty": "No transactions.",
     "searchPlaceholder": "Search transactions…",

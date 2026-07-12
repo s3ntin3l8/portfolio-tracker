@@ -288,6 +288,7 @@ export default async function InstrumentPage({
               showPortfolio={scope.aggregate}
               anomalies={instrumentAnomalies}
               showFilterBanners={false}
+              scopeCurrency={scope.displayCurrency}
             />
           ) : (
             <EmptyState

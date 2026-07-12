@@ -367,33 +367,43 @@ export interface TransactionWithPortfolio extends Transaction {
 /**
  * Every transaction across all of the user's portfolios, each tagged with its
  * portfolio name (for the aggregate Transactions view). `empty` = no portfolio yet.
+ *
+ * "Scope currency" (#465): an aggregate/holder view has no single native currency, so
+ * every row is fetched with `?convertTo=<users.displayCurrency>` — the same currency
+ * `/networth` already converts into — giving each row a `displayRate` the Activity
+ * banners can multiply by instead of dropping non-dominant-currency rows.
  */
 export async function loadTransactionsAcrossPortfolios(): Promise<{
   status: "ok" | "empty" | "unavailable";
   transactions: TransactionWithPortfolio[];
+  scopeCurrency: string;
 }> {
   const api = await getServerApi();
-  if (!api) return { status: "unavailable", transactions: [] };
+  if (!api) return { status: "unavailable", transactions: [], scopeCurrency: "IDR" };
   try {
     const allPortfolios = await listPortfoliosCached();
-    if (allPortfolios.length === 0) return { status: "empty", transactions: [] };
+    if (allPortfolios.length === 0)
+      return { status: "empty", transactions: [], scopeCurrency: "IDR" };
     // When a holder scope is active (and still valid), narrow to that holder's portfolios.
     const holderId = await resolveHolderScope(allPortfolios);
     const portfolios = holderId
       ? allPortfolios.filter((p) => p.accountHolderId === holderId)
       : allPortfolios;
-    if (portfolios.length === 0) return { status: "empty", transactions: [] };
+    if (portfolios.length === 0)
+      return { status: "empty", transactions: [], scopeCurrency: "IDR" };
+    const me = await loadMe();
+    const scopeCurrency = me?.displayCurrency ?? "IDR";
     const nameById = new Map(portfolios.map((p) => [p.id, p.name]));
     const lists = await Promise.all(
-      portfolios.map((p) => api.listTransactions(p.id)),
+      portfolios.map((p) => api.listTransactions(p.id, scopeCurrency)),
     );
     const transactions = lists.flat().map((t) => ({
       ...t,
       portfolioName: nameById.get(t.portfolioId) ?? "",
     }));
-    return { status: "ok", transactions };
+    return { status: "ok", transactions, scopeCurrency };
   } catch {
-    return { status: "unavailable", transactions: [] };
+    return { status: "unavailable", transactions: [], scopeCurrency: "IDR" };
   }
 }
 
@@ -695,8 +705,11 @@ export async function loadInstrumentScope(
       );
     }
   } else {
+    // Single portfolio: `holdingsView.displayCurrency` is already the scope currency
+    // (portfolio.baseCurrency, per #465) — reuse it as `convertTo` so a mixed-currency
+    // portfolio's rows carry a displayRate too, not just aggregate ones.
     const result = await loadPortfolio((api, portfolio) =>
-      api.listTransactions(portfolio.id),
+      api.listTransactions(portfolio.id, holdingsView.displayCurrency),
     );
     if (result.status === "ok") {
       transactions = result.data

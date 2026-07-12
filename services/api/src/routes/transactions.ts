@@ -852,7 +852,7 @@ export async function transactionsRoute(app: FastifyInstance) {
   }
 
   // List a portfolio's transactions, each enriched with instrument metadata.
-  app.get<{ Params: PortfolioParams }>(
+  app.get<{ Params: PortfolioParams; Querystring: { convertTo?: string } }>(
     "/portfolios/:portfolioId/transactions",
     { preHandler: app.authenticate },
     async (request, reply) => {
@@ -880,6 +880,26 @@ export async function transactionsRoute(app: FastifyInstance) {
           txIdsNeedingReview(app, allTxIds),
           sourcesForTransactions(app, allTxIds, request.params.portfolioId),
         ]);
+
+      // Optional per-row FX conversion into a caller-chosen scope currency, at each
+      // transaction's own trade-date rate (stable — doesn't restate history at today's
+      // FX). Callers keep raw amounts and multiply by `displayRate` client-side, so both
+      // gross and net figures can be derived from the same row.
+      const convertTo = request.query.convertTo;
+      let rateByTxId: Map<string, string> | undefined;
+      if (convertTo) {
+        const currencies = [...new Set(rows.map((r) => r.currency))];
+        const dates = [...new Set(rows.map((r) => r.executedAt.toISOString().slice(0, 10)))];
+        const ratesByDate = await getFxRatesForDates(app.db, currencies, convertTo, dates);
+        rateByTxId = new Map(
+          rows.map((r) => {
+            const date = r.executedAt.toISOString().slice(0, 10);
+            const fx = makeFxRateFn(ratesByDate.get(date) ?? {}, convertTo);
+            return [r.id, fx(r.currency, convertTo)];
+          }),
+        );
+      }
+
       return rows.map((r) => ({
         ...r,
         instrument: r.instrumentId ? (meta.get(r.instrumentId) ?? null) : null,
@@ -890,6 +910,9 @@ export async function transactionsRoute(app: FastifyInstance) {
         // Low-confidence draft from a lossy parse — flag it for review in the table.
         needsReview: needsReview.has(r.id),
         sources: sourcesMap.get(r.id) ?? [],
+        ...(rateByTxId
+          ? { displayCurrency: convertTo, displayRate: rateByTxId.get(r.id) ?? "1" }
+          : {}),
       }));
     },
   );
