@@ -2,6 +2,7 @@
   "name": "portfolio-tracker",
   "version": "0.1.1",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "Indonesian-first personal portfolio tracker (monorepo)",
   "packageManager": "npm@11.12.1",
