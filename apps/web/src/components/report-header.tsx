@@ -24,7 +24,9 @@ export function ReportHeader({
       <Link
         href={backHref}
         aria-label="Back"
-        className="flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-card text-foreground shadow-[0_1px_2px_rgba(15,27,20,.08)] transition-transform active:scale-95"
+        // Visual size stays the reference's 36px card button; `before:` pads the tap
+        // target out to ~44px (the touch-target minimum) without affecting layout.
+        className="relative flex size-9 shrink-0 items-center justify-center rounded-[11px] bg-card text-foreground shadow-[0_1px_2px_rgba(15,27,20,.08)] transition-transform before:absolute before:-inset-1 active:scale-95"
       >
         <ChevronLeft className="size-[19px]" strokeWidth={2.2} />
       </Link>

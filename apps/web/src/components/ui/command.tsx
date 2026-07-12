@@ -5,6 +5,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
+import { useBackToClose } from "@/lib/use-back-to-close";
 
 const Command = React.forwardRef<
   React.ComponentRef<typeof CommandPrimitive>,
@@ -23,10 +24,14 @@ Command.displayName = CommandPrimitive.displayName;
 
 function CommandDialog({
   children,
+  open,
+  onOpenChange,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>) {
+  // Android hardware/gesture back closes the palette instead of navigating the route.
+  useBackToClose(open, onOpenChange);
   return (
-    <DialogPrimitive.Root {...props}>
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} {...props}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <DialogPrimitive.Content
@@ -50,7 +55,8 @@ const CommandInput = React.forwardRef<
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-12 w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        // text-base (16px) on mobile avoids iOS/Android zoom-on-focus; text-sm from sm: up.
+        "flex h-12 w-full bg-transparent py-3 text-base outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm",
         className,
       )}
       {...props}

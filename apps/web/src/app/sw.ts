@@ -1,7 +1,8 @@
 import { defaultCache } from "@serwist/next/worker";
-import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
+import type { HandlerDidErrorCallbackParam, PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { NetworkOnly, Serwist } from "serwist";
 import { resolveLocalePrefix } from "./sw-locale";
+import { routing } from "../i18n/routing";
 
 // `__SW_MANIFEST` is injected by @serwist/next at build time (the app-shell precache
 // list). Financial data is NOT cached here: `defaultCache` only matches same-origin
@@ -81,12 +82,23 @@ const serwist = new Serwist({
   ],
   // Serve the precached offline page when a navigation can't be fulfilled (the user is
   // offline and the route wasn't already cached). Visited routes still work from cache.
-  // Routes are localized under /[locale]; precache the default-locale offline page.
+  // Routes are localized under /[locale]; match each non-default locale's own offline
+  // page by its path prefix first, falling back to the default locale's for everything
+  // else (including unprefixed/unrecognized paths).
   fallbacks: {
     entries: [
+      ...routing.locales
+        .filter((locale) => locale !== routing.defaultLocale)
+        .map((locale) => ({
+          url: `/${locale}/offline`,
+          matcher: ({ request }: HandlerDidErrorCallbackParam) =>
+            request.destination === "document" &&
+            new URL(request.url).pathname.startsWith(`/${locale}/`) &&
+            !new URL(request.url).pathname.startsWith("/api"),
+        })),
       {
-        url: "/en/offline",
-        matcher: ({ request }) =>
+        url: `/${routing.defaultLocale}/offline`,
+        matcher: ({ request }: HandlerDidErrorCallbackParam) =>
           request.destination === "document" &&
           !new URL(request.url).pathname.startsWith("/api"),
       },

@@ -5,6 +5,8 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { routing } from "@/i18n/routing";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeColorSync } from "@/components/theme-color-sync";
+import { IosSplashLinks } from "@/components/ios-splash-links";
 import { AuthSessionProvider } from "@/components/session-provider";
 import "../globals.css";
 
@@ -41,9 +43,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Follow the OS scheme so the browser/status-bar chrome matches the rendered
-  // background (`--background`: light `#f4f7f5`, dark `#0e1512`). This tracks the
-  // system preference, not the in-app theme toggle.
+  // SSR/pre-hydration default, following the OS scheme so the browser/status-bar chrome
+  // matches the rendered background (`--background`: light `#f4f7f5`, dark `#0e1512`)
+  // before the in-app theme is known. Once mounted, `<ThemeColorSync>` overwrites this
+  // tag's content to track the actual applied theme (which can differ from the OS scheme
+  // via the in-app toggle).
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f4f7f5" },
     { media: "(prefers-color-scheme: dark)", color: "#0e1512" },
@@ -75,8 +79,11 @@ export default async function LocaleLayout({
       suppressHydrationWarning
       className={`${jakarta.variable} ${dmMono.variable}`}
     >
+      {/* React 19 hoists these <link> tags into <head> regardless of position. */}
+      <IosSplashLinks />
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <ThemeColorSync />
           <AuthSessionProvider>
             <NextIntlClientProvider>{children}</NextIntlClientProvider>
           </AuthSessionProvider>

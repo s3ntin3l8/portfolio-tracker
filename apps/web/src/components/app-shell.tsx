@@ -131,7 +131,9 @@ export function AppShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        {/* overscroll-contain: stop rubber-band/scroll-chaining to the page behind it —
+            matters most in the installed PWA, which has no browser chrome to absorb it. */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain">
           {/* Reference top bar: 62px, card surface, 24px side padding, 12px gaps. */}
           <header className="sticky top-0 z-30 flex min-h-[62px] items-center gap-3 border-b border-border bg-card pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:pl-6 md:pr-6">
             {/* Mobile brand (desktop shows it in the sidebar). */}

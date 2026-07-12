@@ -159,7 +159,8 @@ export function AddTransactionMenu({
         </SheetContent>
       </Sheet>
 
-      <Sheet open={importOpen} onOpenChange={setImportOpen}>
+      {/* Not drag/outside/blur-dismissible: a mid-import swipe must not discard the flow. */}
+      <Sheet open={importOpen} onOpenChange={setImportOpen} dismissible={false}>
         <SheetContent
           className="max-w-3xl"
           onInteractOutside={(e) => e.preventDefault()}

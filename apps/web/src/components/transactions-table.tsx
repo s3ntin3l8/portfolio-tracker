@@ -50,6 +50,7 @@ import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
+import { haptics } from "@/lib/haptics";
 import { cashFlow } from "@portfolio/core";
 import {
   formatMoney,
@@ -604,6 +605,7 @@ export function TransactionsTable({
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true;
       setSelectionMode(true);
+      haptics.selectionStart();
       setSelected((prev) => new Set(prev).add(id));
     }, 450);
   };
@@ -634,6 +636,7 @@ export function TransactionsTable({
   });
 
   async function onBatchDelete() {
+    haptics.destructiveConfirm();
     setBusy(true);
     try {
       // Group by portfolio — the delete endpoint is scoped to one portfolio.

@@ -345,13 +345,14 @@ export function PortfolioFormDialog({
         : trConnection;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} dismissible={false}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       {/* Reference bottom-sheet (Pocket Prototype): pinned to the bottom, 28px top radius,
           drag handle + card-bg close button (from SheetContent). Don't dismiss on outside
-          interaction: this form often holds pasted broker credentials, and a click elsewhere
-          (or the window losing focus when you switch tabs to copy a password) must not throw
-          the work away. Closes only via Save/Done, the X button, or Escape. */}
+          interaction, drag, or window blur: this form often holds pasted broker
+          credentials, and a swipe or a click elsewhere (or the window losing focus when
+          you switch tabs to copy a password) must not throw the work away. Closes only
+          via Save/Done, the X button, or Escape. */}
       <SheetContent
         aria-describedby={subtitleId}
         onInteractOutside={(e) => e.preventDefault()}

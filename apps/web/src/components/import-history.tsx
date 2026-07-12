@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useApiClient } from "@/lib/api";
+import { haptics } from "@/lib/haptics";
 import { SRC_STYLE, DEFAULT_SRC, parserToSourceType } from "@/lib/source-style";
 import { useLongPressSelect } from "@/lib/use-long-press-select";
 import { cn } from "@/lib/utils";
@@ -318,6 +319,7 @@ export function ImportHistory({
       setConfirmingBulk(true);
       return;
     }
+    haptics.destructiveConfirm();
     setBulkBusy(true);
     setActionError(null);
     try {
