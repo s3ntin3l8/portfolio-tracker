@@ -4,8 +4,9 @@ import { accountHolders, portfolios, transactions } from "@portfolio/db";
 import { portfolioInputSchema, portfolioPatchSchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { flattenPortfolio } from "../lib/portfolio.js";
+import { mapPool } from "../lib/promise-pool.js";
 import { deleteReceiptsForPortfolio } from "../storage/receipts.js";
-import { valuePortfolio } from "../services/valuation.js";
+import { valuePortfolioCached } from "../services/valuation.js";
 import { getMarketData } from "../services/market-data.js";
 
 export async function portfoliosRoute(app: FastifyInstance) {
@@ -132,9 +133,13 @@ export async function portfoliosRoute(app: FastifyInstance) {
       .where(eq(portfolios.userId, id));
 
     const marketData = await getMarketData();
-    const results = [];
-    for (const p of pfs) {
-      const { summary } = await valuePortfolio(
+    // Each portfolio's valuation is independent — bounded-concurrency instead of a
+    // serial `for` await (a user with many portfolios paid one full valuation's worth
+    // of DB round trips per portfolio, one at a time). Capped at 4 in flight to stay
+    // well under the postgres-js pool (`max: 10` in db/client.ts, shared with pg-boss's
+    // own `max: 5`) rather than an unbounded Promise.all that could saturate it.
+    const results = await mapPool(pfs, 4, async (p) => {
+      const { summary } = await valuePortfolioCached(
         app.db,
         marketData,
         app.config.MARKET_DATA_TTL_MS,
@@ -143,8 +148,8 @@ export async function portfoliosRoute(app: FastifyInstance) {
         undefined,
         p.cashCounted,
       );
-      results.push({ id: p.id, netWorth: summary.netWorth });
-    }
+      return { id: p.id, netWorth: summary.netWorth };
+    });
     return results;
   });
 

@@ -152,6 +152,91 @@ export async function valuePortfolio(
   return { coreTxns, summary, metaById, prices };
 }
 
+// In-process cache for valuePortfolio, for the read-serving routes (/summary,
+// /performance, /networth, /portfolios/values) — NOT used by the daily/intraday
+// snapshot job (services/snapshots.ts), which always calls `valuePortfolio` directly
+// so its persisted record is a canonical, uncached computation.
+//
+// A portfolio's valuation replays every transaction + corporate action from scratch on
+// every read (see valuePortfolio above), so a single page load's several endpoints
+// (layout net worth, page holdings, page net worth, …) each pay that full cost even
+// though most of them are asking for the exact same (portfolio, currency, cost basis,
+// boundary) valuation. `transactions` has no `updatedAt` column, so there's no cheap
+// version marker to key an always-correct cache on — extending the schema and auditing
+// every one of the many transaction-mutating routes (imports, sync, corporate actions,
+// reassign, merge, bulk ops, …) to bump it correctly is a much larger, riskier change
+// than this perf pass warrants: a missed invalidation site would silently serve stale
+// financial figures with no bound on how stale. A short, fixed TTL instead bounds
+// staleness to a known, small window regardless of which write path touched the data —
+// safe by construction, at the cost of up to DERIVATION_CACHE_TTL_MS of staleness after
+// a write (accepted: the product decision here is "a few seconds stale is fine").
+const DERIVATION_CACHE_TTL_MS = 5000;
+const derivationCache = new Map<string, { expiresAt: number; promise: Promise<Valuation> }>();
+
+function derivationCacheKey(
+  portfolioId: string,
+  displayCurrency: string,
+  costBasisMode: CostBasisMode | undefined,
+  cashCounted: boolean,
+): string {
+  return `${portfolioId}|${displayCurrency}|${costBasisMode ?? ""}|${cashCounted}`;
+}
+
+/**
+ * Cached wrapper around {@link valuePortfolio} — same signature, drop-in for read-serving
+ * routes. Caches the in-flight *promise* (not just the resolved value), so concurrent
+ * requests for the same (portfolio, currency, cost basis, boundary) within the TTL
+ * window collapse onto one computation instead of each re-querying independently — the
+ * same shape of win as `React.cache()` on the web side, but time-bounded rather than
+ * request-scoped since this process serves many requests.
+ */
+export async function valuePortfolioCached(
+  db: DB,
+  marketData: MarketDataService,
+  ttlMs: number,
+  portfolioId: string,
+  displayCurrency: string,
+  costBasisMode?: CostBasisMode,
+  cashCounted = true,
+  /** Injectable clock for deterministic TTL tests (mirrors getCachedQuotes' `now` param) —
+   *  defaults to the real clock in production. */
+  now: number = Date.now(),
+): Promise<Valuation> {
+  const key = derivationCacheKey(portfolioId, displayCurrency, costBasisMode, cashCounted);
+  const hit = derivationCache.get(key);
+  if (hit && hit.expiresAt > now) {
+    return hit.promise;
+  }
+  const promise = valuePortfolio(
+    db,
+    marketData,
+    ttlMs,
+    portfolioId,
+    displayCurrency,
+    costBasisMode,
+    cashCounted,
+  );
+  derivationCache.set(key, { expiresAt: now + DERIVATION_CACHE_TTL_MS, promise });
+  // A failed computation must not poison the cache for the rest of the TTL window — drop
+  // it immediately so the next call retries instead of re-throwing a stale error.
+  promise.catch(() => {
+    if (derivationCache.get(key)?.promise === promise) {
+      derivationCache.delete(key);
+    }
+  });
+  return promise;
+}
+
+/**
+ * Drop every cached valuation. Called from a global `onResponse` hook (see app.ts)
+ * after any write, since there's no cheap per-portfolio version marker to invalidate
+ * precisely (see valuePortfolioCached's doc comment) — also used directly by tests to
+ * reset cache state between cases.
+ */
+export function clearValuationCache(): void {
+  derivationCache.clear();
+}
+
 /** Corporate actions for the given instruments, shaped for @portfolio/core. */
 async function corporateActionsForInstruments(
   db: DB,

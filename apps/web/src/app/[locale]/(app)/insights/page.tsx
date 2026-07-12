@@ -31,14 +31,22 @@ export default async function InsightsPage({
   // defaulted to purchase_price regardless of the user's choice elsewhere).
   // loadHoldings() below only feeds the day-change "Best & worst" movers, which are
   // priced off today's move, not cost basis — no threading needed there.
-  const prefs = await loadPreferences();
+  // loadPreferences() used to be awaited before anything else — a full serial round trip
+  // blocking the whole page. The loaders that don't need costBasis are kicked off
+  // immediately instead; only loadNetWorth waits on it.
+  const prefsPromise = loadPreferences();
+  const historyPromise = loadNetWorthHistory("all");
+  const holdingsPromise = loadHoldings();
+  const selectedIdPromise = getSelectedPortfolioId();
+
+  const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
   const [result, history, holdingsView, selectedId] = await Promise.all([
     loadNetWorth(costBasis),
-    loadNetWorthHistory("all"),
-    loadHoldings(),
-    getSelectedPortfolioId(),
+    historyPromise,
+    holdingsPromise,
+    selectedIdPromise,
   ]);
 
   if (result.status !== "ok") {

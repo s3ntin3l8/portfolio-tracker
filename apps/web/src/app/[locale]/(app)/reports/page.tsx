@@ -35,18 +35,26 @@ export default async function ReportsPage({
   const te = await getTranslations("Empty");
   const openLabel = t("open");
 
-  const prefs = await loadPreferences();
+  // loadPreferences() used to be awaited before anything else — a full serial round trip
+  // blocking the whole page. The loaders that don't need costBasis/taxRegime are kicked
+  // off immediately instead; only the two that do (loadTrades, loadNetworthTax) wait on it.
+  const prefsPromise = loadPreferences();
+  const incomePromise = loadIncomeStats();
+  const contributionsPromise = loadContributions();
+  const documentsPromise = loadDocuments("tax_report");
+
+  const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
   const taxRegime = prefs?.taxRegime ?? "DE";
 
   const [income, trades, contributions, taxHolders, taxReports] = await Promise.all([
-    loadIncomeStats(),
+    incomePromise,
     // Cost basis is a single global preference — thread it in so this tile's
     // realized-P&L figures agree with Trades/Holdings.
     loadTrades(undefined, costBasis),
-    loadContributions(),
+    contributionsPromise,
     loadNetworthTax(undefined, taxRegime),
-    loadDocuments("tax_report"),
+    documentsPromise,
   ]);
   // Indonesian final tax needs the same disposals/dividendRows the Tax page itself
   // recomputes over (see tax/page.tsx) — only fetched when relevant, and only when
