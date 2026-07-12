@@ -17,6 +17,13 @@ updates:
       npm-deps:
         patterns:
           - "*"
+        # Major bumps get their own individual PR instead of riding along in the
+        # weekly group — a major (e.g. typescript 6→7) can break peer-dependency
+        # resolution for the whole group (npm install fails outright), taking every
+        # harmless minor/patch bump down with it. See PR #452.
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "docker"
     directory: "/"
