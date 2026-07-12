@@ -351,7 +351,9 @@ export default async function ReportsPage({
       </header>
 
       {cards.length > 0 ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{cards}</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 @min-[1500px]:grid-cols-3">
+          {cards}
+        </div>
       ) : (
         <EmptyState
           icon={Receipt}
