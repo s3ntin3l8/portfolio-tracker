@@ -1,5 +1,5 @@
 import { txAmount, txNetAmount, type TxRow } from "@/components/transactions-table";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoneyCompact, formatPercent } from "@/lib/utils";
 
 /** Cash-in transaction types that count as "income" for the Activity banners — dividends,
  *  bond coupons, cash interest, and broker cash bonuses (same set the Income screen treats
@@ -108,7 +108,7 @@ export function computeAllBanner(
   const proceedsTotal = sumBy(sells, txAmount);
   const { ytdTotal: incomeYtdTotal, trendPct } = yoyIncome(incomeRows, now);
 
-  const money = (n: number) => formatMoney(n, currency, locale);
+  const money = (n: number) => formatMoneyCompact(n, currency, locale);
   const max = Math.max(investedTotal, proceedsTotal, incomeYtdTotal, 1);
 
   return {
@@ -164,7 +164,7 @@ export function computeIncomeBanner(
   if (incomeRows.length === 0) return null;
   const currency = dominantCurrency(incomeRows);
   const scoped = incomeRows.filter((r) => r.currency === currency);
-  const money = (n: number) => formatMoney(n, currency, locale);
+  const money = (n: number) => formatMoneyCompact(n, currency, locale);
 
   const { ytdTotal, trendPct } = yoyIncome(scoped, now);
 
@@ -218,7 +218,7 @@ export function computeTradeBanner(rows: TxRow[], type: "buy" | "sell", locale: 
   if (typed.length === 0) return null;
   const currency = dominantCurrency(typed);
   const scoped = typed.filter((r) => r.currency === currency);
-  const money = (n: number) => formatMoney(n, currency, locale);
+  const money = (n: number) => formatMoneyCompact(n, currency, locale);
 
   const total = sumBy(scoped, txAmount);
   const count = scoped.length;

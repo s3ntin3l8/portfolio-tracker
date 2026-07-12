@@ -25,10 +25,10 @@ function StatBlock({
   bordered?: boolean;
 }) {
   return (
-    <div className={bordered ? "border-l border-line pl-2.5 sm:pl-4 lg:pl-6" : ""}>
+    <div className={cn("min-w-0", bordered && "border-l border-line pl-2.5 sm:pl-4 lg:pl-6")}>
       <p className="truncate text-[11px] font-semibold text-text-2 sm:text-xs">{label}</p>
-      <p className="tabular mt-1 text-base font-extrabold sm:text-xl lg:text-[26px]">{value}</p>
-      {sub && <p className={cn("tabular mt-0.5 text-[11px] font-bold sm:text-xs", TONE_CLASS[tone])}>{sub}</p>}
+      <p className="tabular mt-1 truncate text-sm font-extrabold sm:text-xl lg:text-[26px]">{value}</p>
+      {sub && <p className={cn("tabular mt-0.5 truncate text-[11px] font-bold sm:text-xs", TONE_CLASS[tone])}>{sub}</p>}
     </div>
   );
 }

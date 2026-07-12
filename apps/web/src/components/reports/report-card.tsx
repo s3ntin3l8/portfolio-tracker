@@ -42,7 +42,7 @@ export function ReportCard({
   // 7px split bar, and a bordered footer pinned to the card bottom.
   return (
     <Link href={href} className="group block h-full">
-      <Card className="flex h-full flex-col rounded-[18px] px-[22px] py-5 transition-colors group-hover:border-primary/40">
+      <Card className="flex h-full min-w-0 flex-col rounded-[18px] px-[22px] py-5 transition-colors group-hover:border-primary/40">
         <div className="flex w-full items-center gap-3">
           <span
             className="flex size-11 shrink-0 items-center justify-center rounded-[14px]"
@@ -54,8 +54,8 @@ export function ReportCard({
           {trend && <TrendChip label={trend.label} tone={trend.tone} arrow={trend.arrow} />}
         </div>
 
-        <p className="tabular mt-4 text-[30px] font-extrabold">{value}</p>
-        <p className="mt-[3px] text-[13px] font-medium text-text-2">{caption}</p>
+        <p className="tabular mt-4 truncate text-[30px] font-extrabold">{value}</p>
+        <p className="mt-[3px] truncate text-[13px] font-medium text-text-2">{caption}</p>
 
         {splitBar && splitBar.length > 0 && (
           <div className="mt-4">

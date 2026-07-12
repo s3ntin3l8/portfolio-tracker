@@ -39,7 +39,7 @@ export function EstimatedTaxHero({
 }) {
   return (
     <div
-      className="rounded-[18px] p-5 text-white"
+      className="min-w-0 rounded-[18px] p-5 text-white"
       style={{
         background:
           tone === "green"
@@ -47,8 +47,8 @@ export function EstimatedTaxHero({
             : "linear-gradient(135deg,#7C5CFC,#5B3FD6)",
       }}
     >
-      <p className="text-xs font-semibold text-white/80">{label}</p>
-      <p className="tabular mt-1 text-[28px] font-extrabold">{value}</p>
+      <p className="truncate text-xs font-semibold text-white/80">{label}</p>
+      <p className="tabular mt-1 truncate text-lg font-extrabold sm:text-2xl lg:text-[28px]">{value}</p>
       <p className="mt-1 text-xs font-medium text-white/80">{description}</p>
     </div>
   );

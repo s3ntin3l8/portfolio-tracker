@@ -20,14 +20,14 @@ export function TrendChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-[5px] whitespace-nowrap rounded-full px-[11px] py-[5px] text-xs font-bold",
+        "inline-flex min-w-0 shrink items-center gap-[5px] rounded-full px-[11px] py-[5px] text-xs font-bold",
         tone === "up" && "bg-success/15 text-success",
         tone === "down" && "bg-destructive/15 text-destructive",
         tone === "neutral" && "bg-muted text-muted-foreground",
       )}
     >
-      {arrow && tone !== "neutral" && <span className="text-[9px]">{arrowGlyph}</span>}
-      {label}
+      {arrow && tone !== "neutral" && <span className="shrink-0 text-[9px]">{arrowGlyph}</span>}
+      <span className="min-w-0 truncate">{label}</span>
     </span>
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "@/components/tax/tax-cards";
 import { DisposalTable, IdSalesTable } from "@/components/tax/disposal-table";
 import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, formatMoneyCompact } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
 import { indonesianFinalTax, harvestSummary } from "@portfolio/core";
 
@@ -174,6 +174,9 @@ function TaxHolderSectionId({
   year: number;
   t: TaxTranslator;
 }) {
+  // The hero headline gets the more aggressive compact form (its cell is the narrowest
+  // on mobile — 1/3 width in this three-up grid), so long IDR figures never clip.
+  const moneyCompact = (n: string | number) => formatMoneyCompact(Number(n), currency, locale);
   const idTax = indonesianFinalTax({
     disposals: (detail?.disposals ?? []).map((d) => ({
       symbol: d.symbol,
@@ -199,7 +202,7 @@ function TaxHolderSectionId({
         <EstimatedTaxHero
           tone="green"
           label={t("id.hero.estimatedTax", { year })}
-          value={money(idTax.estimatedTax)}
+          value={moneyCompact(idTax.estimatedTax)}
           description={t("id.hero.estimatedTaxDesc")}
         />
         <StatCard
@@ -256,6 +259,9 @@ function TaxHolderSectionDe({
   locale: string;
   t: TaxTranslator;
 }) {
+  // The hero headline gets the more aggressive compact form (its cell is the narrowest
+  // on mobile — 1/2 width in this two-up grid), so long IDR figures never clip.
+  const moneyCompact = (n: string | number) => formatMoneyCompact(Number(n), currency, locale);
   const { allowanceUsage: u, harvestSuggestions, distribution } = entry;
   const pct = parseFloat(u.remaining) / parseFloat(u.allowanceAnnual);
   const usedPct = Math.round((1 - Math.max(0, Math.min(1, pct))) * 100);
@@ -287,7 +293,7 @@ function TaxHolderSectionDe({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         <EstimatedTaxHero
           label={t("hero.estimatedTax", { year: entry.year })}
-          value={money(estimatedTax)}
+          value={moneyCompact(estimatedTax)}
           description={t("hero.estimatedTaxDesc", { rate: ratePct, taxable: money(taxable) })}
         />
         <StatCard

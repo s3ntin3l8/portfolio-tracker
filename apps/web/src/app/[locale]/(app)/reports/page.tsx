@@ -12,7 +12,7 @@ import {
   loadPreferences,
   loadDocuments,
 } from "@/lib/server-api";
-import { formatMoney, formatPercent } from "@/lib/utils";
+import { formatMoney, formatMoneyCompact, formatPercent } from "@/lib/utils";
 import type { TrendTone } from "@/components/reports/trend-chip";
 import { indonesianFinalTax } from "@portfolio/core";
 
@@ -71,6 +71,10 @@ export default async function ReportsPage({
     const s = income.data;
     const currency = s.displayCurrency;
     const m = (n: number) => formatMoney(n, currency, locale);
+    // The footer metrics sit three-up beside the "Open ›" link — the narrowest cells on
+    // the card — so they get the compact form; the full-width headline above keeps
+    // full precision.
+    const mc = (n: number) => formatMoneyCompact(n, currency, locale);
     // Full-year outlook (actuals-to-date + rest-of-year forecast) vs last year, not just
     // actuals-to-date vs last year — matches the /income page's own headline delta.
     const lastYearTotal = Number(s.lastYear);
@@ -109,9 +113,9 @@ export default async function ReportsPage({
         caption={t("income.caption")}
         splitBar={splitBar}
         metrics={[
-          { label: t("income.captionEstimated"), value: m(Number(s.forecastFullYear)) },
-          { label: t("income.metricTtm"), value: m(Number(s.ttm)) },
-          { label: t("income.metricLifetime"), value: m(Number(s.lifetimeTotal)) },
+          { label: t("income.captionEstimated"), value: mc(Number(s.forecastFullYear)) },
+          { label: t("income.metricTtm"), value: mc(Number(s.ttm)) },
+          { label: t("income.metricLifetime"), value: mc(Number(s.lifetimeTotal)) },
         ]}
         href="/income"
         openLabel={openLabel}
@@ -124,6 +128,7 @@ export default async function ReportsPage({
     const log = trades.data;
     const currency = log.displayCurrency;
     const m = (n: number) => formatMoney(n, currency, locale);
+    const mc = (n: number) => formatMoneyCompact(n, currency, locale);
     const currentYear = new Date().getUTCFullYear();
     const ytdEntry = log.realizedByYear.find((y) => y.year === currentYear);
     // No entry for the current year means no trades closed this year — 0, not the
@@ -170,7 +175,7 @@ export default async function ReportsPage({
         caption={t("trades.caption")}
         splitBar={splitBar}
         metrics={[
-          { label: t("trades.metricAllTime"), value: m(Number(log.totalRealized)) },
+          { label: t("trades.metricAllTime"), value: mc(Number(log.totalRealized)) },
           {
             label: t("trades.metricAvgHold"),
             value: avgHoldingDays !== null ? t("trades.days", { count: avgHoldingDays }) : "—",
@@ -188,6 +193,7 @@ export default async function ReportsPage({
     const s = contributions.data;
     const currency = s.displayCurrency;
     const m = (n: number) => formatMoney(n, currency, locale);
+    const mc = (n: number) => formatMoneyCompact(n, currency, locale);
     const netContributed = Number(s.netContributed);
     const currentValue = Number(s.currentValue);
     const gain = Math.max(0, currentValue - netContributed);
@@ -217,7 +223,7 @@ export default async function ReportsPage({
         caption={t("savings.caption")}
         splitBar={splitBar}
         metrics={[
-          { label: t("savings.metricMonthly"), value: m(Number(s.monthlyAverage)) },
+          { label: t("savings.metricMonthly"), value: mc(Number(s.monthlyAverage)) },
           {
             label: t("savings.metricReturn"),
             value: totalReturnPct !== null ? formatPercent(totalReturnPct, locale) : "—",
@@ -236,6 +242,7 @@ export default async function ReportsPage({
     // Same recompute-over-the-same-disposals approach as tax/page.tsx's ID branch.
     const currency = taxHolders[0]?.currency ?? "IDR";
     const m = (n: number) => formatMoney(n, currency, locale);
+    const mc = (n: number) => formatMoneyCompact(n, currency, locale);
     let totalTax = 0;
     let totalProceeds = 0;
     let totalDividendGross = 0;
@@ -263,8 +270,8 @@ export default async function ReportsPage({
         value={m(totalTax)}
         caption={t("tax.idCaption")}
         metrics={[
-          { label: t("tax.idMetricSales"), value: m(totalProceeds) },
-          { label: t("tax.idMetricDividends"), value: m(totalDividendGross) },
+          { label: t("tax.idMetricSales"), value: mc(totalProceeds) },
+          { label: t("tax.idMetricDividends"), value: mc(totalDividendGross) },
         ]}
         href="/tax"
         openLabel={openLabel}
@@ -275,6 +282,7 @@ export default async function ReportsPage({
     // no derived tax-owed math invented here.
     const currency = taxHolders[0].currency;
     const m = (n: number) => formatMoney(n, currency, locale);
+    const mc = (n: number) => formatMoneyCompact(n, currency, locale);
     const sum = (f: (h: (typeof taxHolders)[number]) => number) =>
       taxHolders.reduce((acc, h) => acc + f(h), 0);
     const usedYtd = sum((h) => Number(h.allowanceUsage.usedYtd));
@@ -298,8 +306,8 @@ export default async function ReportsPage({
         value={m(usedYtd)}
         caption={t("tax.caption")}
         metrics={[
-          { label: t("tax.metricRealized"), value: m(realizedGains) },
-          { label: t("tax.metricIncome"), value: m(incomeYtd) },
+          { label: t("tax.metricRealized"), value: mc(realizedGains) },
+          { label: t("tax.metricIncome"), value: mc(incomeYtd) },
         ]}
         href="/tax"
         openLabel={openLabel}
@@ -343,7 +351,7 @@ export default async function ReportsPage({
       </header>
 
       {cards.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">{cards}</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{cards}</div>
       ) : (
         <EmptyState
           icon={Receipt}
