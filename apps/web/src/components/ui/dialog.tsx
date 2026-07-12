@@ -4,8 +4,17 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBackToClose } from "@/lib/use-back-to-close";
 
-const Dialog = DialogPrimitive.Root;
+function Dialog({
+  open,
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  // Android hardware/gesture back closes the dialog instead of navigating the route.
+  useBackToClose(open, onOpenChange);
+  return <DialogPrimitive.Root open={open} onOpenChange={onOpenChange} {...props} />;
+}
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogClose = DialogPrimitive.Close;
 

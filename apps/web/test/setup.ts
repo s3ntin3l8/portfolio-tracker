@@ -22,3 +22,16 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   };
 }
+// vaul (bottom-sheet drag-to-close) queries matchMedia on mount; jsdom doesn't implement it.
+if (typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+}

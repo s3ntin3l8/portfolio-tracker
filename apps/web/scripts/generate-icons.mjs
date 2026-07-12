@@ -36,3 +36,49 @@ await Promise.all([
 ]);
 
 console.log("Generated PWA icons → public/icons/");
+
+// --- iOS splash screens (apple-touch-startup-image), issue #99 ---------------------------
+// iOS Safari doesn't auto-generate a launch screen for installed PWAs (unlike
+// Android/Chrome), so without these the app opens to a blank white flash before first
+// paint — jarring against the dark theme. A curated subset of current common devices;
+// extendable later. Keep this list in sync with `SPLASH_DEVICES` in
+// `src/components/ios-splash-links.tsx`, which renders the matching <link> tags.
+const SPLASH_DEVICES = [
+  { name: "iphone-se", width: 375, height: 667, dpr: 2 },
+  { name: "iphone-pro", width: 393, height: 852, dpr: 3 },
+  { name: "iphone-pro-max", width: 430, height: 932, dpr: 3 },
+  { name: "ipad-11", width: 834, height: 1194, dpr: 2 },
+  { name: "ipad-12-9", width: 1024, height: 1366, dpr: 2 },
+];
+
+// Dark bg + centered brand glyph, sized to the device canvas — matches the app's dark
+// default (`defaultTheme="dark"`). Splash can't react to the in-app theme toggle any more
+// than the Android manifest's static theme_color can (see ThemeColorSync's doc comment).
+function splashSvg(width, height) {
+  const glyphSize = Math.round(Math.min(width, height) * 0.16);
+  const x = Math.round((width - glyphSize) / 2);
+  const y = Math.round((height - glyphSize) / 2);
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+      `<rect width="${width}" height="${height}" fill="#0a0a0a"/>` +
+      `<svg x="${x}" y="${y}" width="${glyphSize}" height="${glyphSize}" viewBox="0 0 64 64">` +
+      `<path d="M20 44V20h12a8 8 0 0 1 0 16h-6v8z" fill="#34d399"/></svg>` +
+      `</svg>`,
+  );
+}
+
+const splashDir = join(iconsDir, "splash");
+await mkdir(splashDir, { recursive: true });
+
+await Promise.all(
+  SPLASH_DEVICES.flatMap(({ name, width, height, dpr }) => [
+    sharp(splashSvg(width * dpr, height * dpr))
+      .png()
+      .toFile(join(splashDir, `${name}-portrait.png`)),
+    sharp(splashSvg(height * dpr, width * dpr))
+      .png()
+      .toFile(join(splashDir, `${name}-landscape.png`)),
+  ]),
+);
+
+console.log("Generated iOS splash screens → public/icons/splash/");

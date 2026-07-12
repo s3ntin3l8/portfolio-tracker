@@ -201,6 +201,9 @@
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
+    /* Android Chrome flashes a default grey/blue box on tap; we supply our own
+       press feedback (active: states on Button/pressables), so suppress it here. */
+    -webkit-tap-highlight-color: transparent;
   }
   /* Tabular figures for money/metrics — reference (Pocket Prototype.dc.html `.num`)
      keeps these in Plus Jakarta Sans, just with tabular-nums; no mono swap. */

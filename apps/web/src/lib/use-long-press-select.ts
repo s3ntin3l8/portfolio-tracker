@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { haptics } from "@/lib/haptics";
 
 /**
  * Long-press-to-select gesture for a mobile card list: checkboxes stay hidden until a
@@ -37,6 +38,7 @@ export function useLongPressSelect(onLongPress: (id: string) => void) {
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true;
       setSelectionMode(true);
+      haptics.selectionStart();
       onLongPress(id);
     }, 450);
   }
