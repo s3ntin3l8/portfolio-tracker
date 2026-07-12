@@ -59,7 +59,12 @@ self.addEventListener("fetch", (event: FetchEvent) => {
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  // A new SW parks in "waiting" instead of activating immediately, so PwaUpdater can
+  // detect it and prompt the user to reload rather than swapping the app out from under
+  // them silently. It only activates once `messageSkipWaiting()` is sent (from the
+  // toast's "Reload" action) — Serwist's `addEventListeners()` below wires up the
+  // `SKIP_WAITING` message listener that triggers `self.skipWaiting()`.
+  skipWaiting: false,
   clientsClaim: true,
   navigationPreload: true,
   // Auth + API routes must never be cached, preloaded, or replayed by the SW: the OAuth

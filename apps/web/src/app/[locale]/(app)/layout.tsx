@@ -3,6 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { ImportTasksProvider } from "@/components/import-tasks-provider";
 import { SessionErrorGuard } from "@/components/session-error-guard";
+import { PwaUpdater } from "@/components/pwa-updater";
 import { Toaster } from "@/components/ui/sonner";
 import {
   resolveSelection,
@@ -82,6 +83,7 @@ export default async function AppLayout({
     <>
       <SessionErrorGuard />
       <Toaster richColors position="bottom-right" />
+      <PwaUpdater />
       <ImportTasksProvider>
         <AppShell
           portfolios={selection.portfolios.map((p) => ({

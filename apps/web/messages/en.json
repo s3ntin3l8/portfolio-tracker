@@ -10,7 +10,9 @@
     "title": "Add Pocket to your home screen",
     "cta": "Install Pocket",
     "dismiss": "Dismiss",
-    "iosHint": "To install: tap Share, then “Add to Home Screen”."
+    "iosHint": "To install: tap Share, then “Add to Home Screen”.",
+    "updateAvailable": "A new version is available",
+    "reload": "Reload"
   },
   "Offline": {
     "title": "You’re offline",
@@ -59,7 +61,8 @@
     "insights": "Insights",
     "profile": "Profile",
     "netWorth": "Net worth",
-    "allTime": "all-time"
+    "allTime": "all-time",
+    "version": "Version {version} — release notes"
   },
   "Reports": {
     "title": "Reports",
@@ -967,6 +970,7 @@
     "name": "Name",
     "email": "Email",
     "authVia": "Signed in via Authentik (OIDC) · {email}",
+    "version": "Version {version} — release notes",
     "manage": "Manage",
     "portfoliosLink": "Portfolios & holders",
     "portfoliosDesc": "Accounts, brokerage connections and account holders.",

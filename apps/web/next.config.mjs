@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import createNextIntlPlugin from "next-intl/plugin";
@@ -5,16 +6,25 @@ import withSerwistInit from "@serwist/next";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
+// The app's version label reads the *root* package.json (what Release Please bumps and
+// what the `v*` release tag matches) — not this workspace's own package.json, which isn't
+// tracked by Release Please and only coincidentally carries the same number.
+const rootPkg = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+);
+
 // Service worker: precaches the Next app shell so the PWA is installable + offline-
 // capable. Disabled in dev so `next dev` hot-reload isn't fighting a cache. The
-// generated public/sw.js is a build artifact (gitignored). Registration is auto-injected.
-// `@serwist/next` precaches build assets but not App Router page HTML, so the offline
-// fallback page (referenced in src/app/sw.ts) is added explicitly; the per-build
-// revision busts its cache on every deploy.
+// generated public/sw.js is a build artifact (gitignored). `@serwist/next` precaches
+// build assets but not App Router page HTML, so the offline fallback page (referenced in
+// src/app/sw.ts) is added explicitly; the per-build revision busts its cache on every
+// deploy. Registration is manual (`register: false`) — see PwaUpdater — so we can hold a
+// new worker in "waiting" and prompt the user to reload instead of updating silently.
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
   disable: process.env.NODE_ENV !== "production",
+  register: false,
   additionalPrecacheEntries: [{ url: "/en/offline", revision: randomUUID() }],
 });
 
@@ -35,6 +45,9 @@ const nextConfig = {
   // Allow the LAN host used for dev (matches the IP in .env.local) to fetch /_next/*
   // cross-origin without the Next.js dev warning. Hostname only — no protocol/port.
   allowedDevOrigins: ["192.168.2.152"],
+  // Inlined at build time (dev and prod) so the running app can display its own version —
+  // non-secret, just the release number. Read from the root package.json; see rootPkg above.
+  env: { NEXT_PUBLIC_APP_VERSION: rootPkg.version },
   // Allow importing workspace TS packages directly.
   transpilePackages: [
     "@portfolio/schema",

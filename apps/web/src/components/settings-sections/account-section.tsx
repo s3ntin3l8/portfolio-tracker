@@ -5,6 +5,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { DisplayCurrency } from "@/components/display-currency";
 import { UpdateProfile } from "@/components/update-profile";
+import { AppVersion } from "@/components/app-version";
+import { APP_VERSION } from "@/lib/version";
 
 /** Small uppercase section label above each settings card. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -70,6 +72,10 @@ export async function AccountSection({
         <ShieldCheck className="size-4 shrink-0" />
         <span>{t("authVia", { email: me?.email ?? "" })}</span>
       </div>
+      <AppVersion
+        ariaLabel={t("version", { version: APP_VERSION })}
+        className="block text-center text-xs text-muted-foreground"
+      />
     </div>
   );
 }
