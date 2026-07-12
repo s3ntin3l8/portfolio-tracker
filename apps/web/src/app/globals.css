@@ -57,8 +57,7 @@
      live prototype: rgba(15,27,20,.04) 0 1px 2px, rgba(15,27,20,.05) 0 8px 22px. The
      reference has no real dark render, so the dark variant below is derived (same
      offsets, black-based alpha) rather than measured. */
-  --shadow-card:
-    0 1px 2px rgba(15, 27, 20, 0.04), 0 8px 22px rgba(15, 27, 20, 0.05);
+  --shadow-card: 0 1px 2px rgba(15, 27, 20, 0.04), 0 8px 22px rgba(15, 27, 20, 0.05);
 }
 
 .dark {
@@ -107,8 +106,7 @@
   --warn-strong: #e6c07a;
   --warn-soft: #c2a878;
 
-  --shadow-card:
-    0 1px 2px rgba(0, 0, 0, 0.24), 0 8px 22px rgba(0, 0, 0, 0.28);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 8px 22px rgba(0, 0, 0, 0.28);
 }
 
 @theme inline {
@@ -154,6 +152,43 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --shadow-card: var(--shadow-card);
+
+  /* Route-transition content blend + skeleton shimmer sweep. Registered here so Tailwind
+     generates `animate-fade-in` / `animate-shimmer` utilities (Tailwind v4 CSS config —
+     no tailwind.config.js). */
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* Motion-sensitive users get an instant, non-animated version of both effects — the
+   underlying pulse/opacity states stay, just without the sweep/blend motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-fade-in: none;
+    --animate-shimmer: none;
+  }
 }
 
 @layer base {
@@ -163,7 +198,9 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
   /* Tabular figures for money/metrics — reference (Pocket Prototype.dc.html `.num`)
      keeps these in Plus Jakarta Sans, just with tabular-nums; no mono swap. */

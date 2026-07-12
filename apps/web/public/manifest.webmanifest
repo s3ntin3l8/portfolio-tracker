@@ -40,14 +40,24 @@
   ],
   "shortcuts": [
     {
-      "name": "Import screenshot",
-      "short_name": "Import",
-      "url": "/transactions?import=1",
+      "name": "Holdings",
+      "url": "/holdings",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Holdings",
-      "url": "/holdings",
+      "name": "Reports",
+      "url": "/reports",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Insights",
+      "url": "/insights",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Import screenshot",
+      "short_name": "Import",
+      "url": "/transactions?import=1",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ],

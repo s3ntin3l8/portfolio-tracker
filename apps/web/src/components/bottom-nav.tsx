@@ -1,9 +1,12 @@
 "use client";
 
+import { useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { MAIN_NAV, navActiveKey } from "@/components/nav-items";
+import { useRepaintOnResume } from "@/lib/use-repaint-on-resume";
+import { LinkPendingSignal } from "@/components/nav-progress";
 
 /**
  * Mobile bottom tab bar — the five Pocket destinations. Frosted, safe-area aware. The
@@ -20,9 +23,13 @@ export function BottomNav({
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const activeKey = navActiveKey(pathname);
+  // Fixes #451 — see use-repaint-on-resume.ts for why the backdrop-blur layer needs this.
+  const navRef = useRef<HTMLElement>(null);
+  useRepaintOnResume(navRef);
 
   return (
     <nav
+      ref={navRef}
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-30 flex items-start justify-around border-t border-border bg-card/80 px-3 pt-2.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-lg md:hidden"
     >
@@ -39,6 +46,7 @@ export function BottomNav({
               active ? "text-primary" : "text-muted-foreground",
             )}
           >
+            <LinkPendingSignal id={`bottom-${key}`} />
             <span className="relative flex">
               <Icon className="size-6" strokeWidth={active ? 2 : 1.8} />
               {badge != null && (

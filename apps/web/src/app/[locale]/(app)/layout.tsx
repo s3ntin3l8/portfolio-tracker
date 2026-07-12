@@ -5,21 +5,14 @@ import { ImportTasksProvider } from "@/components/import-tasks-provider";
 import { SessionErrorGuard } from "@/components/session-error-guard";
 import { PwaUpdater } from "@/components/pwa-updater";
 import { Toaster } from "@/components/ui/sonner";
-import {
-  resolveSelection,
-  loadMe,
-  loadAccountHolders,
-  loadNetWorth,
-} from "@/lib/server-api";
+import { resolveSelection, loadMe, loadAccountHolders, loadNetWorth } from "@/lib/server-api";
 import { qualifyingHolders } from "@/lib/portfolio-selection";
 import { formatMoney, formatPercent } from "@/lib/utils";
 import { auth } from "@/auth";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
 // viewable in local dev before Authentik is wired. Configured = AUTH_SECRET + issuer.
-const authConfigured = Boolean(
-  process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER,
-);
+const authConfigured = Boolean(process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER);
 
 // Force every route under this layout to render per-request. Without this, `next build`
 // runs with no auth env / no request cookie, so `authConfigured` is false at build time,
@@ -82,7 +75,15 @@ export default async function AppLayout({
   return (
     <>
       <SessionErrorGuard />
-      <Toaster richColors position="bottom-right" />
+      {/* mobileOffset clears the fixed bottom nav on mobile (where sonner forces
+          full-width bottom placement) so a persistent toast never overlaps its tap
+          targets — a real latent overlap, though not the cause of #451 (confirmed via
+          user report: nav is fully visible when taps go dead, nothing overlays it). */}
+      <Toaster
+        richColors
+        position="bottom-right"
+        mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+      />
       <PwaUpdater />
       <ImportTasksProvider>
         <AppShell
