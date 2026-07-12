@@ -10,7 +10,9 @@
     "title": "Tambahkan Pocket ke layar utama",
     "cta": "Instal Pocket",
     "dismiss": "Tutup",
-    "iosHint": "Untuk memasang: ketuk Bagikan, lalu “Add to Home Screen”."
+    "iosHint": "Untuk memasang: ketuk Bagikan, lalu “Add to Home Screen”.",
+    "updateAvailable": "Versi baru tersedia",
+    "reload": "Muat ulang"
   },
   "Offline": {
     "title": "Anda sedang offline",
@@ -59,7 +61,8 @@
     "insights": "Wawasan",
     "profile": "Profil",
     "netWorth": "Kekayaan bersih",
-    "allTime": "sepanjang masa"
+    "allTime": "sepanjang masa",
+    "version": "Versi {version} — catatan rilis"
   },
   "Reports": {
     "title": "Laporan",
@@ -965,6 +968,7 @@
     "name": "Nama",
     "email": "Email",
     "authVia": "Masuk melalui Authentik (OIDC) · {email}",
+    "version": "Versi {version} — catatan rilis",
     "manage": "Kelola",
     "portfoliosLink": "Portofolio & pemilik",
     "portfoliosDesc": "Akun, koneksi broker, dan pemilik akun.",

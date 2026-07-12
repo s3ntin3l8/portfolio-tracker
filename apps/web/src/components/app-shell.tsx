@@ -13,6 +13,8 @@ import { InstallPrompt } from "@/components/install-prompt";
 import { Brand } from "@/components/brand";
 import { BottomNav } from "@/components/bottom-nav";
 import { SignOutButton } from "@/components/sign-out-button";
+import { AppVersion } from "@/components/app-version";
+import { APP_VERSION } from "@/lib/version";
 import { MAIN_NAV, ADMIN_NAV, navActiveKey } from "@/components/nav-items";
 
 export function AppShell({
@@ -119,6 +121,10 @@ export function AppShell({
             </div>
           )}
           <SignOutButton />
+          <AppVersion
+            ariaLabel={t("version", { version: APP_VERSION })}
+            className="block self-center text-[11px] text-text-3"
+          />
         </div>
       </aside>
 

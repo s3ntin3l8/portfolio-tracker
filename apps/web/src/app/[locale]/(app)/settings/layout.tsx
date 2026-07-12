@@ -2,8 +2,10 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { UserRound, TrendingUp, Briefcase, KeyRound, ShieldCheck } from "lucide-react";
 import { SettingsShell, type ShellNavItem } from "@/components/settings-shell";
 import { SignOutButton } from "@/components/sign-out-button";
+import { AppVersion } from "@/components/app-version";
 import { Link } from "@/i18n/navigation";
 import { loadMe, loadPortfolios, loadAccountHolders } from "@/lib/server-api";
+import { APP_VERSION } from "@/lib/version";
 
 /**
  * Shared master-detail layout for every `/settings/*` route: a persistent desktop rail
@@ -121,6 +123,10 @@ export default async function SettingsLayout({
             {t("authVia", { email: me?.email ?? "" })}
           </p>
           <SignOutButton />
+          <AppVersion
+            ariaLabel={t("version", { version: APP_VERSION })}
+            className="block text-center text-xs text-muted-foreground"
+          />
         </div>
       }
       landingTop={

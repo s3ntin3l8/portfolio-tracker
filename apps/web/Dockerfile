@@ -12,8 +12,10 @@ ENV NPM_CONFIG_FETCH_RETRIES=5 \
     NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 COPY . .
 RUN npm ci
-# No runtime secrets needed at build time (no NEXT_PUBLIC_* env vars remain — the API URL
-# is server-only, resolved at request time, see app/api/backend/[...path]/route.ts).
+# No runtime secrets needed at build time — the API URL is server-only, resolved at request
+# time (see app/api/backend/[...path]/route.ts). The one NEXT_PUBLIC_* var, the app version
+# label, is non-secret and inlined by next.config.mjs from the root package.json (already
+# present via the `COPY . .` above) — no build arg needed.
 RUN npx turbo run build --filter=@portfolio/web...
 
 # --- Minimal runtime image ---
