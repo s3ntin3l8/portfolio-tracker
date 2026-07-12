@@ -96,6 +96,11 @@ export default async function SavingsPage({
           // bonus) into an apparent annual rate — flag it so it isn't read as a run-rate.
           delta={c.xirr !== null && c.monthsElapsed < 12 ? t("xirrYoungHint") : undefined}
           deltaTone="neutral"
+          // With totalReturn also shown, this grid holds 5 cards — an odd count leaves this
+          // trailing tile alone in a half-width mobile cell. Span both mobile columns so it
+          // reads as a deliberate row instead of a lopsided leftover; desktop has room to
+          // spare so it stays single-width there.
+          className={c.totalReturnPct !== null ? "col-span-2 lg:col-span-1" : undefined}
         />
       </div>
 

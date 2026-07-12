@@ -52,4 +52,30 @@ describe("Landing (Pocket split-hero sign-in)", () => {
       callbackUrl: "/holdings",
     });
   });
+
+  // Regression tests for #487: the demo "portfolio glance" figure was hardcoded to
+  // Indonesian Rupiah/punctuation regardless of locale or the returning user's currency.
+  it("defaults the demo figure to an Indonesian Rupiah example, formatted for the locale", () => {
+    renderLanding();
+    expect(screen.getByText("IDR 40,650,000")).toBeInTheDocument();
+    expect(screen.getByText("▲ 18.2%")).toBeInTheDocument();
+  });
+
+  it("formats the demo figure in the returning user's currency", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <Landing initialCurrency="EUR" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText("€24,180")).toBeInTheDocument();
+  });
+
+  it("falls back to the Rupiah example for an unrecognized currency", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <Landing initialCurrency="XYZ" />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText("IDR 40,650,000")).toBeInTheDocument();
+  });
 });

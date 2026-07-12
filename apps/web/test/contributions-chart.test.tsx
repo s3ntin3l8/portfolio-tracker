@@ -106,6 +106,16 @@ describe("ContributionsChart — overlay path", () => {
     // 4 daily history points → 4 merged rows
     expect(chart).toHaveAttribute("data-points", "4");
   });
+
+  // Regression test for #483: a fixed `gap-6` flex row left-clustered the Invested/Gain/Now
+  // worth footer into ~80% of the width on mobile instead of spreading evenly.
+  it("spreads the Invested/Gain/Now worth footer across an even 3-col grid on mobile", () => {
+    renderChart(series, valueHistory);
+    const footer = screen
+      .getByText(messages.Savings.footerInvested)
+      .closest("div.grid");
+    expect(footer).toHaveClass("grid-cols-3");
+  });
 });
 
 // ── Degraded path ─────────────────────────────────────────────────────────────

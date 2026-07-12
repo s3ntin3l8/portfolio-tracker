@@ -38,8 +38,7 @@ export function AddTransactionMenu({
   const pathname = usePathname();
 
   const [addOpen, setAddOpen] = useState(false);
-  const [step, setStep] = useState<"choose" | "manual">("choose");
-  const [importOpen, setImportOpen] = useState(false);
+  const [step, setStep] = useState<"choose" | "manual" | "import">("choose");
   const [portfolios, setPortfolios] = useState<ImportTargetPortfolio[] | null>(null);
   const [defaultPortfolioId, setDefaultPortfolioId] = useState("");
 
@@ -74,8 +73,8 @@ export function AddTransactionMenu({
 
   async function openImport() {
     await loadPortfolios();
-    setAddOpen(false);
-    setImportOpen(true);
+    setAddOpen(true);
+    setStep("import");
   }
 
   async function openManual() {
@@ -98,10 +97,15 @@ export function AddTransactionMenu({
         <span className="hidden sm:inline">{tm("addMenu.add")}</span>
       </Button>
 
-      <Sheet open={addOpen} onOpenChange={onAddOpenChange}>
-        <SheetContent>
+      {/* One sheet, three steps (choose/manual/import) swapped via `step` — swapping content
+          in place (rather than closing this sheet and opening a second `Drawer.Root`) avoids
+          a vaul body-scroll-lock race that left the import step unopenable (#471). Not
+          drag/outside/blur-dismissible while importing: a mid-import swipe must not discard
+          the flow. */}
+      <Sheet open={addOpen} onOpenChange={onAddOpenChange} dismissible={step !== "import"}>
+        <SheetContent className={step === "import" ? "max-w-3xl" : undefined}>
           <SheetHeader className="sticky top-0 z-[2] flex-row items-center gap-2.5 bg-background px-5 pb-3 pt-3">
-            {step === "manual" && (
+            {step !== "choose" && (
               <button
                 type="button"
                 onClick={() => setStep("choose")}
@@ -111,73 +115,60 @@ export function AddTransactionMenu({
                 <ChevronLeft className="size-[18px]" strokeWidth={2.2} />
               </button>
             )}
-            <SheetTitle className="flex-1">{tm("addMenu.title")}</SheetTitle>
+            <SheetTitle className="flex-1">
+              {step === "import" ? ti("title") : tm("addMenu.title")}
+            </SheetTitle>
             {/* spacer so the title clears the built-in close button */}
             <span className="w-[34px] shrink-0" aria-hidden />
           </SheetHeader>
 
-          <div className="px-5 pb-7 pt-1.5">
-            {step === "choose" ? (
-              <>
-                <p className="mx-0.5 mb-3.5 text-[13px] font-medium text-text-2">
-                  {tm("addMenu.subtitle")}
-                </p>
-                <div className="flex flex-col gap-3">
-                  <MethodCard
-                    icon={Camera}
-                    title={tm("addMenu.screenshot")}
-                    description={tm("addMenu.screenshotDesc")}
-                    tone="green"
-                    tag={tm("addMenu.recommended")}
-                    onClick={() => void openImport()}
-                  />
-                  <MethodCard
-                    icon={FileSpreadsheet}
-                    title={tm("addMenu.csv")}
-                    description={tm("addMenu.csvDesc")}
-                    tone="violet"
-                    onClick={() => void openImport()}
-                  />
-                  <MethodCard
-                    icon={PenLine}
-                    title={tm("addMenu.manual")}
-                    description={tm("addMenu.manualDesc")}
-                    tone="gold"
-                    onClick={() => void openManual()}
-                  />
-                </div>
-              </>
-            ) : (
-              portfolios && (
-                <NewEntryTabs
-                  portfolios={portfolios}
-                  initialPortfolioId={defaultPortfolioId}
+          {step === "choose" ? (
+            <div className="px-5 pb-7 pt-1.5">
+              <p className="mx-0.5 mb-3.5 text-[13px] font-medium text-text-2">
+                {tm("addMenu.subtitle")}
+              </p>
+              <div className="flex flex-col gap-3">
+                <MethodCard
+                  icon={Camera}
+                  title={tm("addMenu.screenshot")}
+                  description={tm("addMenu.screenshotDesc")}
+                  tone="green"
+                  tag={tm("addMenu.recommended")}
+                  onClick={() => void openImport()}
                 />
-              )
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Not drag/outside/blur-dismissible: a mid-import swipe must not discard the flow. */}
-      <Sheet open={importOpen} onOpenChange={setImportOpen} dismissible={false}>
-        <SheetContent
-          className="max-w-3xl"
-          onInteractOutside={(e) => e.preventDefault()}
-          onPointerDownOutside={(e) => e.preventDefault()}
-        >
-          <SheetHeader className="px-5 pb-3 pt-3">
-            <SheetTitle>{ti("title")}</SheetTitle>
-          </SheetHeader>
-          <div className="overflow-y-auto px-5 pb-7 pt-1.5">
-            {portfolios && (
-              <ImportFlowClient
-                portfolios={portfolios}
-                defaultPortfolioId={defaultPortfolioId}
-                onClose={() => setImportOpen(false)}
-              />
-            )}
-          </div>
+                <MethodCard
+                  icon={FileSpreadsheet}
+                  title={tm("addMenu.csv")}
+                  description={tm("addMenu.csvDesc")}
+                  tone="violet"
+                  onClick={() => void openImport()}
+                />
+                <MethodCard
+                  icon={PenLine}
+                  title={tm("addMenu.manual")}
+                  description={tm("addMenu.manualDesc")}
+                  tone="gold"
+                  onClick={() => void openManual()}
+                />
+              </div>
+            </div>
+          ) : step === "manual" ? (
+            <div className="px-5 pb-7 pt-1.5">
+              {portfolios && (
+                <NewEntryTabs portfolios={portfolios} initialPortfolioId={defaultPortfolioId} />
+              )}
+            </div>
+          ) : (
+            <div className="overflow-y-auto px-5 pb-7 pt-1.5">
+              {portfolios && (
+                <ImportFlowClient
+                  portfolios={portfolios}
+                  defaultPortfolioId={defaultPortfolioId}
+                  onClose={() => onAddOpenChange(false)}
+                />
+              )}
+            </div>
+          )}
         </SheetContent>
       </Sheet>
     </>

@@ -172,8 +172,10 @@ export function ContributionsChart({
           </ResponsiveContainer>
         </div>
 
-        {/* Invested / Gain / Now worth footer — reference shows this row under the chart. */}
-        <div className="flex items-center gap-6 border-t border-border pt-3">
+        {/* Invested / Gain / Now worth footer — reference shows this row under the chart.
+            Even 3-col spread on mobile (a fixed gap-6 flex row left-clusters into ~80% of
+            the width on a phone); back to the reference's flex row once there's room. */}
+        <div className="grid grid-cols-3 gap-4 border-t border-border pt-3 sm:flex sm:items-center sm:gap-6">
           <div>
             <p className="text-xs text-muted-foreground">{t("footerInvested")}</p>
             <p className="tabular mt-0.5 text-sm font-extrabold">{money(invested)}</p>
