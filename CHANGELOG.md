@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.3](https://github.com/s3ntin3l8/portfolio-tracker/compare/v0.1.2...v0.1.3) (2026-07-12)
+
+
+### Features
+
+* **web:** real drag-to-close bottom sheets + mobile/PWA polish ([#463](https://github.com/s3ntin3l8/portfolio-tracker/issues/463)) ([7f338bb](https://github.com/s3ntin3l8/portfolio-tracker/commit/7f338bb541966db2a9ae2fdac980d47c5a60bdd4))
+
+
+### Bug Fixes
+
+* **web:** repaint bottom nav on PWA resume, add loading transitions ([#451](https://github.com/s3ntin3l8/portfolio-tracker/issues/451)) ([#453](https://github.com/s3ntin3l8/portfolio-tracker/issues/453)) ([8adce32](https://github.com/s3ntin3l8/portfolio-tracker/commit/8adce324ec9909437560557f3b6aea96fd91a549))
+* **web:** stop mobile IDR stat rows from overflowing/clipping ([#461](https://github.com/s3ntin3l8/portfolio-tracker/issues/461)) ([#464](https://github.com/s3ntin3l8/portfolio-tracker/issues/464)) ([ac9ea41](https://github.com/s3ntin3l8/portfolio-tracker/commit/ac9ea412df33a22bb432a5561145e595a0319212))
+* **web:** unify display-currency scope, stop Activity banners dropping rows ([#465](https://github.com/s3ntin3l8/portfolio-tracker/issues/465)) ([#466](https://github.com/s3ntin3l8/portfolio-tracker/issues/466)) ([f7f2141](https://github.com/s3ntin3l8/portfolio-tracker/commit/f7f2141ff77ef9065f866972fdca925ac065c48c))
+* **web:** widen and center desktop layout to reclaim wasted widescreen space ([#462](https://github.com/s3ntin3l8/portfolio-tracker/issues/462)) ([#467](https://github.com/s3ntin3l8/portfolio-tracker/issues/467)) ([6569995](https://github.com/s3ntin3l8/portfolio-tracker/commit/6569995d1123306f506cf523bede0f2596aa86e2))
+
 ## [0.1.2](https://github.com/s3ntin3l8/portfolio-tracker/compare/v0.1.1...v0.1.2) (2026-07-12)
 
 
