@@ -20,7 +20,7 @@ repos:
         name: eslint
         entry: npm run lint
         language: system
-        types: [ts, tsx, js, jsx, mjs]
+        types: [ts, tsx, javascript, jsx]
         pass_filenames: false
         stages: [pre-commit]
 
@@ -36,6 +36,6 @@ repos:
         name: vitest (unit tests)
         entry: npm run test
         language: system
-        types: [ts, tsx, js, jsx, mjs]
+        types: [ts, tsx, javascript, jsx]
         pass_filenames: false
         stages: [pre-push]

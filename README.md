@@ -8,6 +8,23 @@ expand to **Trade Republic / international** holdings.
 Transactions are the single source of truth — holdings, P&L, cash balance, XIRR and net
 worth are all derived, never stored.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="apps/web/public/screenshots/holdings-light-wide.png" alt="Holdings — light" /></td>
+    <td><img src="apps/web/public/screenshots/holdings-dark-wide.png" alt="Holdings — dark" /></td>
+  </tr>
+  <tr>
+    <td><img src="apps/web/public/screenshots/insights-light-wide.png" alt="Insights — light" /></td>
+    <td><img src="apps/web/public/screenshots/tax-dark-wide.png" alt="Tax — dark" /></td>
+  </tr>
+</table>
+
+Captured from a scripted demo dataset spanning every asset class (equities, ETFs, gold, a
+bond, a mutual fund, cash) — regenerate anytime the UI changes with `npm run screenshots`
+(see [Reproducing the screenshots](#reproducing-the-screenshots)).
+
 ## Architecture
 
 A npm-workspaces + Turborepo monorepo (Node ≥26, ESM, TypeScript).
@@ -59,6 +76,19 @@ Target one workspace with `--workspace @portfolio/<name>` (e.g.
 `services/api/src/db/schema.ts`, run `npm run db:generate` and commit the migration.
 
 **Before committing:** `npm run lint && npm run typecheck && npm test`.
+
+## Reproducing the screenshots
+
+`npm run screenshots` regenerates every image in `apps/web/public/screenshots/` (used
+above and by the PWA install dialog's manifest `screenshots`) from a fully scripted,
+throwaway demo: it seeds a rich mock dataset into an isolated PGlite database
+(`services/api/src/db/seed-demo.ts`), boots the API and web app against it on dedicated
+ports, authenticates via a seeded personal-access token (no real Authentik login needed —
+see `apps/web/scripts/mint-session.mjs`), captures each hero screen with Playwright in
+light/dark and mobile/desktop, then tears everything down. Nothing it does touches real
+data or a real account; the whole run is self-contained and safe to re-run at any time.
+
+Requires Playwright's Chromium binary once: `npx playwright install chromium`.
 
 ## Configuration
 
