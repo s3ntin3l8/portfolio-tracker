@@ -134,28 +134,40 @@ export function AppShell({
         {/* overscroll-contain: stop rubber-band/scroll-chaining to the page behind it —
             matters most in the installed PWA, which has no browser chrome to absorb it. */}
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain">
-          {/* Reference top bar: 62px, card surface, 24px side padding, 12px gaps. */}
-          <header className="sticky top-0 z-30 flex min-h-[62px] items-center gap-3 border-b border-border bg-card pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] md:pl-6 md:pr-6">
-            {/* Mobile brand (desktop shows it in the sidebar). */}
-            <Link href="/holdings" className="md:hidden" aria-label="Pocket">
-              <Brand />
-            </Link>
-            <div className="min-w-0">{switcher}</div>
-            <div className="ml-auto flex items-center gap-1">
-              <ThemeToggle />
-              <GlobalSearch holderId={selectedHolderId} />
-              {/* Global add-entry affordance: reachable from every screen, owns the
-                share-target / shortcut auto-open. Suspense is required because
-                AddTransactionMenu reads useSearchParams and this shell renders on
-                every route (avoids a CSR-bailout de-opt). */}
-              <Suspense fallback={null}>
-                <AddTransactionMenu autoOpenFromParams />
-              </Suspense>
+          {/* Reference top bar: 62px, card surface, 24px side padding, 12px gaps.
+            Padding lives on the INNER wrapper (not the outer bar) so its cap/center
+            matches <main>'s content edges exactly — see the widescreen note on <main>.
+            The outer bar stays edge-to-edge (bg-card, sticky, safe-area-top only) so it
+            still reads as one continuous surface across the full width. */}
+          <header className="sticky top-0 z-30 flex min-h-[62px] items-center border-b border-border bg-card pt-[env(safe-area-inset-top)]">
+            <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-6 md:pr-6">
+              {/* Mobile brand (desktop shows it in the sidebar). */}
+              <Link href="/holdings" className="md:hidden" aria-label="Pocket">
+                <Brand />
+              </Link>
+              <div className="min-w-0">{switcher}</div>
+              <div className="ml-auto flex items-center gap-1">
+                <ThemeToggle />
+                <GlobalSearch holderId={selectedHolderId} />
+                {/* Global add-entry affordance: reachable from every screen, owns the
+                  share-target / shortcut auto-open. Suspense is required because
+                  AddTransactionMenu reads useSearchParams and this shell renders on
+                  every route (avoids a CSR-bailout de-opt). */}
+                <Suspense fallback={null}>
+                  <AddTransactionMenu autoOpenFromParams />
+                </Suspense>
+              </div>
             </div>
           </header>
-          {/* Reference (`Pocket Prototype.dc.html` desktop): a padding:24px scroll area with
-            LEFT-ALIGNED max-width:1100px content — not a centered column. */}
-          <main className="w-full max-w-[1148px] flex-1 px-4 pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))] pt-4 sm:px-6 sm:pt-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          {/* Widescreen desktop (issue #462): the Pocket Prototype reference is a
+            padding:24px scroll area with LEFT-ALIGNED max-width:1100px content — not a
+            centered column. We intentionally deviate from that reference above typical
+            laptop widths: content grows to a generous 1600px cap and centers within the
+            space right of the sidebar (sidebar treated as chrome, not the viewport), so
+            wide/ultrawide monitors don't leave a large blank right margin. `@container`
+            lets page grids key density tiers off this real content width rather than
+            viewport width, which is otherwise skewed by the 236px sidebar offset. */}
+          <main className="@container mx-auto w-full max-w-[1600px] flex-1 px-4 pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))] pt-4 sm:px-6 sm:pt-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
             <InstallPrompt />
             <RouteTransition>{children}</RouteTransition>
           </main>
