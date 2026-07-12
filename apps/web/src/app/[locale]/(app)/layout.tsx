@@ -20,6 +20,14 @@ const authConfigured = Boolean(
   process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER,
 );
 
+// Force every route under this layout to render per-request. Without this, `next build`
+// runs with no auth env / no request cookie, so `authConfigured` is false at build time,
+// the `auth()` call below is skipped, and — with no dynamic API touched — Next statically
+// prerenders the whole authed subtree in a signed-out snapshot (me=null, no portfolios,
+// admin gate 404ing) that then gets served frozen to every real user in production. Every
+// page here is per-user and reads the session cookie; none of it is safely cacheable.
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({
   children,
   params,
