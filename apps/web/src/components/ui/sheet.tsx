@@ -23,10 +23,18 @@ const SheetDismissibleContext = React.createContext(true);
 
 function Sheet({
   dismissible = true,
+  handleOnly,
   open,
   onOpenChange,
   ...props
-}: React.ComponentProps<typeof Drawer.Root> & { dismissible?: boolean }) {
+}: React.ComponentProps<typeof Drawer.Root> & {
+  dismissible?: boolean;
+  /** Restrict drag-to-close to the handle even while `dismissible` (#472 — a dismissible
+   *  sheet whose content also scrolls otherwise treats any mid-content downward drag as a
+   *  close gesture, since vaul gates on the content scroller's scrollTop staying at 0).
+   *  Defaults to `!dismissible` (the original coupling) when not given explicitly. */
+  handleOnly?: boolean;
+}) {
   // Android hardware/gesture back closes the sheet instead of navigating the route.
   useBackToClose(open, onOpenChange);
   return (
@@ -34,7 +42,7 @@ function Sheet({
       <Drawer.Root
         open={open}
         onOpenChange={onOpenChange}
-        handleOnly={!dismissible}
+        handleOnly={handleOnly ?? !dismissible}
         {...props}
       />
     </SheetDismissibleContext.Provider>

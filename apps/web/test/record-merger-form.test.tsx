@@ -107,4 +107,15 @@ describe("RecordMergerForm", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.needInstruments));
     expect(client.createMerger).not.toHaveBeenCalled();
   });
+
+  // Regression test for #472: same buried-submit-button fix as AddTransactionForm,
+  // shared by all three tabs in the manual-add sheet.
+  it("wraps the submit button in a sticky footer when stickyFooter is set", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <RecordMergerForm client={makeClient()} portfolioId="p1" onSuccess={vi.fn()} stickyFooter />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: m.submit }).closest(".sticky")).not.toBeNull();
+  });
 });

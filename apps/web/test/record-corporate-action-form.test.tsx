@@ -80,4 +80,15 @@ describe("RecordCorporateActionForm", () => {
     );
     expect(client.createCorporateAction).not.toHaveBeenCalled();
   });
+
+  // Regression test for #472: same buried-submit-button fix as AddTransactionForm,
+  // shared by all three tabs in the manual-add sheet.
+  it("wraps the submit button in a sticky footer when stickyFooter is set", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <RecordCorporateActionForm client={makeClient()} onSuccess={vi.fn()} stickyFooter />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: m.submit }).closest(".sticky")).not.toBeNull();
+  });
 });

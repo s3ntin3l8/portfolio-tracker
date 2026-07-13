@@ -304,8 +304,11 @@ export function TransactionDetailSheet({
   const canSetStatus = status !== "draft";
   const hasOverflow = (canReassign && onReassign) || showReceipt || canSetStatus;
 
+  // handleOnly: this sheet nests its own scroll container below the sticky header (#472 —
+  // content-drag was closing the sheet since vaul saw the outer content permanently at
+  // scrollTop 0). Drag-to-close stays on the handle; X/backdrop/Escape are unaffected.
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetContent className="p-0" side="bottom" hideClose>
         {/* ── Sticky header: type badge + title/date, then the icon-button cluster ── */}
         <SheetHeader className="sticky top-0 z-[2] gap-0 bg-background px-5 pb-2.5 pt-1">

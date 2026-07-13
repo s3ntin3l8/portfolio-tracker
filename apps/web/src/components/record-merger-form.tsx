@@ -7,6 +7,7 @@ import type { ApiClient, Instrument } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type RecordMergerClient = Pick<ApiClient, "searchInstruments" | "createMerger">;
@@ -108,10 +109,13 @@ export function RecordMergerForm({
   client,
   portfolioId,
   onSuccess,
+  stickyFooter = false,
 }: {
   client: RecordMergerClient;
   portfolioId: string;
   onSuccess?: () => void;
+  /** See `AddTransactionForm` — sheet contexts only. */
+  stickyFooter?: boolean;
 }) {
   const t = useTranslations("Merger");
 
@@ -238,10 +242,21 @@ export function RecordMergerForm({
         </div>
       )}
 
-      <Button type="submit" disabled={busy}>
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        {busy ? t("submitting") : t("submit")}
-      </Button>
+      <div
+        className={cn(
+          stickyFooter &&
+            "sticky bottom-0 -mx-5 border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]",
+        )}
+      >
+        <Button
+          type="submit"
+          disabled={busy}
+          className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? t("submitting") : t("submit")}
+        </Button>
+      </div>
     </form>
   );
 }

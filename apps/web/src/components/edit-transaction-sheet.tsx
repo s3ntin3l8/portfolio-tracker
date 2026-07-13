@@ -62,7 +62,9 @@ export function EditTransactionSheet({
   const tm = useTranslations("Manage.tx");
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    // handleOnly: the form scrolls in a nested container, so drag-to-close is restricted
+    // to the handle rather than fighting the form's own scroll (#472).
+    <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetContent side="bottom" className="p-0">
         <SheetHeader className="px-5 pb-1 pt-1">
           <SheetTitle className="text-[19px]">{tm("editTitle")}</SheetTitle>
@@ -74,6 +76,7 @@ export function EditTransactionSheet({
               portfolioId={tx.portfolioId}
               transactionId={tx.id}
               initial={toInitial(tx)}
+              stickyFooter
               onSuccess={() => {
                 onOpenChange(false);
                 onSaved?.();

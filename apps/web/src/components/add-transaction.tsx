@@ -11,11 +11,14 @@ import { useRouter } from "@/i18n/navigation";
 export function AddTransaction({
   portfolioId,
   initial,
+  stickyFooter = false,
 }: {
   portfolioId: string;
   /** Prefill (e.g. a harvest-suggestion sell draft, #harvestInstrument). Not an edit —
    *  no `transactionId` is passed, so the form still creates a new transaction. */
   initial?: AddTransactionInitial;
+  /** See `AddTransactionForm` — sheet contexts only. */
+  stickyFooter?: boolean;
 }) {
   const api = useApiClient();
   const router = useRouter();
@@ -24,6 +27,7 @@ export function AddTransaction({
       client={api}
       portfolioId={portfolioId}
       initial={initial}
+      stickyFooter={stickyFooter}
       onSuccess={() => {
         router.push("/transactions");
         router.refresh();

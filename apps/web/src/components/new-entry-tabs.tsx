@@ -31,6 +31,7 @@ export function NewEntryTabs({
   initialPortfolioId,
   defaultTab = "transaction",
   initialTransaction,
+  stickyFooter = false,
 }: {
   portfolios: PickablePortfolio[];
   initialPortfolioId: string;
@@ -38,6 +39,10 @@ export function NewEntryTabs({
   /** Prefill for the Transaction tab (e.g. a harvest-suggestion sell draft from
    *  `/tax`, threaded in via `?harvestInstrument=<id>`). */
   initialTransaction?: AddTransactionInitial;
+  /** Pin each tab's submit button in a sticky footer (#472) — the sheet caller
+   *  (`add-transaction-menu.tsx`) turns this on; the full `/transactions/new` page leaves
+   *  it off (a bottom-pinned bar there would sit under the fixed bottom-nav). */
+  stickyFooter?: boolean;
 }) {
   const tt = useTranslations("Manage.tx");
   const tca = useTranslations("CorpAction");
@@ -60,21 +65,33 @@ export function NewEntryTabs({
 
   return (
     <Tabs defaultValue={defaultTab}>
-      <TabsList>
-        <TabsTrigger value="transaction">{tt("tabTransaction")}</TabsTrigger>
-        <TabsTrigger value="corporate-action">{tca("link")}</TabsTrigger>
-        <TabsTrigger value="merger">{tmg("link")}</TabsTrigger>
+      {/* Full-width, evenly-distributed segmented control (#472 — was left-clustered under
+          the shared TabsList's `inline-flex` default). */}
+      <TabsList className="flex w-full">
+        <TabsTrigger value="transaction" className="flex-1">
+          {tt("tabTransaction")}
+        </TabsTrigger>
+        <TabsTrigger value="corporate-action" className="flex-1">
+          {tca("link")}
+        </TabsTrigger>
+        <TabsTrigger value="merger" className="flex-1">
+          {tmg("link")}
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="transaction" className="space-y-4">
         {picker}
-        <AddTransaction portfolioId={portfolioId} initial={initialTransaction} />
+        <AddTransaction
+          portfolioId={portfolioId}
+          initial={initialTransaction}
+          stickyFooter={stickyFooter}
+        />
       </TabsContent>
       <TabsContent value="corporate-action">
-        <RecordCorporateAction />
+        <RecordCorporateAction stickyFooter={stickyFooter} />
       </TabsContent>
       <TabsContent value="merger" className="space-y-4">
         {picker}
-        <RecordMerger portfolioId={portfolioId} />
+        <RecordMerger portfolioId={portfolioId} stickyFooter={stickyFooter} />
       </TabsContent>
     </Tabs>
   );

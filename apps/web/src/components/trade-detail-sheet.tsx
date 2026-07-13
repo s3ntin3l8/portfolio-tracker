@@ -101,8 +101,9 @@ export function TradeDetailSheet({ trade, currency, open, onOpenChange }: TradeD
 
   const hasDividends = Number(trade.dividends) > 0;
 
+  // handleOnly: see transaction-detail-sheet.tsx — same nested-scroll-container fix (#472).
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetContent className="p-0" side="bottom">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle className="flex items-center gap-3">

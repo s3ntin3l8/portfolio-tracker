@@ -741,4 +741,27 @@ describe("TransactionSourcesSection (edit mode, #230)", () => {
     expect(screen.queryByText(ms.title)).toBeNull();
     expect(screen.queryByText(messages.Manage.tx.enrichHint)).toBeNull();
   });
+
+  // Regression tests for #472: the submit button was buried at the bottom of a long
+  // scrolling form with no way to pin it above the fold.
+  it("wraps the submit button in a sticky footer when stickyFooter is set", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AddTransactionForm
+          client={makeClient()}
+          portfolioId="p1"
+          onSuccess={vi.fn()}
+          stickyFooter
+        />
+      </NextIntlClientProvider>,
+    );
+    const submit = screen.getByRole("button", { name: m.submit });
+    expect(submit.closest(".sticky")).not.toBeNull();
+  });
+
+  it("does not wrap the submit button in a sticky footer by default", () => {
+    renderForm(makeClient());
+    const submit = screen.getByRole("button", { name: m.submit });
+    expect(submit.closest(".sticky")).toBeNull();
+  });
 });

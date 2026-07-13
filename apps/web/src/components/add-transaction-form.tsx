@@ -141,12 +141,18 @@ export function AddTransactionForm({
   initial,
   transactionId,
   onSuccess,
+  stickyFooter = false,
 }: {
   client: AddTransactionClient;
   portfolioId: string;
   initial?: AddTransactionInitial;
   transactionId?: string;
   onSuccess?: () => void;
+  /** Pin the submit button in a sticky footer bar so it stays visible without scrolling
+   *  (#472 — buried below ~10 fields, worse with the mobile keyboard open). Sheet contexts
+   *  only: full pages leave this off since a bottom-pinned bar would sit under the fixed
+   *  bottom-nav. */
+  stickyFooter?: boolean;
 }) {
   const t = useTranslations("Manage.tx");
   const tt = useTranslations("TxType");
@@ -769,15 +775,24 @@ export function AddTransactionForm({
         <p className="text-sm text-muted-foreground">{t("enrichHint")}</p>
       )}
 
-      {/* Reference primary button: full-width green, rounded-15, 15px padding, 700/15px. */}
-      <Button
-        type="submit"
-        disabled={busy}
-        className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+      {/* Reference primary button: full-width green, rounded-15, 15px padding, 700/15px.
+          `stickyFooter` pins it above the fold instead of leaving it buried at the bottom
+          of the scrolling sheet (#472). */}
+      <div
+        className={cn(
+          stickyFooter &&
+            "sticky bottom-0 -mx-5 border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]",
+        )}
       >
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        {busy ? t("submitting") : isEdit ? t("save") : t("submit")}
-      </Button>
+        <Button
+          type="submit"
+          disabled={busy}
+          className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? t("submitting") : isEdit ? t("save") : t("submit")}
+        </Button>
+      </div>
     </form>
   );
 }

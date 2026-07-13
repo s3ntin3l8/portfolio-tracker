@@ -101,8 +101,15 @@ export function AddTransactionMenu({
           in place (rather than closing this sheet and opening a second `Drawer.Root`) avoids
           a vaul body-scroll-lock race that left the import step unopenable (#471). Not
           drag/outside/blur-dismissible while importing: a mid-import swipe must not discard
-          the flow. */}
-      <Sheet open={addOpen} onOpenChange={onAddOpenChange} dismissible={step !== "import"}>
+          the flow. `handleOnly`: the manual step's form scrolls, so drag-to-close is
+          restricted to the handle rather than the whole content surface fighting the
+          form's own scroll (#472). */}
+      <Sheet
+        open={addOpen}
+        onOpenChange={onAddOpenChange}
+        dismissible={step !== "import"}
+        handleOnly
+      >
         <SheetContent className={step === "import" ? "max-w-3xl" : undefined}>
           <SheetHeader className="sticky top-0 z-[2] flex-row items-center gap-2.5 bg-background px-5 pb-3 pt-3">
             {step !== "choose" && (
@@ -155,7 +162,11 @@ export function AddTransactionMenu({
           ) : step === "manual" ? (
             <div className="px-5 pb-7 pt-1.5">
               {portfolios && (
-                <NewEntryTabs portfolios={portfolios} initialPortfolioId={defaultPortfolioId} />
+                <NewEntryTabs
+                  portfolios={portfolios}
+                  initialPortfolioId={defaultPortfolioId}
+                  stickyFooter
+                />
               )}
             </div>
           ) : (

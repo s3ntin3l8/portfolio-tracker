@@ -112,4 +112,12 @@ describe("NewEntryTabs", () => {
       screen.getByRole("button", { name: tx.portfolioPicker }),
     ).toBeInTheDocument();
   });
+
+  // Regression test for #472: the tab bar used to shrink-wrap and hug the left edge
+  // instead of spreading evenly across the sheet width.
+  it("renders the tab bar as a full-width segmented control", () => {
+    renderTabs();
+    expect(screen.getByRole("tablist")).toHaveClass("flex", "w-full");
+    screen.getAllByRole("tab").forEach((tab) => expect(tab).toHaveClass("flex-1"));
+  });
 });

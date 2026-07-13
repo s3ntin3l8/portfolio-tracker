@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type RecordCorpActionClient = Pick<
@@ -21,9 +22,12 @@ type CaType = (typeof TYPES)[number];
 export function RecordCorporateActionForm({
   client,
   onSuccess,
+  stickyFooter = false,
 }: {
   client: RecordCorpActionClient;
   onSuccess?: () => void;
+  /** See `AddTransactionForm` — sheet contexts only. */
+  stickyFooter?: boolean;
 }) {
   const t = useTranslations("CorpAction");
   const tt = useTranslations("TxType");
@@ -266,10 +270,21 @@ export function RecordCorporateActionForm({
         </div>
       </div>
 
-      <Button type="submit" disabled={busy}>
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        {busy ? t("submitting") : t("submit")}
-      </Button>
+      <div
+        className={cn(
+          stickyFooter &&
+            "sticky bottom-0 -mx-5 border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]",
+        )}
+      >
+        <Button
+          type="submit"
+          disabled={busy}
+          className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+        >
+          {busy && <Loader2 className="size-4 animate-spin" />}
+          {busy ? t("submitting") : t("submit")}
+        </Button>
+      </div>
     </form>
   );
 }
