@@ -63,5 +63,16 @@ jobs:
           # review: "the sandbox blocked npm/npx/node/network access ... update
           # --allowedTools if you'd like a future review to actually run the suite").
           # Node + deps are set up above so these scripts are ready to run immediately.
+          #
+          # Exact-string rules (no trailing wildcard) only match that literal command —
+          # e.g. "Bash(npm run lint)" alone does NOT match "npm run lint --fix" or any
+          # other variation Claude might type. PR #500 shipped with bare exact rules and
+          # every review still hit permission_denials (confirmed in the run logs: the
+          # SDK options included the exact rules verbatim, yet Bash calls still got
+          # denied) because the CI runner is non-interactive — a rule miss has no human
+          # to fall back on and auto-denies. The trailing `*` (no space, so it also
+          # matches the bare command) covers flags/redirection variants; `npm ci` is
+          # allowed too since Claude sometimes reinstalls deps defensively even though
+          # the step above already did it.
           claude_args: |
-            --allowedTools "Bash(npm run lint)" "Bash(npm run typecheck)" "Bash(npm test)"
+            --allowedTools "Bash(npm run lint*)" "Bash(npm run typecheck*)" "Bash(npm run test*)" "Bash(npm test*)" "Bash(npm ci*)"
