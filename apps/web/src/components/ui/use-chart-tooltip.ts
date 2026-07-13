@@ -50,18 +50,15 @@ export function useChartTooltip<C>() {
   // real size via `setSize`; once it does, this approximation is replaced
   // and subsequent flips use the measured dimensions.
   //
-  // The size is held in BOTH a ref and a state: the ref is the synchronous
-  // source of truth read by `update` (so a `setSize` call that also calls
-  // `update` uses the new size, not the old); the state is what the rest
-  // of the hook reacts to (e.g. so the `useEffect` re-attaches when the
-  // size meaningfully changes). A `useRef` alone would be a stale
-  // read for non-`setSize` consumers; a `useState` alone loses the
-  // synchronous-write property that `setSize` needs.
+  // The size is held in a ref rather than state so that `setSize` can
+  // write the new size and synchronously call `update` (which reads
+  // from this ref) in the same tick. A `useState` here would be stale
+  // until the next render — `update` would close over the old size
+  // and the position would be computed with the previous dimensions.
+  // The position state (`pos`) handles the downstream re-render that
+  // propagates the new coordinates to the consumer; the size ref
+  // handles the synchronous write/read.
   const panelSizeRef = useRef<{ width: number; height: number }>({ width: 200, height: 80 });
-  const [panelSize, setPanelSizeState] = useState<{ width: number; height: number }>({
-    width: 200,
-    height: 80,
-  });
 
   const update = useCallback(
     (el: Element) => {
@@ -81,9 +78,8 @@ export function useChartTooltip<C>() {
 
   // Stable identity across renders so the panel's `useEffect([onSize])`
   // doesn't re-fire on every parent render. Returning a new function
-  // each render would re-trigger the effect → onSize() → setPanelSize
-  // → re-render → new onSize → infinite loop. `setPanelSizeState` already
-  // has a stable identity, so wrapping it in useCallback is enough.
+  // each render would re-trigger the effect → onSize() → setSize →
+  // re-render → new onSize → infinite loop.
   //
   // Also re-invokes `update` for the currently-open tooltip so the first
   // tooltip in a session that opens near a viewport edge snaps to the
@@ -99,7 +95,6 @@ export function useChartTooltip<C>() {
   const setSize = useCallback(
     (size: { width: number; height: number }) => {
       panelSizeRef.current = size;
-      setPanelSizeState(size);
       if (targetElRef.current) update(targetElRef.current);
     },
     [update],
