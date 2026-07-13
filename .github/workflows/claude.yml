@@ -30,6 +30,17 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Bash is otherwise the Claude Code action's sandbox: without a Node toolchain
+      # already on PATH, --allowedTools below would just let Claude fail to run npm.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -46,5 +57,11 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
-
+          #
+          # Bash is disabled for Claude by default in this action; without an allowlist
+          # entry a review can only read the diff, not run it (see PR #496's Claude
+          # review: "the sandbox blocked npm/npx/node/network access ... update
+          # --allowedTools if you'd like a future review to actually run the suite").
+          # Node + deps are set up above so these scripts are ready to run immediately.
+          claude_args: |
+            --allowedTools "Bash(npm run lint)" "Bash(npm run typecheck)" "Bash(npm test)"
