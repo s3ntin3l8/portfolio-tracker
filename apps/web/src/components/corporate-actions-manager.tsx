@@ -6,6 +6,7 @@ import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import type { CorporateAction } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
@@ -150,9 +151,8 @@ export function CorporateActionsManager({
                     <span className="text-xs text-muted-foreground">
                       {tc("exDate")}
                     </span>
-                    <Input
+                    <DatePicker
                       aria-label={tc("exDate")}
-                      type="date"
                       className="w-40"
                       value={exDate}
                       onChange={(e) => setExDate(e.target.value)}
