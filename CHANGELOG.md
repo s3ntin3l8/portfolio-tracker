@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.4](https://github.com/s3ntin3l8/portfolio-tracker/compare/v0.1.3...v0.1.4) (2026-07-13)
+
+
+### Features
+
+* **web:** add tooltips to the remaining charts ([#478](https://github.com/s3ntin3l8/portfolio-tracker/issues/478)) ([#491](https://github.com/s3ntin3l8/portfolio-tracker/issues/491)) ([89df449](https://github.com/s3ntin3l8/portfolio-tracker/commit/89df449376ae25eca97e476e3ac34f3889cebf2d))
+* **web:** custom styled date picker for all date input fields ([#493](https://github.com/s3ntin3l8/portfolio-tracker/issues/493)) ([4bb23b8](https://github.com/s3ntin3l8/portfolio-tracker/commit/4bb23b8db7440c9bad2a59cae6d2ce530e08c2c2))
+* **web:** mobile theme auto-switch + settings appearance selector ([#474](https://github.com/s3ntin3l8/portfolio-tracker/issues/474)) ([#495](https://github.com/s3ntin3l8/portfolio-tracker/issues/495)) ([d87e0ac](https://github.com/s3ntin3l8/portfolio-tracker/commit/d87e0acd4fecfa1b290dd3af962846fae9537990))
+* **web:** sort the remaining tables (disposal, lots, tax, tax-reports, import, api-tokens) ([#496](https://github.com/s3ntin3l8/portfolio-tracker/issues/496)) ([ba97f8c](https://github.com/s3ntin3l8/portfolio-tracker/commit/ba97f8c6016278c9b2e7d003091da6c618a7f1aa))
+
+
+### Bug Fixes
+
+* **ci:** use wildcard Bash allow-rules for the Claude Code action ([#502](https://github.com/s3ntin3l8/portfolio-tracker/issues/502)) ([f71a9c5](https://github.com/s3ntin3l8/portfolio-tracker/commit/f71a9c57c3f56385ada0d7091d8f7b5a963848e9))
+* **web,api,core:** mobile-friendly yields table + clean displayName across income surfaces ([#480](https://github.com/s3ntin3l8/portfolio-tracker/issues/480)) ([#494](https://github.com/s3ntin3l8/portfolio-tracker/issues/494)) ([4287be8](https://github.com/s3ntin3l8/portfolio-tracker/commit/4287be8324f19e5be0105627c7a9775fa613ba49))
+* **web:** fix broken +-menu import, donut focus outline, uneven mobile stat rows, and landing demo currency ([#489](https://github.com/s3ntin3l8/portfolio-tracker/issues/489)) ([ffa8656](https://github.com/s3ntin3l8/portfolio-tracker/commit/ffa865682d20656e51aaefc80cb63f583d6498c9))
+* **web:** pin manual-entry save button, spread tabs, fix sheet drag-close ([#472](https://github.com/s3ntin3l8/portfolio-tracker/issues/472)) ([#490](https://github.com/s3ntin3l8/portfolio-tracker/issues/490)) ([831929b](https://github.com/s3ntin3l8/portfolio-tracker/commit/831929b68364005c7ec0aca6627d0f6034e7d6ed))
+* **web:** resolve remaining sheet UX issues ([#472](https://github.com/s3ntin3l8/portfolio-tracker/issues/472)) ([#499](https://github.com/s3ntin3l8/portfolio-tracker/issues/499)) ([0849445](https://github.com/s3ntin3l8/portfolio-tracker/commit/08494453808e59f2d40b0af2bae05e4bb751868d))
+* **web:** wait for font swap before capturing demo screenshots ([#468](https://github.com/s3ntin3l8/portfolio-tracker/issues/468)) ([dbbb6ec](https://github.com/s3ntin3l8/portfolio-tracker/commit/dbbb6ec2299994faa0089ea9c5ac5abff50107c7))
+
 ## [0.1.3](https://github.com/s3ntin3l8/portfolio-tracker/compare/v0.1.2...v0.1.3) (2026-07-12)
 
 
