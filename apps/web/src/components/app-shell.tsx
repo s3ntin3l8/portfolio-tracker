@@ -147,7 +147,7 @@ export function AppShell({
               </Link>
               <div className="min-w-0">{switcher}</div>
               <div className="ml-auto flex items-center gap-1">
-                <ThemeToggle />
+                <ThemeToggle className="hidden md:inline-flex" />
                 <GlobalSearch holderId={selectedHolderId} />
                 {/* Global add-entry affordance: reachable from every screen, owns the
                   share-target / shortcut auto-open. Suspense is required because

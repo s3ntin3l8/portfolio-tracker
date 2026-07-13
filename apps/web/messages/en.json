@@ -993,6 +993,11 @@
     "adminBadge": "ADMIN",
     "preferences": "Preferences",
     "appearance": "Appearance",
+    "appearanceOptions": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
     "language": "Language",
     "languageOptions": {
       "en": "English",

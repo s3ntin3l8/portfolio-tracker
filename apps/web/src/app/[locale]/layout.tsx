@@ -5,7 +5,7 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { routing } from "@/i18n/routing";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeColorSync } from "@/components/theme-color-sync";
+import { ThemeColorSync, STORAGE_KEY } from "@/components/theme-color-sync";
 import { IosSplashLinks } from "@/components/ios-splash-links";
 import { AuthSessionProvider } from "@/components/session-provider";
 import "../globals.css";
@@ -82,7 +82,7 @@ export default async function LocaleLayout({
       {/* React 19 hoists these <link> tags into <head> regardless of position. */}
       <IosSplashLinks />
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey={STORAGE_KEY}>
           <ThemeColorSync />
           <AuthSessionProvider>
             <NextIntlClientProvider>{children}</NextIntlClientProvider>

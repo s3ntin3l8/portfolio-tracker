@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { DisplayCurrency } from "@/components/display-currency";
 import { UpdateProfile } from "@/components/update-profile";
@@ -60,10 +60,7 @@ export async function AccountSection({
         <SectionLabel>{t("appearance")}</SectionLabel>
         <Card>
           <CardContent className="p-5">
-            <div className="flex items-center justify-between py-1">
-              <span className="text-sm font-medium">{t("appearance")}</span>
-              <ThemeToggle />
-            </div>
+            <ThemeSwitcher />
           </CardContent>
         </Card>
       </div>
