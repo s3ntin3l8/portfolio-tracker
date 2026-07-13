@@ -19,6 +19,7 @@ const bbca2026: IncomeEventRow = {
   instrumentId: "i-bbca",
   symbol: "BBCA",
   name: "Bank Central Asia",
+  displayName: null,
   type: "dividend",
   date: "2026-07-15",
   amount: "500000",
@@ -29,6 +30,7 @@ const tlkm2026Forecast: IncomeEventRow = {
   instrumentId: "i-tlkm",
   symbol: "TLKM",
   name: "Telkom Indonesia",
+  displayName: null,
   type: "dividend",
   date: "2026-08-20",
   amount: "300000",
@@ -40,6 +42,7 @@ const sap2025: IncomeEventRow = {
   instrumentId: "i-sap",
   symbol: "SAP",
   name: "SAP SE",
+  displayName: null,
   type: "dividend",
   date: "2025-03-01",
   amount: "168",
@@ -84,6 +87,27 @@ describe("IncomeTimeline", () => {
       target: { value: "sap" },
     });
     expect(screen.getAllByText("SAP").length).toBeGreaterThan(0);
+    expect(screen.queryByText("BBCA")).toBeNull();
+  });
+
+  it("narrows rows by search text matching the clean displayName (#480)", () => {
+    // MSFT-shaped fixture: raw broker name is unsearchable ("MICROSOFT DL-…"),
+    // but the displayName "Microsoft" should make the row findable by plain search.
+    const msft: IncomeEventRow = {
+      instrumentId: "i-msft",
+      symbol: "MSFT",
+      name: "MICROSOFT DL- 00000625",
+      displayName: "Microsoft",
+      type: "dividend",
+      date: "2026-05-01",
+      amount: "13",
+      currency: "USD",
+    };
+    wrap([bbca2026, msft]);
+    fireEvent.change(screen.getByPlaceholderText("Search income…"), {
+      target: { value: "microsoft" },
+    });
+    expect(screen.getAllByText("MSFT").length).toBeGreaterThan(0);
     expect(screen.queryByText("BBCA")).toBeNull();
   });
 

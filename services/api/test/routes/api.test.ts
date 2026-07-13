@@ -1622,6 +1622,108 @@ describe("auth + portfolios + transactions", () => {
     expect(denied.statusCode).toBe(404);
   });
 
+  it("surfaces the clean displayName on yields/events/byInstrument when set on the instrument (#480)", async () => {
+    // MSFT-shaped fixture: a raw broker-style name that the displayName enrichment
+    // is meant to clean up. The income response must prefer displayName everywhere a
+    // name appears, so the UI doesn't have to fall back to the dirty string.
+    // Uses a bond (faceValue → marketValue, no fixture price required) so the
+    // yield denominator is non-zero regardless of the market-data provider.
+    const t = await token("income-displayname-user");
+    await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    await app.inject({
+      method: "PATCH",
+      url: "/me",
+      headers: auth(t),
+      payload: { displayCurrency: "usd" },
+    });
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "DisplayName test", baseCurrency: "USD" },
+      })
+    ).json().id;
+
+    const maturity = new Date(Date.now() + 100 * 86_400_000).toISOString().slice(0, 10);
+    const recentCoupon = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const [bond] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "DN480",
+        market: "IDX",
+        assetClass: "bond",
+        currency: "USD",
+        name: "DN480 RAW BROKER NAME",
+        displayName: "DisplayName Test Bond",
+        faceValue: "1000000",
+        couponRate: "0.06",
+        couponSchedule: "semiannual",
+        maturityDate: maturity,
+      })
+      .returning();
+
+    // Buy the bond so summary.holdings includes it (par valuation → marketValueDisplay).
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: bond.id,
+        quantity: "10",
+        price: "1000000",
+        currency: "USD",
+        executedAt: "2026-01-05T00:00:00.000Z",
+      },
+    });
+
+    // A coupon within the trailing 12-month window — populates events, byInstrument,
+    // and (via par valuation) the yields row.
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "coupon",
+        instrumentId: bond.id,
+        quantity: "0",
+        price: "30000",
+        currency: "USD",
+        executedAt: recentCoupon,
+      },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/networth/income",
+      headers: auth(t),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // Top contributors (byInstrument) — displayName surfaces here.
+    expect(body.byInstrument).toHaveLength(1);
+    expect(body.byInstrument[0]).toMatchObject({
+      symbol: "DN480",
+      displayName: "DisplayName Test Bond",
+    });
+
+    // Event log — displayName rides along with the historical event.
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0]).toMatchObject({
+      symbol: "DN480",
+      displayName: "DisplayName Test Bond",
+    });
+
+    // Trailing yield row — displayName here is the headline fix for #480.
+    expect(body.yields).toHaveLength(1);
+    expect(body.yields[0]).toMatchObject({
+      symbol: "DN480",
+      displayName: "DisplayName Test Bond",
+    });
+  });
+
   it("surfaces cash interest as a separate subtotal without polluting dividend totals", async () => {
     const { fxRates } = await import("@portfolio/db");
     const t = await token("income-interest-user");

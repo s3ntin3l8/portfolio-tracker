@@ -951,6 +951,9 @@ export interface UpcomingPayment {
   instrumentId: string;
   symbol: string;
   name: string | null;
+  /** Clean display name resolved by the metadata enrichment job, when available.
+   *  UI should prefer `displayName ?? name` so a raw broker-style name doesn't leak. */
+  displayName: string | null;
   date: string; // YYYY-MM-DD — ex-date for dividends, coupon date for bonds
   amount: string;
   currency: string;
@@ -974,6 +977,11 @@ export interface InstrumentYield {
   instrumentId: string;
   symbol: string;
   name: string | null;
+  /** Clean display name resolved by the metadata enrichment job, when available. */
+  displayName: string | null;
+  /** Asset class for icon/tint (e.g. equity, etf, bond). Mirrors the
+   *  `instrument.assetClass` shape used by holdings/trades tables. */
+  assetClass: string | null;
   trailingIncome: string;
   marketValue: string;
   costBasis: string;
@@ -993,6 +1001,8 @@ export interface IncomeEvent {
   instrumentId: string | null;
   symbol: string | null;
   name: string | null;
+  /** Clean display name resolved by the metadata enrichment job, when available. */
+  displayName: string | null;
   type: string; // "dividend" | "coupon"
   date: string; // YYYY-MM-DD
   amount: string;
@@ -1019,6 +1029,8 @@ export interface InstrumentIncome {
   instrumentId: string | null;
   symbol: string | null;
   name: string | null;
+  /** Clean display name resolved by the metadata enrichment job, when available. */
+  displayName: string | null;
   total: string;
   pct: number;
 }

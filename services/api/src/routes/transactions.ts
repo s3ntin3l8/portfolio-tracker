@@ -472,6 +472,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           instrumentId: t.instrumentId,
           symbol: im?.symbol ?? null,
           name: im?.name ?? null,
+          displayName: im?.displayName ?? null,
           assetClass: im?.assetClass ?? null,
           type: t.type,
           date: t.executedAt.toISOString().slice(0, 10),
@@ -524,6 +525,8 @@ export async function transactionsRoute(app: FastifyInstance) {
           instrumentId: h.instrumentId,
           symbol: im?.symbol ?? "—",
           name: im?.name ?? null,
+          displayName: im?.displayName ?? null,
+          assetClass: im?.assetClass ?? null,
           trailingIncome,
           marketValue,
           costBasis,
@@ -750,6 +753,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         instrumentId: e.instrumentId,
         symbol: e.symbol,
         name: e.name,
+        displayName: e.displayName ?? null,
         type: e.type,
         date: e.date,
         amount: e.price,
@@ -764,6 +768,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       instrumentId: string;
       symbol: string;
       name: string | null;
+      displayName: string | null;
       date: string;
       amount: string;
       currency: string;
@@ -780,6 +785,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           instrumentId,
           symbol: im?.symbol ?? "",
           name: im?.name ?? null,
+          displayName: im?.displayName ?? null,
           date: entry.exDate,
           amount: entry.amount,
           currency: entry.currency,
