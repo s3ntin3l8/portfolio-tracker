@@ -160,13 +160,3 @@ Caller jobs invoking reusable workflows with write scopes **must declare a
 `codeql` and `dependency-review` are gated on `github.event.repository.private == false`
 — they need GitHub Advanced Security on a private repo, so they **skip while private and
 auto-activate once the repo is made public** (both features are free on public repos).
-
-## Phased plan (see `.claude/plans/`)
-
-0. **Restructure** (this) — monorepo, API→Postgres, web skeleton, compose, CI.
-1. Foundation — Authentik OIDC, full schema (`packages/db`+`core`), design system +
-   screens (ui-ux-pro-max), manual transaction CRUD.
-2. Market data (IDX + gold spot + Antam + bonds/funds) via the provider abstraction.
-3. Screenshot ingest (Claude default, Ollama/LM Studio/Gemini/OpenRouter fallbacks) + CSV.
-4. v1 features — dividends, corporate actions, XIRR, net-worth dashboard.
-5. International — Trade Republic (`pytr`, EODHD/OpenFIGI), then native mobile.
