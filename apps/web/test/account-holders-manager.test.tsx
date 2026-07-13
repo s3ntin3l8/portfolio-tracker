@@ -130,4 +130,12 @@ describe("AccountHoldersManager", () => {
     await waitFor(() => expect(deleteAccountHolder).toHaveBeenCalledWith("h1"));
     expect(refresh).toHaveBeenCalled();
   });
+
+  // Regression test for #472: the submit button is sticky-pinned in the sheet context
+  it("wraps the submit button in a sticky footer in the dialog form", () => {
+    renderManager();
+    fireEvent.click(screen.getByRole("button", { name: m.add }));
+    const submitBtn = screen.getAllByRole("button", { name: m.add }).at(-1)!;
+    expect(submitBtn.closest(".sticky")).not.toBeNull();
+  });
 });

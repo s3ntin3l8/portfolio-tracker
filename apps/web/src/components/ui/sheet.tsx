@@ -37,6 +37,30 @@ function Sheet({
 }) {
   // Android hardware/gesture back closes the sheet instead of navigating the route.
   useBackToClose(open, onOpenChange);
+
+  // Synchronize visual viewport height to prevent keyboard occlusion (#472 Item 4)
+  React.useEffect(() => {
+    if (!open || typeof window === "undefined" || !window.visualViewport) return;
+
+    const vv = window.visualViewport;
+    const updateViewport = () => {
+      document.documentElement.style.setProperty(
+        "--visual-viewport-height",
+        `${vv.height}px`,
+      );
+    };
+
+    updateViewport();
+    vv.addEventListener("resize", updateViewport);
+    vv.addEventListener("scroll", updateViewport);
+
+    return () => {
+      vv.removeEventListener("resize", updateViewport);
+      vv.removeEventListener("scroll", updateViewport);
+      document.documentElement.style.removeProperty("--visual-viewport-height");
+    };
+  }, [open]);
+
   return (
     <SheetDismissibleContext.Provider value={dismissible}>
       <Drawer.Root
@@ -112,6 +136,13 @@ function SheetContent({
       <Drawer.Content
         onInteractOutside={handleInteractOutside}
         onPointerDownOutside={handlePointerDownOutside}
+        style={{
+          maxHeight:
+            side === "bottom"
+              ? "min(90dvh, calc(var(--visual-viewport-height, 100vh) * 0.9))"
+              : undefined,
+          ...props.style,
+        }}
         className={cn(
           "fixed z-50 flex flex-col bg-background outline-none",
           // Centering uses margins, NOT -translate-x-1/2: vaul writes an inline `transform`

@@ -588,4 +588,21 @@ describe("PortfolioFormDialog", () => {
     // …and the loading placeholder is gone (not stuck).
     expect(screen.queryByText(m.trLoading)).not.toBeInTheDocument();
   });
+
+  // Regression test for #472: the submit button is sticky-pinned in the sheet context
+  it("wraps the submit button in a sticky footer", () => {
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+    const submitBtn = screen.getByRole("button", { name: m.create });
+    expect(submitBtn.closest(".sticky")).not.toBeNull();
+  });
+
+  // Regression test for #472: FSA helper is not rendered on mount when no holder is selected
+  it("does not render the FSA helper on mount when no holder is selected", async () => {
+    renderCreate();
+    fireEvent.click(screen.getByRole("button", { name: m.new }));
+    // Wait for async calls (holders/sibling portfolios) to resolve
+    await waitFor(() => expect(listAccountHolders).toHaveBeenCalled());
+    expect(screen.queryByText(/across/)).toBeNull();
+  });
 });

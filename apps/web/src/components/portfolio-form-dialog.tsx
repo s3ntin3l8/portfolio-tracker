@@ -314,7 +314,8 @@ export function PortfolioFormDialog({
   // FSA allocation helper: sum all sibling portfolios' allocations for the selected
   // holder (excluding the current portfolio to avoid double-counting), then add the
   // current input value. Used to show "€X of €cap allocated — €Y left" in the form.
-  const effectiveHolderId = accountHolderId !== NEW_HOLDER ? accountHolderId : null;
+  const effectiveHolderId =
+    accountHolderId !== NEW_HOLDER && accountHolderId !== "" ? accountHolderId : null;
   const selectedHolderObj = holders.find((h) => h.id === effectiveHolderId) ?? null;
   const holderAllowanceCap = Number(selectedHolderObj?.taxAllowanceAnnual ?? 1000);
   const siblingsTotal = siblingPortfolios
@@ -594,7 +595,7 @@ export function PortfolioFormDialog({
             </div>
           </details>
 
-          <div className="pt-2">
+          <div className="sticky bottom-0 -mx-6 bg-background border-t border-border px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] z-[2] mt-4">
             {/* After a TR/IBKR create the portfolio is saved; swap the create button for Done. */}
             {mode === "create" && createdPortfolio ? (
               <Button

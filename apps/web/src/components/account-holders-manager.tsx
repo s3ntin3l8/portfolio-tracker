@@ -223,7 +223,7 @@ function HolderFormDialog({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent aria-describedby={subtitleId}>
         <SheetHeader className="pb-0">
@@ -329,7 +329,7 @@ function HolderFormDialog({
             </div>
           </details>
 
-          <div className="pt-2">
+          <div className="sticky bottom-0 -mx-6 bg-background border-t border-border px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] z-[2] mt-4">
             <Button
               type="submit"
               disabled={busy || !name.trim()}
