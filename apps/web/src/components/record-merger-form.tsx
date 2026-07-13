@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, X } from "lucide-react";
 import type { ApiClient, Instrument } from "@portfolio/api-client";
@@ -9,6 +10,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useFocusScroll } from "@/lib/use-focus-scroll";
+import { useSheetFooter } from "@/components/ui/sheet";
 
 /** The slice of the API client this form needs (injectable for tests). */
 export type RecordMergerClient = Pick<ApiClient, "searchInstruments" | "createMerger">;
@@ -157,107 +160,137 @@ export function RecordMergerForm({
     }
   }
 
+  // Scroll focused fields fully into view when the keyboard opens (#472). See
+  // `AddTransactionForm` — same sheet context, same OSK-occlusion risk.
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusScroll(formRef);
+
+  // See `AddTransactionForm` for why the submit button portals into SheetContent's
+  // footer region instead of using `position: sticky` (#472).
+  const formId = useId();
+  const footerEl = useSheetFooter();
+  const useFooterPortal = stickyFooter && footerEl;
+
   return (
-    <form onSubmit={submit} className="max-w-lg space-y-5">
-      <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+    <>
+      <form ref={formRef} id={formId} onSubmit={submit} className="max-w-lg space-y-5">
+        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
 
-      {error && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          <AlertCircle className="size-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      <InstrumentPicker
-        label={t("from")}
-        placeholder={t("search")}
-        selected={from}
-        onSelect={setFrom}
-        search={client.searchInstruments}
-      />
-      <InstrumentPicker
-        label={t("to")}
-        placeholder={t("search")}
-        selected={to}
-        onSelect={setTo}
-        search={client.searchInstruments}
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="merger-out">{t("outQty")}</Label>
-          <Input
-            id="merger-out"
-            inputMode="decimal"
-            value={outQty}
-            onChange={(e) => setOutQty(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="merger-in">{t("inQty")}</Label>
-          <Input
-            id="merger-in"
-            inputMode="decimal"
-            value={inQty}
-            onChange={(e) => setInQty(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="merger-date">{t("date")}</Label>
-          <DatePicker
-            id="merger-date"
-            label={t("date")}
-            value={executedAt}
-            onChange={(e) => setExecutedAt(e.target.value)}
-            required
-          />
-        </div>
-      </div>
-
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={taxable}
-          onChange={(e) => setTaxable(e.target.checked)}
-          className="size-4"
-        />
-        {t("taxable")}
-      </label>
-
-      {taxable && (
-        <div className="space-y-1.5">
-          <Label htmlFor="merger-value">{t("marketValue")}</Label>
-          <Input
-            id="merger-value"
-            inputMode="decimal"
-            value={marketValue}
-            onChange={(e) => setMarketValue(e.target.value)}
-            required
-          />
-          <p className="text-xs text-muted-foreground">{t("marketValueHint")}</p>
-        </div>
-      )}
-
-      <div
-        className={cn(
-          stickyFooter &&
-            "sticky bottom-0 -mx-5 border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] scroll-mb-24",
+        {error && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            <AlertCircle className="size-4 shrink-0" />
+            {error}
+          </div>
         )}
-      >
-        <Button
-          type="submit"
-          disabled={busy}
-          className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
-        >
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          {busy ? t("submitting") : t("submit")}
-        </Button>
-      </div>
-    </form>
+
+        <InstrumentPicker
+          label={t("from")}
+          placeholder={t("search")}
+          selected={from}
+          onSelect={setFrom}
+          search={client.searchInstruments}
+        />
+        <InstrumentPicker
+          label={t("to")}
+          placeholder={t("search")}
+          selected={to}
+          onSelect={setTo}
+          search={client.searchInstruments}
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="merger-out">{t("outQty")}</Label>
+            <Input
+              id="merger-out"
+              inputMode="decimal"
+              value={outQty}
+              onChange={(e) => setOutQty(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="merger-in">{t("inQty")}</Label>
+            <Input
+              id="merger-in"
+              inputMode="decimal"
+              value={inQty}
+              onChange={(e) => setInQty(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="merger-date">{t("date")}</Label>
+            <DatePicker
+              id="merger-date"
+              label={t("date")}
+              value={executedAt}
+              onChange={(e) => setExecutedAt(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={taxable}
+            onChange={(e) => setTaxable(e.target.checked)}
+            className="size-4"
+          />
+          {t("taxable")}
+        </label>
+
+        {taxable && (
+          <div className="space-y-1.5">
+            <Label htmlFor="merger-value">{t("marketValue")}</Label>
+            <Input
+              id="merger-value"
+              inputMode="decimal"
+              value={marketValue}
+              onChange={(e) => setMarketValue(e.target.value)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">{t("marketValueHint")}</p>
+          </div>
+        )}
+
+        {!useFooterPortal && (
+          <div
+            className={cn(
+              stickyFooter &&
+                "sticky bottom-0 -mx-5 border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] scroll-mb-24",
+            )}
+          >
+            <Button
+              type="submit"
+              disabled={busy}
+              className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? t("submitting") : t("submit")}
+            </Button>
+          </div>
+        )}
+      </form>
+      {useFooterPortal &&
+        createPortal(
+          <div className="border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <Button
+              type="submit"
+              form={formId}
+              disabled={busy}
+              className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? t("submitting") : t("submit")}
+            </Button>
+          </div>,
+          footerEl,
+        )}
+    </>
   );
 }

@@ -68,7 +68,15 @@ export function AppShell({
 
   return (
     <NavProgressProvider>
-      <div className="flex h-dvh overflow-hidden">
+      {/* `h-app-viewport` (globals.css), not `h-dvh`: that was its own independent
+          `100dvh` utility that completely bypassed `<html>`'s standalone-mode
+          viewport-height fix (iOS PWA — `100dvh` can underreport there) rather than
+          inheriting or overriding it, since a percentage height wouldn't reliably
+          resolve through `<body>`'s own `min-height`-based sizing either. This is the
+          element that actually clips/bounds the app's visible content via
+          `overflow-hidden`, so it's the one that needs the real fix, not just `<html>`
+          (#472). */}
+      <div className="flex h-app-viewport overflow-hidden">
         {/* Desktop sidebar — transcribed from the reference: 236px, 22/16 padding, nav
           items 600 14px text-mute (inactive) / 700 14px green on a green tint (active),
           12px radius, 19px icons, 3px gap. */}
@@ -133,7 +141,7 @@ export function AppShell({
 
         {/* overscroll-contain: stop rubber-band/scroll-chaining to the page behind it —
             matters most in the installed PWA, which has no browser chrome to absorb it. */}
-        <div className="flex w-full min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain">
           {/* Reference top bar: 62px, card surface, 24px side padding, 12px gaps.
             Padding lives on the INNER wrapper (not the outer bar) so its cap/center
             matches <main>'s content edges exactly — see the widescreen note on <main>.
@@ -141,17 +149,18 @@ export function AppShell({
             still reads as one continuous surface across the full width. */}
           {/* w-full + will-change-transform: workaround for an iOS Safari compositor
               bug where `sticky` element backgrounds paint only ~60% across the scroll
-              container's content width instead of the element's full width (#472). */}
-          <header className="sticky top-0 z-30 flex w-full min-h-[62px] items-center border-b border-border bg-card pt-[env(safe-area-inset-top)] will-change-transform">
-            {/* Dark overlay behind the status bar area: with
-                `apple-mobile-web-app-status-bar-style: black-translucent` iOS uses
-                always-white status bar text — invisible against a light `bg-card`.
-                The overlay ensures enough contrast without affecting the themed
-                header surface below the status bar (#472). */}
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-[env(safe-area-inset-top)] bg-black/20"
-              aria-hidden="true"
-            />
+              container's content width instead of the element's full width (#472).
+              shrink-0: this header and <main> are both flex items in this column-flex
+              scroll container — Safari has a long-standing bug where it doesn't treat
+              a flex item's own `min-height` as a hard floor in a scrollable flex column,
+              shrinking the item below it once a sibling's content is tall enough to need
+              scrolling. Live-verified: on a page with enough content to scroll (Holdings),
+              the header rendered at ~63px (its `min-h-[62px]` alone, safe-area padding
+              discarded) instead of its natural ~124px, with its own child content
+              overflowing past it — on a page that fits one screen (Profile/Settings),
+              no shrinking occurred and it rendered correctly. Same bug class `shrink-0`
+              already fixes for the Sheet's drag handle/footer (`ui/sheet.tsx`, #472). */}
+          <header className="sticky top-0 z-30 flex w-full min-h-[62px] shrink-0 items-center border-b border-border bg-card pt-[env(safe-area-inset-top)] will-change-transform">
             <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-6 md:pr-6">
               {/* Mobile brand (desktop shows it in the sidebar). */}
               <Link href="/holdings" className="md:hidden" aria-label="Pocket">

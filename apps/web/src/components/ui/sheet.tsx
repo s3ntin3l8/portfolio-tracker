@@ -38,9 +38,17 @@ function Sheet({
   // Android hardware/gesture back closes the sheet instead of navigating the route.
   useBackToClose(open, onOpenChange);
 
-  // Synchronize visual viewport height to prevent keyboard occlusion (#472 Item 4).
-  // Also tracks the keyboard height for `scroll-padding-bottom` so the browser
-  // auto-scrolls focused fields fully into the visible area, not behind the OSK.
+  // Synchronize visual viewport height to prevent keyboard occlusion (#472 Item 4):
+  // `--visual-viewport-height` already shrinks to exclude the OS keyboard's area, and
+  // SheetContent's max-height is derived from it — so the sheet is already fully
+  // contained above the keyboard. (A previous version of this fix ALSO reserved a
+  // `scroll-padding-bottom` equal to the keyboard height on top of that — double-
+  // counting the same space. With the container already this short, that padding
+  // could consume nearly all of it, leaving `scrollIntoView`'s "center" math almost no
+  // room to work with: it scrolled the focused field up underneath the sticky header
+  // instead of centering it, making the sheet look completely blank. Removed —
+  // `useFocusScroll`, below, is sufficient on its own now that the container is
+  // correctly sized.)
   React.useEffect(() => {
     if (!open || typeof window === "undefined" || !window.visualViewport) return;
 
@@ -48,8 +56,6 @@ function Sheet({
     const dh = document.documentElement;
     const updateViewport = () => {
       dh.style.setProperty("--visual-viewport-height", `${vv.height}px`);
-      const keyboardPx = Math.max(0, window.innerHeight - vv.height);
-      dh.style.setProperty("--keyboard-height", `${keyboardPx}px`);
     };
 
     updateViewport();
@@ -60,7 +66,6 @@ function Sheet({
       vv.removeEventListener("resize", updateViewport);
       vv.removeEventListener("scroll", updateViewport);
       dh.style.removeProperty("--visual-viewport-height");
-      dh.style.removeProperty("--keyboard-height");
     };
   }, [open]);
 
@@ -71,6 +76,16 @@ function Sheet({
         onOpenChange={onOpenChange}
         handleOnly={handleOnly ?? !dismissible}
         {...props}
+        // vaul's own keyboard-avoidance (on by default): its `onVisualViewportChange`
+        // writes a raw inline `style.height`/`style.bottom` directly onto Drawer.Content
+        // whenever an input is focused, completely uncoordinated with our own
+        // `--visual-viewport-height` + `useFocusScroll` mechanism above. Live-verified:
+        // vaul never resets that inline height back to auto after the keyboard closes
+        // or the active tab changes, leaving a stale fixed height that (a) blanks the
+        // whole sheet the next time the keyboard opens, and (b) persists across tab
+        // switches, showing scrollable empty space below shorter tabs' content. Disabled
+        // — our own mechanism is the sole source of truth for keyboard avoidance.
+        repositionInputs={false}
       />
     </SheetDismissibleContext.Provider>
   );
@@ -79,16 +94,25 @@ function Sheet({
 const SheetTrigger = Drawer.Trigger;
 const SheetClose = Drawer.Close;
 
-function SheetOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof Drawer.Overlay>) {
+/** DOM node for a persistent, non-scrolling footer region rendered by `SheetContent`
+ *  (side="bottom") — see `useSheetFooter`. `null` outside a Sheet (or for `side="full"`,
+ *  which doesn't render one). */
+const SheetFooterContext = React.createContext<HTMLDivElement | null>(null);
+
+/** A form rendered inside a Sheet can portal its submit button into the sheet's
+ *  persistent footer region instead of rendering `position: sticky` deep inside the
+ *  scrollable content — see the comment on `SheetContent`'s footer div for why `sticky`
+ *  doesn't reliably work there. Returns `null` outside a Sheet (e.g. the full
+ *  `/transactions/new` page), so callers should fall back to their normal inline
+ *  rendering in that case. */
+export function useSheetFooter() {
+  return React.useContext(SheetFooterContext);
+}
+
+function SheetOverlay({ className, ...props }: React.ComponentProps<typeof Drawer.Overlay>) {
   return (
     <Drawer.Overlay
-      className={cn(
-        "fixed inset-0 z-50 bg-[rgba(17,33,26,.45)] backdrop-blur-[2px]",
-        className,
-      )}
+      className={cn("fixed inset-0 z-50 bg-[rgba(17,33,26,.45)] backdrop-blur-[2px]", className)}
       {...props}
     />
   );
@@ -116,6 +140,11 @@ function SheetContent({
   hideClose?: boolean;
 }) {
   const dismissible = React.useContext(SheetDismissibleContext);
+  // DOM node for the persistent footer region (side="bottom" only) — see
+  // `useSheetFooter`. `useState`, not `useRef`: a ref's `.current` mutation doesn't
+  // itself trigger a re-render, so context consumers (forms portaling their submit
+  // button in) wouldn't learn the node exists until some unrelated re-render happened.
+  const [footerEl, setFooterEl] = React.useState<HTMLDivElement | null>(null);
 
   // When the Sheet opts out of dismissal, also block overlay-click / window-blur close on
   // Radix's DismissableLayer (vaul's own `dismissible` stays true so X/Escape still fire).
@@ -150,8 +179,11 @@ function SheetContent({
           "fixed z-50 flex flex-col bg-background outline-none",
           // Centering uses margins, NOT -translate-x-1/2: vaul writes an inline `transform`
           // for the drag/slide and would clobber a Tailwind translateX on the same property.
+          // NOTE: no `overflow-y-auto` here (unlike before) — see the inner scroll region
+          // div below for why the handle, content, and footer are split into three flex
+          // regions instead of one scrolling Drawer.Content.
           side === "bottom" &&
-            "bottom-0 left-0 right-0 mx-auto max-h-[90dvh] w-full max-w-[520px] overflow-y-auto overscroll-contain touch-pan-y scroll-pb-[var(--keyboard-height,0px)] rounded-t-[28px] shadow-[0_-12px_44px_rgba(0,0,0,.22)]",
+            "bottom-0 left-0 right-0 mx-auto max-h-[90dvh] w-full max-w-[520px] rounded-t-[28px] shadow-[0_-12px_44px_rgba(0,0,0,.22)]",
           side === "full" &&
             "bottom-0 left-0 right-0 mx-auto h-[100dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-none bg-card shadow-xl",
           className,
@@ -162,15 +194,51 @@ function SheetContent({
           (dismissible ? (
             // Real drag affordance. vaul injects `[data-vaul-handle]` default styles into
             // <head> at mount (same specificity, later in the cascade) — `!` wins the tie
-            // to reproduce the original pill look.
+            // to reproduce the original pill look. `shrink-0` + living outside the scroll
+            // region below (rather than `position:sticky` inside it) is what keeps this
+            // pinned at the top regardless of scroll position (#472) — sticky was never
+            // applied here before, so it used to scroll away with the content.
             <Drawer.Handle className="!mx-auto !mt-3.5 !h-1 !w-10 !rounded-full !bg-border !opacity-100 shrink-0" />
           ) : (
-            <div
-              className="mx-auto mt-3.5 h-1 w-10 shrink-0 rounded-full bg-border"
-              aria-hidden
-            />
+            <div className="mx-auto mt-3.5 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
           ))}
-        {children}
+        {side === "bottom" ? (
+          <>
+            {/* The sole scroll region. `min-h-0`, NOT `flex-1`: this lets the region (and
+                so the whole sheet, via Drawer.Content's own shrink-to-fit flex-col layout)
+                stay only as tall as its content up to the parent's max-height — `flex-1`
+                would force it to always grow to fill that cap, leaving non-scrollable but
+                still wasted blank space below short content. `min-h-0` overrides the
+                default flex-item `min-height:auto`, which otherwise refuses to shrink below
+                content size and defeats `overflow-y-auto` (the classic flexbox gotcha). */}
+            <div
+              className="min-h-0 overflow-y-auto overscroll-contain"
+              style={{
+                // Inline, not a `touch-pan-y` class: vaul injects its own `<style>` with
+                // `[data-vaul-drawer] { touch-action: none }` at mount, targeting THIS
+                // element's old role as Drawer.Content itself. Now that the scroll region
+                // is a separate inner div, vaul's selector no longer matches it at all —
+                // but keeping this explicit still reliably restricts panning to vertical
+                // only, and no longer depends on winning any cascade tie (#472).
+                touchAction: "pan-y",
+              }}
+            >
+              <SheetFooterContext.Provider value={footerEl}>{children}</SheetFooterContext.Provider>
+            </div>
+            {/* Persistent, non-scrolling footer slot: forms with `stickyFooter` portal
+                their submit button in here via `useSheetFooter` instead of `position:
+                sticky` deep inside the scroll region above. Live-verified that `sticky`
+                doesn't reliably work there: a sticky element's "stuck" range is bounded by
+                its own containing block, and a footer nested inside `<form>` (itself
+                several levels inside the old single scroll container) has essentially no
+                room to operate — scrolling to the bottom of a long form made it detach and
+                scroll away entirely instead of staying pinned (#472). Empty divs with no
+                content render at zero height, so this is invisible when nothing portals in. */}
+            <div ref={setFooterEl} className="shrink-0" />
+          </>
+        ) : (
+          children
+        )}
         {!hideClose && (
           <Drawer.Close
             className={cn(
@@ -190,23 +258,12 @@ function SheetContent({
 }
 
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn("flex flex-col gap-1.5 p-6 pb-0", className)}
-      {...props}
-    />
-  );
+  return <div className={cn("flex flex-col gap-1.5 p-6 pb-0", className)} {...props} />;
 }
 
-function SheetTitle({
-  className,
-  ...props
-}: React.ComponentProps<typeof Drawer.Title>) {
+function SheetTitle({ className, ...props }: React.ComponentProps<typeof Drawer.Title>) {
   return (
-    <Drawer.Title
-      className={cn("text-[19px] font-extrabold leading-none", className)}
-      {...props}
-    />
+    <Drawer.Title className={cn("text-[19px] font-extrabold leading-none", className)} {...props} />
   );
 }
 

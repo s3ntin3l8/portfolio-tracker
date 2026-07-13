@@ -36,6 +36,15 @@ export const metadata: Metadata = {
     title: "Pocket",
     statusBarStyle: "black-translucent",
   },
+  other: {
+    // Next 15+ only emits the unprefixed `mobile-web-app-capable` from `appleWebApp`
+    // (vercel/next.js#70272) — but iOS Safari itself still only honors the classic
+    // Apple-prefixed tag to actually launch a home-screen icon in standalone display
+    // mode (no browser chrome) and to show the splash screen (vercel/next.js#74248,
+    // #74524). Without this, "Add to Home Screen" silently opens as a plain Safari
+    // tab and `display-mode: standalone` never matches. Emit both.
+    "apple-mobile-web-app-capable": "yes",
+  },
   icons: {
     icon: "/icon.svg",
     apple: "/icons/apple-touch-icon.png",
@@ -81,7 +90,14 @@ export default async function LocaleLayout({
     >
       {/* React 19 hoists these <link> tags into <head> regardless of position. */}
       <IosSplashLinks />
-      <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
+      {/* `min-h-app-viewport` (globals.css), not `min-h-dvh`: that was its own
+          independent `100dvh` utility, completely bypassing (not inheriting)
+          `<html>`'s standalone-mode viewport-height fix — a percentage `min-height`
+          would have the same problem, since it only resolves against a parent whose
+          OWN `height` is non-auto, and `<html>`'s `min-height`-only alternative
+          wouldn't count either. Applying the exact same cascade directly here
+          sidesteps that entirely (#472). */}
+      <body className="min-h-app-viewport bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey={STORAGE_KEY}>
           <ThemeColorSync />
           <AuthSessionProvider>

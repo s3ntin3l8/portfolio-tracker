@@ -170,7 +170,9 @@ export function AddTransactionMenu({
               )}
             </div>
           ) : (
-            <div className="overflow-y-auto px-5 pb-7 pt-1.5">
+            // Note: no nested overflow-y-auto — SheetContent is the single scroll
+            // container (#472).
+            <div className="px-5 pb-7 pt-1.5">
               {portfolios && (
                 <ImportFlowClient
                   portfolios={portfolios}
