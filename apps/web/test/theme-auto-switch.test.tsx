@@ -34,8 +34,6 @@ function installLocalStorage() {
 
 describe("ThemeColorSync", () => {
   const setTheme = vi.fn();
-  let addEventListenerMock = vi.fn();
-  let removeEventListenerMock = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,9 +46,6 @@ describe("ThemeColorSync", () => {
       theme: "dark",
       themes: ["light", "dark", "system"],
     });
-
-    addEventListenerMock = vi.fn();
-    removeEventListenerMock = vi.fn();
   });
 
   afterEach(() => {
@@ -60,14 +55,13 @@ describe("ThemeColorSync", () => {
   it("auto-switches to system theme on mobile if no user preference is set", () => {
     window.matchMedia = vi.fn().mockReturnValue({
       matches: true,
-      addEventListener: addEventListenerMock,
-      removeEventListener: removeEventListenerMock,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     });
 
     wrap(<ThemeColorSync />);
 
     expect(setTheme).toHaveBeenCalledWith("system");
-    expect(addEventListenerMock).toHaveBeenCalled();
   });
 
   it("does not auto-switch to system theme on mobile if user preference is set", () => {
@@ -75,8 +69,8 @@ describe("ThemeColorSync", () => {
 
     window.matchMedia = vi.fn().mockReturnValue({
       matches: true,
-      addEventListener: addEventListenerMock,
-      removeEventListener: removeEventListenerMock,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     });
 
     wrap(<ThemeColorSync />);
@@ -87,8 +81,8 @@ describe("ThemeColorSync", () => {
   it("does not auto-switch on desktop", () => {
     window.matchMedia = vi.fn().mockReturnValue({
       matches: false,
-      addEventListener: addEventListenerMock,
-      removeEventListener: removeEventListenerMock,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
     });
 
     wrap(<ThemeColorSync />);

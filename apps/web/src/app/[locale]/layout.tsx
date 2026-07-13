@@ -82,7 +82,7 @@ export default async function LocaleLayout({
       {/* React 19 hoists these <link> tags into <head> regardless of position. */}
       <IosSplashLinks />
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ThemeColorSync />
           <AuthSessionProvider>
             <NextIntlClientProvider>{children}</NextIntlClientProvider>
