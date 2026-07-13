@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useChartTooltip } from "@/components/ui/use-chart-tooltip";
 import { ChartTooltipPanel, type ChartTooltipRow } from "@/components/ui/chart-tooltip-panel";
@@ -15,10 +16,14 @@ import { ChartTooltipPanel, type ChartTooltipRow } from "@/components/ui/chart-t
  * `values` are recent daily closes, oldest→newest. Renders nothing for <2 points (the
  * caller also gates on this); a flat series draws a midline instead of dividing by zero.
  *
- * Accessibility: the SVG is a focusable `role="img"` with an `aria-label` summarizing
- * the price range. On hover/focus/tap, a floating tooltip (`ChartTooltipPanel`,
- * matching the rest of the app's chart tooltips) shows the same range with more
- * detail.
+ * Accessibility: the SVG is keyboard-focusable (`tabIndex={0}`) with an `aria-label`
+ * summarizing the price range, and a hover/focus/tap surfaces a floating tooltip with
+ * the same range. The trigger intentionally omits a `role` — `role="img"` is for
+ * static, non-interactive accessible-name carriers, but a focusable hoverable element
+ * is interactive; a bare `aria-label` reads as the trigger's accessible name and the
+ * tooltip is associated implicitly via the standard trigger/tooltip DOM relationship.
+ * The tooltip's own role="tooltip" + `aria-describedby` linkage is a small follow-up
+ * if a screen-reader user ever needs the tooltip content announced on focus.
  */
 export function HoldingSparkline({
   values,
@@ -27,6 +32,7 @@ export function HoldingSparkline({
   values: number[];
   className?: string;
 }) {
+  const t = useTranslations("Holdings");
   const tip = useChartTooltip<{ rows: ChartTooltipRow[]; label: string }>();
   const { rows, rangeLabel } = useMemo(() => {
     if (values.length < 2) return { rows: [] as ChartTooltipRow[], rangeLabel: "" };
@@ -37,17 +43,17 @@ export function HoldingSparkline({
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
     const minStr = fmt.format(min);
     const maxStr = fmt.format(max);
-    const range =
-      min === max
-        ? minStr
-        : `${minStr} – ${maxStr}`;
+    const range = min === max ? minStr : `${minStr} – ${maxStr}`;
     return {
-      rows: [
-        { label: "Range", value: range },
-      ] as ChartTooltipRow[],
-      rangeLabel: `Price range ${range}`,
+      // The "Range" row label and the aria-label string are translated so an
+      // id-locale user gets Indonesian text instead of the English fallback
+      // that #478 shipped with. The aria-label became screen-reader-visible
+      // in #478 when the SVG's previous `aria-hidden` was dropped (#6 in the
+      // review follow-up), so getting this localized closes that gap.
+      rows: [{ label: t("sparklineRange"), value: range }] as ChartTooltipRow[],
+      rangeLabel: t("sparklineRangeAria", { range }),
     };
-  }, [values]);
+  }, [values, t]);
 
   if (values.length < 2) return null;
 
@@ -77,7 +83,6 @@ export function HoldingSparkline({
         width={52}
         height={24}
         tabIndex={0}
-        role="img"
         aria-label={rangeLabel}
         className={cn("shrink-0", up ? "text-success" : "text-destructive", className)}
       >
@@ -103,7 +108,7 @@ export function HoldingSparkline({
               pointerEvents: "none",
             }}
           >
-            <ChartTooltipPanel rows={tip.content.rows} />
+            <ChartTooltipPanel rows={tip.content.rows} onSize={tip.setSize} />
           </div>,
           document.body,
         )}

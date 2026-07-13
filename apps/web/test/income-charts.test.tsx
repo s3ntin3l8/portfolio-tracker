@@ -231,7 +231,8 @@ describe("IncomeHeatmap", () => {
     const cell = screen.getByTitle(/Jun 2026/);
     fireEvent.click(cell);
 
-    expect(screen.getByText(/Jun 2026/)).toBeInTheDocument();
+    // Subtitle updates to the cell's month + amount.
+    expect(screen.getByText(/Jun 2026 · IDR/)).toBeInTheDocument();
     expect(cell).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -284,5 +285,33 @@ describe("IncomeHeatmap", () => {
     // page is keyboard/SSR-clean). The subtitle is *not* the floating
     // tooltip — it remains as the no-hover fallback.
     expect(screen.queryByText("Amount")).not.toBeInTheDocument();
+  });
+
+  it("opens the floating tooltip on click (tap-to-toggle, mobile parity)", () => {
+    // #478 review #1 regression guard: the cell's onClick used to
+    // override the hook's tap-toggle because JSX prop merge is
+    // left-to-right. The fix composes both: setActive (subtitle) +
+    // listeners.onClick (floating tooltip). If the override ever sneaks
+    // back, this test fails — `Amount` (the floating tooltip's row)
+    // would not be in the DOM after `click` on a touch device.
+    wrap(
+      <IncomeHeatmap
+        currency="IDR"
+        monthly={[{ month: "2026-06", total: "532000" }]}
+      />,
+    );
+    const cell = screen.getByTitle(/Jun 2026/);
+    expect(screen.queryByText("Amount")).not.toBeInTheDocument();
+    fireEvent.click(cell);
+    // Subtitle updates (existing behavior).
+    expect(cell).toHaveAttribute("aria-pressed", "true");
+    // Floating tooltip also opens (this is what #1 broke on mobile).
+    expect(screen.getByText("Amount")).toBeInTheDocument();
+    expect(screen.getByText("Jun 2026")).toBeInTheDocument();
+    // Second click toggles the floating tooltip off while still updating
+    // the subtitle (subtitle stays pinned to the last-clicked cell).
+    fireEvent.click(cell);
+    expect(screen.queryByText("Amount")).not.toBeInTheDocument();
+    expect(cell).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -87,24 +87,39 @@ export function IncomeHeatmap({
                   ? `${monthFullLabels[i]} ${year}: ${formatMoney(value, currency, locale)}`
                   : `${monthFullLabels[i]} ${year}`;
               const isActive = active?.year === year && active.monthIdx === i;
+              // Pull the bind's listeners into a const so the explicit
+              // onClick below can compose with the hook's click-toggle
+              // rather than overwrite it. JSX prop merge is left-to-right:
+              // if `tip.bind({...})` were spread inline and `onClick` were
+              // declared after it, the explicit handler would win and the
+              // hook's tap-to-toggle would be silently dropped — that's
+              // the bug the #478 review caught (item #1). Extracting
+              // `listeners` keeps both behaviors wired.
+              const listeners = tip.bind({
+                title: `${monthFullLabels[i]} ${year}`,
+                rows: [
+                  {
+                    label: t("heatmapCellAmount"),
+                    value: value > 0 ? formatMoney(value, currency, locale) : "—",
+                    dot: "var(--color-primary)",
+                  },
+                ],
+              });
               return (
                 <button
                   key={i}
-                  {...tip.bind({
-                    title: `${monthFullLabels[i]} ${year}`,
-                    rows: [
-                      {
-                        label: t("heatmapCellAmount"),
-                        value: value > 0 ? formatMoney(value, currency, locale) : "—",
-                        dot: "var(--color-primary)",
-                      },
-                    ],
-                  })}
+                  {...listeners}
                   type="button"
                   title={cellTitle}
                   aria-label={cellTitle}
                   aria-pressed={isActive}
-                  onClick={() => setActive({ year, monthIdx: i })}
+                  onClick={(e) => {
+                    setActive({ year, monthIdx: i });
+                    // Run the hook's tap-toggle after the subtitle update
+                    // so the floating tooltip opens on touch devices (where
+                    // there's no real mouseenter).
+                    listeners.onClick(e);
+                  }}
                   className={cn(
                     "aspect-square rounded-[4px] p-0",
                     value > 0 ? "bg-primary" : "bg-muted",
@@ -141,7 +156,11 @@ export function IncomeHeatmap({
               pointerEvents: "none",
             }}
           >
-            <ChartTooltipPanel title={tip.content.title} rows={tip.content.rows} />
+            <ChartTooltipPanel
+              title={tip.content.title}
+              rows={tip.content.rows}
+              onSize={tip.setSize}
+            />
           </div>,
           document.body,
         )}

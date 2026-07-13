@@ -86,9 +86,10 @@ export default async function ReportsPage({
     // Realized-to-date vs. forecasted-remainder, same green as the card icon — the
     // forecast segment is drawn as a diagonal-stripe hatch, matching the "Projected"
     // segment styling on the Income page's own per-year bar chart.
-    // TODO(i18n): tooltip labels are English literals here — when the rest of
-    // the report-card strings grow i18n coverage, mirror them under
-    // `Reports.income.tooltip*`.
+    // Tooltip labels are translated via the `Reports.income.tooltip*` keys
+    // (added in the #478 review follow-up). Previously English literals were
+    // passed inline with a TODO; the keys live alongside the rest of the
+    // Reports-income strings for consistency.
     const thisYearAmt = Number(s.thisYear);
     const forecastFullYearAmt = Number(s.forecastFullYear);
     const remainingAmt = Math.max(0, forecastFullYearAmt - thisYearAmt);
@@ -98,14 +99,14 @@ export default async function ReportsPage({
             {
               pct: (thisYearAmt / forecastFullYearAmt) * 100,
               color: ICONS.income.fg,
-              label: "Received",
+              label: t("income.tooltipReceived"),
               amount: m(thisYearAmt),
             },
             {
               pct: (remainingAmt / forecastFullYearAmt) * 100,
               color: ICONS.income.fg,
               striped: true,
-              label: "Forecast",
+              label: t("income.tooltipForecast"),
               amount: m(remainingAmt),
             },
           ]
@@ -164,13 +165,13 @@ export default async function ReportsPage({
             {
               pct: (winSum / totalAbs) * 100,
               color: "var(--color-success)",
-              label: "Wins",
+              label: t("trades.tooltipWins"),
               amount: m(winSum),
             },
             {
               pct: (lossSum / totalAbs) * 100,
               color: "var(--color-destructive)",
-              label: "Losses",
+              label: t("trades.tooltipLosses"),
               amount: m(lossSum),
             },
           ]
@@ -228,13 +229,13 @@ export default async function ReportsPage({
             {
               pct: (netContributed / total) * 100,
               color: "var(--color-chart-4)",
-              label: "Contributed",
+              label: t("savings.tooltipContributed"),
               amount: m(netContributed),
             },
             {
               pct: (gain / total) * 100,
               color: "var(--color-success)",
-              label: "Gain",
+              label: t("savings.tooltipGain"),
               amount: m(gain),
             },
           ]

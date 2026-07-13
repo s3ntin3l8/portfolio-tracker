@@ -30,28 +30,55 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * charts called out in #478 (income-heatmap, holding-sparkline, mini-split
  * bar) need this manual positioning layer since they don't render inside
  * Recharts' SVG context.
+ *
+ * Panel-size feedback loop: `setSize` is meant to be wired to
+ * {@link ChartTooltipPanel}'s `onSize` prop. The hook uses the stored
+ * size to decide viewport-collision flips; until the panel reports back
+ * (typically on the first render of the open tooltip), the hook falls
+ * back to a 200×80 approximation. This replaced a hardcoded constant
+ * pair in the #478 review (#5): the real size matters for longer /
+ * multi-row tooltips that exceed the approximation.
  */
 export function useChartTooltip<C>() {
   const targetElRef = useRef<Element | null>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [content, setContent] = useState<C | null>(null);
+  // Approximate the tooltip's footprint so collision-flip works before the
+  // tooltip is actually rendered. Matches ChartTooltipPanel's minWidth + the
+  // typical single-row height of a title + 1-2 rows. The panel reports its
+  // real size via `setSize`; once it does, this approximation is replaced
+  // and subsequent flips use the measured dimensions.
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number }>({
+    width: 200,
+    height: 80,
+  });
 
-  const update = useCallback((el: Element) => {
-    const r = el.getBoundingClientRect();
-    // Approximate the tooltip's footprint so collision-flip works before the
-    // tooltip is actually rendered. Matches ChartTooltipPanel's minWidth + the
-    // typical single-row height of a title + 1-2 rows.
-    const TIP_W = 200;
-    const TIP_H = 80;
-    const GAP = 8;
-    const flipX = r.right + TIP_W + GAP > window.innerWidth - 12;
-    const flipY = r.bottom + TIP_H + GAP > window.innerHeight - 12;
-    setPos({
-      x: flipX ? Math.max(12, r.left - TIP_W - GAP) : r.right + GAP,
-      y: flipY ? Math.max(12, r.top - TIP_H - GAP) : r.bottom + GAP,
-    });
-  }, []);
+  const update = useCallback(
+    (el: Element) => {
+      const r = el.getBoundingClientRect();
+      const TIP_W = panelSize.width;
+      const TIP_H = panelSize.height;
+      const GAP = 8;
+      const flipX = r.right + TIP_W + GAP > window.innerWidth - 12;
+      const flipY = r.bottom + TIP_H + GAP > window.innerHeight - 12;
+      setPos({
+        x: flipX ? Math.max(12, r.left - TIP_W - GAP) : r.right + GAP,
+        y: flipY ? Math.max(12, r.top - TIP_H - GAP) : r.bottom + GAP,
+      });
+    },
+    [panelSize],
+  );
+
+  // Stable identity across renders so the panel's `useEffect([onSize])`
+  // doesn't re-fire on every parent render. Returning a new function
+  // each render would re-trigger the effect → onSize() → setPanelSize
+  // → re-render → new onSize → infinite loop. `setPanelSize` already
+  // has a stable identity, so wrapping it in useCallback is enough.
+  const setSize = useCallback(
+    (size: { width: number; height: number }) => setPanelSize(size),
+    [],
+  );
 
   /**
    * Returns a spread of listeners to attach to the hover target. `cellContent`
@@ -133,6 +160,7 @@ export function useChartTooltip<C>() {
     y: pos.y,
     content,
     bind,
+    setSize,
     close: () => setOpen(false),
   };
 }

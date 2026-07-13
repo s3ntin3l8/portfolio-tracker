@@ -75,7 +75,9 @@
       "caption": "Year to date",
       "captionEstimated": "Estimated this year",
       "metricTtm": "TTM",
-      "metricLifetime": "Lifetime"
+      "metricLifetime": "Lifetime",
+      "tooltipReceived": "Received",
+      "tooltipForecast": "Forecast"
     },
     "trades": {
       "title": "Realized P&L",
@@ -85,7 +87,9 @@
       "metricAvgHold": "Avg hold",
       "metricClosed": "Closed trades",
       "metricAllTime": "Realized all time",
-      "days": "{count}d"
+      "days": "{count}d",
+      "tooltipWins": "Wins",
+      "tooltipLosses": "Losses"
     },
     "savings": {
       "title": "Savings",
@@ -93,7 +97,9 @@
       "trend": "{pct} XIRR",
       "caption": "Current value",
       "metricMonthly": "Monthly avg",
-      "metricReturn": "Total return"
+      "metricReturn": "Total return",
+      "tooltipContributed": "Contributed",
+      "tooltipGain": "Gain"
     },
     "tax": {
       "title": "Tax",
@@ -1067,7 +1073,9 @@
     "byRegion": "By region",
     "byCurrency": "By currency",
     "positionsSectionMobile": "Holdings",
-    "positionsSectionDesktop": "Positions"
+    "positionsSectionDesktop": "Positions",
+    "sparklineRange": "Range",
+    "sparklineRangeAria": "Price range {range}"
   },
   "Chart": {
     "modeLabel": "Chart mode",
@@ -1083,7 +1091,9 @@
       "1y": "1Y",
       "all": "All"
     },
-    "collectingIntraday": "Collecting intraday data — check back after markets are open."
+    "collectingIntraday": "Collecting intraday data — check back after markets are open.",
+    "share": "Share",
+    "amount": "Amount"
   },
   "Transactions": {
     "title": "Activity",

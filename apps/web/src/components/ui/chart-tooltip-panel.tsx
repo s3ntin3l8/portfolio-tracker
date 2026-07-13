@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+
 /**
  * Shared visual shell for all chart tooltips in the app. Renders a
  * var(--color-card) panel with a title row and a list of label/value rows
@@ -11,6 +15,15 @@
  * {@link useChartTooltip} and `createPortal(..., document.body)` with
  * `position: fixed` coordinates. This component only renders the inner
  * card.
+ *
+ * `onSize` reports the panel's measured dimensions back to the caller so
+ * the positioning hook can flip the tooltip away from the viewport edge
+ * using the *real* panel size instead of an approximation. This is the
+ * #5 follow-up from the #478 review: previously `useChartTooltip` used
+ * a fixed `TIP_W=200, TIP_H=80` to decide whether to flip, which could
+ * overflow on longer or multi-row tooltips. The first render still uses
+ * the hook's approximation (the panel isn't measured yet); once it
+ * mounts, the real size flows back and the next `update()` uses it.
  */
 
 export interface ChartTooltipRow {
@@ -24,13 +37,40 @@ export interface ChartTooltipRow {
 export function ChartTooltipPanel({
   title,
   rows,
+  onSize,
 }: {
   title?: string;
   rows: ChartTooltipRow[];
+  /**
+   * Called whenever the rendered panel resizes (initial mount + every
+   * subsequent size change). Wired by {@link useChartTooltip} via its
+   * returned `setSize` so the hook can flip the tooltip away from
+   * viewport edges using the real panel footprint.
+   */
+  onSize?: (size: { width: number; height: number }) => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!onSize || !ref.current) return;
+    const el = ref.current;
+    // Fire the initial size synchronously so the hook's next update() can
+    // use the real dimensions without waiting for a ResizeObserver tick.
+    onSize({ width: el.offsetWidth, height: el.offsetHeight });
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      onSize({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onSize]);
+
   if (rows.length === 0) return null;
   return (
     <div
+      ref={ref}
       style={{
         background: "var(--color-card)",
         border: "1px solid var(--color-border)",

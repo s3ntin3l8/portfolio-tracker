@@ -75,7 +75,9 @@
       "caption": "Tahun berjalan",
       "captionEstimated": "Perkiraan tahun ini",
       "metricTtm": "TTM",
-      "metricLifetime": "Sepanjang masa"
+      "metricLifetime": "Sepanjang masa",
+      "tooltipReceived": "Diterima",
+      "tooltipForecast": "Perkiraan"
     },
     "trades": {
       "title": "Laba/Rugi Terealisasi",
@@ -85,7 +87,9 @@
       "metricAvgHold": "Rata-rata tahan",
       "metricClosed": "Transaksi tertutup",
       "metricAllTime": "Terealisasi sepanjang masa",
-      "days": "{count}h"
+      "days": "{count}h",
+      "tooltipWins": "Menang",
+      "tooltipLosses": "Kalah"
     },
     "savings": {
       "title": "Tabungan",
@@ -93,7 +97,9 @@
       "trend": "{pct} XIRR",
       "caption": "Nilai saat ini",
       "metricMonthly": "Rata-rata bulanan",
-      "metricReturn": "Total imbal hasil"
+      "metricReturn": "Total imbal hasil",
+      "tooltipContributed": "Dikonstribusikan",
+      "tooltipGain": "Keuntungan"
     },
     "tax": {
       "title": "Pajak",
@@ -1065,7 +1071,9 @@
     "byRegion": "Berdasarkan wilayah",
     "byCurrency": "Berdasarkan mata uang",
     "positionsSectionMobile": "Kepemilikan",
-    "positionsSectionDesktop": "Posisi"
+    "positionsSectionDesktop": "Posisi",
+    "sparklineRange": "Rentang",
+    "sparklineRangeAria": "Rentang harga {range}"
   },
   "Chart": {
     "modeLabel": "Mode grafik",
@@ -1081,7 +1089,9 @@
       "1y": "1T",
       "all": "Semua"
     },
-    "collectingIntraday": "Mengumpulkan data intraday — cek lagi setelah pasar buka."
+    "collectingIntraday": "Mengumpulkan data intraday — cek lagi setelah pasar buka.",
+    "share": "Bagian",
+    "amount": "Jumlah"
   },
   "Transactions": {
     "title": "Aktivitas",
