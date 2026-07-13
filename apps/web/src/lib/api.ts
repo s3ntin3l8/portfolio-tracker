@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { signIn } from "next-auth/react";
 import { createApiClient, type ApiClient } from "@portfolio/api-client";
 
 /**
@@ -16,7 +17,16 @@ export const apiBaseUrl = "/api/backend";
 /** A typed api-client bound to the same-origin proxy. No client-held token: the proxy
  *  attaches the current session's Authentik access token server-side (see apiBaseUrl). */
 export function useApiClient(): ApiClient {
-  // Stable client: there's no per-session state to track anymore, so this never needs
-  // re-creating across renders.
-  return useMemo(() => createApiClient({ baseUrl: apiBaseUrl }), []);
+  return useMemo(() => {
+    return createApiClient({
+      baseUrl: apiBaseUrl,
+      fetch: async (input, init) => {
+        const res = await fetch(input, init);
+        if (res.status === 401) {
+          void signIn("authentik");
+        }
+        return res;
+      },
+    });
+  }, []);
 }

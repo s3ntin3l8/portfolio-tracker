@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthConfig } from "next-auth";
 import Authentik from "next-auth/providers/authentik";
 
 /**
@@ -33,7 +33,7 @@ function tokenEndpoint(): Promise<string> {
   return tokenEndpointPromise;
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const authConfig: NextAuthConfig = {
   // Self-hosted behind a reverse proxy (Proxmox / same origin as Authentik): trust
   // the forwarded host so Auth.js derives the right callback origin and cookie
   // security under `next start`. Without this, production throws `UntrustedHost`
@@ -94,16 +94,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Expired: rotate the access token using the refresh token.
       try {
-        const res = await fetch(await tokenEndpoint(), {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "refresh_token",
-            refresh_token: refreshToken,
-            client_id: process.env.AUTHENTIK_CLIENT_ID ?? "",
-            client_secret: process.env.AUTHENTIK_CLIENT_SECRET ?? "",
-          }),
-        });
+        let res: Response;
+        try {
+          res = await fetch(await tokenEndpoint(), {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "refresh_token",
+              refresh_token: refreshToken,
+              client_id: process.env.AUTHENTIK_CLIENT_ID ?? "",
+              client_secret: process.env.AUTHENTIK_CLIENT_SECRET ?? "",
+            }),
+          });
+        } catch (err) {
+          // Network offline / DNS / connection failure is transient
+          console.warn("[auth] refresh failed due to network error:", err);
+          token.error = "RefreshTransientError";
+          return token;
+        }
+
         const refreshed = (await res.json()) as {
           access_token?: string;
           expires_in?: number;
@@ -116,7 +125,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           console.warn(
             `[auth] refresh failed: ${res.status} ${refreshed.error ?? "unknown_error"}`,
           );
-          throw new Error("refresh_failed");
+          if (res.status >= 500) {
+            token.error = "RefreshTransientError";
+          } else {
+            token.error = "RefreshAccessTokenError";
+          }
+          return token;
         }
 
         token.accessToken = refreshed.access_token;
@@ -125,7 +139,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Authentik rotates refresh tokens — keep the new one when provided.
         if (refreshed.refresh_token) token.refreshToken = refreshed.refresh_token;
         delete token.error;
-      } catch {
+      } catch (err) {
+        console.error("[auth] unexpected error during token refresh:", err);
         token.error = "RefreshAccessTokenError";
       }
       return token;
@@ -139,4 +154,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-});
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

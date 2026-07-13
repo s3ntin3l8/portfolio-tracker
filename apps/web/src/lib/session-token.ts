@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getToken } from "next-auth/jwt";
 
 /**
@@ -28,13 +29,38 @@ function secureCookie(): boolean {
  * client-sent `Authorization` header — which getToken() would otherwise accept as a
  * fallback session-token source — can never be mistaken for a session cookie.
  */
-export async function accessTokenFromCookieHeader(cookieHeader: string): Promise<string | null> {
+export interface SessionState {
+  isAuthenticated: boolean;
+  isExpired: boolean;
+  token: string | null;
+}
+
+export const getSessionState = cache(async (cookieHeader: string): Promise<SessionState> => {
   const secret = process.env.AUTH_SECRET;
-  if (!secret) return null;
+  if (!secret) {
+    return { isAuthenticated: false, isExpired: false, token: null };
+  }
   const token = await getToken({
     req: { headers: new Headers({ cookie: cookieHeader }) },
     secret,
     secureCookie: secureCookie(),
   });
-  return typeof token?.accessToken === "string" ? token.accessToken : null;
+
+  if (!token || typeof token.accessToken !== "string") {
+    return { isAuthenticated: false, isExpired: false, token: null };
+  }
+
+  const expiresAt = token.expiresAt as number | undefined;
+  const isExpired = expiresAt ? Date.now() >= expiresAt * 1000 - 90_000 : false;
+
+  return {
+    isAuthenticated: true,
+    isExpired,
+    token: token.accessToken,
+  };
+});
+
+export async function accessTokenFromCookieHeader(cookieHeader: string): Promise<string | null> {
+  const state = await getSessionState(cookieHeader);
+  return state.token;
 }
