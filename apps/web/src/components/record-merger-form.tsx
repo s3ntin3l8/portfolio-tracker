@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, X } from "lucide-react";
 import type { ApiClient, Instrument } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -208,9 +209,8 @@ export function RecordMergerForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="merger-date">{t("date")}</Label>
-          <Input
+          <DatePicker
             id="merger-date"
-            type="date"
             value={executedAt}
             onChange={(e) => setExecutedAt(e.target.value)}
             required
