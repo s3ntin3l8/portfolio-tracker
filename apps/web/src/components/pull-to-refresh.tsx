@@ -84,6 +84,7 @@ export function PullToRefresh({ children, scrollContainerRef }: PullToRefreshPro
   // Once router transition completes, release the container height back to 0
   useEffect(() => {
     if (!isPending) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPullDistance(0);
     }
   }, [isPending]);

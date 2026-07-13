@@ -26,6 +26,7 @@ function Sheet({
   handleOnly,
   open,
   onOpenChange,
+  closeThreshold = 0.4,
   ...props
 }: React.ComponentProps<typeof Drawer.Root> & {
   dismissible?: boolean;
@@ -75,6 +76,7 @@ function Sheet({
         open={open}
         onOpenChange={onOpenChange}
         handleOnly={handleOnly ?? !dismissible}
+        closeThreshold={closeThreshold}
         {...props}
         // vaul's own keyboard-avoidance (on by default): its `onVisualViewportChange`
         // writes a raw inline `style.height`/`style.bottom` directly onto Drawer.Content
@@ -192,15 +194,15 @@ function SheetContent({
       >
         {side === "bottom" &&
           (dismissible ? (
-            // Real drag affordance. vaul injects `[data-vaul-handle]` default styles into
-            // <head> at mount (same specificity, later in the cascade) — `!` wins the tie
-            // to reproduce the original pill look. `shrink-0` + living outside the scroll
-            // region below (rather than `position:sticky` inside it) is what keeps this
-            // pinned at the top regardless of scroll position (#472) — sticky was never
-            // applied here before, so it used to scroll away with the content.
-            <Drawer.Handle className="!mx-auto !mt-3.5 !h-1 !w-10 !rounded-full !bg-border !opacity-100 shrink-0" />
+            // Real drag affordance. Overrides vaul's default [data-vaul-handle] size injection
+            // using `!` to create a tall, full-width touch area with a centered visual pill.
+            <Drawer.Handle className="!mx-auto !my-0 !h-auto !w-full !rounded-none !bg-transparent py-4 flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing focus-visible:outline-none">
+              <div className="h-1 w-10 rounded-full bg-border" />
+            </Drawer.Handle>
           ) : (
-            <div className="mx-auto mt-3.5 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden />
+            <div className="w-full py-4 flex items-center justify-center shrink-0" aria-hidden>
+              <div className="h-1 w-10 rounded-full bg-border" />
+            </div>
           ))}
         {side === "bottom" ? (
           <>
