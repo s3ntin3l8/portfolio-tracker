@@ -49,3 +49,23 @@ if (typeof window.matchMedia !== "function") {
     dispatchEvent: () => false,
   });
 }
+
+// visualViewport is queried by Sheet for mobile keyboard avoidance; jsdom doesn't implement it.
+if (typeof window !== "undefined" && typeof window.visualViewport === "undefined") {
+  const visualViewportTarget = new EventTarget();
+  Object.defineProperty(window, "visualViewport", {
+    value: Object.assign(visualViewportTarget, {
+      width: 1024,
+      height: 768,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      onresize: null,
+      onscroll: null,
+    }),
+    writable: true,
+    configurable: true,
+  });
+}

@@ -329,7 +329,7 @@ function HolderFormDialog({
             </div>
           </details>
 
-          <div className="sticky bottom-0 -mx-6 bg-background border-t border-border px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] z-[2] mt-4">
+          <div className="sticky bottom-0 -mx-6 bg-background border-t border-border px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] z-[2]">
             <Button
               type="submit"
               disabled={busy || !name.trim()}
