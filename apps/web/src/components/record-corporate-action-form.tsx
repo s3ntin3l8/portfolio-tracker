@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import type { ApiClient, Instrument, InstrumentSearchResult } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -260,9 +261,8 @@ export function RecordCorporateActionForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ca-date">{t("exDate")}</Label>
-          <Input
+          <DatePicker
             id="ca-date"
-            type="date"
             value={exDate}
             onChange={(e) => setExDate(e.target.value)}
             required
