@@ -62,6 +62,9 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#0e1512" },
   ],
   // Draw into the display cutout / safe areas; insets are reclaimed in the shell.
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
   viewportFit: "cover",
 };
 
