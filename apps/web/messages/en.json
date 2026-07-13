@@ -1,4 +1,7 @@
 {
+  "Common": {
+    "pickDate": "Pick a date"
+  },
   "Duplicates": {
     "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
     "row": "{name} · {action} · {date} (already imported from {source})",

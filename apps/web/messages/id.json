@@ -1,4 +1,7 @@
 {
+  "Common": {
+    "pickDate": "Pilih tanggal"
+  },
   "Duplicates": {
     "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",
     "row": "{name} · {action} · {date} (sudah diimpor dari {source})",

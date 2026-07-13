@@ -54,7 +54,7 @@ describe("RecordCorporateActionForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /BBCA/ }));
 
     fireEvent.change(screen.getByLabelText(m.ratio), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText(m.exDate), {
+    fireEvent.change(screen.getByLabelText(m.exDate, { selector: "input" }), {
       target: { value: "2026-02-01" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -70,7 +70,7 @@ describe("RecordCorporateActionForm", () => {
     renderForm(client);
 
     fireEvent.change(screen.getByLabelText(m.ratio), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText(m.exDate), {
+    fireEvent.change(screen.getByLabelText(m.exDate, { selector: "input" }), {
       target: { value: "2026-02-01" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));

@@ -17,6 +17,7 @@ import { useTableSort } from "@/lib/table-sort";
 import type { ColDef } from "@/lib/table-sort";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -1002,8 +1003,8 @@ export function ImportReview({
                 />
               </Field>
               <Field label={t("fields.executedAt")}>
-                <Input
-                  type="date"
+                <DatePicker
+                  label={t("fields.executedAt")}
                   value={editingDraft.executedAt.slice(0, 10)}
                   onChange={(e) =>
                     onUpdate(editingDraft.uid, { executedAt: e.target.value })
@@ -1100,8 +1101,8 @@ export function ImportReview({
                 />
               </Field>
               <Field label={t("fields.executedAt")}>
-                <Input
-                  type="date"
+                <DatePicker
+                  label={t("fields.executedAt")}
                   value={mapForm.executedAt.slice(0, 10)}
                   onChange={(e) => setMapForm({ ...mapForm, executedAt: e.target.value })}
                 />

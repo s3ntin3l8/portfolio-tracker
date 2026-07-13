@@ -55,7 +55,7 @@ describe("RecordMergerForm", () => {
     await pick(m.to, "new", /NEWF/);
     fireEvent.change(screen.getByLabelText(m.outQty), { target: { value: "48.1464" } });
     fireEvent.change(screen.getByLabelText(m.inQty), { target: { value: "360.218" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2024-01-23" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2024-01-23" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
@@ -81,7 +81,7 @@ describe("RecordMergerForm", () => {
     // German-formatted figures, as typed off a DKB document.
     fireEvent.change(screen.getByLabelText(m.outQty), { target: { value: "48,1464" } });
     fireEvent.change(screen.getByLabelText(m.inQty), { target: { value: "360,218" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2024-01-23" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2024-01-23" } });
     fireEvent.click(screen.getByLabelText(m.taxable));
     fireEvent.change(screen.getByLabelText(m.marketValue), { target: { value: "3.869,77" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -101,7 +101,7 @@ describe("RecordMergerForm", () => {
 
     fireEvent.change(screen.getByLabelText(m.outQty), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText(m.inQty), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2024-01-23" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2024-01-23" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.needInstruments));

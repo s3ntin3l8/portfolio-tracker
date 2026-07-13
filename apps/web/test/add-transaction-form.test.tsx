@@ -92,7 +92,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.price), {
       target: { value: "9500" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-02-03" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -147,7 +147,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.pricePerGram), {
       target: { value: "1150000" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-02-03" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -183,7 +183,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.pricePerGram), {
       target: { value: "1150000" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-02-03" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -207,7 +207,7 @@ describe("AddTransactionForm", () => {
     // Equity is the default kind; leave the symbol empty.
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "100" } });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-02-03" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -228,7 +228,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.amount), {
       target: { value: "5000000" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-01-15" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -259,7 +259,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.amount), {
       target: { value: "-26.70" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-07-08" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -293,7 +293,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.price), {
       target: { value: "9000" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-02-03" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -340,7 +340,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.price), {
       target: { value: "190" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-04-01" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -368,7 +368,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.currency), { target: { value: "USD" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "0.5" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "65000" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-02-03" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-02-03" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
@@ -400,7 +400,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.amount), {
       target: { value: "37500" },
     });
-    fireEvent.change(screen.getByLabelText(m.date), {
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-03-01" },
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
@@ -460,7 +460,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "BCA" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "9500" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-03-01" } });
     fireEvent.change(screen.getByLabelText(m.tax), { target: { value: "50" } });
     fireEvent.change(screen.getByLabelText(m.notes), { target: { value: "rebalance run" } });
     fireEvent.change(screen.getByLabelText(m.tags), { target: { value: "rebalance, idt" } });
@@ -486,7 +486,7 @@ describe("AddTransactionForm", () => {
     expect(screen.queryByLabelText(m.tax)).toBeNull();
 
     fireEvent.change(screen.getByLabelText(m.amount), { target: { value: "1000000" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-03-01" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
@@ -599,7 +599,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Microsoft" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "400" } });
-    fireEvent.change(screen.getByLabelText(m.date), { target: { value: "2026-05-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-05-01" } });
     fireEvent.change(screen.getByLabelText(m.subType), { target: { value: "saveback" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
