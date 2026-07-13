@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PullToRefreshProps {
@@ -116,30 +116,18 @@ export function PullToRefresh({ children, scrollContainerRef }: PullToRefreshPro
           )}
 
           <div
-            className="relative flex items-center justify-center gap-3 transition-opacity"
+            className="relative flex items-center justify-center transition-opacity"
             style={{
               opacity,
               transform: `scale(${scale})`,
               transition: isDragging ? "none" : "transform 0.22s ease, opacity 0.22s ease",
             }}
           >
-            <Sparkles
-              className={cn(
-                "size-4 text-primary transition-all duration-300",
-                isRefreshing && "animate-pulse scale-110 opacity-100",
-              )}
-            />
             <RefreshCw
               className={cn("size-5 text-primary", isRefreshing && "animate-spin")}
               style={{
                 transform: isRefreshing ? undefined : `rotate(${rotation}deg)`,
               }}
-            />
-            <Sparkles
-              className={cn(
-                "size-4 text-primary transition-all duration-300 delay-75",
-                isRefreshing && "animate-pulse scale-110 opacity-100",
-              )}
             />
           </div>
         </div>
