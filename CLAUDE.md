@@ -1,4 +1,4 @@
-# CLAUDE.md — Portfolio Tracker (monorepo)
+# CLAUDE.md — Pocket (monorepo)
 
 Personal portfolio tracker (English/Indonesian language support) that imports transactions
 from **screenshots** (LLM vision), **CSV/PDF** (broker-specific parsers: DKB, IBKR, Trade

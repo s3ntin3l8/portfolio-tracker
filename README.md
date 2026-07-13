@@ -1,4 +1,6 @@
-# Portfolio Tracker
+<img src="apps/web/public/icon.svg" width="64" height="64" alt="Pocket logo" />
+
+# Pocket - self-hosted portfolio tracker
 
 An Indonesian-first personal portfolio tracker. Import transactions from
 **screenshots** (LLM vision) and **CSV**, then track **equities, gold, bonds, mutual

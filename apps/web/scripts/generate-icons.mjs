@@ -10,14 +10,34 @@ const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, "..", "public");
 const iconsDir = join(publicDir, "icons");
 
+// The in-app brand mark (see src/components/brand.tsx): lucide-react "Layers", white on a
+// brand-green tile. Keep in sync with brand.tsx if the glyph ever changes.
+const LAYERS_PATHS = [
+  "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",
+  "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",
+  "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",
+];
+
+// Emits the Layers glyph as a nested <svg>, centered in a `size`x`size` box at `scale` of
+// that box. Default 0.5625 matches the in-app ratio (brand.tsx: 18px glyph / 32px tile).
+function layersGlyph(size, scale = 0.5625) {
+  const glyphSize = Math.round(size * scale);
+  const offset = Math.round((size - glyphSize) / 2);
+  return (
+    `<svg x="${offset}" y="${offset}" width="${glyphSize}" height="${glyphSize}" viewBox="0 0 24 24" ` +
+    `fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+    LAYERS_PATHS.map((d) => `<path d="${d}"/>`).join("") +
+    `</svg>`
+  );
+}
+
 // Rounded tile (transparent corners) — fine for "any"-purpose icons + favicon.
 const roundedSvg = await readFile(join(publicDir, "icon.svg"));
 // Full-bleed opaque square — for maskable (OS applies its own mask) and apple-touch
-// (iOS rounds the corners itself). The glyph already sits inside the maskable safe zone.
+// (iOS rounds the corners itself). The glyph is sized to sit inside the maskable safe zone.
 const squareSvg = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">` +
-    `<rect width="64" height="64" fill="#0a0a0a"/>` +
-    `<path d="M20 44V20h12a8 8 0 0 1 0 16h-6v8z" fill="#34d399"/></svg>`,
+    `<rect width="64" height="64" fill="#0e9f6e"/>${layersGlyph(64)}</svg>`,
 );
 
 await mkdir(iconsDir, { recursive: true });
@@ -51,18 +71,19 @@ const SPLASH_DEVICES = [
   { name: "ipad-12-9", width: 1024, height: 1366, dpr: 2 },
 ];
 
-// Dark bg + centered brand glyph, sized to the device canvas — matches the app's dark
-// default (`defaultTheme="dark"`). Splash can't react to the in-app theme toggle any more
-// than the Android manifest's static theme_color can (see ThemeColorSync's doc comment).
+// Dark bg + centered brand tile (green square + white Layers glyph), sized to the device
+// canvas — matches the app's dark default (`defaultTheme="dark"`). Splash can't react to
+// the in-app theme toggle any more than the Android manifest's static theme_color can (see
+// ThemeColorSync's doc comment).
 function splashSvg(width, height) {
-  const glyphSize = Math.round(Math.min(width, height) * 0.16);
-  const x = Math.round((width - glyphSize) / 2);
-  const y = Math.round((height - glyphSize) / 2);
+  const tileSize = Math.round(Math.min(width, height) * 0.16);
+  const x = Math.round((width - tileSize) / 2);
+  const y = Math.round((height - tileSize) / 2);
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
       `<rect width="${width}" height="${height}" fill="#0a0a0a"/>` +
-      `<svg x="${x}" y="${y}" width="${glyphSize}" height="${glyphSize}" viewBox="0 0 64 64">` +
-      `<path d="M20 44V20h12a8 8 0 0 1 0 16h-6v8z" fill="#34d399"/></svg>` +
+      `<svg x="${x}" y="${y}" width="${tileSize}" height="${tileSize}" viewBox="0 0 64 64">` +
+      `<rect width="64" height="64" rx="15" fill="#0e9f6e"/>${layersGlyph(64)}</svg>` +
       `</svg>`,
   );
 }
