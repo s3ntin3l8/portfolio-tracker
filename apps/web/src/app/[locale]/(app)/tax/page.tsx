@@ -7,16 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
 import {
   EstimatedTaxHero,
-  DividendsTable,
-  ByYearTable,
   AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
-  IdDividendsTable,
-  IdByYearTable,
   type TaxTranslator,
 } from "@/components/tax/tax-cards";
+import {
+  DividendsTable,
+  ByYearTable,
+  IdDividendsTable,
+  IdByYearTable,
+} from "@/components/tax/tax-tables";
 import { DisposalTable, IdSalesTable } from "@/components/tax/disposal-table";
 import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney, formatMoneyCompact } from "@/lib/utils";
@@ -241,11 +243,11 @@ function TaxHolderSectionId({
           totalDividendTax={idTax.totalDividendTax}
           totalDividendNet={idTax.totalDividendNet}
           money={money}
-          t={t}
+          year={year}
         />
       </div>
 
-      <IdByYearTable rows={idTax.byYear} money={money} t={t} />
+      <IdByYearTable rows={idTax.byYear} money={money} />
 
       <p className="text-xs text-muted-foreground leading-relaxed">{t("id.footnote")}</p>
     </>
@@ -342,7 +344,7 @@ function TaxHolderSectionDe({
             rows={detail.dividendRows}
             totalsByCurrency={detail.dividendTotalsByCurrency}
             locale={locale}
-            t={t}
+            year={entry.year}
           />
         </div>
       )}
@@ -438,7 +440,7 @@ function TaxHolderSectionDe({
       </Card>
 
       {/* By year */}
-      {detail && <ByYearTable rows={detail.byYear} money={money} t={t} />}
+      {detail && <ByYearTable rows={detail.byYear} money={money} />}
 
       <p className="text-xs text-muted-foreground leading-relaxed">
         {t("footnote", { rate: ratePct, allowance: money(u.allowanceAnnual) })}
