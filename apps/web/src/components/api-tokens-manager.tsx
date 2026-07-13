@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Check, Copy, Loader2, Trash2 } from "lucide-react";
 import type { ApiClient, ApiToken } from "@portfolio/api-client";
@@ -16,6 +16,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
+import { useTableSort, type ColDef } from "@/lib/table-sort";
+
+const TOKEN_COLS: ColDef<ApiToken>[] = [
+  { key: "name", get: (t) => t.name, type: "text" },
+  { key: "scope", get: (t) => t.scope, type: "text" },
+  { key: "lastUsed", get: (t) => t.lastUsedAt ?? "", type: "date" },
+  { key: "expires", get: (t) => t.expiresAt ?? "", type: "date" },
+];
 
 /** The slice of the API client this manager needs (injectable for tests). */
 export type ApiTokensClient = Pick<
@@ -72,6 +81,8 @@ export function ApiTokensManager({
   // user dismisses it. It is never re-fetchable.
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState<"idle" | "ok" | "fail">("idle");
+  const { sortKey, sortDir, toggle, sort } = useTableSort<ApiToken>(TOKEN_COLS);
+  const sortedTokens = useMemo(() => sort(tokens), [tokens, sort]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -198,15 +209,15 @@ export function ApiTokensManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("tokensName")}</TableHead>
-              <TableHead>{t("tokensScope")}</TableHead>
-              <TableHead>{t("tokensLastUsed")}</TableHead>
-              <TableHead>{t("tokensExpires")}</TableHead>
+              <SortableTableHead colKey="name" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensName")}</SortableTableHead>
+              <SortableTableHead colKey="scope" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensScope")}</SortableTableHead>
+              <SortableTableHead colKey="lastUsed" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensLastUsed")}</SortableTableHead>
+              <SortableTableHead colKey="expires" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensExpires")}</SortableTableHead>
               <TableHead className="sr-only">{t("tokensRevoke")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tokens.map((tok) => (
+            {sortedTokens.map((tok) => (
               <TableRow key={tok.id}>
                 <TableCell>
                   <span className="font-medium">{tok.name}</span>
