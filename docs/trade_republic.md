@@ -22,7 +22,7 @@ path (the subprocess is spawned with cwd under `services/api`, so a relative pat
 ambiguous):
 
 ```
-PYTR_PYTHON_BIN=/abs/path/to/portfolio-tracker/.venv-pytr/bin/python
+PYTR_PYTHON_BIN=/abs/path/to/pocket-portfolio-tracker/.venv-pytr/bin/python
 ```
 
 Restart `make dev` so the API re-reads `.env`.

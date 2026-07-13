@@ -10,7 +10,7 @@ vi.mock("@/lib/version", () => ({
     return version.APP_VERSION;
   },
   releaseUrl: (v: string) =>
-    `https://github.com/s3ntin3l8/portfolio-tracker/releases/tag/v${v}`,
+    `https://github.com/s3ntin3l8/pocket-portfolio-tracker/releases/tag/v${v}`,
 }));
 
 import { AppVersion } from "../src/components/app-version";
@@ -28,7 +28,7 @@ describe("AppVersion", () => {
     expect(link).toHaveTextContent("v0.1.1");
     expect(link).toHaveAttribute(
       "href",
-      "https://github.com/s3ntin3l8/portfolio-tracker/releases/tag/v0.1.1",
+      "https://github.com/s3ntin3l8/pocket-portfolio-tracker/releases/tag/v0.1.1",
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");

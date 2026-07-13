@@ -5,5 +5,5 @@
 export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 
 export function releaseUrl(version: string): string {
-  return `https://github.com/s3ntin3l8/portfolio-tracker/releases/tag/v${version}`;
+  return `https://github.com/s3ntin3l8/pocket-portfolio-tracker/releases/tag/v${version}`;
 }

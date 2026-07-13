@@ -21,7 +21,7 @@ Log in to Client Portal at [https://www.interactivebrokers.com/sso/Login](https:
 
 | Setting | Recommended value |
 |---|---|
-| Query name | `portfolio-tracker` (or anything memorable) |
+| Query name | `pocket-portfolio-tracker` (or anything memorable) |
 | Date Range | **Last 365 Days** |
 | Format | XML |
 | Period | Daily |
