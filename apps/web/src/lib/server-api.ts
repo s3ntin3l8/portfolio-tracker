@@ -1199,6 +1199,13 @@ export interface TaxDisposalLot {
 export interface TaxDisposalRow {
   symbol: string;
   when: string; // YYYY-MM-DD (the shared sell date)
+  /** The underlying instrument's stable id. Same shape as `IdDisposalInput`'s new
+   *  optional `instrumentId` — used by the web tier to disambiguate rows that share a
+   *  displayed `symbol` (dual-listed tickers, the `instrumentId.slice(0, 8)` fallback
+   *  for unnamed instruments, etc.) so React keys and the expand/collapse Set use a
+   *  identity that can't collide. Optional for backward compatibility with older
+   *  callers. */
+  instrumentId?: string | null;
   proceeds: string;
   gain: string;
   /** Teilfreistellung rate applied to this row's instrument (0–1), from the backend's
@@ -1335,6 +1342,10 @@ export async function loadTaxYearDetail(
           {
             symbol: string;
             when: string;
+            /** The underlying instrument's stable id (threaded through to the row's
+             *  `instrumentId` so the UI can disambiguate rows that share a displayed
+             *  `symbol`). */
+            instrumentId: string;
             proceeds: number;
             gain: number;
             quantity: number;
@@ -1357,6 +1368,7 @@ export async function loadTaxYearDetail(
             const group = disposalGroups.get(key) ?? {
               symbol: t.instrument?.symbol ?? t.instrumentId.slice(0, 8),
               when: l.sellDate,
+              instrumentId: t.instrumentId,
               proceeds: 0,
               gain: 0,
               quantity: 0,
@@ -1384,6 +1396,7 @@ export async function loadTaxYearDetail(
         const legs: TaxDisposalRow[] = [...disposalGroups.values()].map((g) => ({
           symbol: g.symbol,
           when: g.when,
+          instrumentId: g.instrumentId,
           proceeds: g.proceeds.toFixed(2),
           gain: g.gain.toFixed(2),
           tfRate: g.tfRate.toString(),

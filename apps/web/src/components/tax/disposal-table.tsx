@@ -9,15 +9,28 @@ import {
   TableBody,
   TableCell,
   TableFooter,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { ID_SALES_TAX_RATE } from "@portfolio/core";
 import type { IdDisposalTax } from "@portfolio/core";
 import type { TaxDisposalLot, TaxDisposalRow } from "@/lib/server-api";
 import { cn, formatMoney } from "@/lib/utils";
+import { useTableSort, type ColDef } from "@/lib/table-sort";
 import type { TaxTranslator } from "./tax-cards";
+
+const DISPOSAL_COLS: ColDef<TaxDisposalRow>[] = [
+  { key: "disposal", get: (r) => `${r.symbol} ${r.when}`, type: "text" },
+  { key: "proceeds", get: (r) => Number(r.proceeds), type: "numeric" },
+  { key: "gain", get: (r) => Number(r.gain), type: "numeric" },
+];
+
+const ID_SALES_COLS: ColDef<IdDisposalTax>[] = [
+  { key: "disposal", get: (r) => `${r.symbol} ${r.when}`, type: "text" },
+  { key: "proceeds", get: (r) => Number(r.proceeds), type: "numeric" },
+  { key: "tax", get: (r) => Number(r.tax), type: "numeric" },
+];
 
 /** Row-expansion state shared by both tables below — keyed by `symbol:when`, the same
  *  key `loadTaxYearDetail` groups disposals on. */
@@ -130,6 +143,8 @@ export function DisposalTable({
   const t = useTranslations("Tax") as unknown as TaxTranslator;
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { expanded, toggle } = useExpandedRows();
+  const { sortKey, sortDir, toggle: toggleSort, sort } =
+    useTableSort<TaxDisposalRow>(DISPOSAL_COLS);
   return (
     <Card>
       <CardHeader>
@@ -148,14 +163,24 @@ export function DisposalTable({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[46%]">{t("disposals.disposal")}</TableHead>
-                <TableHead className="w-[27%] text-right">{t("disposals.proceeds")}</TableHead>
-                <TableHead className="w-[27%] text-right">{t("disposals.gain")}</TableHead>
+                <SortableTableHead colKey="disposal" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="w-[46%]">{t("disposals.disposal")}</SortableTableHead>
+                <SortableTableHead colKey="proceeds" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("disposals.proceeds")}</SortableTableHead>
+                <SortableTableHead colKey="gain" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("disposals.gain")}</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r, i) => {
-                const key = `${r.symbol}:${r.when}:${i}`;
+              {sort(rows).map((r) => {
+                // Key rows by instrumentId (the real grouping identity — see
+                // server-api.ts:1353 which groups disposal legs by
+                // `${t.instrumentId}:${l.sellDate}`) rather than by symbol. Two
+                // distinct instruments that happen to share a displayed symbol
+                // (dual-listed tickers, or the `instrumentId.slice(0, 8)` fallback
+                // for unnamed instruments) would otherwise collide on the same key,
+                // producing duplicate React keys and a shared expand/collapse Set
+                // state between two logically distinct rows. Falls back to symbol
+                // for any unmapped legacy row that hasn't been threaded through the
+                // new optional `instrumentId` field.
+                const key = `${r.instrumentId ?? r.symbol}:${r.when}`;
                 const hasLots = r.lots.length > 1;
                 const isOpen = expanded.has(key);
                 return (
@@ -239,6 +264,8 @@ export function IdSalesTable({
   const t = useTranslations("Tax") as unknown as TaxTranslator;
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { expanded, toggle } = useExpandedRows();
+  const { sortKey, sortDir, toggle: toggleSort, sort } =
+    useTableSort<IdDisposalTax>(ID_SALES_COLS);
   const salesRate = Number(ID_SALES_TAX_RATE);
   return (
     <Card>
@@ -253,14 +280,17 @@ export function IdSalesTable({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[46%]">{t("id.sales.disposal")}</TableHead>
-                <TableHead className="w-[27%] text-right">{t("id.sales.proceeds")}</TableHead>
-                <TableHead className="w-[27%] text-right">{t("id.sales.tax")}</TableHead>
+                <SortableTableHead colKey="disposal" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="w-[46%]">{t("id.sales.disposal")}</SortableTableHead>
+                <SortableTableHead colKey="proceeds" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("id.sales.proceeds")}</SortableTableHead>
+                <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("id.sales.tax")}</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r, i) => {
-                const key = `${r.symbol}:${r.when}:${i}`;
+              {sort(rows).map((r) => {
+                // See DisposalTable's identical comment above — key on
+                // instrumentId, not symbol, so two rows with the same symbol but
+                // different instruments don't collide.
+                const key = `${r.instrumentId ?? r.symbol}:${r.when}`;
                 const lots = r.lots ?? [];
                 const hasLots = lots.length > 1;
                 const isOpen = expanded.has(key);
@@ -274,6 +304,7 @@ export function IdSalesTable({
                         row={{
                           symbol: r.symbol,
                           when: r.when,
+                          instrumentId: r.instrumentId ?? null,
                           proceeds: r.proceeds,
                           gain: "0",
                           // Indonesian final tax has no Teilfreistellung concept — this

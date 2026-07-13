@@ -136,4 +136,28 @@ describe("indonesianFinalTax", () => {
     // not from unrelated byYear totals for other years.
     expect(result.estimatedTax).toBe("100.00");
   });
+
+  it("passes instrumentId through to disposal rows (for client-side row-key disambiguation)", () => {
+    // indonesianFinalTax constructs IdDisposalTax by spreading the input row
+    // (`{ ...r, tax: tax.toFixed(2) }`). The web tier relies on this pass-through
+    // so that IdSalesTable can key its rows on `instrumentId` instead of `symbol`,
+    // avoiding React-key + expand-state collisions between distinct instruments
+    // that share a displayed symbol (dual-listed tickers, the
+    // `instrumentId.slice(0, 8)` fallback for unnamed instruments). If a future
+    // refactor replaces the spread with an explicit field list, this test catches
+    // the silent break before it reaches production.
+    const result = indonesianFinalTax({
+      disposals: [
+        { instrumentId: "inst-A", symbol: "DUP", when: "2026-05-15", proceeds: "100" },
+        { instrumentId: "inst-B", symbol: "DUP", when: "2026-05-15", proceeds: "200" },
+      ],
+      dividends: [],
+      byYear: [],
+    });
+    expect(result.disposals[0]?.instrumentId).toBe("inst-A");
+    expect(result.disposals[1]?.instrumentId).toBe("inst-B");
+    // And the rest of the row is still computed normally.
+    expect(result.disposals[0]?.tax).toBe("0.10");
+    expect(result.disposals[1]?.tax).toBe("0.20");
+  });
 });

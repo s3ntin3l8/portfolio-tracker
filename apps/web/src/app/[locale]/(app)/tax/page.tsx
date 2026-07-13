@@ -181,6 +181,15 @@ function TaxHolderSectionId({
     disposals: (detail?.disposals ?? []).map((d) => ({
       symbol: d.symbol,
       when: d.when,
+      // Forward `instrumentId` so IdSalesTable can key its rows on it — two
+      // distinct instruments that share a displayed symbol (dual-listed tickers,
+      // the `instrumentId.slice(0, 8)` fallback for unnamed instruments) would
+      // otherwise collide on the same React key and share expand/collapse state.
+      // indonesianFinalTax spreads the input through via `{ ...r, tax: ... }`, so
+      // any field not explicitly forwarded here is silently dropped. The German
+      // DisposalTable path doesn't need this because tax/page.tsx passes
+      // `detail.disposals` straight through, unmodified.
+      instrumentId: d.instrumentId,
       proceeds: d.proceeds,
       quantity: d.quantity,
       avgBuyPrice: d.avgBuyPrice,
