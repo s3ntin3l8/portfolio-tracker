@@ -91,4 +91,65 @@ describe("ImportFilesTable", () => {
       screen.queryByRole("button", { name: messages.Import.confirmPortfolio.assignSelected }),
     ).not.toBeInTheDocument();
   });
+
+  it("sorts files by count descending on click", () => {
+    renderTable();
+    // Click "Transactions" once for ascending, twice for descending.
+    fireEvent.click(screen.getByRole("button", { name: /Transactions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Transactions/i }));
+    const dataRows = screen.getAllByRole("row").slice(1); // drop header
+    // Desc: 5 first, 3 second.
+    expect(dataRows[0]).toHaveTextContent("broker-b.csv");
+    expect(dataRows[1]).toHaveTextContent("broker-a.csv");
+  });
+
+  it("re-sorts when countByImport changes mid-flight (no stale closure)", () => {
+    // Regression guard: useTableSort's `sort` is memoized only on [sortKey, sortDir],
+    // so closing over a per-render `countByImport` via the hook's `sort` would let the
+    // row order lag behind the displayed counts whenever the parent re-renders. The
+    // component bypasses the hook's `sort` and computes the sort in a useMemo that
+    // depends on countByImport directly. This test exercises the regression: sort once,
+    // then swap countByImport to a new closure, and assert the row order recomputes
+    // without a re-click.
+    const onPortfolioChange = vi.fn();
+    const baseProps = {
+      groups: GROUPS,
+      portfolios: PORTFOLIOS,
+      portfolioByImport: new Map([["imp-a", "p1"], ["imp-b", "p1"]]),
+      matchedImports: new Set<string>(["imp-a"]),
+      issueCountByImport: () => 0,
+      onPortfolioChange,
+    } satisfies Partial<Parameters<typeof ImportFilesTable>[0]>;
+
+    const { rerender } = render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportFilesTable
+          {...baseProps}
+          // First render: imp-a=3, imp-b=5.
+          countByImport={(iid) => (iid === "imp-a" ? 3 : 5)}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // Sort by Count asc: imp-a (3) first, imp-b (5) second.
+    fireEvent.click(screen.getByRole("button", { name: /Transactions/i }));
+    let dataRows = screen.getAllByRole("row").slice(1);
+    expect(dataRows[0]).toHaveTextContent("broker-a.csv");
+    expect(dataRows[1]).toHaveTextContent("broker-b.csv");
+
+    // Swap the closure — counts flip. Re-render with the new prop without re-clicking.
+    rerender(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <ImportFilesTable
+          {...baseProps}
+          // Second render: imp-a=10, imp-b=1.
+          countByImport={(iid) => (iid === "imp-a" ? 10 : 1)}
+        />
+      </NextIntlClientProvider>,
+    );
+    // Sort key is still "Count asc" — imp-b (1) should now be first.
+    dataRows = screen.getAllByRole("row").slice(1);
+    expect(dataRows[0]).toHaveTextContent("broker-b.csv");
+    expect(dataRows[1]).toHaveTextContent("broker-a.csv");
+  });
 });
