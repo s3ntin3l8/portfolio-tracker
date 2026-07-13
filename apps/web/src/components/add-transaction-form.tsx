@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { MonogramBadge } from "@/components/monogram-badge";
 import { TransactionSourcesSection } from "@/components/transaction-sources-section";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -707,9 +708,8 @@ export function AddTransactionForm({
           </Select>
         </Field>
         <Field label={t("date")} htmlFor="tx-date">
-          <Input
+          <DatePicker
             id="tx-date"
-            type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             required
