@@ -350,6 +350,7 @@
     "heatmapLess": "Less",
     "heatmapMore": "More",
     "heatmapCellSubtitle": "{month} · {amount}",
+    "heatmapCellAmount": "Amount",
     "paymentsTimelineTitle": "Payments timeline",
     "paymentsTimelineSubtitle": "Received & forecast distributions",
     "legendReceived": "Received",

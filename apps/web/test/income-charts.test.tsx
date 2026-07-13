@@ -249,4 +249,40 @@ describe("IncomeHeatmap", () => {
     fireEvent.click(zeroCell);
     expect(screen.getByText(/Jan 2026 · —/)).toBeInTheDocument();
   });
+
+  it("surfaces a floating tooltip on mouseenter with month + amount", () => {
+    wrap(
+      <IncomeHeatmap
+        currency="IDR"
+        monthly={[{ month: "2026-06", total: "532000" }]}
+      />,
+    );
+    const cell = screen.getByTitle(/Jun 2026/);
+    fireEvent.mouseEnter(cell);
+    // Title row (panel heading) carries the month label.
+    expect(screen.getByText("Jun 2026")).toBeInTheDocument();
+    // The "Amount" row uses the new i18n key, formatted via formatMoney.
+    expect(screen.getByText("Amount")).toBeInTheDocument();
+    // The exact formatted value is locale-dependent; just check that the
+    // raw number 532000 appears in the value cell (Intl.NumberFormat
+    // preserves the integer IDR value).
+    expect(screen.getByText(/532[.,\s\u00a0\u202f]?000/)).toBeInTheDocument();
+  });
+
+  it("dismisses the floating tooltip on mouseleave", () => {
+    wrap(
+      <IncomeHeatmap
+        currency="IDR"
+        monthly={[{ month: "2026-06", total: "532000" }]}
+      />,
+    );
+    const cell = screen.getByTitle(/Jun 2026/);
+    fireEvent.mouseEnter(cell);
+    expect(screen.getByText("Amount")).toBeInTheDocument();
+    fireEvent.mouseLeave(cell);
+    // The tooltip is state-driven: the panel unmounts on leave (so the
+    // page is keyboard/SSR-clean). The subtitle is *not* the floating
+    // tooltip — it remains as the no-hover fallback.
+    expect(screen.queryByText("Amount")).not.toBeInTheDocument();
+  });
 });

@@ -86,14 +86,28 @@ export default async function ReportsPage({
     // Realized-to-date vs. forecasted-remainder, same green as the card icon — the
     // forecast segment is drawn as a diagonal-stripe hatch, matching the "Projected"
     // segment styling on the Income page's own per-year bar chart.
+    // TODO(i18n): tooltip labels are English literals here — when the rest of
+    // the report-card strings grow i18n coverage, mirror them under
+    // `Reports.income.tooltip*`.
     const thisYearAmt = Number(s.thisYear);
     const forecastFullYearAmt = Number(s.forecastFullYear);
     const remainingAmt = Math.max(0, forecastFullYearAmt - thisYearAmt);
     const splitBar =
       forecastFullYearAmt > 0
         ? [
-            { pct: (thisYearAmt / forecastFullYearAmt) * 100, color: ICONS.income.fg },
-            { pct: (remainingAmt / forecastFullYearAmt) * 100, color: ICONS.income.fg, striped: true },
+            {
+              pct: (thisYearAmt / forecastFullYearAmt) * 100,
+              color: ICONS.income.fg,
+              label: "Received",
+              amount: m(thisYearAmt),
+            },
+            {
+              pct: (remainingAmt / forecastFullYearAmt) * 100,
+              color: ICONS.income.fg,
+              striped: true,
+              label: "Forecast",
+              amount: m(remainingAmt),
+            },
           ]
         : undefined;
 
@@ -147,8 +161,18 @@ export default async function ReportsPage({
     const splitBar =
       totalAbs > 0
         ? [
-            { pct: (winSum / totalAbs) * 100, color: "var(--color-success)" },
-            { pct: (lossSum / totalAbs) * 100, color: "var(--color-destructive)" },
+            {
+              pct: (winSum / totalAbs) * 100,
+              color: "var(--color-success)",
+              label: "Wins",
+              amount: m(winSum),
+            },
+            {
+              pct: (lossSum / totalAbs) * 100,
+              color: "var(--color-destructive)",
+              label: "Losses",
+              amount: m(lossSum),
+            },
           ]
         : undefined;
     const avgHoldingDays =
@@ -201,8 +225,18 @@ export default async function ReportsPage({
     const splitBar =
       total > 0
         ? [
-            { pct: (netContributed / total) * 100, color: "var(--color-chart-4)" },
-            { pct: (gain / total) * 100, color: "var(--color-success)" },
+            {
+              pct: (netContributed / total) * 100,
+              color: "var(--color-chart-4)",
+              label: "Contributed",
+              amount: m(netContributed),
+            },
+            {
+              pct: (gain / total) * 100,
+              color: "var(--color-success)",
+              label: "Gain",
+              amount: m(gain),
+            },
           ]
         : undefined;
     const totalReturnPct = s.totalReturnPct ?? s.simpleGainPct;

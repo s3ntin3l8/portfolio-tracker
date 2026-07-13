@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { Coins } from "lucide-react";
 import { ReportCard } from "../src/components/reports/report-card";
 import { TrendChip } from "../src/components/reports/trend-chip";
@@ -32,6 +32,40 @@ describe("MiniSplitBar", () => {
     );
     const bar = container.querySelector(".h-\\[7px\\]");
     expect(bar?.children).toHaveLength(2);
+  });
+
+  it("renders segments without label/amount as plain non-interactive fills", () => {
+    const { container } = render(
+      <MiniSplitBar
+        segments={[
+          { pct: 50, color: "red" },
+          { pct: 50, color: "blue" },
+        ]}
+      />,
+    );
+    const segments = container.querySelectorAll(".h-\\[7px\\] > div");
+    // No role=img / tabindex on segments without a label — they were not
+    // hoverable before #478, and stay non-interactive to keep the visual
+    // identical when callers don't opt in.
+    expect(segments[0].getAttribute("role")).toBeNull();
+    expect(segments[0].getAttribute("tabindex")).toBeNull();
+  });
+
+  it("makes labeled segments focusable and surfaces their label/amount on hover", () => {
+    render(
+      <MiniSplitBar
+        segments={[
+          { pct: 70, color: "#0E9F6E", label: "Wins", amount: "Rp 1.2M" },
+          { pct: 30, color: "#EF4444", label: "Losses", amount: "Rp 500K" },
+        ]}
+      />,
+    );
+    const wins = screen.getByRole("img", { name: /Wins/ });
+    expect(wins).toHaveAttribute("tabindex", "0");
+    fireEvent.mouseEnter(wins);
+    expect(screen.getByText("Wins")).toBeInTheDocument();
+    expect(screen.getByText("Rp 1.2M")).toBeInTheDocument();
+    expect(screen.getByText("Amount")).toBeInTheDocument();
   });
 });
 

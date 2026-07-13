@@ -1,18 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocale, useTranslations } from "next-intl";
 import { cn, formatMoney } from "@/lib/utils";
+import { useChartTooltip } from "@/components/ui/use-chart-tooltip";
+import { ChartTooltipPanel, type ChartTooltipRow } from "@/components/ui/chart-tooltip-panel";
 
 /**
  * Monthly seasonality grid: one row per year, twelve month columns, each cell's
  * fill scaled by its share of the busiest month. A plain CSS grid (no recharts) so
  * it stays compact and legible on a phone.
  *
- * Click-to-inspect: tapping a cell highlights it (a ring) and updates the subtitle
- * above the grid to that month's exact figure, defaulting to a "tap a cell" hint.
- * State stays local to this component rather than lifting to the page, since the
- * subtitle is purely a rendering concern of the heatmap itself.
+ * Two read affordances, both layered:
+ * - Subtitle (above the grid): the keyboard/server-rendered fallback that updates
+ *   when a cell is clicked. Always present, no JS interaction needed.
+ * - Floating tooltip (portal'd, hover/focus/tap): the explicit hover affordance
+ *   matching the rest of the app's chart tooltips (same visual shell as
+ *   `ChartTooltipPanel`).
+ *
+ * Both display the same content ({month, amount}) so a screen-reader/keyboard
+ * user gets the same data as a mouse user.
  */
 export function IncomeHeatmap({
   monthly,
@@ -24,6 +32,7 @@ export function IncomeHeatmap({
   const locale = useLocale();
   const t = useTranslations("Income");
   const [active, setActive] = useState<{ year: string; monthIdx: number } | null>(null);
+  const tip = useChartTooltip<{ title: string; rows: ChartTooltipRow[] }>();
 
   // Fold the flat month list into a year → 12-month-totals matrix.
   const byYear = new Map<string, number[]>();
@@ -81,6 +90,16 @@ export function IncomeHeatmap({
               return (
                 <button
                   key={i}
+                  {...tip.bind({
+                    title: `${monthFullLabels[i]} ${year}`,
+                    rows: [
+                      {
+                        label: t("heatmapCellAmount"),
+                        value: value > 0 ? formatMoney(value, currency, locale) : "—",
+                        dot: "var(--color-primary)",
+                      },
+                    ],
+                  })}
                   type="button"
                   title={cellTitle}
                   aria-label={cellTitle}
@@ -109,6 +128,23 @@ export function IncomeHeatmap({
         ))}
         <span>{t("heatmapMore")}</span>
       </div>
+      {tip.open &&
+        tip.content &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: tip.y,
+              left: tip.x,
+              zIndex: 60,
+              pointerEvents: "none",
+            }}
+          >
+            <ChartTooltipPanel title={tip.content.title} rows={tip.content.rows} />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

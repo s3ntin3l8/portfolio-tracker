@@ -350,6 +350,7 @@
     "heatmapLess": "Sedikit",
     "heatmapMore": "Banyak",
     "heatmapCellSubtitle": "{month} · {amount}",
+    "heatmapCellAmount": "Jumlah",
     "paymentsTimelineTitle": "Linimasa pembayaran",
     "paymentsTimelineSubtitle": "Distribusi diterima & perkiraan",
     "legendReceived": "Diterima",

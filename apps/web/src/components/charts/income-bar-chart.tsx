@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { useLocale, useTranslations } from "next-intl";
 import { formatMoney, formatMoneyCompact } from "@/lib/utils";
+import { ChartTooltipPanel, type ChartTooltipRow } from "@/components/ui/chart-tooltip-panel";
 
 /** One bar — a calendar year of income, or the dashed next-year forecast. */
 export interface IncomeBar {
@@ -26,12 +27,7 @@ export interface IncomeBar {
 
 /** One labeled row in the tooltip breakdown — a colored dot (omitted for the
  *  no-dot "Total" row) plus a label/value pair. */
-interface TooltipRow {
-  label: string;
-  value: string;
-  dot?: string;
-  dotOpacity?: number;
-}
+type TooltipRow = ChartTooltipRow;
 
 /**
  * Received / Projected / Forecast key, rendered inline with the card title
@@ -104,49 +100,7 @@ export function ChartTooltip({
         { label: t("tooltipTotal"), value: money(bar.value + projected) },
       ];
 
-  return (
-    <div
-      style={{
-        background: "var(--color-card)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        fontSize: 12,
-        padding: "8px 12px",
-        minWidth: 168,
-      }}
-    >
-      <p style={{ marginBottom: 6, fontWeight: 700 }}>{label}</p>
-      {rows.map((row, i) => (
-        <div
-          key={row.label}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 14,
-            marginTop: i === 0 ? 0 : 4,
-          }}
-        >
-          <span style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.85 }}>
-            {row.dot && (
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 2,
-                  background: row.dot,
-                  opacity: row.dotOpacity ?? 1,
-                  display: "inline-block",
-                }}
-              />
-            )}
-            {row.label}
-          </span>
-          <span style={{ fontWeight: 700 }}>{row.value}</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <ChartTooltipPanel title={label} rows={rows} />;
 }
 
 /**

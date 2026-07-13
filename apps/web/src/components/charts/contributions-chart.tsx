@@ -18,6 +18,7 @@ import { PriceChart } from "@/components/charts/price-chart";
 import { EmptyState } from "@/components/empty-state";
 import { mergeContributionValue } from "@/lib/chart-series";
 import { formatMoney } from "@/lib/utils";
+import { ChartTooltipPanel } from "@/components/ui/chart-tooltip-panel";
 
 /**
  * Contributions vs. portfolio value overlay chart.
@@ -261,24 +262,19 @@ function OverlayTooltip({
   const p = points[0];
 
   return (
-    <div
-      style={{
-        background: "var(--color-card)",
-        border: "1px solid var(--color-border)",
-        borderRadius: 8,
-        fontSize: 12,
-        padding: "6px 10px",
-      }}
-    >
-      <p style={{ color: "var(--color-muted-foreground)", marginBottom: 4 }}>
-        {label}
-      </p>
-      <p style={{ color: "var(--color-muted-foreground)" }}>
-        {t("chartContributions")}: {money(p.contributed)}
-      </p>
-      <p style={{ color: "var(--color-primary)" }}>
-        {t("chartValue")}: {money(p.value)}
-      </p>
-    </div>
+    <ChartTooltipPanel
+      title={label == null ? undefined : String(label)}
+      rows={[
+        {
+          label: t("chartContributions"),
+          value: money(p.contributed),
+        },
+        {
+          label: t("chartValue"),
+          value: money(p.value),
+          dot: "var(--color-primary)",
+        },
+      ]}
+    />
   );
 }
