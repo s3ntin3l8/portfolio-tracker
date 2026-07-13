@@ -207,4 +207,51 @@ describe("useChartTooltip", () => {
     });
     expect(result.current.open).toBe(true);
   });
+
+  it("repositions the open tooltip when setSize reports a different size", () => {
+    // Regression guard for the #491 review's cosmetic edge case
+    // ("position doesn't self-correct for the current open tooltip once
+    // the real size arrives"). When the panel fires onSize with a
+    // different size, the hook re-invokes update() so the open tooltip
+    // snaps to the right position immediately. Tested by placing the
+    // target close to the right edge of the 1024px-wide viewport so the
+    // approximation (200px) doesn't trigger a flip but the real size
+    // (320px) does.
+    const { result } = renderHook(() => useChartTooltip<string>());
+    const target = document.createElement("div");
+    // Right edge at 750. Approximation TIP_W(200) + GAP(8) = 208
+    // → 750 + 208 = 958 < 1024 - 12 = 1012, no flip → x = 750 + 8 = 758.
+    // Real size 320: 750 + 320 + 8 = 1078 > 1012, flip → x = 730 - 320 - 8 = 402.
+    // (The flipped formula reads r.left, not r.right, so it's left - tipW - gap.)
+    Object.defineProperty(target, "getBoundingClientRect", {
+      value: () => ({ top: 100, right: 750, bottom: 120, left: 730, width: 20, height: 20, x: 730, y: 100, toJSON: () => "" }),
+    });
+    act(() => {
+      result.current
+        .bind("x")
+        .onMouseEnter({ currentTarget: target } as unknown as React.MouseEvent<HTMLElement>);
+    });
+    // Approximation: 200x80, no flip at right=750 → x = 750 + 8 = 758
+    expect(result.current.x).toBe(758);
+    // Real panel is 320x96 — that triggers a flip → x = 730 - 320 - 8 = 402
+    act(() => {
+      result.current.setSize({ width: 320, height: 96 });
+    });
+    expect(result.current.x).toBe(402);
+  });
+
+  it("setSize is a no-op when no tooltip is open (targetElRef is null)", () => {
+    // Defensive: if for some reason setSize is called with no active
+    // target (e.g. a stale panel unmounting and firing its final size
+    // report), the hook should silently ignore it rather than throw.
+    const { result } = renderHook(() => useChartTooltip<string>());
+    expect(() => {
+      act(() => {
+        result.current.setSize({ width: 320, height: 96 });
+      });
+    }).not.toThrow();
+    expect(result.current.open).toBe(false);
+    expect(result.current.x).toBe(0);
+    expect(result.current.y).toBe(0);
+  });
 });

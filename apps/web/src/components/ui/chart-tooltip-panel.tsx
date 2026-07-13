@@ -57,7 +57,14 @@ export function ChartTooltipPanel({
     // Fire the initial size synchronously so the hook's next update() can
     // use the real dimensions without waiting for a ResizeObserver tick.
     onSize({ width: el.offsetWidth, height: el.offsetHeight });
-    const ro = new ResizeObserver((entries) => {
+    // Explicit `entries: ResizeObserverEntry[]` annotation. The callback
+    // signature in lib.dom.d.ts is `(entries, observer) => void`, and the
+    // CodeQL `js/superfluous-trailing-arguments` rule misreads the
+    // inferred single-arg form as "passing an unexpected argument to the
+    // default constructor." Annotating the first parameter makes the
+    // intended type explicit and silences the false positive without
+    // needing a codeql suppression comment.
+    const ro = new ResizeObserver((entries: ResizeObserverEntry[]) => {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;

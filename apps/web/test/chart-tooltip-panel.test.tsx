@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/react";
-import { useRef } from "react";
 import { ChartTooltipPanel } from "../src/components/ui/chart-tooltip-panel";
 
 /**
@@ -101,7 +100,3 @@ describe("ChartTooltipPanel onSize", () => {
     expect(observerCallback).toBeNull();
   });
 });
-
-// Suppress the unused-import warning for useRef — it's intentionally not
-// referenced above, but listed for future tests that need a forwarded ref.
-void useRef;
