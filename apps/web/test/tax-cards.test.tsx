@@ -1,24 +1,37 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 import {
   EstimatedTaxHero,
-  DividendsTable,
-  ByYearTable,
   AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
-  IdDividendsTable,
-  IdByYearTable,
   type TaxTranslator,
 } from "../src/components/tax/tax-cards";
+import {
+  DividendsTable,
+  ByYearTable,
+  IdDividendsTable,
+  IdByYearTable,
+} from "../src/components/tax/tax-tables";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
 
-// These components take `t` as a directly-injected prop (the page's established
-// pattern — see apps/web/src/app/[locale]/(app)/tax/page.tsx), not via `useTranslations`,
-// so no NextIntlClientProvider is needed. This stub reads the real `Tax` namespace from
-// en.json with basic `{key}` interpolation, so assertions exercise real copy.
+// The four table components (DividendsTable, ByYearTable, IdDividendsTable,
+// IdByYearTable) are now client components in ./tax-tables.tsx — they call
+// `useTranslations("Tax")` internally, so render them inside the real next-intl
+// provider. The non-table components here still take `t` as a directly-injected prop
+// (the page's established pattern — see apps/web/src/app/[locale]/(app)/tax/page.tsx),
+// so they use a plain-substitution stub for `t`.
+function wrapClient(ui: React.ReactNode) {
+  return render(
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>,
+  );
+}
+
 function makeT(): TaxTranslator {
   const tax = messages.Tax as unknown as Record<string, unknown>;
   return (key, values) => {
@@ -54,12 +67,12 @@ describe("EstimatedTaxHero", () => {
 
 describe("DividendsTable", () => {
   it("renders gross/tax/net per source, in the source's own currency, plus a total row", () => {
-    render(
+    wrapClient(
       <DividendsTable
         rows={[{ symbol: "SAP", currency: "EUR", gross: "168", tax: "35", net: "133" }]}
         totalsByCurrency={[{ currency: "EUR", gross: "168", tax: "35", net: "133" }]}
         locale="en"
-        t={t}
+        year={2026}
       />,
     );
     expect(screen.getByText("SAP")).toBeInTheDocument();
@@ -69,7 +82,7 @@ describe("DividendsTable", () => {
   });
 
   it("joins multi-currency totals instead of summing across currencies", () => {
-    render(
+    wrapClient(
       <DividendsTable
         rows={[
           { symbol: "SAP", currency: "EUR", gross: "168", tax: "35", net: "133" },
@@ -80,7 +93,7 @@ describe("DividendsTable", () => {
           { currency: "USD", gross: "100", tax: "20", net: "80" },
         ]}
         locale="en"
-        t={t}
+        year={2026}
       />,
     );
     // Each row renders in its OWN currency, not a shared/converted one.
@@ -91,21 +104,22 @@ describe("DividendsTable", () => {
   });
 
   it("renders the empty state when there's no dividend income", () => {
-    render(<DividendsTable rows={[]} totalsByCurrency={[]} locale="en" t={t} />);
+    wrapClient(
+      <DividendsTable rows={[]} totalsByCurrency={[]} locale="en" year={2026} />,
+    );
     expect(screen.getByText(/No dividend\/interest income/)).toBeInTheDocument();
   });
 });
 
 describe("ByYearTable", () => {
   it("renders newest-first rows with realized/dividends/FSA used/tax columns", () => {
-    render(
+    wrapClient(
       <ByYearTable
         rows={[
           { year: 2026, realized: "240", dividends: "168", fsaUsed: "408.00", tax: "0.00" },
           { year: 2025, realized: "100", dividends: "227", fsaUsed: "327.00", tax: "0.00" },
         ]}
         money={money}
-        t={t}
       />,
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
@@ -116,7 +130,7 @@ describe("ByYearTable", () => {
   });
 
   it("renders nothing when there are no years", () => {
-    const { container } = render(<ByYearTable rows={[]} money={money} t={t} />);
+    const { container } = wrapClient(<ByYearTable rows={[]} money={money} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -307,7 +321,7 @@ describe("HarvestSummaryNote", () => {
 
 describe("IdDividendsTable", () => {
   it("renders gross/tax(10%)/net per source plus a total row", () => {
-    render(
+    wrapClient(
       <IdDividendsTable
         rows={[
           { symbol: "BBCA", currency: "IDR", gross: "420000", tax: "42000.00", net: "378000.00" },
@@ -316,7 +330,7 @@ describe("IdDividendsTable", () => {
         totalDividendTax="42000.00"
         totalDividendNet="378000.00"
         money={money}
-        t={t}
+        year={2026}
       />,
     );
     expect(screen.getByText("BBCA")).toBeInTheDocument();
@@ -327,14 +341,14 @@ describe("IdDividendsTable", () => {
   });
 
   it("renders the empty state when there's no dividend/coupon income", () => {
-    render(
+    wrapClient(
       <IdDividendsTable
         rows={[]}
         totalDividendGross="0"
         totalDividendTax="0"
         totalDividendNet="0"
         money={money}
-        t={t}
+        year={2026}
       />,
     );
     expect(screen.getByText(/No dividend\/coupon income/)).toBeInTheDocument();
@@ -343,14 +357,13 @@ describe("IdDividendsTable", () => {
 
 describe("IdByYearTable", () => {
   it("renders every year's Est. tax column, not just the current year", () => {
-    render(
+    wrapClient(
       <IdByYearTable
         rows={[
           { year: 2026, realized: "324000", dividends: "1284000", tax: "128724.00" },
           { year: 2025, realized: "1940000", dividends: "2110000", tax: "212940.00" },
         ]}
         money={money}
-        t={t}
       />,
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
@@ -360,7 +373,7 @@ describe("IdByYearTable", () => {
   });
 
   it("renders nothing when there are no years", () => {
-    const { container } = render(<IdByYearTable rows={[]} money={money} t={t} />);
+    const { container } = wrapClient(<IdByYearTable rows={[]} money={money} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

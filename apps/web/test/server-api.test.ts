@@ -769,6 +769,11 @@ describe("loadTaxYearDetail", () => {
       {
         symbol: "NVDA",
         when: "2026-03-12",
+        // The underlying instrumentId is threaded through so the UI can disambiguate
+        // rows that share a displayed `symbol` (dual-listed tickers, the
+        // `instrumentId.slice(0, 8)` fallback for unnamed instruments, etc.) — see the
+        // disposal-table.tsx row key.
+        instrumentId: "i1",
         proceeds: "1240.00",
         gain: "240.00",
         // No tfRatesByInstrument entry for this instrument in the fixture → defaults to

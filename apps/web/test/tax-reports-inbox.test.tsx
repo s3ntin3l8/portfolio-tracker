@@ -113,4 +113,49 @@ describe("TaxReportsInbox", () => {
     expect(openSpy).toHaveBeenCalledWith("https://x/doc.pdf", "_blank", "noopener,noreferrer");
     openSpy.mockRestore();
   });
+
+  it("sorts the documents by Year on click", () => {
+    renderInbox({
+      initialDocuments: [
+        {
+          id: "doc-newer",
+          category: "tax_report",
+          taxYear: 2026,
+          source: "upload",
+          originalFilename: "newer.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 1000,
+          portfolioId: "p1",
+          portfolioLabel: "Main",
+          storedAt: "2026-06-01T00:00:00.000Z",
+        },
+        {
+          id: "doc-older",
+          category: "tax_report",
+          taxYear: 2024,
+          source: "pytr",
+          originalFilename: "older.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2000,
+          portfolioId: "p1",
+          portfolioLabel: "Main",
+          storedAt: "2025-01-01T00:00:00.000Z",
+        },
+      ],
+    });
+    // Both desktop table and mobile card render in jsdom; assert against the desktop button.
+    const yearBtn = screen.getAllByRole("button", { name: /Year/i })[0]!;
+    fireEvent.click(yearBtn);
+    const dataRows = screen.getAllByRole("row").slice(1); // drop header
+    // Asc: 2024 first, 2026 second.
+    expect(dataRows[0]).toHaveTextContent("older.pdf");
+    expect(dataRows[1]).toHaveTextContent("newer.pdf");
+    expect(yearBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
+    fireEvent.click(yearBtn);
+    const dataRowsDesc = screen.getAllByRole("row").slice(1);
+    // Desc: 2026 first, 2024 second.
+    expect(dataRowsDesc[0]).toHaveTextContent("newer.pdf");
+    expect(dataRowsDesc[1]).toHaveTextContent("older.pdf");
+    expect(yearBtn.closest("th")).toHaveAttribute("aria-sort", "descending");
+  });
 });

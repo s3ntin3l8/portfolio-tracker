@@ -137,4 +137,30 @@ describe("ApiTokensManager", () => {
     await waitFor(() => expect(client.deleteApiToken).toHaveBeenCalledWith("tok-1"));
     await waitFor(() => expect(screen.queryByText("old-cli")).not.toBeInTheDocument());
   });
+
+  it("sorts tokens by Name on click", () => {
+    const old: ApiToken = { ...existing, name: "old-cli" };
+    const newer: ApiToken = { ...existing, id: "tok-2", name: "zeta-cli" };
+    renderManager(
+      {
+        listApiTokens: vi.fn(async () => [old, newer]),
+        createApiToken: vi.fn(),
+        deleteApiToken: vi.fn(),
+      },
+      [old, newer],
+    );
+    const nameBtn = screen.getByRole("button", { name: /Name/i });
+    fireEvent.click(nameBtn);
+    const dataRows = screen.getAllByRole("row").slice(1);
+    // Asc: old-cli first, zeta-cli second.
+    expect(dataRows[0]).toHaveTextContent("old-cli");
+    expect(dataRows[1]).toHaveTextContent("zeta-cli");
+    expect(nameBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
+    fireEvent.click(nameBtn);
+    const dataRowsDesc = screen.getAllByRole("row").slice(1);
+    // Desc: zeta-cli first, old-cli second.
+    expect(dataRowsDesc[0]).toHaveTextContent("zeta-cli");
+    expect(dataRowsDesc[1]).toHaveTextContent("old-cli");
+    expect(nameBtn.closest("th")).toHaveAttribute("aria-sort", "descending");
+  });
 });

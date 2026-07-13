@@ -48,6 +48,12 @@ export interface IdDisposalInput {
   symbol: string;
   when: string; // YYYY-MM-DD
   proceeds: string;
+  /** The underlying instrument's stable id. Optional for backward compatibility (older
+   *  callers that don't pass it fall back to `symbol` for row identity in the UI). The
+   *  web tier uses it to disambiguate rows that share a displayed `symbol` but are
+   *  different instruments — e.g. dual-listed tickers or the `instrumentId.slice(0, 8)`
+   *  fallback for unnamed instruments colliding with a real symbol. */
+  instrumentId?: string | null;
   /** Aggregate quantity/price fields + the individual consumed lots — all optional,
    *  pure pass-through (not used in the 0.1% tax computation below, which only needs
    *  `proceeds`). Populated by the web tier when a disposal spans multiple FIFO lots

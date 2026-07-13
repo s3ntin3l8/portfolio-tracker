@@ -7,16 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
 import {
   EstimatedTaxHero,
-  DividendsTable,
-  ByYearTable,
   AllowanceSummaryBoxes,
   DistributionCard,
   HarvestRow,
   HarvestSummaryNote,
-  IdDividendsTable,
-  IdByYearTable,
   type TaxTranslator,
 } from "@/components/tax/tax-cards";
+import {
+  DividendsTable,
+  ByYearTable,
+  IdDividendsTable,
+  IdByYearTable,
+} from "@/components/tax/tax-tables";
 import { DisposalTable, IdSalesTable } from "@/components/tax/disposal-table";
 import { loadNetworthTax, loadTaxYearDetail, loadPreferences, type TaxYearDetail } from "@/lib/server-api";
 import { formatMoney, formatMoneyCompact } from "@/lib/utils";
@@ -181,6 +183,15 @@ function TaxHolderSectionId({
     disposals: (detail?.disposals ?? []).map((d) => ({
       symbol: d.symbol,
       when: d.when,
+      // Forward `instrumentId` so IdSalesTable can key its rows on it — two
+      // distinct instruments that share a displayed symbol (dual-listed tickers,
+      // the `instrumentId.slice(0, 8)` fallback for unnamed instruments) would
+      // otherwise collide on the same React key and share expand/collapse state.
+      // indonesianFinalTax spreads the input through via `{ ...r, tax: ... }`, so
+      // any field not explicitly forwarded here is silently dropped. The German
+      // DisposalTable path doesn't need this because tax/page.tsx passes
+      // `detail.disposals` straight through, unmodified.
+      instrumentId: d.instrumentId,
       proceeds: d.proceeds,
       quantity: d.quantity,
       avgBuyPrice: d.avgBuyPrice,
@@ -232,11 +243,11 @@ function TaxHolderSectionId({
           totalDividendTax={idTax.totalDividendTax}
           totalDividendNet={idTax.totalDividendNet}
           money={money}
-          t={t}
+          year={year}
         />
       </div>
 
-      <IdByYearTable rows={idTax.byYear} money={money} t={t} />
+      <IdByYearTable rows={idTax.byYear} money={money} />
 
       <p className="text-xs text-muted-foreground leading-relaxed">{t("id.footnote")}</p>
     </>
@@ -333,7 +344,7 @@ function TaxHolderSectionDe({
             rows={detail.dividendRows}
             totalsByCurrency={detail.dividendTotalsByCurrency}
             locale={locale}
-            t={t}
+            year={entry.year}
           />
         </div>
       )}
@@ -429,7 +440,7 @@ function TaxHolderSectionDe({
       </Card>
 
       {/* By year */}
-      {detail && <ByYearTable rows={detail.byYear} money={money} t={t} />}
+      {detail && <ByYearTable rows={detail.byYear} money={money} />}
 
       <p className="text-xs text-muted-foreground leading-relaxed">
         {t("footnote", { rate: ratePct, allowance: money(u.allowanceAnnual) })}

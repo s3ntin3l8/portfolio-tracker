@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { FileText, Upload, Download, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,10 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SortableTableHead } from "@/components/ui/sortable-table-head";
+import { useTableSort, type ColDef } from "@/lib/table-sort";
 import { EmptyState } from "@/components/empty-state";
 import { PortfolioPicker, type PickablePortfolio } from "@/components/portfolio-picker";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
+
+const INBOX_COLS: ColDef<InboxDocument>[] = [
+  { key: "document", get: (d) => d.originalFilename ?? "", type: "text" },
+  { key: "year", get: (d) => d.taxYear ?? 0, type: "numeric" },
+  { key: "source", get: (d) => d.source ?? "", type: "text" },
+  { key: "account", get: (d) => d.portfolioLabel ?? "", type: "text" },
+  { key: "size", get: (d) => d.sizeBytes ?? 0, type: "numeric" },
+  { key: "date", get: (d) => d.storedAt, type: "date" },
+];
 
 function formatBytes(n: number | null): string {
   if (n == null) return "—";
@@ -58,6 +69,8 @@ export function TaxReportsInbox({
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
   const df = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const canUpload = Boolean(portfolioId) && !uploading;
+  const { sortKey, sortDir, toggle, sort } = useTableSort<InboxDocument>(INBOX_COLS);
+  const sortedDocs = useMemo(() => sort(documents), [documents, sort]);
 
   async function refresh() {
     try {
@@ -175,17 +188,17 @@ export function TaxReportsInbox({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("colDocument")}</TableHead>
-              <TableHead>{t("colYear")}</TableHead>
-              <TableHead>{t("colSource")}</TableHead>
-              <TableHead>{t("colAccount")}</TableHead>
-              <TableHead>{t("colSize")}</TableHead>
-              <TableHead>{t("colDate")}</TableHead>
+              <SortableTableHead colKey="document" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colDocument")}</SortableTableHead>
+              <SortableTableHead colKey="year" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colYear")}</SortableTableHead>
+              <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colSource")}</SortableTableHead>
+              <SortableTableHead colKey="account" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colAccount")}</SortableTableHead>
+              <SortableTableHead colKey="size" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("colSize")}</SortableTableHead>
+              <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colDate")}</SortableTableHead>
               <TableHead className="text-right">{t("colActions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {documents.map((doc) => (
+            {sortedDocs.map((doc) => (
               <TableRow key={doc.id}>
                 <TableCell className="flex items-center gap-2 font-medium">
                   <FileText className="size-4 shrink-0 text-muted-foreground" />
@@ -229,7 +242,7 @@ export function TaxReportsInbox({
 
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
-        {documents.map((doc) => (
+        {sortedDocs.map((doc) => (
           <Card key={doc.id} className="flex items-center gap-3 p-3">
             <FileText className="size-8 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">

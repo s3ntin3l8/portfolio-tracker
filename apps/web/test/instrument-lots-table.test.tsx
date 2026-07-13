@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 import type { LotView } from "@portfolio/api-client";
@@ -38,5 +38,21 @@ describe("InstrumentLotsTable", () => {
   it("renders nothing when there are no open lots", () => {
     const { container } = renderTable([]);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("sorts by Cost ascending on click", () => {
+    const lots: LotView[] = [
+      { acqDate: "2024-01-15", qty: "50", unitCost: "9500", cost: "475000" },
+      { acqDate: "2024-03-01", qty: "20", unitCost: "9700", cost: "194000" },
+    ];
+    renderTable(lots);
+    fireEvent.click(screen.getByRole("button", { name: /Cost/i }));
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("194,000");
+    expect(rows[1]).toHaveTextContent("475,000");
+    expect(screen.getByRole("button", { name: /Cost/i }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
   });
 });
