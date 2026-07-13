@@ -207,9 +207,9 @@ export default async function IncomePage({
                   <div className="flex items-baseline justify-between gap-3">
                     <div className="min-w-0">
                       <span className={TABLE_LABEL}>{c.symbol ?? "—"}</span>
-                      {c.name && (
+                      {(c.displayName ?? c.name) && (
                         <span className={cn("ml-2 truncate", TABLE_SUBLABEL)}>
-                          {c.name}
+                          {c.displayName ?? c.name}
                         </span>
                       )}
                     </div>

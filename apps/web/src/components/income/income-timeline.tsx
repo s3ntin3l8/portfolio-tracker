@@ -61,7 +61,7 @@ export function IncomeTimeline({
       if (statusFilter === "forecast" && !forecast) return false;
       if (!q) return true;
       const symbol = r.symbol?.toLowerCase() ?? "";
-      const name = r.name?.toLowerCase() ?? "";
+      const name = (r.displayName ?? r.name)?.toLowerCase() ?? "";
       return symbol.includes(q) || name.includes(q);
     });
   }, [rows, yearFilter, statusFilter, query]);

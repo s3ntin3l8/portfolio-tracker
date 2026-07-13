@@ -608,6 +608,10 @@ export interface IncomeEntry {
   instrumentId: string | null;
   symbol?: string | null;
   name?: string | null;
+  /** Optional clean display name resolved by the metadata enrichment job. UI
+   *  consumers should prefer `displayName ?? name` so a broker-style raw name
+   *  (e.g. "MICROSOFT DL- 00000625") doesn't leak into the rendered output. */
+  displayName?: string | null;
   assetClass?: string | null;
   type: string; // "dividend" | "coupon"
   price: string; // amount in `currency`
@@ -628,6 +632,9 @@ export interface InstrumentIncome {
   instrumentId: string | null;
   symbol: string | null;
   name: string | null;
+  /** Clean display name resolved by the metadata enrichment job, when available. UI
+   *  should prefer `displayName ?? name` so a raw broker-style name doesn't leak. */
+  displayName: string | null;
   total: string;
   /** Share of lifetime income, as a fraction (0–1). */
   pct: number;
@@ -723,7 +730,7 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
   const byMonth = new Map<string, Decimal>();
   const byInstrument = new Map<
     string,
-    { symbol: string | null; name: string | null; total: Decimal }
+    { symbol: string | null; name: string | null; displayName: string | null; total: Decimal }
   >();
   const byClass = new Map<string, Decimal>();
   const byCurrency = new Map<string, { native: Decimal; normalized: Decimal }>();
@@ -750,6 +757,7 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
     const inst = byInstrument.get(instKey) ?? {
       symbol: e.symbol ?? null,
       name: e.name ?? null,
+      displayName: e.displayName ?? null,
       total: ZERO(),
     };
     byInstrument.set(instKey, { ...inst, total: inst.total.add(amount) });
@@ -840,6 +848,7 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
         instrumentId: instrumentId === "—" ? null : instrumentId,
         symbol: v.symbol,
         name: v.name,
+        displayName: v.displayName,
         total: v.total.toString(),
         pct: pct(v.total),
       }))

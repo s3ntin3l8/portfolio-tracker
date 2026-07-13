@@ -97,7 +97,7 @@ export function IncomeEventsTable({ rows }: { rows: IncomeEventRow[] }) {
       {rows.map((e, i) => {
         const forecast = Boolean(e.status);
         const clickable = !forecast && Boolean(e.transactionId && e.portfolioId);
-        const label = e.symbol ?? e.name ?? "—";
+        const label = e.symbol ?? e.displayName ?? e.name ?? "—";
         const typeLabel = tt(e.type);
         const dateLabel = df.format(new Date(e.date));
         const amountLabel = formatMoney(Number(e.amount), e.currency, locale);
