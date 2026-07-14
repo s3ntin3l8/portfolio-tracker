@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { setRequestLocale } from "next-intl/server";
 import { AppShell } from "@/components/app-shell";
 import { ImportTasksProvider } from "@/components/import-tasks-provider";
@@ -8,7 +9,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { resolveSelection, loadMe, loadAccountHolders, loadNetWorth } from "@/lib/server-api";
 import { qualifyingHolders } from "@/lib/portfolio-selection";
 import { formatMoney, formatPercent } from "@/lib/utils";
-import { auth } from "@/auth";
+import { getSessionState } from "@/lib/session-token";
 
 // Auth is enforced only once it's configured, so the design-system screens stay
 // viewable in local dev before Authentik is wired. Configured = AUTH_SECRET + issuer.
@@ -32,9 +33,18 @@ export default async function AppLayout({
   const { locale } = await params;
   setRequestLocale(locale);
 
+  let serverSessionExpired = false;
   if (authConfigured) {
-    const session = await auth();
-    if (!session) redirect(`/${locale}`);
+    const cookieStore = await cookies();
+    const cookieHeader = cookieStore
+      .getAll()
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+    const sessionState = await getSessionState(cookieHeader);
+    if (!sessionState.isAuthenticated) {
+      redirect(`/${locale}`);
+    }
+    serverSessionExpired = sessionState.isExpired;
   }
 
   const [selection, holders, me, netWorthResult] = await Promise.all([
@@ -74,7 +84,7 @@ export default async function AppLayout({
 
   return (
     <>
-      <SessionErrorGuard />
+      <SessionErrorGuard serverSessionExpired={serverSessionExpired} />
       {/* mobileOffset clears the fixed bottom nav on mobile (where sonner forces
           full-width bottom placement) so a persistent toast never overlaps its tap
           targets — a real latent overlap, though not the cause of #451 (confirmed via
