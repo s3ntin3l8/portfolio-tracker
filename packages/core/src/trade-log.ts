@@ -461,16 +461,17 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         // --- FIFO method: consume oldest lots ---
         let remaining = sellQty;
         let costFifo = ZERO;
+        let lotIdx = 0;
         const fifoSlices: { acqDate: Date; qty: Decimal; cost: Decimal }[] = [];
-        while (remaining.gt(0) && lots.length > 0) {
-          const lot = lots[0];
+        while (remaining.gt(0) && lotIdx < lots.length) {
+          const lot = lots[lotIdx];
           const take = Decimal.min(lot.qty, remaining);
           const sliceCost = take.mul(lot.unitCost);
           costFifo = costFifo.add(sliceCost);
           fifoSlices.push({ acqDate: lot.acqDate, qty: take, cost: sliceCost });
           lot.qty = lot.qty.sub(take);
           remaining = remaining.sub(take);
-          if (lot.qty.lte(0)) lots.shift();
+          if (lot.qty.lte(0)) lotIdx++;
         }
 
         const costMethod = method === "fifo" ? costFifo : costAvg;

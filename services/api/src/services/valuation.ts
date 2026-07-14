@@ -3,10 +3,12 @@ import { corporateActions, instruments, transactions } from "@portfolio/db";
 import {
   summarizePortfolio,
   openLots,
+  computeTrades,
   type CoreTransaction,
   type CorporateAction,
   type CostBasisMode,
   type PortfolioSummary,
+  type TradeLog,
 } from "@portfolio/core";
 import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
 import type { DB } from "../db/client.js";
@@ -54,6 +56,10 @@ export interface Valuation {
   metaById: Map<string, InstrumentMeta>;
   /** Latest price + currency keyed by instrument id (for open-position valuation). */
   prices: Record<string, { price: string; currency: string }>;
+  /** Corporate actions for all instruments (split, bonus, rights). */
+  corporateActions: CorporateAction[];
+  /** Today's FX rates from each transaction/instrument currency → displayCurrency. */
+  fxRates: Record<string, string>;
 }
 
 /**
@@ -180,7 +186,7 @@ export async function valuePortfolio(
     computationMs: Math.round((tEnd - tFx) * 100) / 100,
   });
 
-  return { coreTxns, summary, metaById, prices };
+  return { coreTxns, summary, metaById, prices, corporateActions: cas, fxRates: rates };
 }
 
 // In-process cache for valuePortfolio, for the read-serving routes (/summary,
@@ -208,7 +214,7 @@ export async function valuePortfolio(
 const DERIVATION_CACHE_TTL_MS = 60_000;
 const derivationCache = new Map<string, { expiresAt: number; promise: Promise<Valuation> }>();
 
-function derivationCacheKey(
+export function derivationCacheKey(
   portfolioId: string,
   displayCurrency: string,
   costBasisMode: CostBasisMode | undefined,
@@ -268,15 +274,60 @@ export async function valuePortfolioCached(
 }
 
 /**
- * Drop every cached valuation. Called from a global `onResponse` hook (see app.ts)
- * after any write, since there's no cheap per-portfolio version marker to invalidate
- * precisely (see valuePortfolioCached's doc comment) — also used directly by tests to
- * reset cache state between cases.
+ * FIFO trade log cache, keyed by the same derivation key. The FIFO trade log is a pure
+ * deterministic function of the valuation inputs (coreTxns, prices, fx rates, corporate
+ * actions) — all of which are already cached in the valuation. Since the tax route is
+ * the only heavy FIFO consumer and runs on every page load, caching it here avoids
+ * re-running computeTrades (the most expensive step) on every tax-route invocation.
+ */
+const fifoTradeLogCache = new Map<string, { expiresAt: number; tradeLog: TradeLog }>();
+
+/**
+ * Get (or compute and cache) the FIFO trade log for a portfolio, sharing the same
+ * cache key and TTL as the valuation it depends on.
+ */
+export async function getCachedFifoTradeLog(
+  key: string,
+  coreTxns: CoreTransaction[],
+  prices: Record<string, { price: string; currency: string }>,
+  target: string,
+  metaById: Map<string, InstrumentMeta>,
+  corporateActions: CorporateAction[],
+  fxRates: Record<string, string>,
+  now: number = Date.now(),
+): Promise<TradeLog> {
+  const hit = fifoTradeLogCache.get(key);
+  if (hit && hit.expiresAt > now) {
+    logTiming(undefined, "fifoTradeLogCache HIT", 0, { key, ttlRemaining: hit.expiresAt - now });
+    return hit.tradeLog;
+  }
+  logTiming(undefined, "fifoTradeLogCache MISS", 0, { key });
+  const fx = makeFxRateFn(fxRates, target);
+  const tradeLog = computeTrades({
+    transactions: coreTxns,
+    corporateActions,
+    prices,
+    displayCurrency: target,
+    fx,
+    method: "fifo",
+    instruments: metaById,
+  });
+  fifoTradeLogCache.set(key, { expiresAt: now + DERIVATION_CACHE_TTL_MS, tradeLog });
+  return tradeLog;
+}
+
+/**
+ * Drop every cached valuation and FIFO trade log. Called from a global `onResponse` hook
+ * (see app.ts) after any write, since there's no cheap per-portfolio version marker to
+ * invalidate precisely (see valuePortfolioCached's doc comment) — also used directly by
+ * tests to reset cache state between cases.
  */
 export function clearValuationCache(_log?: FastifyBaseLogger): void {
-  const count = derivationCache.size;
+  const vCount = derivationCache.size;
   derivationCache.clear();
-  logTiming(undefined, "clearValuationCache", 0, { entriesCleared: count });
+  const tCount = fifoTradeLogCache.size;
+  fifoTradeLogCache.clear();
+  logTiming(undefined, "clearValuationCache", 0, { entriesCleared: vCount, tradeLogsCleared: tCount });
 }
 
 /** Corporate actions for the given instruments, shaped for @portfolio/core. */

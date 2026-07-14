@@ -75,7 +75,7 @@ import {
   type ReconciliationGap,
 } from "@portfolio/core";
 import { getMarketData } from "../services/market-data.js";
-import { valuePortfolioCached, type InstrumentMeta } from "../services/valuation.js";
+import { valuePortfolioCached, derivationCacheKey, getCachedFifoTradeLog, type InstrumentMeta } from "../services/valuation.js";
 import { toCoreTxns } from "../services/tx-core.js";
 import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
 import { rangeStart } from "../services/snapshots.js";
@@ -205,7 +205,8 @@ export async function transactionsRoute(app: FastifyInstance) {
   }
 
   // Build a trade log for one transaction set, in `target` currency. Resolves the
-  // corporate actions and an FX snapshot the engine needs.
+  // corporate actions and an FX snapshot the engine needs. Accepts optional pre-fetched
+  // corporate actions and fx rates (from the valuation cache) to avoid redundant queries.
   async function buildTradeLog(
     coreTxns: CoreTransaction[],
     prices: Record<string, { price: string; currency: string }>,
@@ -213,11 +214,13 @@ export async function transactionsRoute(app: FastifyInstance) {
     method: TradeMethod,
     costBasisMode: CostBasisMode | undefined,
     instrumentsMeta?: Map<string, InstrumentMeta>,
+    existingCorporateActions?: CorporateAction[],
+    existingFxRates?: Record<string, string>,
   ): Promise<TradeLog> {
     const currencies = new Set<string>(coreTxns.map((t) => t.currency));
     for (const p of Object.values(prices)) currencies.add(p.currency);
-    const fx = makeFxRateFn(await getFxRates(app.db, [...currencies], target), target);
-    const cas = await corporateActionsFor(coreTxns.map((t) => t.instrumentId));
+    const fx = makeFxRateFn(existingFxRates ?? await getFxRates(app.db, [...currencies], target), target);
+    const cas = existingCorporateActions ?? await corporateActionsFor(coreTxns.map((t) => t.instrumentId));
     return computeTrades({
       transactions: coreTxns,
       corporateActions: cas,
@@ -3043,7 +3046,6 @@ export async function transactionsRoute(app: FastifyInstance) {
     display: string,
     year: number,
     now: Date = new Date(),
-    corporateActions?: CorporateAction[],
   ): Promise<string> {
     if (year !== now.getUTCFullYear()) return "0";
 
@@ -3058,17 +3060,11 @@ export async function transactionsRoute(app: FastifyInstance) {
         .map((h) => [h.instrumentId, h.quantity]),
     );
 
-    // qtyAt: split-consistent quantity at a historical date (for projectDividends scaling).
-    const corpActions = corporateActions ?? await corporateActionsFor(heldIds);
-    const holdingsCache = new Map<number, Map<string, string>>();
-    const qtyAt = (instrumentId: string, at: Date): string => {
-      const key = at.getTime();
-      if (!holdingsCache.has(key)) {
-        const hs = computeHoldings(coreTxns, corpActions, at);
-        holdingsCache.set(key, new Map(hs.map((h) => [h.instrumentId, h.quantity])));
-      }
-      return holdingsCache.get(key)!.get(instrumentId) ?? "0";
-    };
+    // qtyAt: historical quantity at ex-date is used by projectDividends to compute
+    // per-share amounts. For a forward-looking forecast, current qty is an adequate
+    // proxy — replaces expensive computeHoldings replays per unique dividend date.
+    const qtyAt = (_instrumentId: string, _at: Date): string =>
+      heldQtyMap.get(_instrumentId) ?? "0";
 
     // Map coreTxns → IncomeEntry for projectDividends.
     const pastDivEvents: IncomeEntry[] = coreTxns
@@ -3281,19 +3277,19 @@ export async function transactionsRoute(app: FastifyInstance) {
       const remainingToDistribute = Math.max(0, holderAllowanceCap - totalAllocatedForHolder);
       const overAllocated = totalAllocatedForHolder > holderAllowanceCap;
 
-      const { coreTxns, prices, metaById, summary } = await loadValuation(
+      const valuation = await loadValuation(
         portfolioId,
         portfolio.baseCurrency,
         undefined,
         portfolio.cashCounted,
       );
-      const heldIds = summary.holdings
-        .filter((h) => Number(h.quantity) > 0)
-        .map((h) => h.instrumentId);
-      const [tradeLog, corpActions] = await Promise.all([
-        buildTradeLog(coreTxns, prices, portfolio.baseCurrency, "fifo", undefined, metaById),
-        corporateActionsFor(heldIds),
-      ]);
+      const { coreTxns, prices, metaById, summary, corporateActions: cas, fxRates } = valuation;
+      const cacheKey = derivationCacheKey(
+        portfolioId, portfolio.baseCurrency, undefined, portfolio.cashCounted,
+      );
+      const tradeLog = await getCachedFifoTradeLog(
+        cacheKey, coreTxns, prices, portfolio.baseCurrency, metaById, cas, fxRates,
+      );
       const tfRates: Record<string, string> = {};
       for (const t of tradeLog.trades) {
         const meta = metaById.get(t.instrumentId);
@@ -3313,12 +3309,7 @@ export async function transactionsRoute(app: FastifyInstance) {
       const taxRate = holderProfile?.capitalGainsTaxRate ?? "0.25";
 
       const forecastIncomeRestOfYear = await restOfYearForecastGross(
-        coreTxns,
-        summary,
-        portfolio.baseCurrency,
-        year,
-        now,
-        corpActions,
+        coreTxns, summary, portfolio.baseCurrency, year, now,
       );
 
       const usage = allowanceUsageYTD({
