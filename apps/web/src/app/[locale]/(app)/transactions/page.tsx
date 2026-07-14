@@ -16,8 +16,10 @@ import {
   loadImports,
   loadPortfolioList,
   loadTransactionsAcrossPortfolios,
+  loadNetworthTransactionsPaginated,
   loadTransactionsPaginated,
   loadAnomalies,
+  loadMe,
 } from "@/lib/server-api";
 import type { Anomaly } from "@portfolio/api-client";
 
@@ -62,11 +64,12 @@ export default async function TransactionsPage({
   let scopeCurrency = "IDR";
 
   if (aggregate) {
-    const result = await loadTransactionsAcrossPortfolios();
+    const result = await loadNetworthTransactionsPaginated(page, PAGE_SIZE, typeFilter, yearFilter, searchQuery);
     status = result.status;
-    rows = result.transactions;
-    total = result.transactions.length;
-    scopeCurrency = result.scopeCurrency;
+    rows = result.rows;
+    total = result.total;
+    const me = await loadMe();
+    scopeCurrency = me?.displayCurrency ?? "IDR";
   } else {
     const [txResult, anomalyResult] = await Promise.all([
       loadTransactionsPaginated(selectedId!, page, PAGE_SIZE, undefined, typeFilter, yearFilter, searchQuery),
@@ -201,7 +204,6 @@ export default async function TransactionsPage({
   }
 
   if (rows.length === 0) {
-    const isEmptyPortfolio = status === "empty";
     const hasActiveFilter = typeFilter || yearFilter || searchQuery;
     // When a filter/search is active, fall through to the table — it shows its own
     // "No transactions match your search" message with the filter controls still visible.
@@ -211,22 +213,9 @@ export default async function TransactionsPage({
           {heading()}
           <EmptyState
             icon={Receipt}
-            title={isEmptyPortfolio ? te("noPortfolioTitle") : te("noTransactionsTitle")}
-            description={
-              isEmptyPortfolio ? te("noPortfolioBody") : te("noTransactionsBody")
-            }
-            action={
-              isEmptyPortfolio ? (
-                <Button asChild>
-                  <Link href="/transactions/new">
-                    <Plus className="size-4" />
-                    {tm("createPortfolio")}
-                  </Link>
-                </Button>
-              ) : (
-                <AddTransactionMenu />
-              )
-            }
+            title={te("noTransactionsTitle")}
+            description={te("noTransactionsBody")}
+            action={<AddTransactionMenu />}
           />
           {importsSection}
         </div>

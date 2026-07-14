@@ -97,6 +97,12 @@ const tradesCache = createStore<{ trades: unknown[]; realizedByYear: unknown[]; 
 const performanceCache = createStore<{ xirr: number | null; netWorth: string; asOf: string }>();
 const historyCache = createStore<unknown[]>();
 
+const sparplanCache = createStore<SparplanStats>();
+const networthSparplanCache = createStore<SparplanStats>();
+const networthTradesCache = createStore<TradeLog>();
+const networthContributionsCache = createStore<ContributionStats>();
+const networthTransactionsCache = createStore<{ rows: unknown[]; total: number }>();
+
 const ACTIVITY_INCOME_TYPES = ["dividend", "coupon", "interest", "bonus_cash"] as const;
 
 interface PortfolioParams {
@@ -1140,6 +1146,173 @@ export async function transactionsRoute(app: FastifyInstance) {
         .where(and(...conditions));
       const result = await enrichRows(rows, rows.length);
       return result.rows;
+    },
+  );
+
+  // Aggregate transactions across all of the user's portfolios, paginated.
+  // Same enrichment pipeline as the per-portfolio endpoint but across all portfolios.
+  app.get<{
+    Querystring: { page?: string; pageSize?: string; type?: string; year?: string; q?: string };
+  }>(
+    "/networth/transactions",
+    { preHandler: app.authenticate },
+    async (request, _reply) => {
+      const t0 = performance.now();
+      const { id } = requireUser(request);
+      const paginate = request.query.page !== undefined;
+      const page = paginate ? Math.max(1, parseInt(request.query.page!, 10) || 1) : 1;
+      const pageSize = paginate ? Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? "25", 10) || 25)) : 0;
+      const typeFilter = request.query.type;
+      const yearFilter = request.query.year;
+      const searchQuery = request.query.q;
+
+      const pfs = await app.db
+        .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
+        .from(portfolios)
+        .where(eq(portfolios.userId, id));
+      if (pfs.length === 0) return paginate ? { rows: [], total: 0 } : [];
+
+      const pfIds = pfs.map((p) => p.id);
+      const nameById = new Map(pfs.map((p) => [p.id, p.name]));
+
+      const conditions = [inArray(transactions.portfolioId, pfIds)];
+      if (typeFilter === "buy") conditions.push(inArray(transactions.type, ["buy", "savings_plan"]));
+      if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
+      if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
+      if (yearFilter) {
+        const y = parseInt(yearFilter, 10);
+        if (!isNaN(y)) conditions.push(sql`EXTRACT(YEAR FROM ${transactions.executedAt}) = ${y}`);
+      }
+      if (searchQuery) {
+        conditions.push(sql`(
+          ${transactions.description}::text ILIKE '%' || ${searchQuery} || '%'
+          OR ${transactions.type}::text ILIKE '%' || ${searchQuery} || '%'
+          OR ${transactions.kind}::text ILIKE '%' || ${searchQuery} || '%'
+          OR ${transactions.source}::text ILIKE '%' || ${searchQuery} || '%'
+          OR ${transactions.currency}::text ILIKE '%' || ${searchQuery} || '%'
+          OR ${transactions.instrumentId} IN (SELECT id FROM instruments WHERE symbol::text ILIKE '%' || ${searchQuery} || '%' OR name::text ILIKE '%' || ${searchQuery} || '%')
+        )`);
+      }
+
+      async function enrichAggregateRows(
+        rows: typeof transactions.$inferSelect[],
+      ) {
+        const tB = performance.now();
+        const allImportIds = rows.map((r) => r.importId).filter((x): x is string => x !== null);
+        const allTxIds = rows.map((r) => r.id);
+        const enrichStart = performance.now();
+
+        const meta = await instrumentMeta(rows.map((r) => r.instrumentId).filter((x): x is string => x !== null));
+        const instrMs = performance.now() - enrichStart;
+
+        const [sourcesRows, docsByTx, docsByImport] = await Promise.all([
+          app.db
+            .select({
+              id: transactionSources.id,
+              transactionId: transactionSources.transactionId,
+              sourceType: transactionSources.sourceType,
+              externalId: transactionSources.externalId,
+              orderRef: transactionSources.orderRef,
+              documentId: transactionSources.documentId,
+              importId: transactionSources.importId,
+              taxComponents: transactionSources.taxComponents,
+              createdAt: transactionSources.createdAt,
+              confidence: transactionSources.confidence,
+            })
+            .from(transactionSources)
+            .where(inArray(transactionSources.transactionId, allTxIds)),
+          app.db
+            .select()
+            .from(documents)
+            .where(and(inArray(documents.transactionId, allTxIds), eq(documents.status, "retained"))),
+          app.db
+            .select()
+            .from(documents)
+            .where(and(inArray(documents.importId, allImportIds), eq(documents.status, "retained"))),
+        ]);
+        const sourcesMs = performance.now() - (enrichStart + instrMs);
+
+        const docsRows = docsByTx.concat(docsByImport);
+        const importIdsWithDocs = new Set(docsRows.map((r) => r.importId).filter((x): x is string => x !== null));
+        const txIdsWithDocs = new Set(docsRows.map((r) => r.transactionId).filter((x): x is string => x !== null));
+
+        // Compute importMinDateById from transaction rows
+        const importMinDateById = new Map<string, Date>();
+        for (const r of rows) {
+          if (r.importId && (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)) {
+            importMinDateById.set(r.importId, r.executedAt);
+          }
+        }
+
+        const sourcesMap = sourcesFromPreFetched(
+          sourcesRows,
+          docsRows,
+          rows,
+          meta,
+          null, // portfolioName — null for aggregate view
+          importMinDateById,
+        );
+
+        const phase2Ms = performance.now() - (tB + sourcesMs + instrMs);
+        logTiming(request, "enrichAggregateRows", performance.now() - tB, {
+          rowCount: rows.length,
+          instrMs: Math.round(instrMs * 100) / 100,
+          sourcesMs: Math.round(sourcesMs * 100) / 100,
+          phase2Ms: Math.round(phase2Ms * 100) / 100,
+        });
+
+        const { needsReview, fullTaxDetail } = txFlagsFromSourcesRows(sourcesRows);
+
+        return rows.map((r) => ({
+          ...r,
+          instrument: meta.get(r.instrumentId ?? "") ?? null,
+          sources: sourcesMap.get(r.id) ?? [],
+          hasSources: (sourcesMap.get(r.id)?.length ?? 0) > 0,
+          needsReview: needsReview.has(r.id),
+          fullTaxDetail: fullTaxDetail.has(r.id),
+          documentRetained: txIdsWithDocs.has(r.id) || (r.importId != null && importIdsWithDocs.has(r.importId)),
+          portfolioName: nameById.get(r.portfolioId) ?? "",
+        }));
+      }
+
+      if (paginate) {
+        const cacheKey = `${id}:networth:${page}:${pageSize}:${typeFilter ?? ""}:${yearFilter ?? ""}:${searchQuery ?? ""}`;
+        const cached = await withDerivationCache(networthTransactionsCache, cacheKey, async () => {
+          const [total, rows] = await Promise.all([
+            app.db.select({ count: count() }).from(transactions).where(and(...conditions)).then((r) => Number(r[0].count)),
+            app.db
+              .select()
+              .from(transactions)
+              .where(and(...conditions))
+              .orderBy(desc(transactions.executedAt))
+              .limit(pageSize)
+              .offset((page - 1) * pageSize),
+          ]);
+          const enriched = await enrichAggregateRows(rows);
+          return { rows: enriched, total };
+        });
+        const durationMs = performance.now() - t0;
+        logTiming(request, "GET /networth/transactions", durationMs, {
+          page,
+          pageSize,
+          total: cached.total,
+          portfolioCount: pfs.length,
+        });
+        return cached;
+      }
+
+      const rows = await app.db
+        .select()
+        .from(transactions)
+        .where(and(...conditions))
+        .orderBy(desc(transactions.executedAt));
+      const enriched = await enrichAggregateRows(rows);
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /networth/transactions", durationMs, {
+        rowCount: rows.length,
+        portfolioCount: pfs.length,
+      });
+      return enriched;
     },
   );
 
@@ -2199,12 +2372,6 @@ export async function transactionsRoute(app: FastifyInstance) {
       const t0 = performance.now();
       const { id } = requireUser(request);
       const { holderId } = request.query;
-      const [u] = await app.db
-        .select({ displayCurrency: users.displayCurrency })
-        .from(users)
-        .where(eq(users.id, id))
-        .limit(1);
-      const display = u?.displayCurrency ?? "IDR";
       const method = methodFromQuery(request.query);
       const costBasisMode = costBasisFromQuery(request.query);
 
@@ -2226,28 +2393,38 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
-      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so merging
-      // `meta` maps below in order reproduces the same last-write-wins behavior the old
-      // sequential loop had for an instrument shared across portfolios.
-      const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-        const { coreTxns, prices, metaById } = await loadValuation(
-          p.id,
-          display,
-          costBasisMode,
-          p.cashCounted,
-        );
-        const log = await buildTradeLog(coreTxns, prices, display, method, costBasisMode, metaById);
-        return { log, metaById };
-      });
-      const logs: TradeLog[] = perPortfolio.map((r) => r.log);
-      const meta = new Map<string, InstrumentMeta>();
-      for (const { metaById } of perPortfolio) {
-        for (const [k, v] of metaById) meta.set(k, v);
-      }
+      const result = await withDerivationCache(
+        networthTradesCache,
+        `${id}:${method}:${costBasisMode}:${holderId ?? ""}`,
+        async () => {
+          const [u] = await app.db
+            .select({ displayCurrency: users.displayCurrency })
+            .from(users)
+            .where(eq(users.id, id))
+            .limit(1);
+          const display = u?.displayCurrency ?? "IDR";
+
+          const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
+            const { coreTxns, prices, metaById } = await loadValuation(
+              p.id,
+              display,
+              costBasisMode,
+              p.cashCounted,
+            );
+            const log = await buildTradeLog(coreTxns, prices, display, method, costBasisMode, metaById);
+            return { log, metaById };
+          });
+          const logs: TradeLog[] = perPortfolio.map((r) => r.log);
+          const meta = new Map<string, InstrumentMeta>();
+          for (const { metaById } of perPortfolio) {
+            for (const [k, v] of metaById) meta.set(k, v);
+          }
+          return attachInstruments(mergeTradeLogs(logs, display, method), meta);
+        },
+      );
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/trades", durationMs, { portfolioCount: pfs.length });
-      return attachInstruments(mergeTradeLogs(logs, display, method), meta);
+      return result;
     },
   );
 
@@ -2297,7 +2474,11 @@ export async function transactionsRoute(app: FastifyInstance) {
         undefined,
         portfolio.cashCounted,
       );
-      const stats = await buildSparplanStats(coreTxns, portfolio.baseCurrency);
+      const stats = await withDerivationCache(
+        sparplanCache,
+        `${portfolioId}:${portfolio.cashCounted ? "inside" : "outside"}`,
+        () => buildSparplanStats(coreTxns, portfolio.baseCurrency),
+      );
 
       // Phase B: load instrument targets and compute drift + contribution split.
       const targetRows = await app.db
@@ -2530,36 +2711,43 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      // Detect per portfolio in the display currency, then merge (not concatenate).
-      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
-      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order.
-      const portfolioResults = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-        const { coreTxns } = await loadValuation(p.id, display, undefined, p.cashCounted);
-        const ccys = [...new Set(coreTxns.map((t) => t.currency))];
-        const rates = await getFxRates(app.db, ccys, display);
-        const fx = makeFxRateFn(rates, display);
-        return detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
-      });
-      const perPortfolio: SparplanStats[] = portfolioResults;
-      const allInstrumentIds = new Set<string>();
-      for (const stats of perPortfolio) {
-        for (const plan of stats.plans) allInstrumentIds.add(plan.instrumentId);
-      }
+      const result = await withDerivationCache(
+        networthSparplanCache,
+        `${id}:${display}:${holderId ?? ""}`,
+        async () => {
+          // Detect per portfolio in the display currency, then merge (not concatenate).
+          // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+          // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order.
+          const portfolioResults = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
+            const { coreTxns } = await loadValuation(p.id, display, undefined, p.cashCounted);
+            const ccys = [...new Set(coreTxns.map((t) => t.currency))];
+            const rates = await getFxRates(app.db, ccys, display);
+            const fx = makeFxRateFn(rates, display);
+            return detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
+          });
+          const perPortfolio: SparplanStats[] = portfolioResults;
+          const allInstrumentIds = new Set<string>();
+          for (const stats of perPortfolio) {
+            for (const plan of stats.plans) allInstrumentIds.add(plan.instrumentId);
+          }
 
-      const merged = mergeSparplanStats(perPortfolio, display);
-      const meta = await instrumentMeta([...allInstrumentIds]);
+          const merged = mergeSparplanStats(perPortfolio, display);
+          const meta = await instrumentMeta([...allInstrumentIds]);
+          // TODO Phase B: networth instrument drift — complex (multiple portfolios, base currencies).
+          // Drift + contributionSplit are only wired on the portfolio-scoped endpoint for MVP.
+          return {
+            ...merged,
+            plans: merged.plans.map((p) => ({
+              ...p,
+              symbol: meta.get(p.instrumentId)?.symbol ?? null,
+              name: meta.get(p.instrumentId)?.name ?? null,
+            })),
+          };
+        },
+      );
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/sparplan", durationMs, { portfolioCount: pfs.length });
-      // TODO Phase B: networth instrument drift — complex (multiple portfolios, base currencies).
-      // Drift + contributionSplit are only wired on the portfolio-scoped endpoint for MVP.
-      return {
-        ...merged,
-        plans: merged.plans.map((p) => ({
-          ...p,
-          symbol: meta.get(p.instrumentId)?.symbol ?? null,
-          name: meta.get(p.instrumentId)?.name ?? null,
-        })),
-      };
+      return result;
     },
   );
 
@@ -2603,43 +2791,50 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(portfolios.userId, id),
         );
 
-      // Independent per portfolio — bounded-concurrency instead of a serial `for` await
-      // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so the
-      // merge below is identical to the old sequential push loop.
-      const perPortfolioLoad = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-        const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
-        return { summary, txns: coreTxns, boundary: p.cashCounted ? ("inside" as const) : ("outside" as const) };
-      });
-      const summaries: PortfolioSummary[] = perPortfolioLoad.map((r) => r.summary);
-      const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = perPortfolioLoad.map(
-        (r) => ({ txns: r.txns, boundary: r.boundary }),
+      const result = await withDerivationCache(
+        networthContributionsCache,
+        `${id}:${display}:${holderId ?? ""}`,
+        async () => {
+          // Independent per portfolio — bounded-concurrency instead of a serial `for` await
+          // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order, so the
+          // merge below is identical to the old sequential push loop.
+          const perPortfolioLoad = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
+            const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
+            return { summary, txns: coreTxns, boundary: p.cashCounted ? ("inside" as const) : ("outside" as const) };
+          });
+          const summaries: PortfolioSummary[] = perPortfolioLoad.map((r) => r.summary);
+          const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = perPortfolioLoad.map(
+            (r) => ({ txns: r.txns, boundary: r.boundary }),
+          );
+          const allTxns: CoreTransaction[] = perPortfolioLoad.flatMap((r) => r.txns);
+          const fx = makeFxRateFn(
+            await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
+            display,
+          );
+          // Compute each portfolio under ITS boundary, then merge — so each portfolio keeps its
+          // own boundary instead of being collapsed into one cross-portfolio bucket.
+          const perPortfolio = loaded.map(({ txns, boundary }) =>
+            contributionStats({ txns, displayCurrency: display, fx, boundary }),
+          );
+          // Money-weighted flows: each portfolio under its boundary, concatenated. Independent
+          // per portfolio — bounded-concurrency instead of a serial `for` await.
+          const flowsByPortfolio = await mapPool(loaded, PORTFOLIO_VALUATION_CONCURRENCY, ({ txns, boundary }) =>
+            boundaryFlows(txns, boundary, display),
+          );
+          const flows: CashFlowPoint[] = flowsByPortfolio.flat();
+          const aggregated = aggregatePortfolios(summaries, display);
+          return enrichContributions(
+            mergeContributionStats(perPortfolio, display),
+            aggregated.netWorth,
+            flows,
+            holderBirthYear,
+            holderPortfolioType,
+          );
+        },
       );
-      const allTxns: CoreTransaction[] = perPortfolioLoad.flatMap((r) => r.txns);
-      const fx = makeFxRateFn(
-        await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
-        display,
-      );
-      // Compute each portfolio under ITS boundary, then merge — so each portfolio keeps its
-      // own boundary instead of being collapsed into one cross-portfolio bucket.
-      const perPortfolio = loaded.map(({ txns, boundary }) =>
-        contributionStats({ txns, displayCurrency: display, fx, boundary }),
-      );
-      // Money-weighted flows: each portfolio under its boundary, concatenated. Independent
-      // per portfolio — bounded-concurrency instead of a serial `for` await.
-      const flowsByPortfolio = await mapPool(loaded, PORTFOLIO_VALUATION_CONCURRENCY, ({ txns, boundary }) =>
-        boundaryFlows(txns, boundary, display),
-      );
-      const flows: CashFlowPoint[] = flowsByPortfolio.flat();
-      const aggregated = aggregatePortfolios(summaries, display);
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/contributions", durationMs, { portfolioCount: pfs.length });
-      return enrichContributions(
-        mergeContributionStats(perPortfolio, display),
-        aggregated.netWorth,
-        flows,
-        holderBirthYear,
-        holderPortfolioType,
-      );
+      return result;
     },
   );
 

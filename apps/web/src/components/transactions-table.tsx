@@ -1511,14 +1511,17 @@ export function TransactionsTable({
                 return;
               }
               // All loaded rows are visible; fetch the next server page.
-              if (accumulatedRows.length < (total ?? 0) && portfolioId) {
+              if (accumulatedRows.length < (total ?? 0) && (portfolioId || true)) {
                 setLoadingMore(true);
                 try {
                   const params = new URLSearchParams({ page: String(currentPage + 1), pageSize: "25" });
                   if (typeFilter) params.set("type", typeFilter);
                   if (yearFilterProp) params.set("year", yearFilterProp);
                   if (searchQuery) params.set("q", searchQuery);
-                  const res = await fetch(`/api/backend/portfolios/${portfolioId}/transactions?${params}`);
+                  const basePath = portfolioId
+                    ? `/api/backend/portfolios/${portfolioId}/transactions`
+                    : "/api/backend/networth/transactions";
+                  const res = await fetch(`${basePath}?${params}`);
                   const data = await res.json();
                   setAccumulatedRows((prev) => [...prev, ...data.rows]);
                   setCurrentPage((p) => p + 1);

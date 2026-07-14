@@ -399,7 +399,6 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
     const allPortfolios = await listPortfoliosCached();
     if (allPortfolios.length === 0)
       return { status: "empty", transactions: [], scopeCurrency: "IDR" };
-    // When a holder scope is active (and still valid), narrow to that holder's portfolios.
     const holderId = await resolveHolderScope(allPortfolios);
     const portfolios = holderId
       ? allPortfolios.filter((p) => p.accountHolderId === holderId)
@@ -419,6 +418,27 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
     return { status: "ok", transactions, scopeCurrency };
   } catch {
     return { status: "unavailable", transactions: [], scopeCurrency: "IDR" };
+  }
+}
+
+/** Aggregate paginated transactions across all portfolios (networth scope). */
+export async function loadNetworthTransactionsPaginated(
+  page: number,
+  pageSize = 25,
+  type?: string,
+  year?: string,
+  q?: string,
+): Promise<
+  | { status: "ok"; rows: Transaction[]; total: number }
+  | { status: "unavailable"; rows: []; total: 0 }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", rows: [], total: 0 };
+  try {
+    const data = await api.listNetworthTransactionsPaginated(page, pageSize, type, year, q);
+    return { status: "ok", rows: data.rows, total: data.total };
+  } catch {
+    return { status: "unavailable", rows: [], total: 0 };
   }
 }
 

@@ -1981,6 +1981,24 @@ export function createApiClient(config: ApiClientConfig) {
         `/portfolios/${portfolioId}/transactions?${params}`,
       );
     },
+    /** Aggregate paginated transactions across all portfolios (networth scope).
+     *  Same enrichment + filter pattern as the per-portfolio paginated variant. */
+    listNetworthTransactionsPaginated: (
+      page: number,
+      pageSize = 25,
+      type?: string,
+      year?: string,
+      q?: string,
+    ) => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (type) params.set("type", type);
+      if (year) params.set("year", year);
+      if (q) params.set("q", q);
+      return request<{ rows: Transaction[]; total: number }>(
+        "GET",
+        `/networth/transactions?${params}`,
+      );
+    },
     /** List income-only rows for a portfolio in the given tax year (lightweight, no instrument/sources enrichment). */
     listIncomeByYear: (portfolioId: string, year: number) =>
       request<Transaction[]>(
