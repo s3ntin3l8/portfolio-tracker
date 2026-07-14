@@ -35,6 +35,15 @@ import { logTiming } from "../lib/timing.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 
 const importsCache = createStore<{ rows: unknown[]; importCount: number }>();
+const importDetailCache = createStore<{
+  id: string;
+  portfolioId: string | null;
+  parser: string | null;
+  status: string | null;
+  drafts: unknown[];
+  contracts: unknown[];
+  errors: { line: number; message: string }[];
+}>();
 
 // Batch hard-delete of discarded imports. Mirrors transactions' bulk-delete so the
 // web "clear all" fires one request instead of N parallel DELETE /clear calls (which
@@ -410,23 +419,31 @@ export async function importsRoute(app: FastifyInstance) {
     "/imports/:importId",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      const t0 = performance.now();
       const { id } = requireUser(request);
-      const imp = await ownedImport(id, request.params.importId);
-      if (!imp) return reply.code(404).send({ error: "import_not_found" });
-      const parsed = (imp.parsedJson ?? {}) as {
-        drafts?: unknown[];
-        contracts?: unknown[];
-        errors?: { line: number; message: string }[];
-      };
-      return {
-        id: imp.id,
-        portfolioId: imp.portfolioId,
-        parser: imp.parser,
-        status: imp.status,
-        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
-        contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
-        errors: Array.isArray(parsed.errors) ? parsed.errors : [],
-      };
+      const { importId } = request.params;
+      const result = await withDerivationCache(importDetailCache, importId, async () => {
+        const imp = await ownedImport(id, importId);
+        if (!imp) return null;
+        const parsed = (imp.parsedJson ?? {}) as {
+          drafts?: unknown[];
+          contracts?: unknown[];
+          errors?: { line: number; message: string }[];
+        };
+        return {
+          id: imp.id,
+          portfolioId: imp.portfolioId,
+          parser: imp.parser,
+          status: imp.status,
+          drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+          contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
+          errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+        };
+      });
+      if (!result) return reply.code(404).send({ error: "import_not_found" });
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /imports/:importId", durationMs, { importId });
+      return result;
     },
   );
 

@@ -673,6 +673,10 @@ export const documentListQuerySchema = z.object({
   category: documentCategorySchema.optional(),
   /** Scope the list to one portfolio/account (e.g. the app-wide switcher selection). */
   portfolioId: z.string().uuid().optional(),
+  /** Page number for server-side pagination (1-indexed). Omit for bare-array backward compat. */
+  page: z.string().optional(),
+  /** Page size (default 25, max 100). Only used when page is provided. */
+  pageSize: z.string().optional(),
 });
 export type DocumentListQuery = z.infer<typeof documentListQuerySchema>;
 export type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;

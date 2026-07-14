@@ -25,6 +25,8 @@ import { formatMoney, formatMoneyCompact } from "@/lib/utils";
 import type { TaxSummaryHolder } from "@portfolio/api-client";
 import { indonesianFinalTax, harvestSummary } from "@portfolio/core";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function TaxPage({
   params,
   searchParams,
@@ -32,6 +34,8 @@ export default async function TaxPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ year?: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   const { year: yearParam } = await searchParams;
   const year = yearParam ? parseInt(yearParam, 10) : undefined;
@@ -48,6 +52,18 @@ export default async function TaxPage({
   // which components render from the result below, not which loaders run.
   const holders = await loadNetworthTax(year, regime);
   const detailByHolder = await loadTaxYearDetail(holders, year);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] TaxPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   const Heading = (
     <ReportHeader

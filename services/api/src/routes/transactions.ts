@@ -93,6 +93,9 @@ import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 
 const anomaliesCache = createStore<{ filtered: Anomaly[] }>();
 const transactionsCache = createStore<{ rows: unknown[]; total: number; summary?: { totalInvested: string; totalProceeds: string; totalIncome: string } }>();
+const tradesCache = createStore<{ trades: unknown[]; realizedByYear: unknown[]; dividendsByYear: unknown[] }>();
+const performanceCache = createStore<{ xirr: number | null; netWorth: string; asOf: string }>();
+const historyCache = createStore<unknown[]>();
 
 const ACTIVITY_INCOME_TYPES = ["dividend", "coupon", "interest", "bonus_cash"] as const;
 
@@ -1784,27 +1787,30 @@ export async function transactionsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const boundary = portfolio.cashCounted ? "inside" : "outside";
-      const { coreTxns, summary } = await loadValuation(
-        portfolioId,
-        portfolio.baseCurrency,
-        undefined,
-        portfolio.cashCounted,
-      );
+      const cached = await withDerivationCache(performanceCache, `${portfolioId}:${boundary}`, async () => {
+        const { coreTxns, summary } = await loadValuation(
+          portfolioId,
+          portfolio.baseCurrency,
+          undefined,
+          portfolio.cashCounted,
+        );
 
-      const flows = await boundaryFlows(coreTxns, boundary, portfolio.baseCurrency);
-      const asOf = new Date();
-      flows.push({ amount: Number(summary.netWorth), date: asOf });
+        const flows = await boundaryFlows(coreTxns, boundary, portfolio.baseCurrency);
+        const asOf = new Date();
+        flows.push({ amount: Number(summary.netWorth), date: asOf });
 
-      const rate = xirr(flows);
+        const rate = xirr(flows);
+        return {
+          xirr: Number.isFinite(rate) ? rate : null,
+          netWorth: summary.netWorth,
+          asOf: asOf.toISOString(),
+        };
+      });
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /portfolios/:id/performance", durationMs, {
         portfolioId,
       });
-      return {
-        xirr: Number.isFinite(rate) ? rate : null,
-        netWorth: summary.netWorth,
-        asOf: asOf.toISOString(),
-      };
+      return cached;
     },
   );
 
@@ -1857,27 +1863,30 @@ export async function transactionsRoute(app: FastifyInstance) {
       }
       const method = methodFromQuery(request.query);
       const costBasisMode = costBasisFromQuery(request.query);
-      const { coreTxns, prices, metaById } = await loadValuation(
-        portfolioId,
-        portfolio.baseCurrency,
-        costBasisMode,
-        portfolio.cashCounted,
-      );
-      const log = await buildTradeLog(
-        coreTxns,
-        prices,
-        portfolio.baseCurrency,
-        method,
-        costBasisMode,
-        metaById,
-      );
+      const cached = await withDerivationCache(tradesCache, `${portfolioId}:${method}:${costBasisMode}`, async () => {
+        const { coreTxns, prices, metaById } = await loadValuation(
+          portfolioId,
+          portfolio.baseCurrency,
+          costBasisMode,
+          portfolio.cashCounted,
+        );
+        const log = await buildTradeLog(
+          coreTxns,
+          prices,
+          portfolio.baseCurrency,
+          method,
+          costBasisMode,
+          metaById,
+        );
+        return attachInstruments(log, metaById);
+      });
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /portfolios/:id/trades", durationMs, {
         portfolioId,
         method,
         costBasis: costBasisMode,
       });
-      return attachInstruments(log, metaById);
+      return cached;
     },
   );
 
@@ -2643,12 +2652,9 @@ export async function transactionsRoute(app: FastifyInstance) {
       const t0 = performance.now();
       const { id } = requireUser(request);
       const { holderId } = request.query;
-      const [u] = await app.db
-        .select({ displayCurrency: users.displayCurrency })
-        .from(users)
-        .where(eq(users.id, id))
-        .limit(1);
-      const display = u?.displayCurrency ?? "IDR";
+      const range = request.query.range ?? "1y";
+      const includeParam = request.query.include ?? "";
+      const excludeParam = request.query.exclude ?? "";
 
       if (holderId != null) {
         const [holder] = await app.db
@@ -2669,122 +2675,121 @@ export async function transactionsRoute(app: FastifyInstance) {
         );
       if (pfs.length === 0) return [];
 
-      // Resolve which portfolios to include.
-      // ?include=id1,id2 overrides default; ?exclude=id1,id2 removes from default.
-      const includeParam = (request.query.include ?? "").split(",").filter(Boolean);
-      const excludeParam = (request.query.exclude ?? "").split(",").filter(Boolean);
-
-      let pfIds: string[];
-      if (includeParam.length > 0) {
-        pfIds = pfs.filter((p) => includeParam.includes(p.id)).map((p) => p.id);
-      } else {
-        pfIds = pfs
-          .filter((p) => p.includeInAggregate && !excludeParam.includes(p.id))
-          .map((p) => p.id);
-      }
+      const pfIds = (() => {
+        const inc = includeParam.split(",").filter(Boolean);
+        const exc = excludeParam.split(",").filter(Boolean);
+        if (inc.length > 0) {
+          return pfs.filter((p) => inc.includes(p.id)).map((p) => p.id);
+        }
+        return pfs.filter((p) => p.includeInAggregate && !exc.includes(p.id)).map((p) => p.id);
+      })();
       if (pfIds.length === 0) return [];
 
-      const range = request.query.range ?? "1y";
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
 
-      // 1D/7D: aggregate the intraday (timestamped) table instead of the day-grained one.
-      // Points are grouped by their exact capture timestamp (every portfolio in one job run
-      // shares `capturedAt`) and FX-converted at today's rate, since every point is "today".
-      if (range === "1d" || range === "7d") {
-        const since = new Date(Date.now() - (range === "1d" ? 1 : 7) * 86_400_000);
-        const rows = await app.db
-          .select()
-          .from(portfolioIntradaySnapshots)
-          .where(
-            and(
-              inArray(portfolioIntradaySnapshots.portfolioId, pfIds),
-              gte(portfolioIntradaySnapshots.capturedAt, since),
-            ),
-          )
-          .orderBy(asc(portfolioIntradaySnapshots.capturedAt));
-        if (rows.length === 0) return [];
+      const cacheKey = `${id}:${range}:${holderId ?? ""}:${includeParam}:${excludeParam}`;
+      const cached = await withDerivationCache(historyCache, cacheKey, async () => {
 
-        const currencies = [...new Set(rows.map((r) => r.currency))];
-        const fx = makeFxRateFn(await getFxRates(app.db, currencies, display), display);
+          // 1D/7D: aggregate the intraday (timestamped) table instead of the day-grained one.
+          if (range === "1d" || range === "7d") {
+            const since = new Date(Date.now() - (range === "1d" ? 1 : 7) * 86_400_000);
+            const rows = await app.db
+              .select()
+              .from(portfolioIntradaySnapshots)
+              .where(
+                and(
+                  inArray(portfolioIntradaySnapshots.portfolioId, pfIds),
+                  gte(portfolioIntradaySnapshots.capturedAt, since),
+                ),
+              )
+              .orderBy(asc(portfolioIntradaySnapshots.capturedAt));
+            if (rows.length === 0) return [];
 
-        const byAt = new Map<string, { netWorth: number; marketValue: number }>();
-        for (const r of rows) {
-          const at = r.capturedAt.toISOString();
-          const entry = byAt.get(at) ?? { netWorth: 0, marketValue: 0 };
-          entry.netWorth += Number(convert(r.netWorth, r.currency, display, fx));
-          entry.marketValue += Number(convert(r.marketValue ?? "0", r.currency, display, fx));
-          byAt.set(at, entry);
-        }
-        return [...byAt.entries()]
-          .sort(([a], [b]) => (a < b ? -1 : 1))
-          .map(([at, v]) => ({
-            at,
-            netWorth: String(v.netWorth),
-            marketValue: String(v.marketValue),
+            const currencies = [...new Set(rows.map((r) => r.currency))];
+            const fx = makeFxRateFn(await getFxRates(app.db, currencies, display), display);
+
+            const byAt = new Map<string, { netWorth: number; marketValue: number }>();
+            for (const r of rows) {
+              const at = r.capturedAt.toISOString();
+              const entry = byAt.get(at) ?? { netWorth: 0, marketValue: 0 };
+              entry.netWorth += Number(convert(r.netWorth, r.currency, display, fx));
+              entry.marketValue += Number(convert(r.marketValue ?? "0", r.currency, display, fx));
+              byAt.set(at, entry);
+            }
+            return [...byAt.entries()]
+              .sort(([a], [b]) => (a < b ? -1 : 1))
+              .map(([at, v]) => ({
+                at,
+                netWorth: String(v.netWorth),
+                marketValue: String(v.marketValue),
+              }));
+          }
+
+          const start = rangeStart(range);
+          const conds = [inArray(portfolioSnapshots.portfolioId, pfIds)];
+          if (start) conds.push(gte(portfolioSnapshots.date, start));
+          const rows = await app.db
+            .select()
+            .from(portfolioSnapshots)
+            .where(and(...conds))
+            .orderBy(asc(portfolioSnapshots.date));
+
+          const currencies = [...new Set(rows.map((r) => r.currency))];
+          const dates = [...new Set(rows.map((r) => r.date))];
+          const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
+
+          const perPortfolio = new Map<string, { date: string; marketValue: string; effectiveFlow: string; netWorth: string; currency: string }[]>();
+          for (const r of rows) {
+            const list = perPortfolio.get(r.portfolioId) ?? [];
+            list.push(r);
+            perPortfolio.set(r.portfolioId, list);
+          }
+
+          const allFlows: { date: string; marketValue: string; effectiveFlow: string }[][] = [];
+          for (const [, pfRows] of perPortfolio) {
+            const converted = pfRows.map((r) => {
+              const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+              return {
+                date: r.date,
+                marketValue: convert(r.marketValue ?? "0", r.currency, display, fx),
+                effectiveFlow: convert(r.effectiveFlow ?? "0", r.currency, display, fx),
+              };
+            });
+            allFlows.push(converted);
+          }
+
+          const aggregated = aggregateValueFlows(allFlows);
+          const indexed = chainIndex(aggregated);
+          const indexById = new Map(indexed.map((p) => [p.date, p]));
+
+          const nwByDate = new Map<string, number>();
+          for (const r of rows) {
+            const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+            const nw = Number(convert(r.netWorth, r.currency, display, fx));
+            nwByDate.set(r.date, (nwByDate.get(r.date) ?? 0) + nw);
+          }
+
+          return aggregated.map((p) => ({
+            date: p.date,
+            netWorth: String(nwByDate.get(p.date) ?? 0),
+            marketValue: p.marketValue,
+            index: indexById.get(p.date)?.index ?? "100",
+            pct: indexById.get(p.date)?.pct ?? "0",
           }));
-      }
-
-      const start = rangeStart(range);
-      const conds = [inArray(portfolioSnapshots.portfolioId, pfIds)];
-      if (start) conds.push(gte(portfolioSnapshots.date, start));
-      const rows = await app.db
-        .select()
-        .from(portfolioSnapshots)
-        .where(and(...conds))
-        .orderBy(asc(portfolioSnapshots.date));
-
-      // FX-convert each row's (marketValue, effectiveFlow, netWorth) to display currency.
-      const currencies = [...new Set(rows.map((r) => r.currency))];
-      const dates = [...new Set(rows.map((r) => r.date))];
-      const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
-
-      // Group by portfolio then aggregate before chaining (cannot average per-portfolio indices).
-      const perPortfolio = new Map<string, { date: string; marketValue: string; effectiveFlow: string; netWorth: string; currency: string }[]>();
-      for (const r of rows) {
-        const list = perPortfolio.get(r.portfolioId) ?? [];
-        list.push(r);
-        perPortfolio.set(r.portfolioId, list);
-      }
-
-      // FX-convert per-portfolio flows to display currency, then aggregate.
-      const allFlows: { date: string; marketValue: string; effectiveFlow: string }[][] = [];
-      for (const [, pfRows] of perPortfolio) {
-        const converted = pfRows.map((r) => {
-          const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
-          return {
-            date: r.date,
-            marketValue: convert(r.marketValue ?? "0", r.currency, display, fx),
-            effectiveFlow: convert(r.effectiveFlow ?? "0", r.currency, display, fx),
-          };
-        });
-        allFlows.push(converted);
-      }
-
-      const aggregated = aggregateValueFlows(allFlows);
-      const indexed = chainIndex(aggregated);
-      const indexById = new Map(indexed.map((p) => [p.date, p]));
-
-      // Also compute aggregated netWorth per date for the Value toggle.
-      const nwByDate = new Map<string, number>();
-      for (const r of rows) {
-        const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
-        const nw = Number(convert(r.netWorth, r.currency, display, fx));
-        nwByDate.set(r.date, (nwByDate.get(r.date) ?? 0) + nw);
-      }
-
+        },
+      );
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/history", durationMs, {
-        portfolioCount: pfs.length,
+        portfolioCount: cached.length,
         range,
-        resultCount: aggregated.length,
+        resultCount: cached.length,
       });
-
-      return aggregated.map((p) => ({
-        date: p.date,
-        netWorth: String(nwByDate.get(p.date) ?? 0),
-        marketValue: p.marketValue,
-        index: indexById.get(p.date)?.index ?? "100",
-        pct: indexById.get(p.date)?.pct ?? "0",
-      }));
+      return cached;
     },
   );
 

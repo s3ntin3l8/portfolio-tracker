@@ -25,11 +25,15 @@ import type { IncomeEventRow } from "@/components/income/income-events-table";
 import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent, cn } from "@/lib/utils";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function IncomePage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Income");
@@ -39,6 +43,18 @@ export default async function IncomePage({
   // Holder scope is now global (cookie-based via the portfolio switcher).
   // loadIncomeStats() reads it automatically.
   const result = await loadIncomeStats();
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] IncomePage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   const heading = <ReportHeader title={t("title")} subtitle={t("subtitle")} />;
 

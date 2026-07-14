@@ -14,11 +14,15 @@ import { bestAndWorst } from "@/lib/movers";
 import { formatPercent } from "@/lib/utils";
 import { isIntradayPoint } from "@portfolio/api-client";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function InsightsPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Insights");
@@ -48,6 +52,18 @@ export default async function InsightsPage({
     holdingsPromise,
     selectedIdPromise,
   ]);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] InsightsPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   if (result.status !== "ok") {
     return (

@@ -12,6 +12,8 @@ import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
 
 type Method = "average" | "fifo";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function TradesPage({
   params,
   searchParams,
@@ -19,6 +21,8 @@ export default async function TradesPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ method?: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   const { method: methodParam } = await searchParams;
   const method: Method = methodParam === "fifo" ? "fifo" : "average";
@@ -29,10 +33,28 @@ export default async function TradesPage({
   // Cost basis is a single global preference (Settings → Investing) — there was
   // never a visible toggle here (only `?costBasis=` reachable by hand-editing the
   // URL), so switching the source has near-zero UX cost.
-  const prefs = await loadPreferences();
+  // Kick off loadPreferences as early as possible; loadTrades needs the result
+  // (costBasis), so it can't be truly parallelized, but the prefs fetch starts
+  // while translations / params resolve.
+  const prefsPromise = loadPreferences();
+
+  const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
   const result = await loadTrades(method, costBasis);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] TradesPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
+
   const log = result.status === "ok" ? result.data : null;
   const currency = log?.displayCurrency ?? "IDR";
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
