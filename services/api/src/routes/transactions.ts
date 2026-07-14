@@ -159,6 +159,7 @@ export async function transactionsRoute(app: FastifyInstance) {
           sectorWeights: (i.sectorWeights as Record<string, number> | null) ?? null,
           countryWeights: (i.countryWeights as Record<string, number> | null) ?? null,
           sectorCheckedAt: i.sectorCheckedAt ? new Date(i.sectorCheckedAt) : null,
+          partialExemptionRate: i.partialExemptionRate ?? null,
         },
       ]),
     );
@@ -2358,7 +2359,18 @@ export async function transactionsRoute(app: FastifyInstance) {
 
       // Compute harvest suggestions using FIFO trade log.
       const tradeLog = await buildTradeLog(coreTxns, prices, portfolio.baseCurrency, "fifo", undefined, metaById);
-      const tfRates = await tfRatesFor(tradeLog.trades.map((t) => t.instrumentId));
+      const tfRates: Record<string, string> = {};
+      for (const t of tradeLog.trades) {
+        const meta = metaById.get(t.instrumentId);
+        if (!meta) continue;
+        if (meta.partialExemptionRate !== null) {
+          tfRates[t.instrumentId] = meta.partialExemptionRate;
+        } else if (meta.assetClass === "etf") {
+          tfRates[t.instrumentId] = "0.30";
+        } else if (meta.assetClass === "mutual_fund") {
+          tfRates[t.instrumentId] = "0.15";
+        }
+      }
       const allowanceAnnual = portfolio.taxAllowanceAnnual;
       const taxRate = holderTaxRate ?? "0.25";
       const usage = allowanceUsageYTD({ tradeLog, tfRates, allowanceAnnual, taxRate });
@@ -2986,46 +2998,6 @@ export async function transactionsRoute(app: FastifyInstance) {
   // German tax optimization: Sparerpauschbetrag headroom + harvest suggestions
   // ---------------------------------------------------------------------------
 
-  /**
-   * Build a per-instrumentId Teilfreistellung rate map for a set of instrument ids.
-   *
-   * Priority:
-   *   1. `partial_exemption_rate` column (explicit per-instrument override).
-   *   2. Asset-class default under German InvStG §20 Abs. 9:
-   *        etf          → 30 % (equity ETF — the overwhelming common case)
-   *        mutual_fund  → 15 % (mixed fund; equity funds also qualify at 30 %, but
-   *                             we conservatively default to 15 % for unclassified
-   *                             mutual funds; users can override via the column)
-   *        all others   → 0 % (stocks, bonds, gold, cash — no exemption)
-   *
-   * Only instruments with a non-zero rate appear in the returned map; absent =
-   * core treats as 0 (correct for stocks/bonds/gold).
-   */
-  async function tfRatesFor(instrumentIds: (string | null)[]): Promise<Record<string, string>> {
-    const ids = [...new Set(instrumentIds.filter((x): x is string => x !== null))];
-    if (ids.length === 0) return {};
-    const rows = await app.db
-      .select({
-        id: instruments.id,
-        partialExemptionRate: instruments.partialExemptionRate,
-        assetClass: instruments.assetClass,
-      })
-      .from(instruments)
-      .where(inArray(instruments.id, ids));
-    const map: Record<string, string> = {};
-    for (const r of rows) {
-      if (r.partialExemptionRate !== null) {
-        // Explicit per-instrument override always wins.
-        map[r.id] = r.partialExemptionRate;
-      } else if (r.assetClass === "etf") {
-        map[r.id] = "0.30"; // §20 Abs. 9 InvStG — equity ETF
-      } else if (r.assetClass === "mutual_fund") {
-        map[r.id] = "0.15"; // §20 Abs. 9 InvStG — mixed/unclassified fund
-      }
-      // stocks, bonds, gold, cash → omit (core defaults to 0 %)
-    }
-    return map;
-  }
 
   /**
    * Fetch a holder's seeded loss carry-forward for one tax year, shaped for
@@ -3064,6 +3036,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     display: string,
     year: number,
     now: Date = new Date(),
+    corporateActions?: CorporateAction[],
   ): Promise<string> {
     if (year !== now.getUTCFullYear()) return "0";
 
@@ -3079,7 +3052,7 @@ export async function transactionsRoute(app: FastifyInstance) {
     );
 
     // qtyAt: split-consistent quantity at a historical date (for projectDividends scaling).
-    const corpActions = await corporateActionsFor(heldIds);
+    const corpActions = corporateActions ?? await corporateActionsFor(heldIds);
     const holdingsCache = new Map<number, Map<string, string>>();
     const qtyAt = (instrumentId: string, at: Date): string => {
       const key = at.getTime();
@@ -3268,29 +3241,31 @@ export async function transactionsRoute(app: FastifyInstance) {
       let carryForwardApplied = false;
 
       if (holderId) {
-        const [holder] = await app.db
-          .select({
-            taxAllowanceAnnual: accountHolders.taxAllowanceAnnual,
-            capitalGainsTaxRate: accountHolders.capitalGainsTaxRate,
-          })
-          .from(accountHolders)
-          .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
-          .limit(1);
+        const [holderResult, siblingRows, lossCarryForwardResult] = await Promise.all([
+          app.db
+            .select({
+              taxAllowanceAnnual: accountHolders.taxAllowanceAnnual,
+              capitalGainsTaxRate: accountHolders.capitalGainsTaxRate,
+            })
+            .from(accountHolders)
+            .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
+            .limit(1),
+          app.db
+            .select({ taxAllowanceAnnual: portfolios.taxAllowanceAnnual })
+            .from(portfolios)
+            .where(and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))),
+          lossCarryForwardFor(holderId, year),
+        ]);
+        const [holder] = holderResult;
         if (holder) holderProfile = holder;
 
-        // Sum FSA allocations across all portfolios for this holder (for the distribution
-        // helper); its row count also tells us how many depots this holder has.
-        const siblingRows = await app.db
-          .select({ taxAllowanceAnnual: portfolios.taxAllowanceAnnual })
-          .from(portfolios)
-          .where(and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId)));
         totalAllocatedForHolder = siblingRows.reduce(
           (sum, p) => sum + Number(p.taxAllowanceAnnual ?? 0),
           0,
         );
 
         if (siblingRows.length <= 1) {
-          lossCarryForwardInput = await lossCarryForwardFor(holderId, year);
+          lossCarryForwardInput = lossCarryForwardResult;
           carryForwardApplied = true;
         }
       }
@@ -3305,8 +3280,25 @@ export async function transactionsRoute(app: FastifyInstance) {
         undefined,
         portfolio.cashCounted,
       );
-      const tradeLog = await buildTradeLog(coreTxns, prices, portfolio.baseCurrency, "fifo", undefined, metaById);
-      const tfRates = await tfRatesFor(tradeLog.trades.map((t) => t.instrumentId));
+      const heldIds = summary.holdings
+        .filter((h) => Number(h.quantity) > 0)
+        .map((h) => h.instrumentId);
+      const [tradeLog, corpActions] = await Promise.all([
+        buildTradeLog(coreTxns, prices, portfolio.baseCurrency, "fifo", undefined, metaById),
+        corporateActionsFor(heldIds),
+      ]);
+      const tfRates: Record<string, string> = {};
+      for (const t of tradeLog.trades) {
+        const meta = metaById.get(t.instrumentId);
+        if (!meta) continue;
+        if (meta.partialExemptionRate !== null) {
+          tfRates[t.instrumentId] = meta.partialExemptionRate;
+        } else if (meta.assetClass === "etf") {
+          tfRates[t.instrumentId] = "0.30";
+        } else if (meta.assetClass === "mutual_fund") {
+          tfRates[t.instrumentId] = "0.15";
+        }
+      }
       const assetClasses = Object.fromEntries(
         [...metaById.entries()].map(([iid, m]) => [iid, m.assetClass]),
       );
@@ -3319,6 +3311,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         portfolio.baseCurrency,
         year,
         now,
+        corpActions,
       );
 
       const usage = allowanceUsageYTD({
@@ -3410,20 +3403,18 @@ export async function transactionsRoute(app: FastifyInstance) {
             : eq(accountHolders.userId, id),
         );
 
-      const result = [];
-
-      for (const holder of holderRows) {
+      const perHolderResults = await mapPool(holderRows, 2, async (holder) => {
         // Portfolios belonging to this holder (include taxAllowanceAnnual for FSA sum).
         const pfs = await app.db
           .select({ id: portfolios.id, cashCounted: portfolios.cashCounted, taxAllowanceAnnual: portfolios.taxAllowanceAnnual })
           .from(portfolios)
           .where(and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holder.id)));
 
-        if (pfs.length === 0) continue;
+        if (pfs.length === 0) return null;
 
         // Sum per-depot FSA allocations. Skip this holder if no depot has an allocation.
         const totalAllocated = pfs.reduce((sum, p) => sum + Number(p.taxAllowanceAnnual ?? 0), 0);
-        if (totalAllocated === 0) continue;
+        if (totalAllocated === 0) return null;
 
         // Merge trade logs across all portfolios; accumulate rest-of-year income forecast.
         // Independent per portfolio — bounded-concurrency instead of a serial `for` await
@@ -3447,7 +3438,18 @@ export async function transactionsRoute(app: FastifyInstance) {
         }
         const mergedLog = mergeTradeLogs(logs, display, "fifo");
 
-        const tfRates = await tfRatesFor(mergedLog.trades.map((t) => t.instrumentId));
+        const tfRates: Record<string, string> = {};
+        for (const t of mergedLog.trades) {
+          const m = meta.get(t.instrumentId);
+          if (!m) continue;
+          if (m.partialExemptionRate !== null) {
+            tfRates[t.instrumentId] = m.partialExemptionRate;
+          } else if (m.assetClass === "etf") {
+            tfRates[t.instrumentId] = "0.30";
+          } else if (m.assetClass === "mutual_fund") {
+            tfRates[t.instrumentId] = "0.15";
+          }
+        }
         const assetClasses = Object.fromEntries(
           [...meta.entries()].map(([iid, m]) => [iid, m.assetClass]),
         );
@@ -3481,7 +3483,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         });
         const suggestions = harvestSuggestions({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, usage });
 
-        result.push({
+        return {
           holder: {
             id: holder.id,
             name: holder.name,
@@ -3511,8 +3513,9 @@ export async function transactionsRoute(app: FastifyInstance) {
             remainingToDistribute: remainingToDistribute.toFixed(2),
             overAllocated,
           },
-        });
-      }
+        };
+      });
+      const result = perHolderResults.filter((r): r is NonNullable<typeof r> => r != null);
 
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/tax", durationMs, {
@@ -3537,6 +3540,35 @@ export async function transactionsRoute(app: FastifyInstance) {
       const rates = await getFxRatesForDates(app.db, [from], to, [date]);
       const rate = rates.get(date)?.[from] ?? null;
       return { rate };
+    },
+  );
+
+  // Lightweight income-only query for the tax year detail breakdown.
+  // Returns raw transaction rows (no instrument/sources enrichment) matching
+  // ACTIVITY_INCOME_TYPES for the given year, newest first.
+  app.get<{
+    Params: PortfolioParams;
+    Querystring: { year?: string };
+  }>(
+    "/portfolios/:portfolioId/income-year",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const portfolio = await ownedPortfolio(id, request.params.portfolioId);
+      if (!portfolio) return reply.code(404).send({ error: "portfolio_not_found" });
+
+      const year = parseInt(request.query.year ?? String(new Date().getUTCFullYear()), 10);
+      const rows = await app.db
+        .select()
+        .from(transactions)
+        .where(and(
+          eq(transactions.portfolioId, request.params.portfolioId),
+          inArray(transactions.type, ACTIVITY_INCOME_TYPES),
+          sql`EXTRACT(YEAR FROM ${transactions.executedAt}) = ${year}`,
+        ))
+        .orderBy(desc(transactions.executedAt));
+
+      return rows;
     },
   );
 }

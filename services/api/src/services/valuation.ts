@@ -41,6 +41,11 @@ export interface InstrumentMeta {
   countryWeights: Record<string, number> | null;
   /** Timestamp of last sector enrichment attempt; null = never attempted. */
   sectorCheckedAt: Date | null;
+  /**
+   * German Teilfreistellung rate for this instrument (InvStG §20 Abs. 9).
+   * Non-null when an explicit per-instrument override is set; null = use asset-class default.
+   */
+  partialExemptionRate: string | null;
 }
 
 export interface Valuation {
@@ -100,6 +105,7 @@ export async function valuePortfolio(
         sectorWeights: (i.sectorWeights as Record<string, number> | null) ?? null,
         countryWeights: (i.countryWeights as Record<string, number> | null) ?? null,
         sectorCheckedAt: i.sectorCheckedAt ? new Date(i.sectorCheckedAt) : null,
+        partialExemptionRate: i.partialExemptionRate ?? null,
       },
     ]),
   );
@@ -208,7 +214,8 @@ function derivationCacheKey(
   costBasisMode: CostBasisMode | undefined,
   cashCounted: boolean,
 ): string {
-  return `${portfolioId}|${displayCurrency}|${costBasisMode ?? ""}|${cashCounted}`;
+  const mode = costBasisMode === undefined || costBasisMode === "purchase_price" ? "" : costBasisMode;
+  return `${portfolioId}|${displayCurrency}|${mode}|${cashCounted}`;
 }
 
 /**
