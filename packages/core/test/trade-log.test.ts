@@ -128,6 +128,28 @@ describe("computeTrades — average vs FIFO", () => {
     expect(legs[0]).toMatchObject({ acqDate: "2021-01-01", quantity: "10", gain: "300" });
     expect(legs[1]).toMatchObject({ acqDate: "2022-01-01", quantity: "10", gain: "100" });
   });
+
+  it("does not emit zero-quantity legs after multi-tranche sells (regression: lotIdx fork)", () => {
+    // Three buys accumulating 20 shares, then two sells — the second sell must not
+    // re-scan zeroed lots and emit {quantity:0} slices.
+    const txns = [
+      tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-01-01") }),
+      tx({ type: "buy", quantity: "5", price: "110", executedAt: new Date("2021-06-01") }),
+      tx({ type: "buy", quantity: "5", price: "120", executedAt: new Date("2021-12-01") }),
+      tx({ type: "sell", quantity: "12", price: "130", executedAt: new Date("2022-06-01") }),
+      tx({ type: "sell", quantity: "8", price: "140", executedAt: new Date("2022-12-01") }),
+    ];
+    const { trades } = run(txns, { method: "fifo" });
+    expect(trades).toHaveLength(1); // single episode, closed
+    const legs = trades[0].legs;
+    // All legs must have positive quantity — zero-qty ghosts are the regression.
+    for (const leg of legs) {
+      expect(Number(leg.quantity)).toBeGreaterThan(0);
+    }
+    // Total disposed quantity equals sum of all sell quantities (12 + 8 = 20).
+    const totalLegQty = legs.reduce((s, l) => s + Number(l.quantity), 0);
+    expect(totalLegQty).toBe(20);
+  });
 });
 
 describe("computeTrades — dividends folded into the holding window", () => {

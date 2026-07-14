@@ -389,6 +389,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       });
     };
 
+    let lotIdx = 0;
     for (const ev of events) {
       if (ev.kind === "ca") {
         // Lot-level corporate actions: keep total cost fixed, scale quantities.
@@ -461,8 +462,8 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         // --- FIFO method: consume oldest lots ---
         let remaining = sellQty;
         let costFifo = ZERO;
-        let lotIdx = 0;
         const fifoSlices: { acqDate: Date; qty: Decimal; cost: Decimal }[] = [];
+        while (lotIdx < lots.length && lots[lotIdx].qty.lte(0)) lotIdx++;
         while (remaining.gt(0) && lotIdx < lots.length) {
           const lot = lots[lotIdx];
           const take = Decimal.min(lot.qty, remaining);

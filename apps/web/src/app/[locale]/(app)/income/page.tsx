@@ -122,6 +122,14 @@ export default async function IncomePage({
     })),
   ];
 
+  // Years with data that aren't in the initial 3-year events window → collapsed
+  // year headers that load on demand.
+  const eventYears = new Set(s.events.map((e) => e.date.slice(0, 4)));
+  const olderYears = s.byYear
+    .map((y) => String(y.year))
+    .filter((y) => !eventYears.has(y))
+    .sort((a, b) => Number(b) - Number(a));
+
   return (
     <div className="space-y-5">
       {heading}
@@ -255,7 +263,9 @@ export default async function IncomePage({
 
       {/* Payments timeline — one card, year sub-headers newest-first, with its own
           year/status filter chips + search (reference). */}
-      {timelineRows.length > 0 && <IncomeTimeline rows={timelineRows} locale={locale} />}
+      {timelineRows.length > 0 && (
+        <IncomeTimeline rows={timelineRows} locale={locale} olderYears={olderYears} />
+      )}
     </div>
   );
 }

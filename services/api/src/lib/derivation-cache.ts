@@ -8,6 +8,10 @@
  *
  * All caches share a single TTL and are cleared together via {@link clearDerivationCache},
  * called from the global `onResponse` hook after any non-GET request.
+ *
+ * ⚠ Per-instance: in a multi-replica deployment a write on one replica only clears
+ * that replica's caches. Other replicas serve stale data until TTL expiry or their own
+ * next write. Fine for single-instance; revisit before horizontal scaling.
  */
 
 const DERIVATION_CACHE_TTL_MS = 60_000;
@@ -39,6 +43,16 @@ export async function withDerivationCache<T>(
   compute: () => Promise<T>,
   now: number = Date.now(),
 ): Promise<T> {
+  // Amortized eviction: drop up to 5 expired entries per call to bound growth without
+  // a background timer. Expired keys that are never accessed again will linger until a
+  // write clears the whole store, but the cleanup keeps the total within 5 × requests/s
+  // × 60s of the current request rate — well within reason.
+  let evicted = 0;
+  for (const [k, v] of cache) {
+    if (evicted >= 5) break;
+    if (v.expiresAt <= now) { cache.delete(k); evicted++; }
+  }
+
   const hit = cache.get(key);
   if (hit && hit.expiresAt > now) return hit.promise;
 

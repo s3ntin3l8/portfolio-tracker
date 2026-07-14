@@ -16,6 +16,7 @@ import {
   loadAnomalies,
   loadNetWorth,
   loadNetWorthHistory,
+  loadPreferences,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
 import {
@@ -64,24 +65,21 @@ export default async function HoldingsPage({
   const tf = await getTranslations("PortfolioForm");
 
   // Cost basis is a single global preference (Settings → Investing), not a per-page
-  // toggle — threaded into every cost-basis-sensitive loader below.
-  //
-  // loadPreferences() used to block the main data fetch (a full serial round trip).
-  // Now we fire all loaders in parallel using the default costBasis — if prefs are
-  // still loading when the data arrives, the API defaults to purchase_price anyway.
-  // Once prefs resolve, costBasis is updated for the render phase (the data itself
-  // was already fetched with the default, which matches for most users anyway).
-  // Default costBasis to purchase_price so the main data fetch doesn't block on
-  // loadPreferences() (the API defaults to purchase_price anyway). The layout or
-  // navigation components that need the user's exact preference call it separately.
-  const DEFAULT_COST_BASIS = "purchase_price";
+  // toggle — threaded into every cost-basis-sensitive loader below. The loaders that
+  // don't need costBasis (anomalies, history, selectedId) are kicked off immediately
+  // in parallel with loadPreferences; only the two that do (loadHoldings, loadNetWorth)
+  // wait on it.
+  const prefsPromise = loadPreferences();
   const anomaliesPromise = loadAnomalies(portfolioParam);
   const historyPromise = loadNetWorthHistory(HERO_INITIAL_RANGE);
   const selectedIdPromise = getSelectedPortfolioId();
 
+  const prefs = await prefsPromise;
+  const costBasis = prefs?.costBasisMode ?? "purchase_price";
+
   const [result, netWorthResult, anomalies, history, selectedId] = await Promise.all([
-    loadHoldings(DEFAULT_COST_BASIS, portfolioParam),
-    loadNetWorth(DEFAULT_COST_BASIS),
+    loadHoldings(costBasis, portfolioParam),
+    loadNetWorth(costBasis),
     anomaliesPromise,
     historyPromise,
     selectedIdPromise,

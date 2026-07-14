@@ -759,6 +759,7 @@ export function sourcesFromPreFetched(
   rows: { id: string; type: string; executedAt: Date; instrumentId: string | null }[],
   instrumentsMeta: Map<string, { symbol: string }>,
   portfolioName: string | null,
+  importMinDateById?: Map<string, Date>,
 ): Map<string, SourceSummary[]> {
   if (sourcesRows.length === 0 && docsRows.length === 0) return new Map();
 
@@ -772,7 +773,7 @@ export function sourcesFromPreFetched(
     portfolioName,
     txById,
     instrumentSymbolById,
-    importMinDateById: new Map(),
+    importMinDateById: importMinDateById ?? new Map(),
   };
 
   // Build doc lookup maps from pre-fetched docsRows

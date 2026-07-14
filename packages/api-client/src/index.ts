@@ -1893,6 +1893,13 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
+    getIncomeEventsByYear: (year: number, holderId?: string) =>
+      request<{ displayCurrency: string; events: IncomeEvent[] }>(
+        "GET",
+        holderId
+          ? `/networth/income?eventsYear=${year}&holderId=${encodeURIComponent(holderId)}`
+          : `/networth/income?eventsYear=${year}`,
+      ),
     getContributions: (holderId?: string) =>
       request<ContributionStats>(
         "GET",

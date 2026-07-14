@@ -1023,12 +1023,19 @@ export async function transactionsRoute(app: FastifyInstance) {
             .map((r) => r.transactionId)
             .filter((x): x is string => x !== null),
         );
+        const importMinDateById = new Map<string, Date>();
+        for (const r of rows) {
+          if (r.importId && (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)) {
+            importMinDateById.set(r.importId, r.executedAt);
+          }
+        }
         const sourcesMap = sourcesFromPreFetched(
           sourcesRows,
           docsRows,
           rows,
           meta,
           portfolioName,
+          importMinDateById,
         );
         const tD = performance.now();
 
@@ -2073,13 +2080,13 @@ export async function transactionsRoute(app: FastifyInstance) {
   // display currency: per-period totals, forecast, delta, breakdowns, yields, upcoming
   // coupons + events. Optional `holderId` narrows the result to portfolios linked to that
   // account holder (must be owned by the requesting user).
-  app.get<{ Querystring: { holderId?: string } }>(
+  app.get<{ Querystring: { holderId?: string; eventsYear?: string } }>(
     "/networth/income",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const t0 = performance.now();
       const { id } = requireUser(request);
-      const { holderId } = request.query;
+      const { holderId, eventsYear } = request.query;
       const [u] = await app.db
         .select({ displayCurrency: users.displayCurrency })
         .from(users)
@@ -2112,14 +2119,58 @@ export async function transactionsRoute(app: FastifyInstance) {
         const { coreTxns, summary } = await loadValuation(p.id, display, undefined, p.cashCounted);
         return { portfolioId: p.id, coreTxns, summary };
       });
-      const summaries = perPortfolio.map((r) => r.summary);
-      const allTxns: CoreTransaction[] = perPortfolio.flatMap((r) => r.coreTxns);
+
       const txPortfolioId = new Map<string, string>();
       for (const { portfolioId, coreTxns } of perPortfolio) {
         for (const t of coreTxns) {
           if (t.id) txPortfolioId.set(t.id, portfolioId);
         }
       }
+
+      if (eventsYear) {
+        const targetYear = parseInt(eventsYear, 10);
+        const meta = await instrumentMeta(
+          [...new Set(
+            perPortfolio.flatMap((p) => p.coreTxns)
+              .filter((t) => t.type === "dividend" || t.type === "coupon")
+              .map((t) => t.instrumentId)
+              .filter(Boolean),
+          )] as string[],
+        );
+        const events = perPortfolio.flatMap((p) => p.coreTxns)
+          .filter((t) =>
+            (t.type === "dividend" || t.type === "coupon") &&
+            t.executedAt.getUTCFullYear() === targetYear,
+          )
+          .map((t) => {
+            const im = t.instrumentId ? meta.get(t.instrumentId) : undefined;
+            return {
+              transactionId: t.id ?? null,
+              portfolioId: (t.id && txPortfolioId.get(t.id)) ?? null,
+              instrumentId: t.instrumentId,
+              symbol: im?.symbol ?? null,
+              name: im?.name ?? null,
+              displayName: im?.displayName ?? null,
+              type: t.type,
+              date: t.executedAt.toISOString().slice(0, 10),
+              amount: t.price,
+              currency: t.currency,
+              perShare: null as string | null,
+              quantity: null as string | null,
+            };
+          })
+          .sort((a, b) => b.date.localeCompare(a.date));
+        const durationMs = performance.now() - t0;
+        logTiming(request, "GET /networth/income (eventsYear)", durationMs, {
+          portfolioCount: pfs.length,
+          targetYear,
+          eventCount: events.length,
+        });
+        return { displayCurrency: display, events };
+      }
+
+      const summaries = perPortfolio.map((r) => r.summary);
+      const allTxns: CoreTransaction[] = perPortfolio.flatMap((r) => r.coreTxns);
       const aggregated = aggregatePortfolios(summaries, display);
 
       const durationMs = performance.now() - t0;
