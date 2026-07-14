@@ -194,9 +194,7 @@ function SheetContent({
       >
         {side === "bottom" &&
           (dismissible ? (
-            // Real drag affordance. Overrides vaul's default [data-vaul-handle] size injection
-            // using `!` to create a tall, full-width touch area with a centered visual pill.
-            <Drawer.Handle className="!mx-auto !my-0 !h-auto !w-full !rounded-none !bg-transparent py-4 flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing focus-visible:outline-none">
+            <Drawer.Handle className="!mx-auto !my-0 !h-auto !w-full !rounded-none !bg-transparent !border-none !outline-none !shadow-none py-4 flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing focus-visible:outline-none">
               <div className="h-1 w-10 rounded-full bg-border" />
             </Drawer.Handle>
           ) : (
