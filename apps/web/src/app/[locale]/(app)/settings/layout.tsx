@@ -4,7 +4,7 @@ import { SettingsShell, type ShellNavItem } from "@/components/settings-shell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { AppVersion } from "@/components/app-version";
 import { Link } from "@/i18n/navigation";
-import { loadMe, loadPortfolios, loadAccountHolders } from "@/lib/server-api";
+import { loadMe, loadPortfoliosList, loadAccountHolders } from "@/lib/server-api";
 import { APP_VERSION } from "@/lib/version";
 
 /**
@@ -26,7 +26,7 @@ export default async function SettingsLayout({
 
   const [me, portfoliosResult, holders] = await Promise.all([
     loadMe(),
-    loadPortfolios(),
+    loadPortfoliosList(),
     loadAccountHolders(),
   ]);
 

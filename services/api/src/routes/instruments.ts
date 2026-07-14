@@ -1,14 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { asc, eq, ilike, or } from "drizzle-orm";
+import { asc, eq, ilike, or, count } from "drizzle-orm";
 import { instruments, providerSettings } from "@portfolio/db";
 import { assetClassSchema, instrumentInputSchema } from "@portfolio/schema";
 import { findOrCreateInstrument, updateInstrument } from "../services/instruments.js";
 import { getMarketData, goldSources, getBorseFrankfurt } from "../services/market-data.js";
+import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
+import { logTiming } from "../lib/timing.js";
+
+const instrumentsCache = createStore<{ rows: typeof instruments.$inferSelect[]; total: number }>();
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 const lookupQuerySchema = z.object({ q: z.string().trim().min(1) });
 const historyQuerySchema = z.object({ range: z.string().default("1y") });
@@ -25,23 +30,53 @@ const enrichQuerySchema = z.object({ q: z.string().trim().min(1) });
 export async function instrumentsRoute(app: FastifyInstance) {
   // Search instruments (shared reference data) for the manual-entry picker.
   app.get("/instruments", { preHandler: app.authenticate }, async (request) => {
-    const { q, limit } = searchQuerySchema.parse(request.query);
-    if (q) {
-      return app.db
-        .select()
-        .from(instruments)
-        .where(
-          or(
-            ilike(instruments.symbol, `%${q}%`),
-            ilike(instruments.name, `%${q}%`),
-            ilike(instruments.isin, `%${q}%`),
-            ilike(instruments.wkn, `%${q}%`),
-          ),
-        )
-        .orderBy(asc(instruments.symbol))
-        .limit(limit);
+    const t0 = performance.now();
+    const parsed = searchQuerySchema.parse(request.query);
+    const q = parsed.q;
+    const pageSize = parsed.pageSize;
+
+    if (parsed.page) {
+      const page = parsed.page;
+      const cacheKey = `instruments:${q || ""}:${page}:${pageSize}`;
+      const { rows, total } = await withDerivationCache(instrumentsCache, cacheKey, async () => {
+        const conditions = q
+          ? or(
+              ilike(instruments.symbol, `%${q}%`),
+              ilike(instruments.name, `%${q}%`),
+              ilike(instruments.isin, `%${q}%`),
+              ilike(instruments.wkn, `%${q}%`),
+            )
+          : undefined;
+        const [cnt, _rows] = await Promise.all([
+          conditions
+            ? app.db.select({ count: count() }).from(instruments).where(conditions).then((r) => Number(r[0].count))
+            : app.db.select({ count: count() }).from(instruments).then((r) => Number(r[0].count)),
+          conditions
+            ? app.db.select().from(instruments).where(conditions).orderBy(asc(instruments.symbol)).limit(pageSize).offset((page - 1) * pageSize)
+            : app.db.select().from(instruments).orderBy(asc(instruments.symbol)).limit(pageSize).offset((page - 1) * pageSize),
+        ]);
+        return { rows: _rows, total: cnt };
+      });
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /instruments (paginated)", durationMs, { q, page, pageSize, total });
+      return { rows, total };
     }
-    return app.db.select().from(instruments).orderBy(asc(instruments.symbol)).limit(limit);
+
+    // Legacy path: no pagination, return bare array.
+    const conditions = q
+      ? or(
+          ilike(instruments.symbol, `%${q}%`),
+          ilike(instruments.name, `%${q}%`),
+          ilike(instruments.isin, `%${q}%`),
+          ilike(instruments.wkn, `%${q}%`),
+        )
+      : undefined;
+    const rows = conditions
+      ? await app.db.select().from(instruments).where(conditions).orderBy(asc(instruments.symbol))
+      : await app.db.select().from(instruments).orderBy(asc(instruments.symbol));
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /instruments", durationMs, { q, rowCount: rows.length });
+    return rows;
   });
 
   // Discover instruments from market-data providers (ticker/name search or ISIN
@@ -77,11 +112,14 @@ export async function instrumentsRoute(app: FastifyInstance) {
     "/instruments/:id",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      const t0 = performance.now();
       const [inst] = await app.db
         .select()
         .from(instruments)
         .where(eq(instruments.id, request.params.id))
         .limit(1);
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /instruments/:id", durationMs, { instrumentId: request.params.id });
       if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
       return inst;
     },
@@ -92,15 +130,20 @@ export async function instrumentsRoute(app: FastifyInstance) {
     "/instruments/:id/history",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      const t0 = performance.now();
       const { range } = historyQuerySchema.parse(request.query);
       const [inst] = await app.db
         .select()
         .from(instruments)
         .where(eq(instruments.id, request.params.id))
         .limit(1);
-      if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
+      if (!inst) {
+        const durationMs = performance.now() - t0;
+        logTiming(request, "GET /instruments/:id/history", durationMs, { instrumentId: request.params.id, range, found: false });
+        return reply.code(404).send({ error: "instrument_not_found" });
+      }
       const md = await getMarketData();
-      return md.getHistory(
+      const result = await md.getHistory(
         {
           symbol: inst.symbol,
           market: inst.market,
@@ -109,6 +152,9 @@ export async function instrumentsRoute(app: FastifyInstance) {
         },
         range,
       );
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /instruments/:id/history", durationMs, { instrumentId: request.params.id, range, found: true });
+      return result;
     },
   );
 

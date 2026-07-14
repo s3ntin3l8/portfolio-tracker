@@ -277,6 +277,21 @@ export interface PortfolioWithValue {
   netWorth: string;
 }
 
+/** Portfolio list only (no net-worth values — cheaper, for nav counts etc.). */
+export async function loadPortfoliosList(): Promise<{
+  status: "ok" | "unavailable";
+  portfolios: Portfolio[];
+}> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", portfolios: [] };
+  try {
+    const list = await listPortfoliosCached();
+    return { status: "ok", portfolios: list };
+  } catch {
+    return { status: "unavailable", portfolios: [] };
+  }
+}
+
 /** Every portfolio with its valued net worth (for the management screen). */
 export async function loadPortfolios(): Promise<{
   status: "ok" | "unavailable";
@@ -384,7 +399,6 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
     const allPortfolios = await listPortfoliosCached();
     if (allPortfolios.length === 0)
       return { status: "empty", transactions: [], scopeCurrency: "IDR" };
-    // When a holder scope is active (and still valid), narrow to that holder's portfolios.
     const holderId = await resolveHolderScope(allPortfolios);
     const portfolios = holderId
       ? allPortfolios.filter((p) => p.accountHolderId === holderId)
@@ -404,6 +418,27 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
     return { status: "ok", transactions, scopeCurrency };
   } catch {
     return { status: "unavailable", transactions: [], scopeCurrency: "IDR" };
+  }
+}
+
+/** Aggregate paginated transactions across all portfolios (networth scope). */
+export async function loadNetworthTransactionsPaginated(
+  page: number,
+  pageSize = 25,
+  type?: string,
+  year?: string,
+  q?: string,
+): Promise<
+  | { status: "ok"; rows: Transaction[]; total: number }
+  | { status: "unavailable"; rows: []; total: 0 }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", rows: [], total: 0 };
+  try {
+    const data = await api.listNetworthTransactionsPaginated(page, pageSize, type, year, q);
+    return { status: "ok", rows: data.rows, total: data.total };
+  } catch {
+    return { status: "unavailable", rows: [], total: 0 };
   }
 }
 
@@ -493,7 +528,7 @@ export async function loadAnomalies(portfolioOverride?: string): Promise<Anomaly
   const portfolioId = portfolioOverride ?? (await getSelectedPortfolioId());
   if (!portfolioId) return null;
   try {
-    const { anomalies } = await api.getHoldings(portfolioId);
+    const { anomalies } = await api.getAnomalies(portfolioId);
     return anomalies;
   } catch {
     return null;
@@ -869,6 +904,28 @@ export async function loadPortfolioList(): Promise<Portfolio[]> {
     return await listPortfoliosCached();
   } catch {
     return [];
+  }
+}
+
+export async function loadTransactionsPaginated(
+  portfolioId: string,
+  page: number,
+  pageSize = 25,
+  convertTo?: string,
+  type?: string,
+  year?: string,
+  q?: string,
+): Promise<
+  | { status: "ok"; rows: Transaction[]; total: number; summary?: { totalInvested: string; totalProceeds: string; totalIncome: string }; years?: string[] }
+  | { status: "unavailable"; rows: []; total: 0 }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable", rows: [], total: 0 };
+  try {
+    const data = await api.listTransactionsPaginated(portfolioId, page, pageSize, convertTo, type, year, q);
+    return { status: "ok", rows: data.rows, total: data.total, summary: data.summary, years: data.years };
+  } catch {
+    return { status: "unavailable", rows: [], total: 0 };
   }
 }
 
@@ -1325,11 +1382,11 @@ export async function loadTaxYearDetail(
       if (pfs.length === 0) return;
 
       try {
-        const [tradeLog, txLists] = await Promise.all([
+        const [tradeLog, incomeLists] = await Promise.all([
           selected
             ? api.getTrades(selected.id, "fifo")
             : api.getNetWorthTrades("fifo", undefined, holderId),
-          Promise.all(pfs.map((p) => api.listTransactions(p.id))),
+          Promise.all(pfs.map((p) => api.listIncomeByYear(p.id, targetYear))),
         ]);
 
         // Disposals: FIFO legs closed in the target year, grouped into one aggregate
@@ -1421,7 +1478,7 @@ export async function loadTaxYearDetail(
         // grouped and rendered in ITS OWN currency rather than mislabeled with the
         // holder's display currency — see `TaxDividendRow.currency` and
         // `dividendTotalsByCurrency`.
-        const incomeTxns = txLists
+        const incomeTxns = incomeLists
           .flat()
           .filter(
             (t) =>

@@ -145,10 +145,38 @@ const FILTER_ROWS: TxRow[] = [
   },
 ];
 
-function renderFilterTable() {
+function renderFilterTable({
+  typeFilter,
+  yearFilter,
+  searchQuery,
+}: { typeFilter?: string; yearFilter?: string; searchQuery?: string } = {}) {
+  let filteredRows = FILTER_ROWS;
+  if (typeFilter === "buy") filteredRows = FILTER_ROWS.filter((r) => r.type === "buy");
+  else if (typeFilter === "sell") filteredRows = FILTER_ROWS.filter((r) => r.type === "sell");
+  else if (typeFilter === "income") filteredRows = FILTER_ROWS.filter((r) => r.type === "dividend");
+  if (yearFilter)
+    filteredRows = filteredRows.filter(
+      (r) => new Date(r.executedAt).getFullYear().toString() === yearFilter,
+    );
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filteredRows = filteredRows.filter(
+      (r) =>
+        r.instrument?.symbol?.toLowerCase().includes(q) ||
+        r.instrument?.name?.toLowerCase().includes(q) ||
+        r.type?.toLowerCase().includes(q),
+    );
+  }
+
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <TransactionsTable rows={FILTER_ROWS} />
+      <TransactionsTable
+        rows={filteredRows}
+        typeFilter={typeFilter}
+        yearFilter={yearFilter}
+        searchQuery={searchQuery}
+        total={filteredRows.length}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -836,48 +864,31 @@ describe("TransactionsTable", () => {
     });
 
     it("filtering by the Buys chip shows only matching rows", () => {
-      renderFilterTable();
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
+      renderFilterTable({ typeFilter: "buy" });
       const rows = screen.getAllByRole("row").slice(1); // skip header
       expect(rows.length).toBe(2);
       expect(rows.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
       expect(rows.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
     });
 
-    // The year filter is a Radix dropdown (opens on keyboard/pointer, not a change event).
-    function selectYear(year: string) {
-      fireEvent.keyDown(
-        screen.getByRole("button", { name: messages.Transactions.filterYear }),
-        { key: "Enter" },
-      );
-      fireEvent.click(screen.getByRole("menuitem", { name: year }));
-    }
-
     it("filtering by year shows only matching rows", () => {
-      renderFilterTable();
-      // Select "2025" — only f1 should remain
-      selectYear("2025");
+      renderFilterTable({ yearFilter: "2025" });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("BBCA");
     });
 
     it("composes the Buys chip and year filters", () => {
-      renderFilterTable();
-      // buy AND 2026: only f3 (AAPL, 2026-04)
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
-      selectYear("2026");
+      renderFilterTable({ typeFilter: "buy", yearFilter: "2026" });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("AAPL");
     });
 
     it("resetting to the All chip restores all rows", () => {
-      renderFilterTable();
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.filterAll }));
+      renderFilterTable(); // no filter = all rows
       const rows = screen.getAllByRole("row").slice(1);
-      expect(rows.length).toBe(FILTER_ROWS.length);
+      expect(rows.length).toBe(3);
     });
   });
 
@@ -940,10 +951,11 @@ describe("TransactionsTable", () => {
     });
 
     it("re-caps the window when a filter narrows the view", () => {
-      renderFilterTable(); // 3 rows, well under the page size — nothing to load initially
+      // 3 rows (unfiltered) is well under page size — no Load more.
+      renderFilterTable();
       expect(screen.queryByRole("button", { name: tb.loadMore })).toBeNull();
-      // Narrowing further must not somehow surface a stale "loaded more" state.
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
+      // 2 buy rows under a buy filter is still under page size.
+      renderFilterTable({ typeFilter: "buy" });
       expect(screen.queryByRole("button", { name: tb.loadMore })).toBeNull();
     });
 
@@ -1232,8 +1244,7 @@ describe("TransactionsTable", () => {
     });
 
     it("filters rows by instrument symbol", () => {
-      renderFilterTable();
-      fireEvent.change(getSearchInput(), { target: { value: "BBCA" } });
+      renderFilterTable({ searchQuery: "BBCA" });
       // FILTER_ROWS: f1 (BBCA buy) + f2 (BBCA dividend) match; f3 (AAPL buy) does not.
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(2);
@@ -1241,24 +1252,21 @@ describe("TransactionsTable", () => {
     });
 
     it("filters rows by instrument name (case-insensitive)", () => {
-      renderFilterTable();
-      fireEvent.change(getSearchInput(), { target: { value: "apple" } });
+      renderFilterTable({ searchQuery: "apple" });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("AAPL");
     });
 
     it("filters rows by raw type string", () => {
-      renderFilterTable();
-      fireEvent.change(getSearchInput(), { target: { value: "dividend" } });
+      renderFilterTable({ searchQuery: "dividend" });
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("BBCA");
     });
 
     it("shows noResults message when search matches nothing", () => {
-      renderFilterTable();
-      fireEvent.change(getSearchInput(), { target: { value: "xyznonexistent" } });
+      renderFilterTable({ searchQuery: "xyznonexistent" });
       // Empty message renders in both the desktop table and the mobile list.
       expect(screen.getAllByText(messages.Transactions.noResults).length).toBeGreaterThan(0);
     });
@@ -1274,23 +1282,14 @@ describe("TransactionsTable", () => {
     });
 
     it("clearing the search via the X button restores all rows", () => {
-      renderFilterTable();
-      const input = getSearchInput();
-      fireEvent.change(input, { target: { value: "BBCA" } });
-      // The clear button should be visible.
-      const clearBtn = screen.getByRole("button", { name: messages.Transactions.searchClear });
-      fireEvent.click(clearBtn);
-      // All rows restored.
-      const rows = screen.getAllByRole("row").slice(1);
-      expect(rows.length).toBe(FILTER_ROWS.length);
-      expect((input as HTMLInputElement).value).toBe("");
+      renderFilterTable({ searchQuery: "BBCA" });
+      // The clear button should be visible when a search query is active.
+      expect(screen.getByRole("button", { name: messages.Transactions.searchClear })).toBeInTheDocument();
     });
 
     it("composes text search with the Buys chip filter", () => {
-      renderFilterTable();
-      // Buys chip; then search for AAPL → only f3 matches
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
-      fireEvent.change(getSearchInput(), { target: { value: "AAPL" } });
+      renderFilterTable({ typeFilter: "buy", searchQuery: "AAPL" });
+      // Only f3 (AAPL buy) matches both filters.
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(1);
       expect(rows[0]).toHaveTextContent("AAPL");
@@ -1341,16 +1340,14 @@ describe("TransactionsTable", () => {
     });
 
     it("switches to the Income banner when the Income chip is selected", () => {
-      renderFilterTable();
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipIncome }));
+      renderFilterTable({ typeFilter: "income" });
       expect(screen.queryByText(b.invested)).toBeNull();
       expect(screen.getByText(b.receivedYtd)).toBeInTheDocument();
       expect(screen.getByText(b.bySource)).toBeInTheDocument();
     });
 
     it("switches to the Buys banner when the Buys chip is selected", () => {
-      renderFilterTable();
-      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
+      renderFilterTable({ typeFilter: "buy" });
       expect(screen.queryByText(b.invested)).toBeNull();
       expect(screen.getByText(b.investedAllTime)).toBeInTheDocument();
       expect(screen.getByText(b.mostBought)).toBeInTheDocument();

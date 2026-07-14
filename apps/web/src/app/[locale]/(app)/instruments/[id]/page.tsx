@@ -22,11 +22,15 @@ import {
 import { formatMoney, formatPercent, rowAnomalyCounts } from "@/lib/utils";
 import { lastPriceInfo } from "@/lib/instrument-price";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function InstrumentPage({
   params,
 }: {
   params: Promise<{ locale: string; id: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale, id } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Instrument");
@@ -54,6 +58,19 @@ export default async function InstrumentPage({
     anomaliesPromise,
     incomeStatsPromise,
   ]);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] InstrumentPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
+
   // Filter anomalies to those affecting this specific instrument. Portfolio-scoped
   // anomalies (reconciliation_gap, position_gap) are NOT instrument-specific — they used to
   // be included unconditionally here (`|| a.scope === "portfolio"`), which leaked an

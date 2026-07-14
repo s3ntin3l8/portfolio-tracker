@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ScanLine,
@@ -49,11 +49,13 @@ import { Button } from "@/components/ui/button";
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
 import { useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { useApiClient } from "@/lib/api";
 import { haptics } from "@/lib/haptics";
 import { cashFlow } from "@portfolio/core";
 import {
   formatMoney,
+  formatMoneyCompact,
   anomalyLabel,
   cn,
   type AnomalyTranslator,
@@ -84,7 +86,6 @@ import {
   computeAllBanner,
   computeIncomeBanner,
   computeTradeBanner,
-  ACTIVITY_INCOME_TYPES,
 } from "@/lib/transaction-banners";
 
 export const SOURCE_ICON: Record<string, LucideIcon> = {
@@ -364,6 +365,13 @@ export function TransactionsTable({
   portfolios = [],
   showFilterBanners = true,
   scopeCurrency = "IDR",
+  summary = null,
+  years = [],
+  typeFilter,
+  yearFilter: yearFilterProp,
+  searchQuery,
+  portfolioId,
+  total,
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
@@ -381,6 +389,22 @@ export function TransactionsTable({
    *  else the aggregate/holder display-currency selector. Drives the banner totals (each
    *  row is pre-converted via `displayRate`) and the detail sheet's secondary amount. */
   scopeCurrency?: string;
+  /** Server-computed summary aggregates for the current filter (all pages). Present when
+   *  a single portfolio is selected (not the aggregate view). */
+  summary?: { totalInvested: string | null; totalProceeds: string | null; totalIncome: string | null } | null;
+  /** Available years for the year filter dropdown, derived server-side from the full
+   *  (unpaginated) transaction set. */
+  years?: string[];
+  /** Active transaction-type filter from the URL (buy/sell/income). */
+  typeFilter?: string;
+  /** Active year filter from the URL. Renamed to avoid shadowing the local variable. */
+  yearFilter?: string;
+  /** Active search query from the URL. */
+  searchQuery?: string;
+  /** Portfolio ID for server-side "Load more" fetching. Absent in aggregate view. */
+  portfolioId?: string;
+  /** Total matching transactions (all pages), used by "Load more" to know when to stop. */
+  total?: number;
 }) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -421,12 +445,11 @@ export function TransactionsTable({
   };
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Reference filter chips: All / Buys / Sells / Income (+ "Needs review · N").
-  const [chipFilter, setChipFilter] = useState<"all" | "buy" | "sell" | "income" | "issues">("all");
-  const [yearFilter, setYearFilter] = useState("all");
   const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
-  const [query, setQuery] = useState("");
   const [showFlagged, setShowFlagged] = useState(false);
+  const [localQuery, setLocalQuery] = useState(searchQuery ?? "");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchParams = useSearchParams();
   // How many of the (already filtered+sorted) rows to render — the ledger can grow long
   // for old/frequent portfolios, pushing "Recent imports" far below the fold. Capped with
   // an explicit "Load more" button rather than infinite-scroll: scroll-triggered loading
@@ -436,17 +459,23 @@ export function TransactionsTable({
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
   const [editTx, setEditTx] = useState<TxRow | null>(null);
 
+  // Server-side "Load more": accumulate pages from the API as the user clicks "Load more".
+  const [accumulatedRows, setAccumulatedRows] = useState<TxRow[]>(rows);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Detect rows prop change (new filter / SSR re-fetch) and reset accumulated state.
+  const [prevRows, setPrevRows] = useState(rows);
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setAccumulatedRows(rows);
+    setCurrentPage(1);
+  }
+
   // When the last flagged transaction is dismissed (router.refresh re-feeds an empty
   // anomalies list), clear the filter so the user isn't stranded on an empty list.
   // Adjusting state during render is React's recommended pattern over a setState-in-effect.
   if (showFlagged && flaggedCount === 0) {
     setShowFlagged(false);
-  }
-  // Same reset for the "Needs review · N" chip: it only renders while flaggedCount > 0
-  // (see below), so leaving chipFilter on "issues" after the last anomaly is dismissed
-  // would strand the user on an empty table with no visible way back to "all".
-  if (chipFilter === "issues" && flaggedCount === 0) {
-    setChipFilter("all");
   }
   // Id of a single row currently being confirmed/discarded (shows a spinner on that row).
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -466,7 +495,7 @@ export function TransactionsTable({
   // the pre-refresh draft. Closes the sheet if the row no longer appears at all (e.g. deleted
   // elsewhere). Adjusting state during render, same pattern as the filters above.
   if (detailTx) {
-    const freshDetailTx = rows.find((r) => r.id === detailTx.id) ?? null;
+    const freshDetailTx = accumulatedRows.find((r) => r.id === detailTx.id) ?? null;
     if (freshDetailTx !== detailTx) {
       setDetailTx(freshDetailTx);
     }
@@ -476,107 +505,147 @@ export function TransactionsTable({
   // filter/search/sort starts short instead of inheriting a stale "loaded 200" from the
   // previous view. Tracks the prior signature in state (not a ref) per React's documented
   // "adjusting state when a value changes during render" pattern.
-  const viewSignature = `${chipFilter}|${yearFilter}|${draftFilter}|${query}|${showFlagged}|${sortKey}`;
+  const viewSignature = `${draftFilter}|${showFlagged}|${sortKey}`;
   const [prevViewSignature, setPrevViewSignature] = useState(viewSignature);
   if (viewSignature !== prevViewSignature) {
     setPrevViewSignature(viewSignature);
     setVisibleCount(PAGE_SIZE);
   }
 
-  // Derive distinct options from `rows` so selects only show values present in the data.
+  // Year options from the server (full unpaginated set) or derived from rows as fallback.
   const yearOptions = useMemo(
     () =>
-      [...new Set(rows.map((r) => String(new Date(r.executedAt).getFullYear())))].sort(
-        (a, b) => Number(b) - Number(a),
-      ),
-    [rows],
+      years.length > 0
+        ? years
+        : [...new Set(rows.map((r) => String(new Date(r.executedAt).getFullYear())))].sort(
+            (a, b) => Number(b) - Number(a),
+          ),
+    [years, rows],
   );
 
-  // Display-only filters; none of these touch any calculation.
+  // Client-side filters only: draft visibility and flagged-only toggle. All other
+  // filtering (type, year, search) is handled server-side via URL params.
   const visibleRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter(
+    return accumulatedRows.filter(
       (r) =>
         (!showFlagged || anomalyByTxId.has(r.id)) &&
-        (draftFilter === "all" || r.status === "draft") &&
-        (chipFilter === "all" ||
-          (chipFilter === "buy" && (r.type === "buy" || r.type === "savings_plan")) ||
-          (chipFilter === "sell" && r.type === "sell") ||
-          (chipFilter === "income" && ACTIVITY_INCOME_TYPES.has(r.type)) ||
-          (chipFilter === "issues" && anomalyByTxId.has(r.id))) &&
-        (yearFilter === "all" ||
-          String(new Date(r.executedAt).getFullYear()) === yearFilter) &&
-        (!q ||
-          (r.instrument?.symbol ?? "").toLowerCase().includes(q) ||
-          (r.instrument?.name ?? "").toLowerCase().includes(q) ||
-          r.type.toLowerCase().includes(q) ||
-          tt(r.type as Parameters<typeof tt>[0])
-            .toLowerCase()
-            .includes(q) ||
-          (r.portfolioName ?? "").toLowerCase().includes(q) ||
-          r.source.toLowerCase().includes(q)),
+        (draftFilter === "all" || r.status === "draft"),
     );
-  }, [rows, showFlagged, anomalyByTxId, draftFilter, chipFilter, yearFilter, query, tt]);
+  }, [accumulatedRows, showFlagged, anomalyByTxId, draftFilter]);
 
   // Whether any picker/search is narrowing the view, so the empty state can distinguish
-  // "no transactions at all" from "no transactions match the current filter" — covers the
-  // chip filter too, not just search/showFlagged, so an "issues"/"buy"/etc. filter with no
-  // matches doesn't show the misleading "no transactions yet" copy.
+  // "no transactions at all" from "no transactions match the current filter".
   const hasActiveFilter =
-    query.trim().length > 0 ||
+    (searchQuery != null && searchQuery.length > 0) ||
     showFlagged ||
-    chipFilter !== "all" ||
-    yearFilter !== "all" ||
+    typeFilter != null ||
+    yearFilterProp != null ||
     draftFilter !== "all";
 
-  // Which filter-scoped summary banner (if any) to show above the list — keyed directly
-  // off the reference-style chip filter (All/Buys/Sells/Income).
+  // Which filter-scoped summary banner (if any) to show above the list — keyed off the
+  // URL type param. The "all" banner is the default when no type filter is active.
   const tBanner = useTranslations("Transactions.banners");
   const activeBannerMode: "all" | "income" | "buy" | "sell" | null =
-    chipFilter === "issues" ? null : chipFilter;
+    typeFilter == null ? "all" : (typeFilter as "all" | "income" | "buy" | "sell");
 
   // Banners are computed from the full (unfiltered-by-other-pickers) `rows` — they answer
   // "how much have I invested/received, all time / YTD", not "how much is in the current
   // table view" — mirroring the source design, whose equivalent aggregates ignore the other
   // filters too.
-  const allBanner = useMemo(
-    () =>
-      activeBannerMode === "all"
-        ? computeAllBanner(rows, scopeCurrency, locale, {
-            invested: tBanner("invested"),
-            proceeds: tBanner("proceeds"),
-            incomeYtd: tBanner("incomeYtd"),
-            buysCount: (n) => tBanner("buysCount", { count: n }),
-            sellsCount: (n) => tBanner("sellsCount", { count: n }),
-            vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
-            buys: tBanner("buys"),
-            sells: tBanner("sells"),
-            income: tBanner("income"),
-          })
-        : null,
-    [activeBannerMode, rows, scopeCurrency, locale, tBanner],
+  const allBanner = useMemo(() => {
+    if (activeBannerMode !== "all") return null;
+    if (summary) {
+      return {
+        currency: scopeCurrency,
+        tiles: [
+          {
+            label: tBanner("invested"),
+            value: summary.totalInvested
+              ? formatMoneyCompact(Number(summary.totalInvested), scopeCurrency, locale)
+              : "—",
+            sub: "",
+            tone: "neutral" as const,
+          },
+          {
+            label: tBanner("proceeds"),
+            value: summary.totalProceeds
+              ? formatMoneyCompact(Number(summary.totalProceeds), scopeCurrency, locale)
+              : "—",
+            sub: "",
+            tone: "neutral" as const,
+          },
+          {
+            label: tBanner("incomeYtd"),
+            value: summary.totalIncome
+              ? formatMoneyCompact(Number(summary.totalIncome), scopeCurrency, locale)
+              : "—",
+            sub: "",
+            tone: "neutral" as const,
+          },
+        ],
+        mix: [],
+      };
+    }
+    return computeAllBanner(rows, scopeCurrency, locale, {
+      invested: tBanner("invested"),
+      proceeds: tBanner("proceeds"),
+      incomeYtd: tBanner("incomeYtd"),
+      buysCount: (n) => tBanner("buysCount", { count: n }),
+      sellsCount: (n) => tBanner("sellsCount", { count: n }),
+      vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
+      buys: tBanner("buys"),
+      sells: tBanner("sells"),
+      income: tBanner("income"),
+    });
+  }, [activeBannerMode, summary, rows, scopeCurrency, locale, tBanner]);
+  const incomeBanner = useMemo(() => {
+    if (activeBannerMode !== "income") return null;
+    // Can't compute a full income banner from just the summary (missing YTD breakdown).
+    // Fall back to rows data when summary is unavailable (aggregate view).
+    return computeIncomeBanner(rows, scopeCurrency, locale, {
+      vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
+      new: tBanner("newIncome"),
+      perMonth: (amount) => tBanner("perMonth", { amount }),
+      dividends: tBanner("dividends"),
+      couponsInterest: tBanner("couponsInterest"),
+      other: tBanner("otherIncome"),
+    });
+  }, [activeBannerMode, rows, scopeCurrency, locale, tBanner]);
+  const tradeBanner = useMemo(() => {
+    if (activeBannerMode !== "buy" && activeBannerMode !== "sell") return null;
+    if (summary) {
+      const total =
+        activeBannerMode === "buy" ? summary.totalInvested : summary.totalProceeds;
+      if (!total) return null;
+      const money = (n: number) => formatMoneyCompact(n, scopeCurrency, locale);
+      return {
+        currency: scopeCurrency,
+        total: money(Number(total)),
+        count: rows.filter((r) => r.type === activeBannerMode).length,
+        avg: "—",
+        bySymbol: [],
+      };
+    }
+    return computeTradeBanner(rows, activeBannerMode, scopeCurrency, locale);
+  }, [activeBannerMode, summary, rows, scopeCurrency, locale]);
+
+  // Navigate with a URL param update (type/year/q). Resets to page 1 on filter change.
+  const navigateWithParam = useCallback(
+    (key: string, value: string | undefined) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+      params.set("page", "1");
+      router.push(`/transactions?${params.toString()}`);
+    },
+    [router, searchParams],
   );
-  const incomeBanner = useMemo(
-    () =>
-      activeBannerMode === "income"
-        ? computeIncomeBanner(rows, scopeCurrency, locale, {
-            vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
-            new: tBanner("newIncome"),
-            perMonth: (amount) => tBanner("perMonth", { amount }),
-            dividends: tBanner("dividends"),
-            couponsInterest: tBanner("couponsInterest"),
-            other: tBanner("otherIncome"),
-          })
-        : null,
-    [activeBannerMode, rows, scopeCurrency, locale, tBanner],
-  );
-  const tradeBanner = useMemo(
-    () =>
-      activeBannerMode === "buy" || activeBannerMode === "sell"
-        ? computeTradeBanner(rows, activeBannerMode, scopeCurrency, locale)
-        : null,
-    [activeBannerMode, rows, scopeCurrency, locale],
-  );
+
+  // Cleanup debounce on unmount.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   // Anomalies with no transactionId (reconciliation_gap, position_gap, …) never drive the
   // row-level "Show flagged" toggle above — surfaced here instead, independent of any
@@ -785,7 +854,7 @@ export function TransactionsTable({
     () => sortedRows.slice(0, visibleCount),
     [sortedRows, visibleCount],
   );
-  const hasMore = sortedRows.length > windowedRows.length;
+  const hasMore = sortedRows.length > windowedRows.length || (accumulatedRows.length < (total ?? 0) && portfolioId != null);
   // The reference groups the ledger into month bands. That only reads coherently while the
   // list is in date order (the default, or an explicit Date sort); any other sort renders flat.
   const groupByMonth = sortKey === null || sortKey === "date";
@@ -897,7 +966,8 @@ export function TransactionsTable({
         {/* Chips scroll horizontally on mobile (no awkward multi-line wrap); wrap on desktop. */}
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden">
         {/* Reference tChips: rounded-full pills, active = white on var(--pill),
-            inactive = 600 on card bg with a border; "Needs review · N" is tinted. */}
+            inactive = 600 on card bg with a border. Navigational — update the URL,
+            server re-fetches with the new filter. "Needs review · N" is local state. */}
         {(
           [
             ["all", t("filterAll")],
@@ -909,11 +979,11 @@ export function TransactionsTable({
           <button
             key={key}
             type="button"
-            onClick={() => setChipFilter(key)}
-            aria-pressed={chipFilter === key}
+            onClick={() => navigateWithParam("type", key === "all" ? undefined : key)}
+            aria-pressed={key === "all" ? !typeFilter : typeFilter === key}
             className={cn(
               "whitespace-nowrap rounded-full px-3.5 py-[7px] text-xs",
-              chipFilter === key
+              (key === "all" ? !typeFilter : typeFilter === key)
                 ? "bg-pill font-bold text-white"
                 : "border border-border bg-card font-semibold text-foreground",
             )}
@@ -924,11 +994,11 @@ export function TransactionsTable({
         {anomalyByTxId.size > 0 && (
           <button
             type="button"
-            onClick={() => setChipFilter(chipFilter === "issues" ? "all" : "issues")}
-            aria-pressed={chipFilter === "issues"}
+            onClick={() => setShowFlagged((v) => !v)}
+            aria-pressed={showFlagged}
             className={cn(
               "whitespace-nowrap rounded-full border px-3 py-[7px] text-xs font-bold",
-              chipFilter === "issues"
+              showFlagged
                 ? "border-[var(--gold-fg)] bg-[var(--gold-fg)] text-white"
                 : "border-[rgba(224,165,58,.34)] bg-[rgba(224,165,58,.12)] text-[var(--gold-fg)]",
             )}
@@ -937,8 +1007,6 @@ export function TransactionsTable({
           </button>
         )}
         {yearOptions.length > 1 && (
-          // Styled dropdown (Radix) rather than a native <select> so the popup matches the
-          // app's menus and the chevron has proper right padding.
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -946,7 +1014,7 @@ export function TransactionsTable({
                 aria-label={t("filterYear")}
                 className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                {yearFilter === "all" ? t("allYears") : yearFilter}
+                {yearFilterProp ?? t("allYears")}
                 <ChevronDown className="size-3.5 shrink-0 text-text-3" />
               </button>
             </DropdownMenuTrigger>
@@ -954,11 +1022,13 @@ export function TransactionsTable({
               {["all", ...yearOptions].map((y) => (
                 <DropdownMenuItem
                   key={y}
-                  onSelect={() => setYearFilter(y)}
+                  onSelect={() => navigateWithParam("year", y === "all" ? undefined : y)}
                   className="justify-between gap-3"
                 >
                   {y === "all" ? t("allYears") : y}
-                  {yearFilter === y && <Check className="size-4 text-primary" />}
+                  {(y === "all" ? !yearFilterProp : yearFilterProp === y) && (
+                    <Check className="size-4 text-primary" />
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -981,14 +1051,25 @@ export function TransactionsTable({
           <Input
             type="text"
             placeholder={t("searchPlaceholder")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={localQuery}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLocalQuery(v);
+              if (debounceRef.current) clearTimeout(debounceRef.current);
+              debounceRef.current = setTimeout(() => {
+                navigateWithParam("q", v || undefined);
+              }, 300);
+            }}
             className="h-8 w-full pl-7 pr-7 text-xs sm:w-44"
           />
-          {query && (
+          {localQuery && (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => {
+                setLocalQuery("");
+                if (debounceRef.current) clearTimeout(debounceRef.current);
+                navigateWithParam("q", undefined);
+              }}
               aria-label={t("searchClear")}
               className="absolute right-2 text-muted-foreground hover:text-foreground"
             >
@@ -1415,16 +1496,47 @@ export function TransactionsTable({
         )}
       </div>
 
-      {/* Explicit "Load more" rather than scroll-triggered/infinite loading — an
-          intersection-observer approach never bottoms out, which would make "Recent
-          imports" (rendered below this table) permanently unreachable by scrolling. */}
+      {/* "Load more": first reveals already-loaded rows (client-side), then fetches the
+          next server page and appends. This replaces the old page-number navigation. */}
       {visibleRows.length > 0 && hasMore && (
         <div className="flex flex-col items-center gap-2 py-2">
-          <Button variant="outline" size="sm" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loadingMore}
+            onClick={async () => {
+              // If there are already-loaded rows not yet visible, just reveal them.
+              if (visibleCount < sortedRows.length) {
+                setVisibleCount((n) => n + PAGE_SIZE);
+                return;
+              }
+              // All loaded rows are visible; fetch the next server page.
+              if (accumulatedRows.length < (total ?? 0) && (portfolioId || true)) {
+                setLoadingMore(true);
+                try {
+                  const params = new URLSearchParams({ page: String(currentPage + 1), pageSize: "25" });
+                  if (typeFilter) params.set("type", typeFilter);
+                  if (yearFilterProp) params.set("year", yearFilterProp);
+                  if (searchQuery) params.set("q", searchQuery);
+                  const basePath = portfolioId
+                    ? `/api/backend/portfolios/${portfolioId}/transactions`
+                    : "/api/backend/networth/transactions";
+                  const res = await fetch(`${basePath}?${params}`);
+                  const data = await res.json();
+                  setAccumulatedRows((prev) => [...prev, ...data.rows]);
+                  setCurrentPage((p) => p + 1);
+                  setVisibleCount((n) => n + data.rows.length);
+                } finally {
+                  setLoadingMore(false);
+                }
+              }
+            }}
+          >
+            {loadingMore ? <Loader2 className="size-4 animate-spin" /> : null}
             {tb("loadMore")}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {tb("showingCount", { shown: windowedRows.length, total: sortedRows.length })}
+            {tb("showingCount", { shown: windowedRows.length, total: Math.max(sortedRows.length, total ?? 0) })}
           </span>
         </div>
       )}
@@ -1436,6 +1548,7 @@ export function TransactionsTable({
         onOpenChange={(o) => { if (!o) setDetailTx(null); }}
         onDeleted={() => { setDetailTx(null); router.refresh(); }}
         portfolios={portfolios}
+        scopeCurrency={scopeCurrency}
         onEdit={(tx) => { setDetailTx(null); setEditTx(tx); }}
         onReassign={(tx) => { setDetailTx(null); setReassignRows([tx]); }}
         onResolve={(tx, action) => onResolveOne(tx, action)}

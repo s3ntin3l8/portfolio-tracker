@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { Multipart } from "@fastify/multipart";
-import { inArray } from "drizzle-orm";
-import { portfolios } from "@portfolio/db";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
+import { documents, portfolios } from "@portfolio/db";
 import { documentUploadFieldsSchema, documentListQuerySchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
+import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
+import { logTiming } from "../lib/timing.js";
 import {
   storeInboxDocument,
   deleteInboxDocument,
@@ -12,6 +14,8 @@ import {
 } from "../storage/inbox.js";
 import { ownedPortfolio } from "./imports/helpers.js";
 import { shortHash } from "../services/parsers/hash.js";
+
+const documentsCache = createStore<{ rows: unknown[]; total: number }>();
 
 /** Read a plain-field value out of a multipart `part.fields[name]` entry (which may be a
  *  file, a value, an array of either, or absent). Returns undefined for anything but a
@@ -32,20 +36,14 @@ export async function documentsRoute(app: FastifyInstance) {
   // (the only category today) — see listInboxDocuments.
   app.get("/documents", { preHandler: app.authenticate }, async (request) => {
     const { id: userId } = requireUser(request);
-    const { category, portfolioId } = documentListQuerySchema.parse(request.query);
-    const docs = await listInboxDocuments(app, { userId, category, portfolioId });
+    const { category, portfolioId, page: rawPage, pageSize: rawPageSize } = documentListQuerySchema.parse(request.query);
+    const paginate = rawPage !== undefined;
+    const page = paginate ? Math.max(1, parseInt(rawPage!, 10) || 1) : 1;
+    const pageSize = paginate
+      ? Math.min(100, Math.max(1, parseInt(rawPageSize ?? "25", 10) || 25))
+      : 0;
 
-    // Batch-resolve portfolio labels (which account/connection a report covers) in one query.
-    const portfolioIds = [...new Set(docs.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
-    const portfolioRows = portfolioIds.length
-      ? await app.db
-          .select({ id: portfolios.id, name: portfolios.name })
-          .from(portfolios)
-          .where(inArray(portfolios.id, portfolioIds))
-      : [];
-    const nameById = new Map(portfolioRows.map((p) => [p.id, p.name]));
-
-    return docs.map((d) => ({
+    const renderRow = (d: { id: string; category: string | null; taxYear: number | null; source: string | null; originalFilename: string | null; mimeType: string | null; sizeBytes: number | null; portfolioId: string | null; storedAt: Date }, nameById: Map<string, string>) => ({
       id: d.id,
       category: d.category,
       taxYear: d.taxYear,
@@ -56,7 +54,64 @@ export async function documentsRoute(app: FastifyInstance) {
       portfolioId: d.portfolioId,
       portfolioLabel: d.portfolioId ? (nameById.get(d.portfolioId) ?? null) : null,
       storedAt: d.storedAt,
-    }));
+    });
+
+    const t0 = performance.now();
+
+    if (paginate) {
+      const conditions = [eq(documents.userId, userId), eq(documents.category, category ?? "tax_report")];
+      if (portfolioId) conditions.push(eq(documents.portfolioId, portfolioId));
+
+      const cacheKey = `${userId}:${page}:${pageSize}:${category ?? ""}:${portfolioId ?? ""}`;
+      const cached = await withDerivationCache(documentsCache, cacheKey, async () => {
+        const [cnt, rows] = await Promise.all([
+          app.db
+            .select({ count: count() })
+            .from(documents)
+            .where(and(...conditions))
+            .then((r) => Number(r[0].count)),
+          app.db
+            .select()
+            .from(documents)
+            .where(and(...conditions))
+            .orderBy(desc(documents.storedAt))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize),
+        ]);
+
+        const portfolioIds = [...new Set(rows.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
+        const portfolioRows = portfolioIds.length
+          ? await app.db
+              .select({ id: portfolios.id, name: portfolios.name })
+              .from(portfolios)
+              .where(inArray(portfolios.id, portfolioIds))
+          : [];
+        const nameById = new Map(portfolioRows.map((p) => [p.id, p.name]));
+
+        return { rows: rows.map((d) => renderRow(d, nameById)), total: cnt };
+      });
+
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /documents", durationMs, { total: cached.total, page, pageSize });
+
+      return cached;
+    }
+
+    const docs = await listInboxDocuments(app, { userId, category, portfolioId });
+
+    const portfolioIds = [...new Set(docs.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
+    const portfolioRows = portfolioIds.length
+      ? await app.db
+          .select({ id: portfolios.id, name: portfolios.name })
+          .from(portfolios)
+          .where(inArray(portfolios.id, portfolioIds))
+      : [];
+    const nameById = new Map(portfolioRows.map((p) => [p.id, p.name]));
+
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /documents", durationMs, { docCount: docs.length });
+
+    return docs.map((d) => renderRow(d, nameById));
   });
 
   // Upload a tax PDF straight into the inbox — no import required at upload time, but

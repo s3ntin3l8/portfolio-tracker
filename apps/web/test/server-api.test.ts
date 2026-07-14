@@ -228,7 +228,7 @@ describe("loadAnomalies", () => {
 
   it("fetches anomalies for the selected portfolio", async () => {
     h.cookies = { pf: "p1" };
-    h.client.getHoldings = async () => ({
+    h.client.getAnomalies = async () => ({
       anomalies: [{ id: "a1", severity: "warning", message: "test" }],
     });
     const res = await api.loadAnomalies();
@@ -238,16 +238,16 @@ describe("loadAnomalies", () => {
 
   it("uses portfolioOverride instead of the cookie for anomalies", async () => {
     h.cookies = { pf: "p1" }; // cookie says p1
-    const getHoldings = vi.fn(async () => ({ anomalies: [] }));
-    h.client.getHoldings = getHoldings;
+    const getAnomalies = vi.fn(async () => ({ anomalies: [] }));
+    h.client.getAnomalies = getAnomalies;
 
     await api.loadAnomalies("p2"); // override says p2
-    expect(getHoldings).toHaveBeenCalledWith("p2");
+    expect(getAnomalies).toHaveBeenCalledWith("p2");
   });
 
   it("returns null on error", async () => {
     h.cookies = { pf: "p1" };
-    h.client.getHoldings = async () => {
+    h.client.getAnomalies = async () => {
       throw new Error("x");
     };
     expect(await api.loadAnomalies()).toBeNull();
@@ -715,7 +715,7 @@ describe("loadTaxYearDetail", () => {
     }));
     h.client.getTrades = getTrades;
 
-    const listTransactions = vi.fn(async (id: string) =>
+    const listIncomeByYear = vi.fn(async (id: string) =>
       id === "p1"
         ? [
             {
@@ -735,7 +735,7 @@ describe("loadTaxYearDetail", () => {
           ]
         : [],
     );
-    h.client.listTransactions = listTransactions;
+    h.client.listIncomeByYear = listIncomeByYear;
 
     const holders = [
       {
@@ -756,8 +756,8 @@ describe("loadTaxYearDetail", () => {
 
     const map = await api.loadTaxYearDetail(holders, 2026);
     expect(getTrades).toHaveBeenCalledWith("p1", "fifo");
-    expect(listTransactions).toHaveBeenCalledWith("p1");
-    expect(listTransactions).not.toHaveBeenCalledWith("p2");
+    expect(listIncomeByYear).toHaveBeenCalledWith("p1", 2026);
+    expect(listIncomeByYear).not.toHaveBeenCalledWith("p2");
 
     const detail = map.get("p1");
     expect(detail).toBeDefined();
@@ -871,7 +871,7 @@ describe("loadTaxYearDetail", () => {
       realizedByYear: [],
       dividendsByYear: [],
     });
-    h.client.listTransactions = async () => [];
+    h.client.listIncomeByYear = async () => [];
 
     const holders = [
       {
@@ -920,7 +920,7 @@ describe("loadTaxYearDetail", () => {
       realizedByYear: [],
       dividendsByYear: [],
     });
-    h.client.listTransactions = async () => [
+    h.client.listIncomeByYear = async () => [
       {
         id: "t1",
         portfolioId: "p1",
@@ -983,7 +983,7 @@ describe("loadTaxYearDetail", () => {
       dividendsByYear: [],
     }));
     h.client.getNetWorthTrades = getNetWorthTrades;
-    h.client.listTransactions = async () => [];
+    h.client.listIncomeByYear = async () => [];
 
     const holders = [
       { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
@@ -1010,7 +1010,7 @@ describe("loadTaxYearDetail", () => {
       if (holderId === "h1") throw new Error("boom");
       return { displayCurrency: "EUR", trades: [], realizedByYear: [], dividendsByYear: [] };
     };
-    h.client.listTransactions = async () => [];
+    h.client.listIncomeByYear = async () => [];
 
     const holders = [
       { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
@@ -1062,7 +1062,7 @@ describe("loadTaxYearDetail", () => {
         { year: 2026, amount: "133", tax: "15" },
       ],
     });
-    h.client.listTransactions = async () => [];
+    h.client.listIncomeByYear = async () => [];
 
     const holders = [
       { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
@@ -1099,14 +1099,14 @@ describe("loadTaxYearDetail", () => {
       dividendsByYear: [],
     }));
     h.client.getNetWorthTrades = getNetWorthTrades;
-    const listTransactions = vi.fn(async () => []);
-    h.client.listTransactions = listTransactions;
+    const listIncomeByYear = vi.fn(async () => []);
+    h.client.listIncomeByYear = listIncomeByYear;
 
     await api.loadTaxYearDetail(idHolders, 2026);
-    // Both portfolios' transactions are fetched — the sentinel resolved to "every
+    // Both portfolios' income is fetched — the sentinel resolved to "every
     // portfolio", not filtered down by a (non-existent) accountHolderId match.
-    expect(listTransactions).toHaveBeenCalledWith("p1");
-    expect(listTransactions).toHaveBeenCalledWith("p2");
+    expect(listIncomeByYear).toHaveBeenCalledWith("p1", 2026);
+    expect(listIncomeByYear).toHaveBeenCalledWith("p2", 2026);
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertCircle,
@@ -48,7 +48,6 @@ import { cn, formatMoney, formatSignedMoney, anomalyLabel, type AnomalyTranslato
 import {
   txAmount,
   txNetAmount,
-  txNetAmountDisplay,
   SOURCE_ICON,
 } from "@/components/transactions-table";
 import type { TxRow } from "@/components/transactions-table";
@@ -114,6 +113,8 @@ interface TransactionDetailSheetProps {
   onResolve?: (tx: TxRow, action: "confirm" | "discard") => void;
   /** True while this row's draft is being confirmed/discarded (spinner + disable). */
   resolving?: boolean;
+  /** The scope currency for the "≈ in" display. Defaults to IDR. */
+  scopeCurrency?: string;
 }
 
 /** A section heading — small uppercase label above a card (reference `--text-3`, .04em). */
@@ -182,6 +183,7 @@ export function TransactionDetailSheet({
   onReassign,
   onResolve,
   resolving = false,
+  scopeCurrency = "IDR",
 }: TransactionDetailSheetProps) {
   const t = useTranslations("Transactions");
   const tt = useTranslations("TxType");
@@ -196,6 +198,7 @@ export function TransactionDetailSheet({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [clientRate, setClientRate] = useState<string | null>(null);
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(
@@ -204,22 +207,36 @@ export function TransactionDetailSheet({
   );
   const numFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
 
+  // Client-side FX rate lookup: when the row wasn't converted server-side (displayRate is
+  // null or "1"), try to fetch a rate for the pair so we can still show the "≈ in" line.
+  useEffect(() => {
+    if (!tx) return;
+    if (tx.displayRate != null && tx.displayRate !== "1") return;
+    if (!tx.currency || !scopeCurrency || tx.currency === scopeCurrency) return;
+    let cancelled = false;
+    fetch(
+      `/api/backend/fx-rate?from=${encodeURIComponent(tx.currency)}&to=${encodeURIComponent(scopeCurrency)}&date=${tx.executedAt.slice(0, 10)}`,
+    )
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setClientRate(data.rate ?? null); })
+      .catch(() => { if (!cancelled) setClientRate(null); });
+    return () => { cancelled = true; };
+  }, [tx, scopeCurrency]);
+
   if (!tx) return null;
 
   const amount = txAmount(tx);
   const netAmount = txNetAmount(tx);
-  // Secondary "≈ in {scope currency}" line (#465) — only when the row's own currency
-  // differs from the scope currency it was fetched against (else it's a redundant
-  // duplicate of the hero amount above it) AND there's an actual rate for the pair.
-  // `displayRate` is overloaded: "1" means either "same currency" (excluded above) or
-  // "unknown FX pair, left unconverted" — the latter must NOT render as a converted
-  // amount mislabeled with the scope currency.
+
+  const effectiveDisplayRate = tx.displayRate != null && tx.displayRate !== "1" ? tx.displayRate : clientRate;
+  const effectiveDisplayCurrency = tx.displayCurrency ?? scopeCurrency;
   const showApproxDisplay =
-    tx.displayCurrency != null &&
-    tx.displayCurrency !== tx.currency &&
-    tx.displayRate != null &&
-    tx.displayRate !== "1";
-  const netAmountDisplay = showApproxDisplay ? txNetAmountDisplay(tx) : null;
+    effectiveDisplayRate != null &&
+    effectiveDisplayCurrency != null &&
+    effectiveDisplayCurrency !== tx.currency;
+  const netAmountDisplay = showApproxDisplay && netAmount != null
+    ? netAmount * Number(effectiveDisplayRate)
+    : null;
   const qty = Number(tx.quantity);
   const badge = TYPE_BADGE[tx.type] ?? DEFAULT_BADGE;
   const BadgeIcon = badge.icon;
@@ -404,7 +421,7 @@ export function TransactionDetailSheet({
             </div>
             {showApproxDisplay && netAmountDisplay !== null && (
               <div className="tabular mt-0.5 text-[13px] font-medium text-text-2">
-                {t("approxDisplay", { amount: m(netAmountDisplay, tx.displayCurrency!) })}
+                {t("approxDisplay", { amount: m(netAmountDisplay, effectiveDisplayCurrency!) })}
               </div>
             )}
             <div className="mt-2.5">

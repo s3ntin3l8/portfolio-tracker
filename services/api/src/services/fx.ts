@@ -218,18 +218,28 @@ export async function getFxRatesForDates(
   for (const r of cached) byCurrency.get(r.base)?.set(r.date, r.rate);
 
   // Back-fill any currency that lacks an exact rate for one of the wanted dates.
+  // All missing currencies are fetched in parallel (was a serial for-loop) — the
+  // Frankfurter API supports up to ~30 currencies per request, but to keep the
+  // provider interface generic we fan out with Promise.all instead.
   if (fxProvider?.getRateHistory) {
     const minDate = wanted[0];
-    for (const from of foreign) {
+    const missing = foreign.filter((from) => {
       const known = byCurrency.get(from)!;
-      if (wanted.every((d) => known.has(d))) continue;
-      const history = await fxProvider.getRateHistory(from, base, minDate, maxDate);
-      for (const [date, rate] of Object.entries(history)) {
-        const str = fmtRate(rate);
-        known.set(date, str);
-        await cacheFxRate(db, from, base, str, date);
-      }
-    }
+      return !wanted.every((d) => known.has(d));
+    });
+    const cacheOps: Promise<void>[] = [];
+    await Promise.all(
+      missing.map(async (from) => {
+        const known = byCurrency.get(from)!;
+        const history = await fxProvider.getRateHistory!(from, base, minDate, maxDate);
+        for (const [date, rate] of Object.entries(history)) {
+          const str = fmtRate(rate);
+          known.set(date, str);
+          cacheOps.push(cacheFxRate(db, from, base, str, date));
+        }
+      }),
+    );
+    await Promise.all(cacheOps);
   }
 
   for (const from of foreign) {

@@ -456,6 +456,27 @@
       "when": 1783778279299,
       "tag": "0064_charming_talisman",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1784028702046,
+      "tag": "0065_mysterious_havok",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1784039110206,
+      "tag": "0066_wet_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1784043995125,
+      "tag": "0067_cuddly_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

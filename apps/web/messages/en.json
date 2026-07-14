@@ -377,7 +377,8 @@
     "allYears": "All years",
     "searchPlaceholder": "Search income…",
     "searchClear": "Clear search",
-    "noMatches": "No payments match your filters."
+    "noMatches": "No payments match your filters.",
+    "olderYears": "Older years"
   },
   "Savings": {
     "title": "Savings",

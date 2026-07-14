@@ -389,6 +389,13 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       });
     };
 
+    // FIFO consumption pointer into `lots`, shared by the sell and transfer_out branches
+    // below. Persists across transactions *within one episode* so consumed lots are never
+    // re-scanned (O(n) amortized over the episode, not O(n) per sell) — but MUST be reset
+    // to 0 everywhere `lots` itself is reset to `[]` (episode close), since a stale index
+    // into a fresh array would skip straight past the end and silently price the next
+    // disposal at zero cost.
+    let lotIdx = 0;
     for (const ev of events) {
       if (ev.kind === "ca") {
         // Lot-level corporate actions: keep total cost fixed, scale quantities.
@@ -459,18 +466,21 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         const costAvg = avgUnit.mul(sellQty);
 
         // --- FIFO method: consume oldest lots ---
+        // Skip-ahead guards against a lot left at qty 0 by a still-open leading position
+        // (defensive; lotIdx should already point past fully-consumed lots).
         let remaining = sellQty;
         let costFifo = ZERO;
         const fifoSlices: { acqDate: Date; qty: Decimal; cost: Decimal }[] = [];
-        while (remaining.gt(0) && lots.length > 0) {
-          const lot = lots[0];
+        while (lotIdx < lots.length && lots[lotIdx].qty.lte(0)) lotIdx++;
+        while (remaining.gt(0) && lotIdx < lots.length) {
+          const lot = lots[lotIdx];
           const take = Decimal.min(lot.qty, remaining);
           const sliceCost = take.mul(lot.unitCost);
           costFifo = costFifo.add(sliceCost);
           fifoSlices.push({ acqDate: lot.acqDate, qty: take, cost: sliceCost });
           lot.qty = lot.qty.sub(take);
           remaining = remaining.sub(take);
-          if (lot.qty.lte(0)) lots.shift();
+          if (lot.qty.lte(0)) lotIdx++;
         }
 
         const costMethod = method === "fifo" ? costFifo : costAvg;
@@ -531,6 +541,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
           finalizeTrade(episode, "closed", sellDate);
           episode = null;
           lots = [];
+          lotIdx = 0;
           avgQty = ZERO;
           avgCost = ZERO;
           vorabPool = ZERO;
@@ -538,15 +549,18 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       }
       else if (tx.type === "transfer_out") {
         // Outbound depot transfer: shares leave at average cost, no realized P&L.
-        // Drain the lot ledger so future sells don't over-count the removed shares.
+        // Drain the lot ledger (same shared lotIdx as the sell branch — never `.shift()`,
+        // which would invalidate the index other transactions rely on) so future sells
+        // don't over-count the removed shares.
         if (!episode || avgQty.lte(0)) continue;
         let remaining = Decimal.min(q, avgQty);
-        while (remaining.gt(0) && lots.length > 0) {
-          const lot = lots[0];
+        while (lotIdx < lots.length && lots[lotIdx].qty.lte(0)) lotIdx++;
+        while (remaining.gt(0) && lotIdx < lots.length) {
+          const lot = lots[lotIdx];
           const take = Decimal.min(lot.qty, remaining);
           lot.qty = lot.qty.sub(take);
           remaining = remaining.sub(take);
-          if (lot.qty.lte(0)) lots.shift();
+          if (lot.qty.lte(0)) lotIdx++;
         }
         const transferQty = Decimal.min(q, avgQty);
         const avg = avgQty.gt(0) ? avgCost.div(avgQty) : ZERO;

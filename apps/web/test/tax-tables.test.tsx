@@ -17,7 +17,8 @@ function wrap(ui: React.ReactNode) {
   );
 }
 
-const money = (n: string | number) => `Rp ${Number(n).toLocaleString("en")}`;
+const CURRENCY = "IDR";
+const LOCALE = "en";
 
 describe("DividendsTable sorting", () => {
   it("sorts by Net descending on click", () => {
@@ -54,7 +55,8 @@ describe("ByYearTable sorting", () => {
           { year: 2026, realized: "240", dividends: "168", fsaUsed: "408", tax: "0" },
           { year: 2024, realized: "100", dividends: "227", fsaUsed: "327", tax: "0" },
         ]}
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Year/i }));
@@ -75,7 +77,8 @@ describe("IdDividendsTable sorting", () => {
         totalDividendGross="600000"
         totalDividendTax="60000"
         totalDividendNet="540000"
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
         year={2026}
       />,
     );
@@ -95,7 +98,8 @@ describe("IdByYearTable sorting", () => {
           { year: 2025, realized: "1940000", dividends: "2110000", tax: "212940" },
           { year: 2026, realized: "324000", dividends: "1284000", tax: "128724" },
         ]}
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Tax/i }));

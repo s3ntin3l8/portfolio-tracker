@@ -16,27 +16,39 @@ import { EmptyState } from "@/components/empty-state";
 import { loadContributions, loadSparplan, loadHoldings } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function SavingsPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Savings");
   const te = await getTranslations("Empty");
 
   // Holder scope is now global (cookie-based via the portfolio switcher).
-  // loadContributions() reads it automatically.
-  const result = await loadContributions();
-  // Sparplan detection is fetched independently so it renders even when
-  // totalContributed === 0 (e.g. cash-outside portfolio with only plan buys).
-  const sparplanResult = await loadSparplan();
-  // Cash-on-hand card needs the same per-currency cash balances the Holdings
-  // screen pins — only meaningful (cashTracked) for cash-inside-boundary
-  // portfolios; absent entirely for cash-outside scope, which is correct (there's
-  // nothing "idle" to nudge when cash isn't part of the portfolio's boundary).
-  const holdingsResult = await loadHoldings();
+  // All three loaders are independent — fire them in parallel.
+  const [result, sparplanResult, holdingsResult] = await Promise.all([
+    loadContributions(),
+    loadSparplan(),
+    loadHoldings(),
+  ]);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] SavingsPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   const heading = <ReportHeader title={t("title")} subtitle={t("subtitle")} />;
 

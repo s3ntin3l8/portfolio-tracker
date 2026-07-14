@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import pino from "pino";
 import type { DestinationStream } from "pino";
 import pinoRoll from "pino-roll";
+import compress from "@fastify/compress";
 import sensible from "@fastify/sensible";
 import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
@@ -40,6 +41,7 @@ import type { IbkrFlexClient } from "./services/ibkr/flex-client.js";
 import type { StorageProvider } from "./storage/types.js";
 import { storagePlugin } from "./plugins/storage.js";
 import { clearValuationCache } from "./services/valuation.js";
+import { clearDerivationCache } from "./lib/derivation-cache.js";
 
 export type BuildAppOptions = AuthPluginOptions & {
   // Injectable so tests can supply a mock parser instead of hitting Anthropic.
@@ -177,6 +179,10 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   await app.register(envPlugin);
   await app.register(loggingPlugin);
   await app.register(sensible);
+  // Gzip-compress responses >1 KB (large responses like income stats). The web proxy
+  // (apps/web/src/app/api/backend/[...path]/route.ts) streams the compressed body
+  // through unchanged, so browsers get the smaller payload directly.
+  await app.register(compress, { global: true, threshold: 1024 });
   // Allow multipart/form-data uploads (screenshot imports). 25 MB per file; single file
   // per request. The limit is caught in-route (→ 413) to avoid leaking FST_* error codes.
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
@@ -195,7 +201,8 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   // extra recompute per portfolio on the next read — never a staleness risk.
   app.addHook("onResponse", async (request) => {
     if (request.method !== "GET" && request.method !== "HEAD") {
-      clearValuationCache();
+      clearValuationCache(request.log);
+      clearDerivationCache();
     }
   });
 

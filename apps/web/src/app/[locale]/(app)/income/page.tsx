@@ -25,11 +25,15 @@ import type { IncomeEventRow } from "@/components/income/income-events-table";
 import { loadIncomeStats } from "@/lib/server-api";
 import { formatMoney, formatPercent, cn } from "@/lib/utils";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function IncomePage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Income");
@@ -39,6 +43,18 @@ export default async function IncomePage({
   // Holder scope is now global (cookie-based via the portfolio switcher).
   // loadIncomeStats() reads it automatically.
   const result = await loadIncomeStats();
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] IncomePage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   const heading = <ReportHeader title={t("title")} subtitle={t("subtitle")} />;
 
@@ -121,6 +137,14 @@ export default async function IncomePage({
       quantity: u.quantity,
     })),
   ];
+
+  // Years with data that aren't in the initial 3-year events window → collapsed
+  // year headers that load on demand.
+  const eventYears = new Set(s.events.map((e) => e.date.slice(0, 4)));
+  const olderYears = s.byYear
+    .map((y) => String(y.year))
+    .filter((y) => !eventYears.has(y))
+    .sort((a, b) => Number(b) - Number(a));
 
   return (
     <div className="space-y-5">
@@ -255,7 +279,9 @@ export default async function IncomePage({
 
       {/* Payments timeline — one card, year sub-headers newest-first, with its own
           year/status filter chips + search (reference). */}
-      {timelineRows.length > 0 && <IncomeTimeline rows={timelineRows} locale={locale} />}
+      {timelineRows.length > 0 && (
+        <IncomeTimeline rows={timelineRows} locale={locale} olderYears={olderYears} />
+      )}
     </div>
   );
 }

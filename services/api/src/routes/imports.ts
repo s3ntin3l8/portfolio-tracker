@@ -31,6 +31,19 @@ import { reassignTransactions } from "../services/reassign.js";
 import { enqueueRecompute } from "../services/scheduler.js";
 import { registerConfirmImportRoute } from "./imports/confirm.js";
 import { registerParseImportRoutes } from "./imports/parse.js";
+import { logTiming } from "../lib/timing.js";
+import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
+
+const importsCache = createStore<{ rows: unknown[]; importCount: number }>();
+const importDetailCache = createStore<{
+  id: string;
+  portfolioId: string | null;
+  parser: string | null;
+  status: string | null;
+  drafts: unknown[];
+  contracts: unknown[];
+  errors: { line: number; message: string }[];
+}>();
 
 // Batch hard-delete of discarded imports. Mirrors transactions' bulk-delete so the
 // web "clear all" fires one request instead of N parallel DELETE /clear calls (which
@@ -132,58 +145,66 @@ export async function importsRoute(app: FastifyInstance) {
   // List the current user's imports (newest first) — id, status, parser, draft count,
   // and document summary if one has been retained (#231).
   app.get("/imports", { preHandler: app.authenticate }, async (request) => {
+    const t0 = performance.now();
     const { id } = requireUser(request);
-    const rows = await app.db
-      .select()
-      .from(screenshotImports)
-      .where(eq(screenshotImports.userId, id))
-      .orderBy(desc(screenshotImports.createdAt));
-    // Batch the per-import document summary into one query (vs. one per confirmed row).
-    const confirmedIds = rows.filter((r) => r.status === "confirmed").map((r) => r.id);
-    const docByImport = await getDocumentSummariesForImports(app, confirmedIds);
-    // Display-only filename, independent of confirm/retention — a "staged" doc still exists
-    // for a draft (pre-confirm) import, so the list can show its real filename before review.
-    const filenameByImport = await getOriginalFilenamesForImports(
-      app,
-      rows.map((r) => r.id),
-    );
-    // TR/IBKR sync writes a single stable "anchor" screenshot_imports row whose
-    // parsedJson.drafts is always [] by design (materializeDrafts writes straight into
-    // `transactions` with status='draft' instead of staging in the collector — see
-    // sync.ts). Reading parsed.drafts.length for those rows always shows "0 items" even
-    // when the sync materialized hundreds of transactions. Batch a real transaction count
-    // by importId for just the sync parsers; every other parser keeps the drafts-length
-    // count (accurate pre-confirm, since those transactions don't exist yet).
-    const syncImportIds = rows.filter((r) => r.parser === "pytr" || r.parser === "ibkr").map((r) => r.id);
-    const syncCountRows = syncImportIds.length
-      ? await app.db
-          .select({ importId: transactions.importId, n: count() })
-          .from(transactions)
-          .where(inArray(transactions.importId, syncImportIds))
-          .groupBy(transactions.importId)
-      : [];
-    const syncCountByImport = new Map(syncCountRows.map((r) => [r.importId, r.n]));
-    return rows.map((r) => {
-      const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
-      const document = r.status === "confirmed" ? (docByImport.get(r.id) ?? null) : null;
-      const isSync = r.parser === "pytr" || r.parser === "ibkr";
-      return {
-        id: r.id,
-        portfolioId: r.portfolioId,
-        parser: r.parser,
-        status: r.status,
-        confidence: r.confidence,
-        count: isSync
-          ? (syncCountByImport.get(r.id) ?? 0)
-          : Array.isArray(parsed.drafts)
-            ? parsed.drafts.length
-            : 0,
-        batchId: r.batchId,
-        createdAt: r.createdAt,
-        document,
-        originalFilename: filenameByImport.get(r.id) ?? null,
-      };
+    const { rows, importCount } = await withDerivationCache(importsCache, id, async () => {
+      const rows = await app.db
+        .select({
+          id: screenshotImports.id,
+          portfolioId: screenshotImports.portfolioId,
+          parser: screenshotImports.parser,
+          status: screenshotImports.status,
+          confidence: screenshotImports.confidence,
+          parsedJson: screenshotImports.parsedJson,
+          batchId: screenshotImports.batchId,
+          createdAt: screenshotImports.createdAt,
+        })
+        .from(screenshotImports)
+        .where(eq(screenshotImports.userId, id))
+        .orderBy(desc(screenshotImports.createdAt));
+      const confirmedIds = rows.filter((r) => r.status === "confirmed").map((r) => r.id);
+      const allIds = rows.map((r) => r.id);
+      const syncImportIds = rows.filter((r) => r.parser === "pytr" || r.parser === "ibkr").map((r) => r.id);
+      const [docByImport, filenameByImport, syncCountRows] = await Promise.all([
+        getDocumentSummariesForImports(app, confirmedIds),
+        getOriginalFilenamesForImports(app, allIds),
+        syncImportIds.length
+          ? app.db
+              .select({ importId: transactions.importId, n: count() })
+              .from(transactions)
+              .where(inArray(transactions.importId, syncImportIds))
+              .groupBy(transactions.importId)
+          : [],
+      ]);
+      const syncCountByImport = new Map(
+        (Array.isArray(syncCountRows) ? syncCountRows : []).map((r) => [r.importId, r.n]),
+      );
+      const result = rows.map((r) => {
+        const parsed = (r.parsedJson ?? {}) as { drafts?: unknown[] };
+        const document = r.status === "confirmed" ? (docByImport.get(r.id) ?? null) : null;
+        const isSync = r.parser === "pytr" || r.parser === "ibkr";
+        return {
+          id: r.id,
+          portfolioId: r.portfolioId,
+          parser: r.parser,
+          status: r.status,
+          confidence: r.confidence,
+          count: isSync
+            ? (syncCountByImport.get(r.id) ?? 0)
+            : Array.isArray(parsed.drafts)
+              ? parsed.drafts.length
+              : 0,
+          batchId: r.batchId,
+          createdAt: r.createdAt,
+          document,
+          originalFilename: filenameByImport.get(r.id) ?? null,
+        };
+      });
+      return { rows: result, importCount: rows.length };
     });
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /imports", durationMs, { importCount });
+    return rows;
   });
 
   // Safety net: aggregate event types that reached the importer but have no mapping yet
@@ -398,23 +419,31 @@ export async function importsRoute(app: FastifyInstance) {
     "/imports/:importId",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      const t0 = performance.now();
       const { id } = requireUser(request);
-      const imp = await ownedImport(id, request.params.importId);
-      if (!imp) return reply.code(404).send({ error: "import_not_found" });
-      const parsed = (imp.parsedJson ?? {}) as {
-        drafts?: unknown[];
-        contracts?: unknown[];
-        errors?: { line: number; message: string }[];
-      };
-      return {
-        id: imp.id,
-        portfolioId: imp.portfolioId,
-        parser: imp.parser,
-        status: imp.status,
-        drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
-        contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
-        errors: Array.isArray(parsed.errors) ? parsed.errors : [],
-      };
+      const { importId } = request.params;
+      const result = await withDerivationCache(importDetailCache, importId, async () => {
+        const imp = await ownedImport(id, importId);
+        if (!imp) return null;
+        const parsed = (imp.parsedJson ?? {}) as {
+          drafts?: unknown[];
+          contracts?: unknown[];
+          errors?: { line: number; message: string }[];
+        };
+        return {
+          id: imp.id,
+          portfolioId: imp.portfolioId,
+          parser: imp.parser,
+          status: imp.status,
+          drafts: Array.isArray(parsed.drafts) ? parsed.drafts : [],
+          contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
+          errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+        };
+      });
+      if (!result) return reply.code(404).send({ error: "import_not_found" });
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /imports/:importId", durationMs, { importId });
+      return result;
     },
   );
 

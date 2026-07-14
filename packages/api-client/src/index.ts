@@ -751,6 +751,10 @@ export interface HoldingsResult {
   anomalies: Anomaly[];
 }
 
+export interface AnomaliesResult {
+  anomalies: Anomaly[];
+}
+
 /** A standing open FIFO lot (acquisition order), for a per-lot cost-basis display. */
 export interface LotView {
   acqDate: string; // ISO date (YYYY-MM-DD)
@@ -1735,8 +1739,14 @@ function uploadQuery(force: boolean, batchId?: string): string {
 
 export function createApiClient(config: ApiClientConfig) {
   const doFetch = config.fetch ?? globalThis.fetch;
+  const timingEnabled =
+    typeof (globalThis as Record<string, unknown>).process !== "undefined" &&
+    typeof ((globalThis as Record<string, unknown>).process as Record<string, unknown>).env === "object" &&
+    ((globalThis as Record<string, unknown>).process as Record<string, Record<string, string>>).env
+      ?.TIMING_ENABLED === "true";
 
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const t0 = timingEnabled ? performance.now() : 0;
     const token = await config.getToken?.();
     // Only declare a JSON content-type when we actually send a body. A bodyless
     // request (e.g. DELETE) that still advertises application/json trips Fastify's
@@ -1757,7 +1767,20 @@ export function createApiClient(config: ApiClientConfig) {
       throw new ApiError(res.status, await res.text());
     }
     if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    const result = (await res.json()) as T;
+    if (timingEnabled) {
+      const durationMs = performance.now() - t0;
+      console.log(
+        JSON.stringify({
+          level: "info",
+          msg: `[timing] api-client request`,
+          method,
+          path,
+          durationMs: Math.round(durationMs * 100) / 100,
+        }),
+      );
+    }
+    return result;
   }
 
   /** Like `request` but returns a Blob — for binary downloads (zip exports etc.). */
@@ -1870,6 +1893,13 @@ export function createApiClient(config: ApiClientConfig) {
       ),
     getPortfolioIncome: (portfolioId: string) =>
       request<IncomeStats>("GET", `/portfolios/${portfolioId}/income`),
+    getIncomeEventsByYear: (year: number, holderId?: string) =>
+      request<{ displayCurrency: string; events: IncomeEvent[] }>(
+        "GET",
+        holderId
+          ? `/networth/income?eventsYear=${year}&holderId=${encodeURIComponent(holderId)}`
+          : `/networth/income?eventsYear=${year}`,
+      ),
     getContributions: (holderId?: string) =>
       request<ContributionStats>(
         "GET",
@@ -1927,6 +1957,60 @@ export function createApiClient(config: ApiClientConfig) {
         convertTo
           ? `/portfolios/${portfolioId}/transactions?convertTo=${encodeURIComponent(convertTo)}`
           : `/portfolios/${portfolioId}/transactions`,
+      ),
+    /** Paginated variant: returns one page + total count. Enrichment only runs on the
+     *  returned page, so this is ~10× faster than fetching all 945+ rows. Accepts optional
+     *  filter params (`type`, `year`, `q`) that are passed to the server and returns
+     *  summary aggregates and available years when requested. */
+    listTransactionsPaginated: (
+      portfolioId: string,
+      page: number,
+      pageSize = 25,
+      convertTo?: string,
+      type?: string,
+      year?: string,
+      q?: string,
+    ) => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (convertTo) params.set("convertTo", convertTo);
+      if (type) params.set("type", type);
+      if (year) params.set("year", year);
+      if (q) params.set("q", q);
+      return request<{ rows: Transaction[]; total: number; summary?: { totalInvested: string; totalProceeds: string; totalIncome: string }; years?: string[] }>(
+        "GET",
+        `/portfolios/${portfolioId}/transactions?${params}`,
+      );
+    },
+    /** Aggregate paginated transactions across all portfolios (networth scope).
+     *  Same enrichment + filter pattern as the per-portfolio paginated variant. */
+    listNetworthTransactionsPaginated: (
+      page: number,
+      pageSize = 25,
+      type?: string,
+      year?: string,
+      q?: string,
+    ) => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (type) params.set("type", type);
+      if (year) params.set("year", year);
+      if (q) params.set("q", q);
+      return request<{ rows: Transaction[]; total: number }>(
+        "GET",
+        `/networth/transactions?${params}`,
+      );
+    },
+    /** List income-only rows for a portfolio in the given tax year (lightweight, no instrument/sources enrichment). */
+    listIncomeByYear: (portfolioId: string, year: number) =>
+      request<Transaction[]>(
+        "GET",
+        `/portfolios/${portfolioId}/income-year?year=${year}`,
+      ),
+    /** Look up a single FX rate for a given currency pair and date. Returns null when no
+     *  rate is available for that pair/date (caller falls back to 1:1). */
+    getFxRate: (from: string, to: string, date: string) =>
+      request<{ rate: string | null }>(
+        "GET",
+        `/fx-rate?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}`,
       ),
     createTransaction: (portfolioId: string, input: Omit<TransactionInput, "portfolioId">) =>
       request<Transaction>("POST", `/portfolios/${portfolioId}/transactions`, input),
@@ -2076,6 +2160,8 @@ export function createApiClient(config: ApiClientConfig) {
 
     getHoldings: (portfolioId: string) =>
       request<HoldingsResult>("GET", `/portfolios/${portfolioId}/holdings`),
+    getAnomalies: (portfolioId: string) =>
+      request<AnomaliesResult>("GET", `/portfolios/${portfolioId}/anomalies`),
     /** Persistently dismiss a transaction-scoped anomaly (e.g. an accepted negative_cash). */
     dismissAnomaly: (portfolioId: string, transactionId: string, code: string) =>
       request<void>("POST", `/portfolios/${portfolioId}/anomalies/dismiss`, {

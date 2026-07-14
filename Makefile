@@ -37,9 +37,12 @@ prod-logs: ## Follow logs from the production stack
 	docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f
 
 dev: ## Start all dev servers (API + web via Turbo)
+	fuser -k 3005/tcp 2>/dev/null || true
+	fuser -k 3001/tcp 2>/dev/null || true
 	npm run dev
 
 dev-web: ## Start only the web app dev server (mock data, no API needed)
+	fuser -k 3005/tcp 2>/dev/null || true
 	npm run dev --workspace @portfolio/web
 
 test: ## Run tests

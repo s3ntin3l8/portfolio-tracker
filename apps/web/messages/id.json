@@ -377,7 +377,8 @@
     "allYears": "Semua tahun",
     "searchPlaceholder": "Cari pendapatan…",
     "searchClear": "Hapus pencarian",
-    "noMatches": "Tidak ada pembayaran yang cocok dengan filter Anda."
+    "noMatches": "Tidak ada pembayaran yang cocok dengan filter Anda.",
+    "olderYears": "Tahun sebelumnya"
   },
   "Savings": {
     "title": "Tabungan",

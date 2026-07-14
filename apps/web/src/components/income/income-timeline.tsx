@@ -2,7 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search, X, ChevronDown, Check } from "lucide-react";
+import { Search, X, ChevronDown, ChevronRight, Check, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,14 +38,18 @@ type StatusFilter = "all" | "received" | "forecast";
 export function IncomeTimeline({
   rows,
   locale,
+  olderYears = [],
 }: {
   rows: IncomeEventRow[];
   locale: string;
+  olderYears?: string[];
 }) {
   const t = useTranslations("Income");
   const [yearFilter, setYearFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
+  const [loadedYears, setLoadedYears] = useState<Map<string, IncomeEventRow[]>>(new Map());
+  const [loadingYear, setLoadingYear] = useState<string | null>(null);
 
   const yearOptions = useMemo(
     () => [...new Set(rows.map((r) => r.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a)),
@@ -108,6 +112,22 @@ export function IncomeTimeline({
     subtotal: string;
     assumptions?: ReactNode;
   }[] = [];
+
+  async function loadYear(year: string) {
+    if (loadedYears.has(year) || loadingYear === year) return;
+    setLoadingYear(year);
+    try {
+      const res = await fetch(`/api/backend/networth/income?eventsYear=${year}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setLoadedYears(prev => new Map(prev).set(year, data.events));
+    } catch {
+      // Ignore — user can retry by clicking again
+    } finally {
+      setLoadingYear(null);
+    }
+  }
+
   if (nextYearRows.length > 0) {
     timelineGroups.push({
       year: nextYearStr,
@@ -248,6 +268,34 @@ export function IncomeTimeline({
               <IncomeEventsTable rows={g.rows} />
             </div>
           ))}
+          {olderYears.length > 0 && (
+            <div className="mt-6 space-y-0.5">
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-text-3">
+                {t("olderYears")}
+              </h3>
+              {olderYears.map((year) => (
+                <div key={year}>
+                  <button
+                    type="button"
+                    onClick={() => loadYear(year)}
+                    className="flex w-full items-center justify-between border-b border-border py-2.5 text-left hover:bg-muted/30"
+                  >
+                    <span className="text-[15px] font-extrabold">{year}</span>
+                    {loadingYear === year ? (
+                      <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="size-4 text-muted-foreground" />
+                    )}
+                  </button>
+                  {loadedYears.has(year) && (
+                    <div className="pt-2">
+                      <IncomeEventsTable rows={loadedYears.get(year)!} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

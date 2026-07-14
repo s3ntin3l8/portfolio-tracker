@@ -19,7 +19,7 @@
 
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { documents, transactions } from "@portfolio/db";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import type { schema } from "@portfolio/db";
@@ -593,6 +593,38 @@ export async function transactionIdsWithDocuments(
   return new Set(
     rows.map((r) => r.transactionId).filter((id): id is string => id !== null),
   );
+}
+
+/**
+ * Combined check: retained documents by importId AND by transactionId in one query.
+ * Reduces IN-clause overhead vs two separate queries with the same large ID lists.
+ */
+export async function documentIdsWithRetained(
+  app: AppLikeDb,
+  importIds: string[],
+  txIds: string[],
+): Promise<{ importIdsWithDocs: Set<string>; txIdsWithDocs: Set<string> }> {
+  const hasImportIds = importIds.length > 0;
+  const hasTxIds = txIds.length > 0;
+  if (!hasImportIds && !hasTxIds) return { importIdsWithDocs: new Set(), txIdsWithDocs: new Set() };
+
+  const conditions: ReturnType<typeof and>[] = [eq(documents.status, "retained")];
+  if (hasImportIds && hasTxIds) {
+    conditions.push(or(inArray(documents.importId, importIds), inArray(documents.transactionId, txIds)));
+  } else if (hasImportIds) {
+    conditions.push(inArray(documents.importId, importIds));
+  } else {
+    conditions.push(inArray(documents.transactionId, txIds));
+  }
+
+  const rows = await db(app)
+    .select({ importId: documents.importId, transactionId: documents.transactionId })
+    .from(documents)
+    .where(and(...conditions));
+
+  const importIdsWithDocs = new Set(rows.map((r) => r.importId).filter((id): id is string => id !== null));
+  const txIdsWithDocs = new Set(rows.map((r) => r.transactionId).filter((id): id is string => id !== null));
+  return { importIdsWithDocs, txIdsWithDocs };
 }
 
 /**

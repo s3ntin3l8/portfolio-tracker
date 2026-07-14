@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { desc, relations, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   pgEnum,
@@ -634,8 +634,8 @@ export const documents = pgTable(
     storedAt: timestamp("stored_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("documents_import_id_idx").on(t.importId),
-    index("documents_transaction_id_idx").on(t.transactionId),
+    index("documents_import_id_status_idx").on(t.importId, t.status),
+    index("documents_transaction_id_status_idx").on(t.transactionId, t.status),
     index("documents_user_id_idx").on(t.userId),
     // Idempotency for the pytr report-fetch job: re-syncing the same postbox event must not
     // duplicate the inbox document. Scoped to category="tax_report" (not just
@@ -726,7 +726,10 @@ export const transactions = pgTable(
   },
   (t) => [
     index("transactions_portfolio_id_idx").on(t.portfolioId),
+    index("transactions_portfolio_executed_at_idx").on(t.portfolioId, desc(t.executedAt)),
     index("transactions_instrument_id_idx").on(t.instrumentId),
+    // Speed up import-related queries (DELETE/SELECT/GROUP BY import_id).
+    index("transactions_import_id_status_idx").on(t.importId, t.status),
     // Prevent double-importing the same source row into a portfolio.
     uniqueIndex("transactions_dedup_idx")
       .on(t.portfolioId, t.source, t.externalId)

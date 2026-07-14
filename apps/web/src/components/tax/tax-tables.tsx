@@ -131,12 +131,15 @@ const BY_YEAR_COLS: ColDef<TaxYearRow>[] = [
  *  uniformly to history). */
 export function ByYearTable({
   rows,
-  money,
+  currency,
+  locale,
 }: {
   rows: TaxYearRow[];
-  money: (n: string | number) => string;
+  currency: string;
+  locale: string;
 }) {
   const t = useTranslations("Tax");
+  const fmt = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { sortKey, sortDir, toggle, sort } = useTableSort<TaxYearRow>(BY_YEAR_COLS);
   if (rows.length === 0) return null;
   const sorted = sort(rows);
@@ -162,15 +165,15 @@ export function ByYearTable({
               <TableRow key={y.year}>
                 <TableCell className="font-semibold">{y.year}</TableCell>
                 <TableCell className="tabular text-right font-medium text-emerald-600 dark:text-emerald-400">
-                  {money(y.realized)}
+                  {fmt(y.realized)}
                 </TableCell>
                 <TableCell className="tabular text-right text-muted-foreground">
-                  {money(y.dividends)}
+                  {fmt(y.dividends)}
                 </TableCell>
                 <TableCell className="tabular text-right text-muted-foreground">
-                  {money(y.fsaUsed)}
+                  {fmt(y.fsaUsed)}
                 </TableCell>
-                <TableCell className="tabular text-right font-semibold">{money(y.tax)}</TableCell>
+                <TableCell className="tabular text-right font-semibold">{fmt(y.tax)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -196,17 +199,20 @@ export function IdDividendsTable({
   totalDividendGross,
   totalDividendTax,
   totalDividendNet,
-  money,
+  currency,
+  locale,
   year,
 }: {
   rows: IdDividendTax[];
   totalDividendGross: string;
   totalDividendTax: string;
   totalDividendNet: string;
-  money: (n: string | number) => string;
+  currency: string;
+  locale: string;
   year: number;
 }) {
   const t = useTranslations("Tax");
+  const fmt = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { sortKey, sortDir, toggle, sort } = useTableSort<IdDividendTax>(ID_DIVIDEND_COLS);
   const sorted = sort(rows);
 
@@ -237,11 +243,11 @@ export function IdDividendsTable({
                 <TableRow key={`${r.symbol}:${r.currency}:${i}`}>
                   <TableCell className="font-medium">{r.symbol}</TableCell>
                   <TableCell className="tabular text-right text-muted-foreground">
-                    {money(r.gross)}
+                    {fmt(r.gross)}
                   </TableCell>
-                  <TableCell className="tabular text-right font-semibold">{money(r.tax)}</TableCell>
+                  <TableCell className="tabular text-right font-semibold">{fmt(r.tax)}</TableCell>
                   <TableCell className="tabular text-right text-emerald-600 dark:text-emerald-400">
-                    {money(r.net)}
+                    {fmt(r.net)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -250,13 +256,13 @@ export function IdDividendsTable({
               <TableRow>
                 <TableCell className="font-semibold">{t("id.dividendsTable.total")}</TableCell>
                 <TableCell className="tabular text-right font-semibold text-muted-foreground">
-                  {money(totalDividendGross)}
+                  {fmt(totalDividendGross)}
                 </TableCell>
                 <TableCell className="tabular text-right font-semibold">
-                  {money(totalDividendTax)}
+                  {fmt(totalDividendTax)}
                 </TableCell>
                 <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
-                  {money(totalDividendNet)}
+                  {fmt(totalDividendNet)}
                 </TableCell>
               </TableRow>
             </TableFooter>
@@ -279,12 +285,15 @@ const ID_BY_YEAR_COLS: ColDef<IdYearTax>[] = [
  *  figure for the selected year (see `loadTaxYearDetail`'s idByYear rollup). */
 export function IdByYearTable({
   rows,
-  money,
+  currency,
+  locale,
 }: {
   rows: IdYearTax[];
-  money: (n: string | number) => string;
+  currency: string;
+  locale: string;
 }) {
   const t = useTranslations("Tax");
+  const fmt = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { sortKey, sortDir, toggle, sort } = useTableSort<IdYearTax>(ID_BY_YEAR_COLS);
   if (rows.length === 0) return null;
   const sorted = sort(rows);
@@ -309,12 +318,12 @@ export function IdByYearTable({
               <TableRow key={y.year}>
                 <TableCell className="font-semibold">{y.year}</TableCell>
                 <TableCell className="tabular text-right font-medium text-emerald-600 dark:text-emerald-400">
-                  {money(y.realized)}
+                  {fmt(y.realized)}
                 </TableCell>
                 <TableCell className="tabular text-right text-muted-foreground">
-                  {money(y.dividends)}
+                  {fmt(y.dividends)}
                 </TableCell>
-                <TableCell className="tabular text-right font-semibold">{money(y.tax)}</TableCell>
+                <TableCell className="tabular text-right font-semibold">{fmt(y.tax)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

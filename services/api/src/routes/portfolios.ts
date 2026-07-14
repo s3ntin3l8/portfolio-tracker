@@ -8,6 +8,7 @@ import { mapPool } from "../lib/promise-pool.js";
 import { deleteReceiptsForPortfolio } from "../storage/receipts.js";
 import { valuePortfolioCached } from "../services/valuation.js";
 import { getMarketData } from "../services/market-data.js";
+import { logTiming } from "../lib/timing.js";
 
 export async function portfoliosRoute(app: FastifyInstance) {
   // Confirm an account holder (if one is given) exists and belongs to the user, so a
@@ -26,6 +27,7 @@ export async function portfoliosRoute(app: FastifyInstance) {
   // Each row carries `transactionCount` (a cheap correlated count over the indexed
   // portfolioId) so the delete-confirm UI can state how much data it will remove.
   app.get("/portfolios", { preHandler: app.authenticate }, async (request) => {
+    const t0 = performance.now();
     const { id } = requireUser(request);
     const rows = await app.db
       .select({
@@ -37,6 +39,8 @@ export async function portfoliosRoute(app: FastifyInstance) {
       .from(portfolios)
       .leftJoin(accountHolders, eq(portfolios.accountHolderId, accountHolders.id))
       .where(eq(portfolios.userId, id));
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /portfolios", durationMs, { portfolioCount: rows.length });
     return rows.map((r) => ({
       ...flattenPortfolio(r.portfolio, r.holder),
       transactionCount: Number(r.transactionCount),
@@ -126,6 +130,7 @@ export async function portfoliosRoute(app: FastifyInstance) {
   // Live net-worth for every portfolio the user owns — one request instead of N summary calls.
   // Each portfolio is valued against its own base currency so no FX conversion is needed.
   app.get("/portfolios/values", { preHandler: app.authenticate }, async (request) => {
+    const t0 = performance.now();
     const { id } = requireUser(request);
     const pfs = await app.db
       .select({ id: portfolios.id, baseCurrency: portfolios.baseCurrency, cashCounted: portfolios.cashCounted })
@@ -150,6 +155,8 @@ export async function portfoliosRoute(app: FastifyInstance) {
       );
       return { id: p.id, netWorth: summary.netWorth };
     });
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /portfolios/values", durationMs, { portfolioCount: pfs.length });
     return results;
   });
 

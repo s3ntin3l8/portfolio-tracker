@@ -43,6 +43,8 @@ const toneOf = (n: number): Tone => (n > 0 ? "up" : n < 0 ? "down" : "flat");
  */
 const HERO_INITIAL_RANGE = "1y";
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function HoldingsPage({
   params,
   searchParams,
@@ -50,6 +52,8 @@ export default async function HoldingsPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ portfolio?: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   const { portfolio: portfolioParam } = await searchParams;
   setRequestLocale(locale);
@@ -61,13 +65,10 @@ export default async function HoldingsPage({
   const tf = await getTranslations("PortfolioForm");
 
   // Cost basis is a single global preference (Settings → Investing), not a per-page
-  // toggle — threaded into every cost-basis-sensitive loader below, including
-  // loadNetWorth (previously called with no costBasis at all, silently defaulting to
-  // purchase_price and disagreeing with the holdings table).
-  //
-  // loadPreferences() used to be awaited before starting anything else — a full serial
-  // round trip blocking the whole page. The loaders that don't need costBasis are kicked
-  // off immediately instead; only the two that do (loadHoldings, loadNetWorth) wait on it.
+  // toggle — threaded into every cost-basis-sensitive loader below. The loaders that
+  // don't need costBasis (anomalies, history, selectedId) are kicked off immediately
+  // in parallel with loadPreferences; only the two that do (loadHoldings, loadNetWorth)
+  // wait on it.
   const prefsPromise = loadPreferences();
   const anomaliesPromise = loadAnomalies(portfolioParam);
   const historyPromise = loadNetWorthHistory(HERO_INITIAL_RANGE);
@@ -83,6 +84,18 @@ export default async function HoldingsPage({
     historyPromise,
     selectedIdPromise,
   ]);
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] HoldingsPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =

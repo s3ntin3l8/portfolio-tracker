@@ -87,7 +87,7 @@ describe("valuePortfolioCached", () => {
     expect(a.summary.holdings).toHaveLength(1);
     expect(counter.n).toBe(1);
 
-    // Same key, well within the 5s TTL — served from cache, provider not called again.
+    // Same key, well within the 60s TTL — served from cache, provider not called again.
     const b = await valuePortfolioCached(
       db,
       countingService(counter),
@@ -111,7 +111,7 @@ describe("valuePortfolioCached", () => {
     await valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0);
     expect(counter.n).toBe(1);
 
-    // Past the 5s TTL — cache entry expired, provider called again.
+    // Past the 60s derivation-cache TTL — cache entry expired, provider called again.
     await valuePortfolioCached(
       db,
       countingService(counter),
@@ -120,7 +120,7 @@ describe("valuePortfolioCached", () => {
       "IDR",
       undefined,
       true,
-      t0 + 5_001,
+      t0 + 60_001,
     );
     expect(counter.n).toBe(2);
   });

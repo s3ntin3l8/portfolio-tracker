@@ -24,11 +24,15 @@ const ICONS = {
   documents: { icon: FileText, bg: "rgba(59,130,246,.12)", fg: "#3B82F6" },
 } as const;
 
+const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+
 export default async function ReportsPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
+  // eslint-disable-next-line react-hooks/purity
+  const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Reports");
@@ -37,7 +41,8 @@ export default async function ReportsPage({
 
   // loadPreferences() used to be awaited before anything else — a full serial round trip
   // blocking the whole page. The loaders that don't need costBasis/taxRegime are kicked
-  // off immediately instead; only the two that do (loadTrades, loadNetworthTax) wait on it.
+  // off immediately in parallel with prefs; only loadTrades and loadNetworthTax wait on
+  // prefs to resolve (they need the user's selected costBasis and taxRegime).
   const prefsPromise = loadPreferences();
   const incomePromise = loadIncomeStats();
   const contributionsPromise = loadContributions();
@@ -49,8 +54,6 @@ export default async function ReportsPage({
 
   const [income, trades, contributions, taxHolders, taxReports] = await Promise.all([
     incomePromise,
-    // Cost basis is a single global preference — thread it in so this tile's
-    // realized-P&L figures agree with Trades/Holdings.
     loadTrades(undefined, costBasis),
     contributionsPromise,
     loadNetworthTax(undefined, taxRegime),
@@ -377,6 +380,18 @@ export default async function ReportsPage({
       openLabel={openLabel}
     />,
   );
+
+  if (TIMING) {
+    // eslint-disable-next-line react-hooks/purity
+    const durationMs = performance.now() - t0;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        msg: `[timing] ReportsPage data fetch`,
+        durationMs: Math.round(durationMs * 100) / 100,
+      }),
+    );
+  }
 
   return (
     <div className="space-y-6">

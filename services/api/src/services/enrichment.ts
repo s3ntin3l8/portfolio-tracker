@@ -31,6 +31,7 @@ import {
   buildDocumentName,
   type NamingRequest,
   type DocumentForNaming,
+  type DocumentNamingMetadata,
 } from "../storage/naming.js";
 
 type AppLike = Pick<FastifyInstance, "db" | "log">;
@@ -625,6 +626,38 @@ export async function sourcesForTransactions(
  * draft rows as "needs review" in the transactions table. Deterministic parsers emit
  * confidence 1 and never qualify; rows with no confidence recorded are treated as confident.
  */
+/**
+ * Combined check: needs-review flags AND full-tax-detail flags from a single
+ * `transaction_sources` query. Replaces two separate IN-clause queries with one.
+ */
+export async function txFlagsFromSources(
+  app: AppLike,
+  txIds: string[],
+  threshold = LOW_CONFIDENCE_THRESHOLD,
+): Promise<{ needsReview: Set<string>; fullTaxDetail: Set<string> }> {
+  if (txIds.length === 0) return { needsReview: new Set(), fullTaxDetail: new Set() };
+  const rows = await db(app)
+    .select({
+      transactionId: transactionSources.transactionId,
+      confidence: transactionSources.confidence,
+      taxComponents: transactionSources.taxComponents,
+    })
+    .from(transactionSources)
+    .where(inArray(transactionSources.transactionId, txIds));
+
+  const needsReview = new Set<string>();
+  const fullTaxDetail = new Set<string>();
+  for (const r of rows) {
+    if (r.confidence != null && Number(r.confidence) < threshold) {
+      needsReview.add(r.transactionId);
+    }
+    if (r.taxComponents != null && Object.keys(r.taxComponents as object).length > 0) {
+      fullTaxDetail.add(r.transactionId);
+    }
+  }
+  return { needsReview, fullTaxDetail };
+}
+
 export async function txIdsNeedingReview(
   app: AppLike,
   txIds: string[],
@@ -669,4 +702,167 @@ export async function txIdsWithFullTaxDetail(
       .filter((r) => r.taxComponents != null && Object.keys(r.taxComponents as object).length > 0)
       .map((r) => r.transactionId),
   );
+}
+
+/**
+ * Pure-JS alternative to `txFlagsFromSources` — builds needs-review / full-tax-detail sets
+ * from already-fetched transaction_sources rows. No DB queries.
+ */
+export function txFlagsFromSourcesRows(
+  sourcesRows: { transactionId: string; confidence: string | null; taxComponents: unknown }[],
+  threshold = LOW_CONFIDENCE_THRESHOLD,
+): { needsReview: Set<string>; fullTaxDetail: Set<string> } {
+  const needsReview = new Set<string>();
+  const fullTaxDetail = new Set<string>();
+  for (const r of sourcesRows) {
+    if (r.confidence != null && Number(r.confidence) < threshold) {
+      needsReview.add(r.transactionId);
+    }
+    if (r.taxComponents != null && Object.keys(r.taxComponents as object).length > 0) {
+      fullTaxDetail.add(r.transactionId);
+    }
+  }
+  return { needsReview, fullTaxDetail };
+}
+
+/**
+ * Pure-JS alternative to `sourcesForTransactions` — builds the sources map from
+ * already-fetched data. No DB queries.
+ *
+ * @param sourcesRows  Pre-fetched transaction_sources rows (all for the target txIds).
+ * @param docsRows     Pre-fetched documents rows (all retained docs for these txIds/importIds).
+ * @param rows         The transaction rows themselves (for naming context).
+ * @param instrumentsMeta  instrumentId → presentation-metadata map (from instrumentMeta).
+ * @param portfolioName    The portfolio's display name (for naming context).
+ */
+export function sourcesFromPreFetched(
+  sourcesRows: {
+    id: string;
+    transactionId: string;
+    sourceType: string;
+    externalId: string | null;
+    orderRef: string | null;
+    documentId: string | null;
+    importId: string | null;
+    taxComponents: unknown;
+    createdAt: Date;
+  }[],
+  docsRows: {
+    id: string;
+    transactionId: string | null;
+    importId: string | null;
+    status: string;
+    originalFilename: string | null;
+    mimeType: string;
+    storedAt: Date;
+  }[],
+  rows: { id: string; type: string; executedAt: Date; instrumentId: string | null }[],
+  instrumentsMeta: Map<string, { symbol: string }>,
+  portfolioName: string | null,
+  importMinDateById?: Map<string, Date>,
+): Map<string, SourceSummary[]> {
+  if (sourcesRows.length === 0 && docsRows.length === 0) return new Map();
+
+  const txById = new Map<string, { type: string; executedAt: Date; instrumentId: string | null }>();
+  for (const r of rows) txById.set(r.id, { type: r.type, executedAt: r.executedAt, instrumentId: r.instrumentId });
+
+  const instrumentSymbolById = new Map<string, string>();
+  for (const [id, m] of instrumentsMeta) instrumentSymbolById.set(id, m.symbol);
+
+  const namingMeta: DocumentNamingMetadata = {
+    portfolioName,
+    txById,
+    instrumentSymbolById,
+    importMinDateById: importMinDateById ?? new Map(),
+  };
+
+  // Build doc lookup maps from pre-fetched docsRows
+  const docById = new Map<string, { originalFilename: string | null; mimeType: string }>();
+  const importDocById = new Map<string, { id: string; originalFilename: string | null; mimeType: string }>();
+  for (const d of docsRows) {
+    if (d.status !== "retained") continue;
+    docById.set(d.id, { originalFilename: d.originalFilename, mimeType: d.mimeType });
+    if (d.importId && !d.transactionId && !importDocById.has(d.importId)) {
+      importDocById.set(d.importId, { id: d.id, originalFilename: d.originalFilename, mimeType: d.mimeType });
+    }
+  }
+
+  const claimedDocIds = new Set(sourcesRows.map((r) => r.documentId).filter(Boolean) as string[]);
+
+  const namingRequests: { entry: SourceSummary; request: NamingRequest }[] = [];
+  const out = new Map<string, SourceSummary[]>();
+
+  for (const r of sourcesRows) {
+    let filename: string | null = null;
+    let hasDocument = false;
+    let namingDoc: DocumentForNaming | null = null;
+
+    if (r.sourceType === "pytr") {
+      // Sync-provenance marker only — never linked to a document.
+    } else if (r.documentId && docById.has(r.documentId)) {
+      const doc = docById.get(r.documentId)!;
+      filename = doc.originalFilename;
+      hasDocument = true;
+      namingDoc = { id: r.documentId, mimeType: doc.mimeType, source: null, storedAt: r.createdAt, importId: null, transactionId: null };
+    } else if (r.importId && importDocById.has(r.importId)) {
+      const doc = importDocById.get(r.importId)!;
+      filename = doc.originalFilename;
+      hasDocument = true;
+      namingDoc = { id: doc.id, mimeType: doc.mimeType, source: null, storedAt: r.createdAt, importId: r.importId, transactionId: null };
+    }
+
+    const entry: SourceSummary = {
+      id: r.id,
+      sourceType: r.sourceType,
+      externalId: r.externalId,
+      orderRef: r.orderRef,
+      documentId: r.documentId,
+      taxComponents: r.taxComponents as TaxComponents | null,
+      createdAt: r.createdAt,
+      filename,
+      hasDocument,
+    };
+    const bucket = out.get(r.transactionId);
+    if (bucket) bucket.push(entry);
+    else out.set(r.transactionId, [entry]);
+    if (namingDoc) namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
+  }
+
+  // Unclaimed retained documents → synthetic `pdf` entries.
+  for (const d of docsRows) {
+    if (!d.transactionId || d.status !== "retained" || claimedDocIds.has(d.id)) continue;
+    const entry: SourceSummary = {
+      id: `doc:${d.id}`,
+      sourceType: "pdf",
+      externalId: null,
+      orderRef: null,
+      documentId: d.id,
+      taxComponents: null,
+      createdAt: d.storedAt,
+      filename: d.originalFilename,
+      hasDocument: true,
+    };
+    const bucket = out.get(d.transactionId);
+    if (bucket) bucket.push(entry);
+    else out.set(d.transactionId, [entry]);
+    namingRequests.push({
+      entry,
+      request: {
+        doc: { id: d.id, mimeType: d.mimeType, source: null, storedAt: d.storedAt, importId: null, transactionId: d.transactionId },
+        txId: d.transactionId,
+      },
+    });
+  }
+
+  // Synthesize human-readable display names for every entry that resolved a document.
+  for (const { entry, request } of namingRequests) {
+    try {
+      const ctx = namingContextFor(request, namingMeta);
+      entry.filename = buildDocumentName(computeNamingParts(request.doc, ctx));
+    } catch {
+      // Fallback: keep raw stored filename.
+    }
+  }
+
+  return out;
 }
