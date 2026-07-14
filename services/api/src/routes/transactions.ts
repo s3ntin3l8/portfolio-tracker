@@ -745,32 +745,36 @@ export async function transactionsRoute(app: FastifyInstance) {
 
     // The event log doesn't need the helper-only fields (assetClass/executedAt).
     // For dividend rows with a known instrument, compute split-adjusted per-share/quantity.
-    const events = enriched.map((e) => {
-      let perShare: string | undefined;
-      let quantity: string | undefined;
-      if (e.type === "dividend" && e.instrumentId) {
-        const q = qtyAt(e.instrumentId, e.executedAt);
-        const qNum = Number(q);
-        if (qNum > 0) {
-          perShare = String(Number(e.price) / qNum);
-          quantity = q;
+    const threeYearsAgo = new Date(now);
+    threeYearsAgo.setUTCFullYear(threeYearsAgo.getUTCFullYear() - 3);
+    const events = enriched
+      .filter((e) => e.executedAt >= threeYearsAgo)
+      .map((e) => {
+        let perShare: string | undefined;
+        let quantity: string | undefined;
+        if (e.type === "dividend" && e.instrumentId) {
+          const q = qtyAt(e.instrumentId, e.executedAt);
+          const qNum = Number(q);
+          if (qNum > 0) {
+            perShare = String(Number(e.price) / qNum);
+            quantity = q;
+          }
         }
-      }
-      return {
-        transactionId: e.transactionId,
-        portfolioId: e.portfolioId,
-        instrumentId: e.instrumentId,
-        symbol: e.symbol,
-        name: e.name,
-        displayName: e.displayName ?? null,
-        type: e.type,
-        date: e.date,
-        amount: e.price,
-        currency: e.currency,
-        perShare,
-        quantity,
-      };
-    });
+        return {
+          transactionId: e.transactionId,
+          portfolioId: e.portfolioId,
+          instrumentId: e.instrumentId,
+          symbol: e.symbol,
+          name: e.name,
+          displayName: e.displayName ?? null,
+          type: e.type,
+          date: e.date,
+          amount: e.price,
+          currency: e.currency,
+          perShare,
+          quantity,
+        };
+      });
 
     // Build announced entries for the upcoming stream (future ex-dates only, both windows).
     const upcomingAnnounced: {
@@ -863,7 +867,10 @@ export async function transactionsRoute(app: FastifyInstance) {
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
 
-    return { displayCurrency: display, ...stats, yields, upcoming, events, interest };
+    const threeYearsAgoStr = threeYearsAgo.toISOString().slice(0, 7);
+    const monthly = stats.monthly.filter((m) => m.month >= threeYearsAgoStr);
+
+    return { displayCurrency: display, ...stats, monthly, yields, upcoming, events, interest };
   }
 
   // List a portfolio's transactions, each enriched with instrument metadata.

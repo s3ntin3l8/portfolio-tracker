@@ -470,6 +470,13 @@
       "when": 1784039110206,
       "tag": "0066_wet_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1784043995125,
+      "tag": "0067_cuddly_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

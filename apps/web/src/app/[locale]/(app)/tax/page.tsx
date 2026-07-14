@@ -242,12 +242,13 @@ function TaxHolderSectionId({
           totalDividendGross={idTax.totalDividendGross}
           totalDividendTax={idTax.totalDividendTax}
           totalDividendNet={idTax.totalDividendNet}
-          money={money}
+          currency={currency}
+          locale={locale}
           year={year}
         />
       </div>
 
-      <IdByYearTable rows={idTax.byYear} money={money} />
+      <IdByYearTable rows={idTax.byYear} currency={currency} locale={locale} />
 
       <p className="text-xs text-muted-foreground leading-relaxed">{t("id.footnote")}</p>
     </>
@@ -440,7 +441,7 @@ function TaxHolderSectionDe({
       </Card>
 
       {/* By year */}
-      {detail && <ByYearTable rows={detail.byYear} money={money} />}
+      {detail && <ByYearTable rows={detail.byYear} currency={currency} locale={locale} />}
 
       <p className="text-xs text-muted-foreground leading-relaxed">
         {t("footnote", { rate: ratePct, allowance: money(u.allowanceAnnual) })}

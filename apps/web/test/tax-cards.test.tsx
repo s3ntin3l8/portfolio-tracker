@@ -47,6 +47,8 @@ function makeT(): TaxTranslator {
   };
 }
 
+const CURRENCY = "IDR";
+const LOCALE = "en";
 const money = (n: string | number) => `Rp ${Number(n).toLocaleString("en")}`;
 const t = makeT();
 
@@ -119,18 +121,19 @@ describe("ByYearTable", () => {
           { year: 2026, realized: "240", dividends: "168", fsaUsed: "408.00", tax: "0.00" },
           { year: 2025, realized: "100", dividends: "227", fsaUsed: "327.00", tax: "0.00" },
         ]}
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
       />,
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
     expect(years).toEqual(["2026", "2025"]);
     expect(screen.getByText("FSA used")).toBeInTheDocument();
-    expect(screen.getByText("Rp 408")).toBeInTheDocument();
-    expect(screen.getByText("Rp 327")).toBeInTheDocument();
+    expect(screen.getByText("IDR 408")).toBeInTheDocument();
+    expect(screen.getByText("IDR 327")).toBeInTheDocument();
   });
 
   it("renders nothing when there are no years", () => {
-    const { container } = wrapClient(<ByYearTable rows={[]} money={money} />);
+    const { container } = wrapClient(<ByYearTable rows={[]} currency={CURRENCY} locale={LOCALE} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -329,14 +332,15 @@ describe("IdDividendsTable", () => {
         totalDividendGross="420000"
         totalDividendTax="42000.00"
         totalDividendNet="378000.00"
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
         year={2026}
       />,
     );
     expect(screen.getByText("BBCA")).toBeInTheDocument();
-    expect(screen.getAllByText("Rp 420,000").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rp 42,000").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Rp 378,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("IDR 420,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("IDR 42,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("IDR 378,000").length).toBeGreaterThan(0);
     expect(screen.getByText("Dividends & coupons · 10% final")).toBeInTheDocument();
   });
 
@@ -347,7 +351,8 @@ describe("IdDividendsTable", () => {
         totalDividendGross="0"
         totalDividendTax="0"
         totalDividendNet="0"
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
         year={2026}
       />,
     );
@@ -363,17 +368,18 @@ describe("IdByYearTable", () => {
           { year: 2026, realized: "324000", dividends: "1284000", tax: "128724.00" },
           { year: 2025, realized: "1940000", dividends: "2110000", tax: "212940.00" },
         ]}
-        money={money}
+        currency={CURRENCY}
+        locale={LOCALE}
       />,
     );
     const years = screen.getAllByText(/^(2026|2025)$/).map((el) => el.textContent);
     expect(years).toEqual(["2026", "2025"]);
-    expect(screen.getByText("Rp 128,724")).toBeInTheDocument();
-    expect(screen.getByText("Rp 212,940")).toBeInTheDocument();
+    expect(screen.getByText("IDR 128,724")).toBeInTheDocument();
+    expect(screen.getByText("IDR 212,940")).toBeInTheDocument();
   });
 
   it("renders nothing when there are no years", () => {
-    const { container } = wrapClient(<IdByYearTable rows={[]} money={money} />);
+    const { container } = wrapClient(<IdByYearTable rows={[]} currency={CURRENCY} locale={LOCALE} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
