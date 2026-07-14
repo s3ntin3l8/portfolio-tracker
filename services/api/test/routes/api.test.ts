@@ -441,6 +441,185 @@ describe("auth + portfolios + transactions", () => {
     });
   });
 
+  it("filters the paginated transaction list by year across a calendar boundary", async () => {
+    // Regression: the year filter went from `EXTRACT(YEAR FROM executed_at) = y` to a
+    // sargable [start, end) date range — this pins the boundary dates (Dec 31 23:59 vs
+    // Jan 1 00:00 UTC) so a future refactor can't silently shift a row into the wrong year.
+    const t = await token("year-filter-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Year filter test", baseCurrency: "idr" },
+      })
+    ).json().id;
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBYF", market: "IDX", assetClass: "equity", currency: "IDR", name: "Year Filter Test Co" })
+      .returning();
+
+    const buy = (executedAt: string) =>
+      app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: inst.id,
+          quantity: "10",
+          price: "1000",
+          currency: "IDR",
+          executedAt,
+        },
+      });
+
+    await buy("2024-12-31T23:59:59.000Z"); // last instant of 2024
+    await buy("2025-01-01T00:00:00.000Z"); // first instant of 2025
+    await buy("2025-06-15T12:00:00.000Z");
+
+    const y2024 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions?page=1&year=2024`,
+      headers: auth(t),
+    });
+    expect(y2024.statusCode).toBe(200);
+    expect(y2024.json().total).toBe(1);
+    expect(y2024.json().rows[0].executedAt).toBe("2024-12-31T23:59:59.000Z");
+
+    const y2025 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions?page=1&year=2025`,
+      headers: auth(t),
+    });
+    expect(y2025.statusCode).toBe(200);
+    expect(y2025.json().total).toBe(2);
+  });
+
+  it("reports total + summary correctly on a normal page and on an out-of-range page", async () => {
+    // Regression: count + summary are folded into the page query via COUNT(*)/SUM(...)
+    // OVER () (one scan instead of three). A window aggregate only rides along on rows
+    // the query actually returns, so requesting a page whose offset skips past every
+    // matching row (rows come back empty) must still report the true total/summary via
+    // the separate fallback query, not silently report zero.
+    const t = await token("pagination-total-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Pagination total test", baseCurrency: "idr" },
+      })
+    ).json().id;
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBPT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Pagination Test Co" })
+      .returning();
+
+    for (const [type, price] of [
+      ["buy", "1000"],
+      ["buy", "1000"],
+      ["sell", "1200"],
+      ["dividend", "50"],
+    ] as const) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type,
+          instrumentId: inst.id,
+          quantity: type === "dividend" ? "0" : "10",
+          price,
+          currency: "IDR",
+          executedAt: "2025-03-01T00:00:00.000Z",
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    // pageSize=2 → page 1 has rows and an accurate window-derived total/summary.
+    const page1 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions?page=1&pageSize=2`,
+      headers: auth(t),
+    });
+    expect(page1.statusCode).toBe(200);
+    const body1 = page1.json();
+    expect(body1.rows).toHaveLength(2);
+    expect(body1.total).toBe(4);
+    expect(body1.summary).toMatchObject({
+      totalInvested: "20000", // 2 buys × 10 × 1000
+      totalProceeds: "12000", // 1 sell × 10 × 1200
+    });
+
+    // page 10 is entirely beyond the 4 available rows → empty page, but total/summary
+    // must still reflect all 4 rows, not fall back to 0 (the merged-query edge case).
+    const page10 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions?page=10&pageSize=2`,
+      headers: auth(t),
+    });
+    expect(page10.statusCode).toBe(200);
+    const body10 = page10.json();
+    expect(body10.rows).toHaveLength(0);
+    expect(body10.total).toBe(4);
+    expect(body10.summary).toEqual(body1.summary);
+  });
+
+  it("reports the true total on an out-of-range page of /networth/transactions", async () => {
+    // Same merged-query fallback as the per-portfolio endpoint, exercised on the
+    // cross-portfolio aggregate path.
+    const t = await token("networth-pagination-user");
+    const portfolioId = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Networth pagination test", baseCurrency: "idr" },
+      })
+    ).json().id;
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({ symbol: "BBNP", market: "IDX", assetClass: "equity", currency: "IDR", name: "Networth Pagination Test Co" })
+      .returning();
+
+    for (let i = 0; i < 3; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+        payload: {
+          type: "buy",
+          instrumentId: inst.id,
+          quantity: "1",
+          price: "100",
+          currency: "IDR",
+          executedAt: "2025-03-01T00:00:00.000Z",
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    const page1 = await app.inject({
+      method: "GET",
+      url: "/networth/transactions?page=1&pageSize=2",
+      headers: auth(t),
+    });
+    expect(page1.statusCode).toBe(200);
+    expect(page1.json().rows).toHaveLength(2);
+    expect(page1.json().total).toBe(3);
+
+    const page10 = await app.inject({
+      method: "GET",
+      url: "/networth/transactions?page=10&pageSize=2",
+      headers: auth(t),
+    });
+    expect(page10.statusCode).toBe(200);
+    expect(page10.json().rows).toHaveLength(0);
+    expect(page10.json().total).toBe(3);
+  });
+
   it("values the portfolio via /summary (priced by market data)", async () => {
     const t = await token("user-a");
     const portfolioId = (

@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { Decimal } from "decimal.js";
-import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import {
   accountHolders,
   allocationTargets,
@@ -104,6 +104,19 @@ const networthContributionsCache = createStore<ContributionStats>();
 const networthTransactionsCache = createStore<{ rows: unknown[]; total: number }>();
 
 const ACTIVITY_INCOME_TYPES = ["dividend", "coupon", "interest", "bonus_cash"] as const;
+
+/**
+ * Half-open [start, end) UTC bounds for a calendar year, for filtering `executedAt`.
+ * A `gte`/`lt` range on the raw column is sargable (can use an index on `executedAt`);
+ * `EXTRACT(YEAR FROM executed_at) = y` forces a per-row function evaluation that defeats
+ * the `transactions_portfolio_executed_at_idx` composite index.
+ */
+function yearRange(year: number): { start: Date; end: Date } {
+  return {
+    start: new Date(Date.UTC(year, 0, 1)),
+    end: new Date(Date.UTC(year + 1, 0, 1)),
+  };
+}
 
 interface PortfolioParams {
   portfolioId: string;
@@ -919,7 +932,10 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
       if (yearFilter) {
         const y = parseInt(yearFilter, 10);
-        if (!isNaN(y)) conditions.push(sql`EXTRACT(YEAR FROM ${transactions.executedAt}) = ${y}`);
+        if (!isNaN(y)) {
+          const { start, end } = yearRange(y);
+          conditions.push(gte(transactions.executedAt, start), lt(transactions.executedAt, end));
+        }
       }
       if (searchQuery) {
         conditions.push(sql`(
@@ -1106,29 +1122,60 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (paginate) {
         const cacheKey = `transactions:${request.params.portfolioId}:${page}:${pageSize}:${convertTo || ''}:${typeFilter || ''}:${yearFilter || ''}:${searchQuery || ''}`;
         const cached = await withDerivationCache(transactionsCache, cacheKey, async () => {
-          const [cnt, _rows, summaryRows] = await Promise.all([
-            app.db
-              .select({ count: count() })
-              .from(transactions)
-              .where(and(...conditions))
-              .then((r) => Number(r[0].count)),
-            app.db
-              .select()
-              .from(transactions)
-              .where(and(...conditions))
-              .orderBy(desc(transactions.executedAt))
-              .limit(pageSize)
-              .offset((page - 1) * pageSize),
-            app.db
-              .select({
-                totalInvested: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('buy','savings_plan') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric + ${transactions.fees}::numeric ELSE 0 END), '0')`,
-                totalProceeds: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'sell' THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric - ${transactions.fees}::numeric ELSE 0 END), '0')`,
-                totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('dividend','coupon','interest','bonus_cash') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric ELSE 0 END), '0')`,
-              })
-              .from(transactions)
-              .where(and(...conditions))
-              .then((r) => r[0]),
-          ]);
+          // Fold count + summary into the page query via window functions (COUNT(*)/SUM(...)
+          // OVER ()) — one scan of the filtered rows instead of three separate ones, one
+          // round trip instead of three. OVER() aggregates across every row matching WHERE
+          // (not just the LIMIT'd page), so `total`/summary stay correct for the whole filter,
+          // not just the page — but a window aggregate only appears on rows the query
+          // actually returns, so an out-of-range page (offset past the last matching row)
+          // yields zero rows and no aggregate to read. Fall back to the old two-query shape
+          // for just that edge case.
+          const merged = await app.db
+            .select({
+              ...getTableColumns(transactions),
+              __total: sql<number>`count(*) over ()`,
+              __totalInvested: sql<string>`coalesce(sum(case when ${transactions.type} in ('buy','savings_plan') then ${transactions.price}::numeric * ${transactions.quantity}::numeric + ${transactions.fees}::numeric else 0 end) over (), '0')`,
+              __totalProceeds: sql<string>`coalesce(sum(case when ${transactions.type} = 'sell' then ${transactions.price}::numeric * ${transactions.quantity}::numeric - ${transactions.fees}::numeric else 0 end) over (), '0')`,
+              __totalIncome: sql<string>`coalesce(sum(case when ${transactions.type} in ('dividend','coupon','interest','bonus_cash') then ${transactions.price}::numeric * ${transactions.quantity}::numeric else 0 end) over (), '0')`,
+            })
+            .from(transactions)
+            .where(and(...conditions))
+            .orderBy(desc(transactions.executedAt))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize);
+
+          let cnt: number;
+          let summaryRows: { totalInvested: string; totalProceeds: string; totalIncome: string };
+          let _rows: typeof transactions.$inferSelect[];
+          if (merged.length > 0) {
+            cnt = Number(merged[0].__total);
+            summaryRows = {
+              totalInvested: merged[0].__totalInvested,
+              totalProceeds: merged[0].__totalProceeds,
+              totalIncome: merged[0].__totalIncome,
+            };
+            _rows = merged.map(({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r);
+          } else {
+            const [c, s] = await Promise.all([
+              app.db
+                .select({ count: count() })
+                .from(transactions)
+                .where(and(...conditions))
+                .then((r) => Number(r[0].count)),
+              app.db
+                .select({
+                  totalInvested: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('buy','savings_plan') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric + ${transactions.fees}::numeric ELSE 0 END), '0')`,
+                  totalProceeds: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'sell' THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric - ${transactions.fees}::numeric ELSE 0 END), '0')`,
+                  totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('dividend','coupon','interest','bonus_cash') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric ELSE 0 END), '0')`,
+                })
+                .from(transactions)
+                .where(and(...conditions))
+                .then((r) => r[0]),
+            ]);
+            cnt = c;
+            summaryRows = s;
+            _rows = [];
+          }
           return enrichRows(_rows, cnt, summaryRows);
         });
         const years = await app.db
@@ -1181,7 +1228,10 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
       if (yearFilter) {
         const y = parseInt(yearFilter, 10);
-        if (!isNaN(y)) conditions.push(sql`EXTRACT(YEAR FROM ${transactions.executedAt}) = ${y}`);
+        if (!isNaN(y)) {
+          const { start, end } = yearRange(y);
+          conditions.push(gte(transactions.executedAt, start), lt(transactions.executedAt, end));
+        }
       }
       if (searchQuery) {
         conditions.push(sql`(
@@ -1278,16 +1328,30 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (paginate) {
         const cacheKey = `${id}:networth:${page}:${pageSize}:${typeFilter ?? ""}:${yearFilter ?? ""}:${searchQuery ?? ""}`;
         const cached = await withDerivationCache(networthTransactionsCache, cacheKey, async () => {
-          const [total, rows] = await Promise.all([
-            app.db.select({ count: count() }).from(transactions).where(and(...conditions)).then((r) => Number(r[0].count)),
-            app.db
-              .select()
+          // Fold the count into the page query via COUNT(*) OVER() — one scan/round trip
+          // instead of two. Falls back to a separate count when the page itself is empty
+          // (out-of-range offset), since an empty result set carries no window aggregate.
+          const merged = await app.db
+            .select({ ...getTableColumns(transactions), __total: sql<number>`count(*) over ()` })
+            .from(transactions)
+            .where(and(...conditions))
+            .orderBy(desc(transactions.executedAt))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize);
+
+          let total: number;
+          let rows: typeof transactions.$inferSelect[];
+          if (merged.length > 0) {
+            total = Number(merged[0].__total);
+            rows = merged.map(({ __total, ...r }) => r);
+          } else {
+            total = await app.db
+              .select({ count: count() })
               .from(transactions)
               .where(and(...conditions))
-              .orderBy(desc(transactions.executedAt))
-              .limit(pageSize)
-              .offset((page - 1) * pageSize),
-          ]);
+              .then((r) => Number(r[0].count));
+            rows = [];
+          }
           const enriched = await enrichAggregateRows(rows);
           return { rows: enriched, total };
         });
@@ -3807,13 +3871,15 @@ export async function transactionsRoute(app: FastifyInstance) {
       if (!portfolio) return reply.code(404).send({ error: "portfolio_not_found" });
 
       const year = parseInt(request.query.year ?? String(new Date().getUTCFullYear()), 10);
+      const { start, end } = yearRange(year);
       const rows = await app.db
         .select()
         .from(transactions)
         .where(and(
           eq(transactions.portfolioId, request.params.portfolioId),
           inArray(transactions.type, ACTIVITY_INCOME_TYPES),
-          sql`EXTRACT(YEAR FROM ${transactions.executedAt}) = ${year}`,
+          gte(transactions.executedAt, start),
+          lt(transactions.executedAt, end),
         ))
         .orderBy(desc(transactions.executedAt));
 
