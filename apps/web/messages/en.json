@@ -1059,6 +1059,8 @@
     "navInvestingSub": "Tax code & cost basis",
     "navData": "Data & connections",
     "navDataSub": "Tokens, sources & imports",
+    "navInstall": "Install App",
+    "navInstallSub": "PWA home screen installation",
     "navPortfoliosCount": "{portfolios, plural, one {# portfolio} other {# portfolios}} · {holders, plural, one {# holder} other {# holders}}",
     "investingCostBasisLabel": "Cost basis",
     "investingCostBasisNote": "How P&L cost is calculated — Total paid includes fees.",
@@ -1076,7 +1078,14 @@
     "dataSourceTr": "Trade Republic sync",
     "dataSourceIbkr": "Interactive Brokers sync",
     "dataSourceOn": "On",
-    "dataSourceOff": "Off"
+    "dataSourceOff": "Off",
+    "installApp": "Install App",
+    "installAppDesc": "Install Pocket as a standalone app on your device for quick access.",
+    "installAppCta": "Install Pocket",
+    "installAppIosTitle": "Install on iOS",
+    "installAppIosHint": "Tap Share, then \"Add to Home Screen\".",
+    "installAppInstalled": "Pocket is already installed on this device.",
+    "installAppUnavailable": "Installation is not supported in your browser."
   },
   "Holdings": {
     "title": "Holdings",

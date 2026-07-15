@@ -1057,6 +1057,8 @@
     "navInvestingSub": "Kode pajak & basis biaya",
     "navData": "Data & koneksi",
     "navDataSub": "Token, sumber & impor",
+    "navInstall": "Instal Aplikasi",
+    "navInstallSub": "Pemasangan PWA ke layar utama",
     "navPortfoliosCount": "{portfolios, plural, other {# portofolio}} · {holders, plural, other {# pemilik}}",
     "investingCostBasisLabel": "Basis biaya",
     "investingCostBasisNote": "Cara biaya P&L dihitung — Total dibayar termasuk biaya.",
@@ -1074,7 +1076,14 @@
     "dataSourceTr": "Sinkronisasi Trade Republic",
     "dataSourceIbkr": "Sinkronisasi Interactive Brokers",
     "dataSourceOn": "Aktif",
-    "dataSourceOff": "Nonaktif"
+    "dataSourceOff": "Nonaktif",
+    "installApp": "Instal Aplikasi",
+    "installAppDesc": "Pasang Pocket sebagai aplikasi mandiri di perangkat Anda untuk akses cepat.",
+    "installAppCta": "Instal Pocket",
+    "installAppIosTitle": "Instal di iOS",
+    "installAppIosHint": "Ketuk Bagikan, lalu \"Add to Home Screen\".",
+    "installAppInstalled": "Pocket sudah terpasang di perangkat ini.",
+    "installAppUnavailable": "Pemasangan tidak didukung di peramban Anda."
   },
   "Holdings": {
     "title": "Kepemilikan",

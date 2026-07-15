@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { UserRound, TrendingUp, Briefcase, KeyRound, ShieldCheck } from "lucide-react";
+import { UserRound, TrendingUp, Briefcase, KeyRound, ShieldCheck, Download } from "lucide-react";
 import { SettingsShell, type ShellNavItem } from "@/components/settings-shell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { AppVersion } from "@/components/app-version";
@@ -70,9 +70,18 @@ export default async function SettingsLayout({
       color: "var(--gold-fg)",
       bg: "rgba(224,165,58,.16)",
     },
+    {
+      key: "install",
+      href: "/settings/install",
+      icon: <Download />,
+      title: t("navInstall"),
+      subtitle: t("navInstallSub"),
+      color: "#3B82F6",
+      bg: "rgba(59,130,246,.16)",
+    },
   ];
 
-  const groups = [[navItems[0], navItems[1]], [navItems[2], navItems[3]]];
+  const groups = [[navItems[0], navItems[1]], [navItems[2], navItems[3]], [navItems[4]]];
 
   if (me?.isAdmin) {
     navItems.push({
