@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { ConcentrationPoint } from "@portfolio/api-client";
 
@@ -67,6 +68,10 @@ export function ConcentrationTrendCard({
           <p className="mt-1 text-[10px] text-text-2">
             {t("samples", { count: trend.length, classes: latest.classCount })}
           </p>
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
+            <span>{t("note")}</span>
+          </div>
         </>
       ) : (
         <p className="mt-1 text-sm text-text-2">{t("insufficientData")}</p>

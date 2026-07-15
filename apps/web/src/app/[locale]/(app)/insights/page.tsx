@@ -173,6 +173,7 @@ export default async function InsightsPage({
               best={movers.best}
               worst={movers.worst}
               title={t("bestWorst.title")}
+              timeframeLabel={t("bestWorst.timeframe")}
               bestLabel={t("bestWorst.best")}
               worstLabel={t("bestWorst.worst")}
               locale={locale}

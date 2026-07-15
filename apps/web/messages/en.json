@@ -190,6 +190,7 @@
     },
     "bestWorst": {
       "title": "Best & worst",
+      "timeframe": "24h",
       "best": "Best performer",
       "worst": "Worst performer",
       "empty": "Not enough day-change data yet."
@@ -205,7 +206,8 @@
       "title": "Volatility & Risk",
       "annualized": "Annualized volatility",
       "sharpe": "Sharpe",
-      "sortino": "Sortino"
+      "sortino": "Sortino",
+      "note": "Annualized volatility = standard deviation of daily returns × √252 trading days. Sharpe and Sortino measure excess return (over the risk-free rate) per unit of risk — Sortino counts only downside swings."
     },
     "streaks": {
       "title": "Streaks",
@@ -227,7 +229,8 @@
       "hhiTrend": "HHI trend",
       "top1Trend": "Top 1%",
       "samples": "{count} monthly samples · {classes} asset classes",
-      "insufficientData": "Insufficient data"
+      "insufficientData": "Insufficient data",
+      "note": "HHI (Herfindahl-Hirschman Index) sums the squared weight of every holding, from 0 (perfectly spread out) to 1.0 (a single holding). Rising HHI or Top 1% means your portfolio is concentrating into fewer positions."
     }
   },
   "Admin": {
