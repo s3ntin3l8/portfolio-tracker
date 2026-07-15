@@ -118,8 +118,8 @@ describe("AdminProvidersForm", () => {
 
   it("disables the toggle for an unconfigured provider", () => {
     renderForm(STUB_CLIENT);
-    // EODHD is unconfigured → not-configured hint shows and its switch is disabled.
-    expect(screen.getByText(messages.Admin.notConfigured)).toBeInTheDocument();
+    // EODHD is unconfigured → not-configured hint shows (in both desktop + mobile).
+    expect(screen.getAllByText(messages.Admin.notConfigured).length).toBeGreaterThanOrEqual(1);
     const allSwitches = screen.getAllByRole("switch");
     expect(allSwitches.some((s) => (s as HTMLButtonElement).disabled)).toBe(true);
   });
@@ -138,7 +138,8 @@ describe("AdminProvidersForm", () => {
         />
       </NextIntlClientProvider>,
     );
-    expect(screen.getAllByText(messages.Admin.keyFromEnv)).toHaveLength(1);
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText(messages.Admin.keyFromEnv)).toHaveLength(2);
   });
 
   it("shows usage: live quota with a limit and a local-count fallback", () => {
@@ -196,7 +197,8 @@ describe("AdminProvidersForm", () => {
       provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
-    expect(screen.getByText(messages.Admin.keyNotNeeded)).toBeInTheDocument();
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText(messages.Admin.keyNotNeeded).length).toBeGreaterThanOrEqual(1);
     // Keyless providers offer no key editor.
     expect(screen.queryByRole("button", { name: messages.Admin.editCredential })).toBeNull();
   });
@@ -206,7 +208,8 @@ describe("AdminProvidersForm", () => {
       provider({ id: "eodhd", label: "EODHD", priority: 1, keySource: null, hasKey: false, configured: false }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
-    expect(screen.getByText(messages.Admin.keyNone)).toBeInTheDocument();
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText(messages.Admin.keyNone).length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows 'Not needed' even when encryption is disabled (no key to encrypt)", () => {
@@ -214,7 +217,8 @@ describe("AdminProvidersForm", () => {
       provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: false });
-    expect(screen.getByText(messages.Admin.keyNotNeeded)).toBeInTheDocument();
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText(messages.Admin.keyNotNeeded).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(messages.Admin.encryptionDisabled)).toBeNull();
   });
 
@@ -223,7 +227,8 @@ describe("AdminProvidersForm", () => {
       provider({ id: "twelvedata", label: "Twelve Data", priority: 1, hasKey: true, keyHint: "••••abcd", keySource: "db" }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
-    expect(screen.getByText("••••abcd")).toBeInTheDocument();
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText("••••abcd").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows 'from .env' for an env-keyed provider when encryption is enabled", () => {
@@ -231,7 +236,8 @@ describe("AdminProvidersForm", () => {
       provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: "env", hasKey: false }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
-    expect(screen.getByText(messages.Admin.keyFromEnv)).toBeInTheDocument();
+    // Both desktop + mobile branches render the same credential cells.
+    expect(screen.getAllByText(messages.Admin.keyFromEnv).length).toBeGreaterThanOrEqual(1);
   });
 
   it("opens the edit dialog and saves a new key via setAdminProviderCredential", async () => {
@@ -245,8 +251,8 @@ describe("AdminProvidersForm", () => {
     ];
     renderForm(client, vi.fn(), { providers, encryptionEnabled: true });
 
-    // Click the pencil to open the dialog.
-    fireEvent.click(screen.getByRole("button", { name: messages.Admin.editCredential }));
+    // Click the first pencil to open the dialog (desktop + mobile both render one).
+    fireEvent.click(screen.getAllByRole("button", { name: messages.Admin.editCredential })[0]);
 
     // The dialog title (an <h2>) should appear — confirms dialog opened.
     await waitFor(() =>

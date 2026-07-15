@@ -7,7 +7,6 @@ import {
   Check,
   Eye,
   EyeOff,
-  GripVertical,
   Loader2,
   Pencil,
   ShieldOff,
@@ -26,10 +25,8 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type {
   AdminVisionProvider,
   AdminVisionProvidersResponse,
@@ -39,6 +36,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { SortableRow, SortableCard } from "@/components/sortable-utils";
 import {
   Dialog,
   DialogContent,
@@ -158,7 +156,6 @@ function VisionCredentialCell({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        {/* Fixed-width display area so the pencil icon aligns across all rows. */}
         <div className="w-28 shrink-0 truncate">{display}</div>
 
         <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
@@ -226,47 +223,6 @@ function VisionCredentialCell({
   );
 }
 
-/** Drag-sortable table row wrapping one vision provider. */
-function SortableRow({
-  id,
-  dragHandleLabel,
-  children,
-}: {
-  id: string;
-  dragHandleLabel: string;
-  children: (handle: React.ReactNode) => React.ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handle = (
-    <button
-      type="button"
-      {...attributes}
-      {...listeners}
-      aria-label={dragHandleLabel}
-      className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-    >
-      <GripVertical className="size-4" />
-    </button>
-  );
-
-  return (
-    <tr
-      ref={setNodeRef}
-      style={style}
-      className={`border-b border-border last:border-0${isDragging ? " opacity-50" : ""}`}
-    >
-      {children(handle)}
-    </tr>
-  );
-}
-
 const signature = (rows: AdminVisionProvider[]) =>
   rows.map((r) => `${r.id}:${r.enabled ? 1 : 0}`).join(",");
 
@@ -287,6 +243,7 @@ export function AdminVisionProvidersForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -359,13 +316,14 @@ export function AdminVisionProvidersForm({
         </div>
       )}
 
+      {/* Desktop: separate DndContext so useSortable ids don't collide with mobile */}
       <DndContext
-        id="admin-vision-providers"
+        id="admin-vision-providers-desktop"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <div className="overflow-x-auto rounded-md border border-border">
+        <div className="hidden overflow-x-auto rounded-md border border-border md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
@@ -425,6 +383,83 @@ export function AdminVisionProvidersForm({
               </SortableContext>
             </tbody>
           </table>
+        </div>
+      </DndContext>
+
+      {/* Mobile: reorder toggle + cards. Separate DndContext to avoid useSortable
+          id collisions with the always-mounted desktop SortableRows. */}
+      <DndContext
+        id="admin-vision-providers-mobile"
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="md:hidden">
+          <div className="mb-3 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setReorderMode((v) => !v)}
+            >
+              {reorderMode ? t("done") : t("reorder")}
+            </Button>
+          </div>
+
+          <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {rows.map((p, i) => {
+                if (reorderMode) {
+                  return (
+                    <SortableCard
+                      key={p.id}
+                      id={p.id}
+                      disabled={false}
+                      dragHandleLabel={t("dragHandle")}
+                    >
+                      {(handle) => (
+                        <div className="flex items-center gap-3">
+                          {handle}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-bold">{p.label}</div>
+                            {!p.configured && (
+                              <div className="text-xs text-muted-foreground">{t("notConfigured")}</div>
+                            )}
+                          </div>
+                          <span className="tabular-nums text-xs text-muted-foreground">#{i + 1}</span>
+                        </div>
+                      )}
+                    </SortableCard>
+                  );
+                }
+
+                return (
+                  <div key={p.id} className="rounded-[14px] border border-border bg-card p-3.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-bold">{p.label}</span>
+                      <Switch
+                        checked={p.enabled}
+                        disabled={!p.configured}
+                        onCheckedChange={() => toggle(p.id)}
+                        aria-label={p.enabled ? t("enabled") : t("disabled")}
+                      />
+                    </div>
+                    {!p.configured && (
+                      <div className="mt-1 text-xs text-muted-foreground">{t("notConfigured")}</div>
+                    )}
+                    <div className="mt-2">
+                      <VisionCredentialCell
+                        provider={p}
+                        encryptionEnabled={encryptionEnabled}
+                        onSet={handleSetCredential}
+                        onClear={handleClearCredential}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SortableContext>
         </div>
       </DndContext>
 
