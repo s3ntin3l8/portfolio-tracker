@@ -114,4 +114,33 @@ describe("useTableSort", () => {
     const sorted = result.current.sort(rows);
     expect(sorted.map((r) => r.amount)).toEqual(["100.00", "999.99", "1234.56"]);
   });
+
+  it("reads latest cols from ref when cols identity changes between renders", () => {
+    const extract: (r: { n: string }) => string = (r) => r.n;
+    const COLS_A: ColDef<{ n: string }>[] = [
+      { key: "f", get: (r) => extract(r), type: "text" },
+    ];
+    const COLS_B: ColDef<{ n: string }>[] = [
+      { key: "f", get: () => "same", type: "text" },
+    ];
+    const ROWS = [{ n: "z" }, { n: "a" }];
+
+    const { result, rerender } = renderHook(
+      ({ cols }: { cols: ColDef<{ n: string }>[] }) => useTableSort(cols),
+      { initialProps: { cols: COLS_A } },
+    );
+
+    act(() => result.current.toggle("f"));
+
+    // COLS_A's get returns r.n → "a" < "z"
+    expect(result.current.sort(ROWS).map((r) => r.n)).toEqual(["a", "z"]);
+
+    // Re-render with a different COLS identity (same key, different get)
+    rerender({ cols: COLS_B });
+
+    // The sort callback reads colsRef.current (latest cols), so it uses COLS_B's
+    // get which returns "same" for both — stable sort preserves original order.
+    // Without the ref fix it would still use COLS_A (stale closure) → "a", "z".
+    expect(result.current.sort(ROWS).map((r) => r.n)).toEqual(["z", "a"]);
+  });
 });

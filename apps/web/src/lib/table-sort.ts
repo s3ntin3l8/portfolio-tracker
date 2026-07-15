@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export type SortDir = "asc" | "desc";
 export type ColType = "text" | "numeric" | "date";
@@ -50,17 +50,20 @@ export function useTableSort<T>(cols: ColDef<T>[]): UseTableSortResult<T> {
     [sortKey],
   );
 
+  const colsRef = useRef(cols);
+  // eslint-disable-next-line react-hooks/refs
+  colsRef.current = cols;
+
   const sort = useCallback(
     (rows: T[]): T[] => {
       if (sortKey === null) return rows;
-      const col = cols.find((c) => c.key === sortKey);
+      const col = colsRef.current.find((c) => c.key === sortKey);
       if (!col) return rows;
       return [...rows].sort((a, b) => {
         const cmp = compareValues(col.get(a), col.get(b), col.type);
         return sortDir === "asc" ? cmp : -cmp;
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [sortKey, sortDir],
   );
 
