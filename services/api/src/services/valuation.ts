@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import { corporateActions, instruments, transactions } from "@portfolio/db";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
+import { corporateActions, instruments, prices as pricesTable, transactions } from "@portfolio/db";
 import {
   summarizePortfolio,
   openLots,
@@ -77,6 +77,8 @@ export async function valuePortfolio(
   costBasisMode?: CostBasisMode,
   cashCounted = true,
   _log?: FastifyBaseLogger,
+  /** Injectable clock for deterministic date handling. Defaults to the real clock. */
+  now: Date = new Date(),
 ): Promise<Valuation> {
   const t0 = performance.now();
   const rows = await db
@@ -135,6 +137,34 @@ export async function valuePortfolio(
   for (const i of instrumentRows) {
     if (i.assetClass === "bond" && i.faceValue && !prices[i.id]) {
       prices[i.id] = { price: i.faceValue, currency: i.currency };
+    }
+  }
+
+  // Historical-price fallback: carry forward the last known close for held
+  // instruments whose live price lookup returned null (cache miss + provider
+  // miss — market holiday, provider outage, etc).  A 7-day staleness cap
+  // ensures a genuinely delisted instrument eventually reverts to unpriced
+  // rather than being carried forever at a stale value.
+  {
+    const today = now.toISOString().slice(0, 10);
+    const missingIds = instrumentIds.filter((id) => !prices[id]);
+    if (missingIds.length > 0) {
+      const historical = await db
+        .select()
+        .from(pricesTable)
+        .where(and(inArray(pricesTable.instrumentId, missingIds), lte(pricesTable.date, today)))
+        .orderBy(pricesTable.instrumentId, desc(pricesTable.date));
+      const todayMs = new Date(`${today}T00:00:00.000Z`).getTime();
+      const seen = new Set<string>();
+      for (const row of historical) {
+        if (seen.has(row.instrumentId)) continue;
+        seen.add(row.instrumentId);
+        const rowMs = new Date(`${row.date}T00:00:00.000Z`).getTime();
+        const daysAgo = (todayMs - rowMs) / 86_400_000;
+        if (daysAgo <= 7) {
+          prices[row.instrumentId] = { price: row.close, currency: row.currency };
+        }
+      }
     }
   }
 
@@ -261,6 +291,7 @@ export async function valuePortfolioCached(
     costBasisMode,
     cashCounted,
     _log,
+    new Date(now),
   );
   derivationCache.set(key, { expiresAt: now + DERIVATION_CACHE_TTL_MS, promise });
   // A failed computation must not poison the cache for the rest of the TTL window — drop

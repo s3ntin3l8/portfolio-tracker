@@ -44,6 +44,8 @@ export async function recordDailySnapshots(
       p.baseCurrency,
       undefined,
       p.cashCounted,
+      undefined,
+      now,
     );
 
     // Compute today's effectiveFlow: -Σ cashFlow(tx) for qualifying txns executed today.
@@ -173,6 +175,8 @@ export async function recordIntradaySnapshots(
       p.baseCurrency,
       undefined,
       p.cashCounted,
+      undefined,
+      now,
     );
     await db.insert(portfolioIntradaySnapshots).values({
       portfolioId: p.id,
