@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { bestAndWorst } from "../src/lib/movers";
-import type { HoldingValuation } from "@portfolio/api-client";
+import { bestAndWorst, periodToMover } from "../src/lib/movers";
+import type { HoldingValuation, PeriodMover } from "@portfolio/api-client";
 
 function holding(overrides: Partial<HoldingValuation> & { instrumentId: string }): HoldingValuation {
   return {
@@ -71,5 +71,36 @@ describe("bestAndWorst", () => {
       holding({ instrumentId: "b", dayChangePct: "2.0" }),
     ];
     expect(bestAndWorst(holdings)).toBeNull();
+  });
+});
+
+describe("periodToMover", () => {
+  it("maps PeriodMover fields to Mover correctly", () => {
+    const pm: PeriodMover = {
+      instrumentId: "x",
+      symbol: "BBCA",
+      name: "Bank Central Asia",
+      assetClass: "equity",
+      pct: 0.05,
+    };
+    const m = periodToMover(pm);
+    expect(m.instrumentId).toBe("x");
+    expect(m.symbol).toBe("BBCA");
+    expect(m.name).toBe("Bank Central Asia");
+    expect(m.assetClass).toBe("equity");
+    expect(m.pct).toBeCloseTo(0.05);
+  });
+
+  it("falls back to instrumentId when name is null", () => {
+    const pm: PeriodMover = {
+      instrumentId: "fallback-id",
+      symbol: "SYM",
+      name: null,
+      assetClass: "gold",
+      pct: -0.03,
+    };
+    const m = periodToMover(pm);
+    expect(m.name).toBe("fallback-id");
+    expect(m.pct).toBeCloseTo(-0.03);
   });
 });

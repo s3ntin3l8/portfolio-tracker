@@ -39,7 +39,7 @@ function MoverRow({ mover, label, locale }: { mover: Mover; label: string; local
   );
 }
 
-/** The Insights "Best & worst" card — the day's biggest winning and losing open holding. */
+/** Insights "Best & worst" card — the biggest winning and losing open holding for a given timeframe. */
 export function BestWorstCard({
   best,
   worst,

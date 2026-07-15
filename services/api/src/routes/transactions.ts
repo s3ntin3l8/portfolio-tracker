@@ -4215,8 +4215,10 @@ export async function transactionsRoute(app: FastifyInstance) {
         const concentrationTrend: { date: string; hhi: number; top1Pct: number; classCount: number }[] = [];
         const months = [...new Set(dates.map((d) => d.slice(0, 7)))].slice(-60);
         const pfIds = pfs.map((p) => p.id);
-        let bestWorstMonthly: { best: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null; worst: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null } = { best: null, worst: null };
-        let bestWorstYearly: { best: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null; worst: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null } = { best: null, worst: null };
+        type PeriodMoverResult = { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number };
+        type BestWorstPair = { best: PeriodMoverResult | null; worst: PeriodMoverResult | null };
+        let bestWorstMonthly: BestWorstPair = { best: null, worst: null };
+        let bestWorstYearly: BestWorstPair = { best: null, worst: null };
 
         if (months.length > 0) {
           const allTxRows = await app.db
@@ -4305,13 +4307,30 @@ export async function transactionsRoute(app: FastifyInstance) {
           const yearStart = latestDate.slice(0, 4) + "-01-01";
           const periodEnd = new Date(`${latestDate}T23:59:59.999Z`);
 
-          const heldInsts = computeHoldings(coreTxns, corpActions, periodEnd)
-            .filter((h) => Number(h.quantity) > 0 && h.instrumentId)
-            .map((h) => h.instrumentId!);
+          // Require the instrument to be held at both period start and period
+          // end — a recent buy or a partial exit shouldn't show the full period's
+          // price swing as "your return", since part of that move happened before
+          // the user owned the position (or happened on shares already sold).
+          const heldAtStart = new Set(
+            computeHoldings(coreTxns, corpActions, new Date(`${monthStart}T00:00:00.000Z`))
+              .filter((h) => Number(h.quantity) > 0 && h.instrumentId)
+              .map((h) => h.instrumentId!),
+          );
+          const heldAtYearStart = new Set(
+            computeHoldings(coreTxns, corpActions, new Date(`${yearStart}T00:00:00.000Z`))
+              .filter((h) => Number(h.quantity) > 0 && h.instrumentId)
+              .map((h) => h.instrumentId!),
+          );
+          const heldAtEnd = new Map(
+            computeHoldings(coreTxns, corpActions, periodEnd)
+              .filter((h) => Number(h.quantity) > 0 && h.instrumentId)
+              .map((h) => [h.instrumentId!, h]),
+          );
 
-          const computePeriodMovers = (startDate: string): { best: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null; worst: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number } | null } => {
-            const movers: { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number }[] = [];
-            for (const instId of heldInsts) {
+          const computePeriodMovers = (startDate: string, heldAtStartSet: Set<string>): BestWorstPair => {
+            const movers: PeriodMoverResult[] = [];
+            for (const instId of heldAtEnd.keys()) {
+              if (!heldAtStartSet.has(instId)) continue;
               const startPrice = latestPriceBefore(instId, startDate);
               const endPrice = latestPriceBefore(instId, latestDate);
               if (!startPrice || !endPrice || Number(startPrice) <= 0) continue;
@@ -4331,8 +4350,8 @@ export async function transactionsRoute(app: FastifyInstance) {
             return { best: movers[0], worst: movers[movers.length - 1] };
           };
 
-          bestWorstMonthly = computePeriodMovers(monthStart);
-          bestWorstYearly = computePeriodMovers(yearStart);
+          bestWorstMonthly = computePeriodMovers(monthStart, heldAtStart);
+          bestWorstYearly = computePeriodMovers(yearStart, heldAtYearStart);
         }
 
         return { drawdown, volatility, streaks, benchmark, concentrationTrend, bestWorstMonthly, bestWorstYearly };

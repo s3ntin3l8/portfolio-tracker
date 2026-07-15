@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
-import { portfolioSnapshots } from "@portfolio/db";
+import { instruments, portfolioSnapshots, prices, transactions } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 
@@ -147,5 +147,97 @@ describe("GET /insights", () => {
     // Must NOT be -1 (-100%) — the gap day is carried forward, not applied as a real loss.
     expect(Number(body.drawdown.maxDrawdownPct)).not.toBeCloseTo(-1, 2);
     expect(Number(body.drawdown.maxDrawdownPct)).toBeGreaterThan(-0.5);
+  });
+
+  describe("period best/worst", () => {
+    it("returns MTD and YTD best/worst from price moves of continuously-held instruments", async () => {
+      const t = await token("insights-period-user");
+      const create = await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Period Test", baseCurrency: "IDR" },
+      });
+      const portfolioId = create.json().id;
+
+      const [instA] = await app.db.insert(instruments).values({
+        symbol: "INSTA", name: "Instrument A", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
+      }).returning({ id: instruments.id });
+      const [instB] = await app.db.insert(instruments).values({
+        symbol: "INSTB", name: "Instrument B", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
+      }).returning({ id: instruments.id });
+
+      // Both bought before Jan 2026 — held at period start (Jan 1) → qualifies as continuously-held.
+      await app.db.insert(transactions).values({ portfolioId, instrumentId: instA.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2025-12-15") });
+      await app.db.insert(transactions).values({ portfolioId, instrumentId: instB.id, type: "buy", quantity: "20", price: "50", currency: "IDR", executedAt: new Date("2025-12-15") });
+
+      // Prices at period start and period end: A goes up 50%, B goes down 40%.
+      await app.db.insert(prices).values([
+        { instrumentId: instA.id, date: "2025-12-15", close: "100", currency: "IDR" },
+        { instrumentId: instA.id, date: "2026-01-31", close: "150", currency: "IDR" },
+        { instrumentId: instB.id, date: "2025-12-15", close: "50", currency: "IDR" },
+        { instrumentId: instB.id, date: "2026-01-31", close: "30", currency: "IDR" },
+      ]);
+
+      await app.db.insert(portfolioSnapshots).values([
+        { portfolioId, date: "2026-01-01", netWorth: "2000", marketValue: "2000", effectiveFlow: "2000", currency: "IDR" },
+        { portfolioId, date: "2026-01-15", netWorth: "2100", marketValue: "2100", effectiveFlow: "0", currency: "IDR" },
+        { portfolioId, date: "2026-01-31", netWorth: "2100", marketValue: "2100", effectiveFlow: "0", currency: "IDR" },
+      ]);
+
+      const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body.bestWorstMonthly.best).not.toBeNull();
+      expect(body.bestWorstMonthly.best.instrumentId).toBe(instA.id);
+      expect(body.bestWorstMonthly.best.pct).toBeCloseTo(0.5, 6);
+      expect(body.bestWorstMonthly.worst.instrumentId).toBe(instB.id);
+      expect(body.bestWorstMonthly.worst.pct).toBeCloseTo(-0.4, 6);
+
+      // Yearly overlaps the same month — same prices → same result.
+      expect(body.bestWorstYearly.best).not.toBeNull();
+      expect(body.bestWorstYearly.best.instrumentId).toBe(instA.id);
+      expect(body.bestWorstYearly.best.pct).toBeCloseTo(0.5, 6);
+      expect(body.bestWorstYearly.worst.instrumentId).toBe(instB.id);
+      expect(body.bestWorstYearly.worst.pct).toBeCloseTo(-0.4, 6);
+    });
+
+    it("returns null for both best/worst when fewer than 2 held instruments have a period-start price", async () => {
+      const t = await token("insights-period-user-edge");
+      const create = await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Period Edge", baseCurrency: "IDR" },
+      });
+      const portfolioId = create.json().id;
+
+      // Only one instrument — no best/worst pair possible.
+      const [inst] = await app.db.insert(instruments).values({
+        symbol: "ONLY", name: "Only One", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
+      }).returning({ id: instruments.id });
+
+      await app.db.insert(transactions).values({ portfolioId, instrumentId: inst.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2026-01-02") });
+
+      await app.db.insert(prices).values([
+        { instrumentId: inst.id, date: "2026-01-01", close: "100", currency: "IDR" },
+        { instrumentId: inst.id, date: "2026-01-31", close: "110", currency: "IDR" },
+      ]);
+
+      await app.db.insert(portfolioSnapshots).values([
+        { portfolioId, date: "2026-01-01", netWorth: "1000", marketValue: "1000", effectiveFlow: "1000", currency: "IDR" },
+        { portfolioId, date: "2026-01-31", netWorth: "1100", marketValue: "1100", effectiveFlow: "0", currency: "IDR" },
+      ]);
+
+      const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body.bestWorstMonthly.best).toBeNull();
+      expect(body.bestWorstMonthly.worst).toBeNull();
+      expect(body.bestWorstYearly.best).toBeNull();
+      expect(body.bestWorstYearly.worst).toBeNull();
+    });
   });
 });
