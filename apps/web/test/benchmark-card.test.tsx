@@ -77,7 +77,7 @@ describe("BenchmarkCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save/i }));
 
     await waitFor(() => {
-      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: "^GDAXI", riskFreeRate: null });
+      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: "^GDAXI" });
     });
   });
 
@@ -92,7 +92,7 @@ describe("BenchmarkCard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Remove/i }));
 
     await waitFor(() => {
-      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: null, riskFreeRate: null });
+      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: null });
     });
   });
 });

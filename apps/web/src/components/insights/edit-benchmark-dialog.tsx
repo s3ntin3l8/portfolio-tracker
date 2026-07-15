@@ -11,18 +11,18 @@ import { Button } from "@/components/ui/button";
 import { benchmarkLabel } from "@/lib/benchmark-labels";
 import type { InstrumentSearchResult } from "@portfolio/api-client";
 
+// Quick-pick indices — `currency` below is a UI-only placeholder; the backend infers the
+// real currency from stored benchmark_prices via getUserBenchmarkConfig.
 const SUGGESTED = ["^GSPC", "^DJI", "^IXIC", "^GDAXI", "^N225", "^HSI", "^JKSE", "^STOXX50E", "^FTSE"] as const;
 
 export function EditBenchmarkDialog({
   open,
   onOpenChange,
   currentSymbol,
-  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentSymbol: string | null;
-  onSaved: () => void;
 }) {
   const t = useTranslations("Insights.benchmark");
   const api = useApiClient();
@@ -59,8 +59,7 @@ export function EditBenchmarkDialog({
   const handleSave = async (symbol: string | null) => {
     setSaving(true);
     try {
-      await api.putPreferences({ benchmarkSymbol: symbol, riskFreeRate: null });
-      onSaved();
+      await api.putPreferences({ benchmarkSymbol: symbol });
       router.refresh();
       onOpenChange(false);
     } catch {

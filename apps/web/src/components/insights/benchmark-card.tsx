@@ -39,7 +39,6 @@ export function BenchmarkCard({
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           currentSymbol={null}
-          onSaved={() => {}}
         />
       </Card>
     );
@@ -76,7 +75,6 @@ export function BenchmarkCard({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         currentSymbol={benchmark.symbol}
-        onSaved={() => {}}
       />
     </Card>
   );
