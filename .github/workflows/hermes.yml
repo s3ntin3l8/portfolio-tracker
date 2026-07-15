@@ -1,0 +1,22 @@
+name: Hermes (on-demand)
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  hermes:
+    # Only human comment events; the bot never re-triggers itself. The actual
+    # "@s3ntin3l8-hermes" mention check lives inside the reusable workflow.
+    if: github.actor != 's3ntin3l8-hermes[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: write
+    uses: s3ntin3l8/.github/.github/workflows/hermes-review.yml@main
+    with:
+      mention-trigger: s3ntin3l8-hermes # the GitHub App slug
+    secrets: inherit # pragma: allowlist secret
