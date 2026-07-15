@@ -44,6 +44,7 @@ export function BestWorstCard({
   best,
   worst,
   title,
+  timeframeLabel,
   bestLabel,
   worstLabel,
   locale,
@@ -51,13 +52,20 @@ export function BestWorstCard({
   best: Mover;
   worst: Mover;
   title: string;
+  /** Explicit basis for the mover pct (e.g. "24h") — this card is always a day-change view. */
+  timeframeLabel: string;
   bestLabel: string;
   worstLabel: string;
   locale: string;
 }) {
   return (
     <Card className="space-y-3 p-5">
-      <h2 className="text-base font-bold">{title}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold">{title}</h2>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          {timeframeLabel}
+        </span>
+      </div>
       <MoverRow mover={best} label={bestLabel} locale={locale} />
       <MoverRow mover={worst} label={worstLabel} locale={locale} />
     </Card>

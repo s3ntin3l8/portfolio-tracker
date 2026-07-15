@@ -86,4 +86,46 @@ describe("streakAnalysis", () => {
     ]);
     expect(result.bestYear?.year).toBe(2026);
   });
+
+  // Regression: the real caller (the /insights route) feeds a DAILY TWR index, not one
+  // point per month. Before the fix, `monthlyReturns` computed a return between every
+  // CONSECUTIVE point regardless of cadence, so a long daily uptrend reported a streak
+  // "length" in the hundreds/thousands while still being labeled "mo" by the card —
+  // e.g. a real ~5-year uptrend read as "1818mo". Resampling to true month-end points
+  // first means `length`/`positiveMonths`/`totalMonths` are genuine month counts.
+  it("resamples a daily index to month-end points before computing streaks", () => {
+    const daily: { date: string; index: string }[] = [];
+    // 3 calendar months of daily points, steadily rising — every single day is an
+    // "up day" relative to the previous day, but it's only 2 real month-over-month
+    // transitions (Jan→Feb, Feb→Mar).
+    let idx = 100;
+    for (const month of ["2026-01", "2026-02", "2026-03"]) {
+      const daysInMonth = month === "2026-02" ? 28 : 31;
+      for (let d = 1; d <= daysInMonth; d++) {
+        idx += 0.1;
+        daily.push({ date: `${month}-${String(d).padStart(2, "0")}`, index: idx.toFixed(4) });
+      }
+    }
+
+    const result = streakAnalysis(daily);
+
+    // Genuinely monthly: 3 calendar months → at most 2 month-over-month returns.
+    expect(result.totalMonths).toBe(2);
+    expect(result.bestStreak?.length).toBeLessThanOrEqual(2);
+    // Not the daily-point count (90) a pre-fix run would have produced.
+    expect(result.bestStreak?.length).not.toBe(daily.length - 1);
+  });
+
+  it("is a no-op for input that already has exactly one point per month", () => {
+    // Guards against a resampling regression for callers (and existing tests above)
+    // that already pass genuinely-monthly points.
+    const monthly = [
+      { date: "2026-01-01", index: "100" },
+      { date: "2026-02-01", index: "105" },
+      { date: "2026-03-01", index: "110" },
+    ];
+    const result = streakAnalysis(monthly);
+    expect(result.totalMonths).toBe(2);
+    expect(result.bestStreak?.length).toBe(2);
+  });
 });

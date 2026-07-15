@@ -141,12 +141,20 @@ export function computeActiveReturn(
   const bmFinal = common[common.length - 1].bm;
   const activeReturn = pfFinal - bmFinal;
 
+  // `common[i].pf`/`.bm` are CUMULATIVE returns (in percentage points) since the common
+  // base date — not daily returns. The true daily return between two index levels is
+  // (1+cum_i/100)/(1+cum_{i-1}/100) - 1, NOT the difference of the cumulative pcts: that
+  // difference scales with how large the cumulative return has already grown, so late in
+  // a long series the same day-to-day move produces an ever-larger "diff", inflating the
+  // annualized tracking error (and distorting correlation).
+  const dailyReturn = (curr: number, prev: number) => (1 + curr / 100) / (1 + prev / 100) - 1;
+
   // Tracking error = stddev of daily return differences
   const diffs: number[] = [];
   for (let i = 1; i < common.length; i++) {
-    const pfDailyRet = common[i].pf - common[i - 1].pf;
-    const bmDailyRet = common[i].bm - common[i - 1].bm;
-    diffs.push(pfDailyRet - bmDailyRet);
+    const pfDailyRet = dailyReturn(common[i].pf, common[i - 1].pf);
+    const bmDailyRet = dailyReturn(common[i].bm, common[i - 1].bm);
+    diffs.push((pfDailyRet - bmDailyRet) * 100);
   }
 
   if (diffs.length < 2) return null;
@@ -159,8 +167,8 @@ export function computeActiveReturn(
   const pfRets: number[] = [];
   const bmRets: number[] = [];
   for (let i = 1; i < common.length; i++) {
-    pfRets.push(common[i].pf - common[i - 1].pf);
-    bmRets.push(common[i].bm - common[i - 1].bm);
+    pfRets.push(dailyReturn(common[i].pf, common[i - 1].pf));
+    bmRets.push(dailyReturn(common[i].bm, common[i - 1].bm));
   }
 
   const meanPf = pfRets.reduce((a, b) => a + b, 0) / pfRets.length;

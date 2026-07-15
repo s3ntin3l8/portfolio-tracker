@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { InsightsVolatility } from "@portfolio/api-client";
 
@@ -34,6 +35,10 @@ export function VolatilityCard({
             {t("sortino")}: <span className="font-semibold">{sortino.toFixed(2)}</span>
           </span>
         )}
+      </div>
+      <div className="mt-3 flex items-start gap-2 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0" />
+        <span>{t("note")}</span>
       </div>
     </Card>
   );

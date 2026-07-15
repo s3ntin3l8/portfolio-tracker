@@ -116,4 +116,36 @@ describe("GET /insights", () => {
     expect(cross.statusCode).toBe(200);
     expect(cross.json().drawdown.maxDrawdownPct).toBe("0");
   });
+
+  // Regression guard: a stale/missing price for a still-held instrument gets recorded
+  // upstream (snapshot generation) as marketValue=0 with no offsetting effectiveFlow —
+  // a data artifact, not a real total loss. Before the chainIndex guard, this single
+  // gap day permanently zeroed the TWR index, so drawdown read -100% "from the
+  // beginning" no matter how healthy the portfolio actually was on every other day.
+  it("does not report -100% drawdown from a single price-gap snapshot day", async () => {
+    const t = await token("insights-gap-user");
+    const create = await app.inject({
+      method: "POST",
+      url: "/portfolios",
+      headers: auth(t),
+      payload: { name: "Gap Test", baseCurrency: "IDR" },
+    });
+    const portfolioId = create.json().id;
+
+    await app.db.insert(portfolioSnapshots).values([
+      { portfolioId, date: "2026-01-01", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "1000000", currency: "IDR" },
+      { portfolioId, date: "2026-01-02", netWorth: "1100000", marketValue: "1100000", effectiveFlow: "0", currency: "IDR" },
+      // Gap day: price missing for the held instrument → marketValue recorded as 0,
+      // no compensating flow.
+      { portfolioId, date: "2026-01-03", netWorth: "0", marketValue: "0", effectiveFlow: "0", currency: "IDR" },
+      { portfolioId, date: "2026-01-04", netWorth: "1150000", marketValue: "1150000", effectiveFlow: "0", currency: "IDR" },
+    ]);
+
+    const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Must NOT be -1 (-100%) — the gap day is carried forward, not applied as a real loss.
+    expect(Number(body.drawdown.maxDrawdownPct)).not.toBeCloseTo(-1, 2);
+    expect(Number(body.drawdown.maxDrawdownPct)).toBeGreaterThan(-0.5);
+  });
 });

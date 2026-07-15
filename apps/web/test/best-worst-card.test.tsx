@@ -13,12 +13,15 @@ describe("BestWorstCard", () => {
         best={best}
         worst={worst}
         title="Best & worst"
+        timeframeLabel="24h"
         bestLabel="Best performer"
         worstLabel="Worst performer"
         locale="en"
       />,
     );
     expect(screen.getByText("Best & worst")).toBeInTheDocument();
+    // Explicit timeframe label — this card is always a day-change ("24h") view.
+    expect(screen.getByText("24h")).toBeInTheDocument();
     expect(screen.getByText("BBCA")).toBeInTheDocument();
     expect(screen.getByText("Best performer")).toBeInTheDocument();
     expect(screen.getByText("+3.20%")).toBeInTheDocument();

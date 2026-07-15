@@ -31,7 +31,7 @@ export function StreaksCard({
                 {bestReturn !== null ? formatPercent(bestReturn, locale) : ""}
               </p>
               <p className="text-[10px] text-text-2">
-                {streaks.bestStreak.start} → {streaks.bestStreak.end}
+                {streaks.bestStreak.start.slice(0, 7)} → {streaks.bestStreak.end.slice(0, 7)}
               </p>
             </>
           ) : (
@@ -49,7 +49,7 @@ export function StreaksCard({
                 {worstReturn !== null ? formatPercent(worstReturn, locale) : ""}
               </p>
               <p className="text-[10px] text-text-2">
-                {streaks.worstStreak.start} → {streaks.worstStreak.end}
+                {streaks.worstStreak.start.slice(0, 7)} → {streaks.worstStreak.end.slice(0, 7)}
               </p>
             </>
           ) : (

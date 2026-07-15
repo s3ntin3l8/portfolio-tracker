@@ -190,6 +190,7 @@
     },
     "bestWorst": {
       "title": "Terbaik & terburuk",
+      "timeframe": "24j",
       "best": "Kinerja terbaik",
       "worst": "Kinerja terburuk",
       "empty": "Data perubahan harian belum cukup."
@@ -205,7 +206,8 @@
       "title": "Volatilitas & Risiko",
       "annualized": "Volatilitas tahunan",
       "sharpe": "Sharpe",
-      "sortino": "Sortino"
+      "sortino": "Sortino",
+      "note": "Volatilitas tahunan = deviasi standar imbal hasil harian × √252 hari perdagangan. Sharpe dan Sortino mengukur kelebihan imbal hasil (di atas suku bunga bebas risiko) per unit risiko — Sortino hanya menghitung fluktuasi negatif."
     },
     "streaks": {
       "title": "Rentetan",
@@ -227,7 +229,8 @@
       "hhiTrend": "Tren HHI",
       "top1Trend": "Top 1%",
       "samples": "{count} sampel bulanan · {classes} kelas aset",
-      "insufficientData": "Data tidak mencukupi"
+      "insufficientData": "Data tidak mencukupi",
+      "note": "HHI (Indeks Herfindahl-Hirschman) menjumlahkan bobot kuadrat setiap holding, dari 0 (tersebar merata) hingga 1,0 (satu holding tunggal). HHI atau Top 1% yang naik berarti portofolio Anda makin terkonsentrasi pada lebih sedikit posisi."
     }
   },
   "Admin": {
