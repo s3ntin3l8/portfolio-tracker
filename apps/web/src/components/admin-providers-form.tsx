@@ -7,7 +7,6 @@ import {
   Check,
   Eye,
   EyeOff,
-  GripVertical,
   Loader2,
   Lock,
   Pencil,
@@ -27,14 +26,13 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { AdminProvider, AdminProvidersResponse, AdminProviderUsage, ApiClient, ProviderCredentialInput } from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { SortableRow, SortableCard } from "@/components/sortable-utils";
 import {
   Dialog,
   DialogContent,
@@ -237,90 +235,6 @@ function CredentialCell({
         )}
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
-
-/** Drag-sortable table row wrapping one provider. */
-function SortableRow({
-  id,
-  dragHandleLabel,
-  children,
-}: {
-  id: string;
-  dragHandleLabel: string;
-  children: (handle: React.ReactNode) => React.ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handle = (
-    <button
-      type="button"
-      {...attributes}
-      {...listeners}
-      aria-label={dragHandleLabel}
-      className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-    >
-      <GripVertical className="size-4" />
-    </button>
-  );
-
-  return (
-    <tr
-      ref={setNodeRef}
-      style={style}
-      className={`border-b border-border last:border-0${isDragging ? " opacity-50" : ""}`}
-    >
-      {children(handle)}
-    </tr>
-  );
-}
-
-/** Drag-sortable mobile card wrapping one provider (iOS reorder mode). */
-function SortableCard({
-  id,
-  disabled,
-  dragHandleLabel,
-  children,
-}: {
-  id: string;
-  disabled: boolean;
-  dragHandleLabel: string;
-  children: (handle: React.ReactNode) => React.ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handle = (
-    <button
-      type="button"
-      {...attributes}
-      {...listeners}
-      aria-label={dragHandleLabel}
-      className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-    >
-      <GripVertical className="size-5" />
-    </button>
-  );
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-[14px] border border-border bg-card p-3.5${isDragging ? " opacity-50" : ""}`}
-    >
-      {children(handle)}
     </div>
   );
 }
