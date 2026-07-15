@@ -846,7 +846,13 @@ export async function adminRoute(app: FastifyInstance) {
           portfolioCount: sql<number>`count(distinct ${portfolios.id})`,
           transactionCount: sql<number>`count(distinct ${transactions.id})`,
           documentCount: sql<number>`count(distinct ${documents.id})`,
-          storageBytes: sql<number>`coalesce(sum(${documents.sizeBytes}), 0)`,
+          // NOT sum(documents.sizeBytes): the portfolios→transactions and
+          // documents/apiTokens joins below fan out independently, so a plain sum
+          // would multiply each document's size once per (transaction × token) row
+          // in the join's Cartesian product. A correlated subquery sums each
+          // user's documents exactly once, immune to the outer joins' fan-out.
+          storageBytes: sql<number>`coalesce((select sum(${documents.sizeBytes})
+            from ${documents} where ${documents.userId} = ${users.id}), 0)`,
           tokenCount: sql<number>`count(distinct ${apiTokens.id})`,
         })
         .from(users)

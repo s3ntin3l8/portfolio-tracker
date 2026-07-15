@@ -676,6 +676,42 @@ describe("admin provider config", () => {
     await app.db.delete(users).where(eq(users.id, idB));
   });
 
+  // Regression guard for a join fan-out: the query LEFT JOINs portfolios→transactions,
+  // documents, and apiTokens onto users then GROUP BY users.id. Counts survive because
+  // they use count(distinct …), but a plain sum(documents.sizeBytes) would be multiplied
+  // once per (transaction × token) row in the joined Cartesian product. With 2
+  // transactions and 2 tokens, a naive sum would report storageBytes 4x too large.
+  it("does not inflate storageBytes via joined transactions/tokens fan-out", async () => {
+    const id = await ensureUser("user-fanout-check");
+
+    const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
+    const [port] = await app.db.insert(portfolios).values({ userId: id, name: "Fanout Test" }).returning({ id: portfolios.id });
+    await app.db.insert(transactions).values([
+      { portfolioId: port.id, type: "buy", quantity: "10", price: "100", currency: "USD", executedAt: new Date() },
+      { portfolioId: port.id, type: "sell", quantity: "5", price: "110", currency: "USD", executedAt: new Date() },
+    ]);
+    await app.db.insert(apiTokens).values([
+      { userId: id, name: "t1", tokenHash: hash("fanout-t1"), tokenPrefix: "pt_ft1_", scope: "read" },
+      { userId: id, name: "t2", tokenHash: hash("fanout-t2"), tokenPrefix: "pt_ft2_", scope: "read" },
+    ]);
+    await app.db.insert(documents).values([
+      { userId: id, storageKey: "test/fanout-a.pdf", mimeType: "application/pdf", sizeBytes: 1000 },
+      { userId: id, storageKey: "test/fanout-b.pdf", mimeType: "application/pdf", sizeBytes: 500 },
+    ]);
+
+    const res = await app.inject({ method: "GET", url: "/admin/users", headers: auth(await token("admin-fanout-check", [ADMIN_GROUP])) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { id: string; documentCount: number; storageBytes: number; transactionCount: number; tokenCount: number }[];
+    const user = body.find((u) => u.id === id);
+    expect(user).toBeDefined();
+    expect(user!.transactionCount).toBe(2);
+    expect(user!.tokenCount).toBe(2);
+    expect(user!.documentCount).toBe(2);
+    expect(user!.storageBytes).toBe(1500); // not 1500 * 2 * 2
+
+    await app.db.delete(users).where(eq(users.id, id));
+  });
+
   it("revokes all tokens for a user", async () => {
     const id = await ensureUser("revoke-test");
 
