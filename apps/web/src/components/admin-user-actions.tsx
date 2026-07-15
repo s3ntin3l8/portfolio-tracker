@@ -5,6 +5,7 @@ import { useApiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 export function AdminUserActions({
   userId,
@@ -32,7 +33,8 @@ export function AdminUserActions({
         confirmVariant="default"
         requiresTyping={false}
         onConfirm={async () => {
-          await api.adminRevokeUserTokens(userId);
+          const { revoked } = await api.adminRevokeUserTokens(userId);
+          toast.success(t("revokeTokensDone", { count: revoked }));
           router.refresh();
         }}
       />
@@ -50,6 +52,7 @@ export function AdminUserActions({
         requiresTyping={true}
         onConfirm={async () => {
           await api.adminDeleteUser(userId);
+          toast.success(t("deleteUserDone"));
           router.refresh();
         }}
       />
