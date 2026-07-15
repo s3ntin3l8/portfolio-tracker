@@ -214,9 +214,7 @@ export default async function InsightsPage({
             <StreaksCard streaks={insightsData.streaks} locale={locale} />
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {insightsData.benchmark && (
-              <BenchmarkCard benchmark={insightsData.benchmark} locale={locale} />
-            )}
+            <BenchmarkCard benchmark={insightsData.benchmark ?? null} locale={locale} />
             {insightsData.concentrationTrend.length > 0 && (
               <ConcentrationTrendCard trend={insightsData.concentrationTrend} />
             )}

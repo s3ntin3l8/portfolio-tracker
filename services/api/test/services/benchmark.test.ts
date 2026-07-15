@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeActiveReturn } from "../../src/services/benchmark.js";
+import { computeActiveReturn, getUserBenchmarkConfig } from "../../src/services/benchmark.js";
+import { buildApp } from "../../src/app.js";
+import { users, userPreferences, benchmarkPrices } from "@portfolio/db";
+
+const TEST_KEY = new TextEncoder().encode("test-key");
 
 // `pct` values are chained-index percentages — i.e. already ×100 (chainIndex's `pct`
 // is `index/base - 1, ×100`, so +12.5% total return shows up as pct "12.5", not
@@ -152,5 +156,80 @@ describe("computeActiveReturn", () => {
     const benchmarkIndex = [{ date: "2026-01-01", pct: "0" }];
     expect(computeActiveReturn(portfolioIndex, benchmarkIndex)).toBeNull();
     expect(computeActiveReturn([], [])).toBeNull();
+  });
+});
+
+describe("getUserBenchmarkConfig", () => {
+  async function seedUser(app: Awaited<ReturnType<typeof buildApp>>, symbol?: string) {
+    const [u] = await app.db.insert(users).values({
+      authSub: crypto.randomUUID(), email: "bm@example.com",
+    }).returning();
+    if (symbol) {
+      await app.db.insert(userPreferences).values({ userId: u.id, benchmarkSymbol: symbol });
+    }
+    return u;
+  }
+
+  it("returns default symbol and USD for a user with no preferences row", async () => {
+    const app = await buildApp({ authKey: TEST_KEY });
+    try {
+      const config = await getUserBenchmarkConfig(app.db, crypto.randomUUID(), "USD");
+      expect(config.symbol).toBe("^GSPC");
+      expect(config.currency).toBe("USD");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns USD when user has a benchmarkSymbol but no benchmark prices yet", async () => {
+    const app = await buildApp({ authKey: TEST_KEY });
+    try {
+      const u = await seedUser(app, "^GDAXI");
+      const config = await getUserBenchmarkConfig(app.db, u.id, "EUR");
+      expect(config.symbol).toBe("^GDAXI");
+      expect(config.currency).toBe("USD");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("infers currency from the most recent benchmark price row", async () => {
+    const app = await buildApp({ authKey: TEST_KEY });
+    try {
+      const u = await seedUser(app, "^N225");
+      await app.db.insert(benchmarkPrices).values({
+        userId: u.id, symbol: "^N225", date: "2026-01-14", close: "38500", currency: "JPY", source: "yahoo",
+      });
+      await app.db.insert(benchmarkPrices).values({
+        userId: u.id, symbol: "^N225", date: "2026-01-15", close: "39000", currency: "JPY", source: "yahoo",
+      });
+      const config = await getUserBenchmarkConfig(app.db, u.id, "JPY");
+      expect(config.symbol).toBe("^N225");
+      expect(config.currency).toBe("JPY");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("infers currency per-symbol, not per-user (two users, same symbol)", async () => {
+    const app = await buildApp({ authKey: TEST_KEY });
+    try {
+      const uA = await seedUser(app, "^GDAXI");
+      const uB = await seedUser(app, "^GDAXI");
+      await app.db.insert(benchmarkPrices).values({
+        userId: uA.id, symbol: "^GDAXI", date: "2026-01-15", close: "20000", currency: "EUR", source: "yahoo",
+      });
+      await app.db.insert(benchmarkPrices).values({
+        userId: uB.id, symbol: "^GDAXI", date: "2026-01-15", close: "20000", currency: "EUR", source: "yahoo",
+      });
+      const [configA, configB] = await Promise.all([
+        getUserBenchmarkConfig(app.db, uA.id, "JPY"),
+        getUserBenchmarkConfig(app.db, uB.id, "JPY"),
+      ]);
+      expect(configA.currency).toBe("EUR");
+      expect(configB.currency).toBe("EUR");
+    } finally {
+      await app.close();
+    }
   });
 });

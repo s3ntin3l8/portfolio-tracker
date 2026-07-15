@@ -1,11 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { BenchmarkCard } from "../src/components/insights/benchmark-card";
 import type { InsightsBenchmark } from "@portfolio/api-client";
 import messages from "../messages/en.json";
 
-function renderCard(benchmark: InsightsBenchmark) {
+const refresh = vi.fn();
+const putPreferences = vi.fn();
+
+vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("@/lib/api", () => ({ useApiClient: () => ({ putPreferences, lookupInstruments: vi.fn(async () => []) }) }));
+
+function renderCard(benchmark: InsightsBenchmark | null) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <BenchmarkCard benchmark={benchmark} locale="en" />
@@ -14,16 +20,16 @@ function renderCard(benchmark: InsightsBenchmark) {
 }
 
 describe("BenchmarkCard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders a friendly benchmark name and a single-signed percentage (regression: no doubled '+')", () => {
     renderCard({ symbol: "^GSPC", activeReturn: "0.032", trackingError: "0.021", correlation: "0.85" });
 
     expect(screen.getByText("vs S&P 500")).toBeInTheDocument();
-    // Exactly one leading "+" — formatPercent's own signDisplay already adds it;
-    // the card must not also prepend one (that produced "++3.20%" before the fix).
     expect(screen.getByText("+3.20%")).toBeInTheDocument();
     expect(screen.queryByText("++3.20%")).not.toBeInTheDocument();
-    // Tracking error: API returns a fraction (0.021 = 2.1%); the card must not also
-    // multiply by 100 a second time (that produced "210.0%" before the fix).
     expect(screen.getByText(/2\.10%/)).toBeInTheDocument();
     expect(screen.queryByText(/210\.0/)).not.toBeInTheDocument();
   });
@@ -33,5 +39,60 @@ describe("BenchmarkCard", () => {
 
     expect(screen.getByText("vs ^WEIRD123")).toBeInTheDocument();
     expect(screen.getByText("-5.00%")).toBeInTheDocument();
+  });
+
+  it("shows a placeholder when no benchmark is configured", () => {
+    renderCard(null);
+
+    const els = screen.getAllByText("Set benchmark");
+    expect(els.length).toBeGreaterThanOrEqual(1);
+    expect(els[0]).toBeInTheDocument();
+  });
+
+  it("shows an edit button when a benchmark is configured", () => {
+    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+
+    expect(screen.getByRole("button", { name: /Edit/i })).toBeInTheDocument();
+  });
+
+  it("opens a dialog when the edit button is clicked", async () => {
+    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText("Search benchmark...")).toBeInTheDocument();
+  });
+
+  it("saves a new benchmark symbol via putPreferences when a suggested benchmark is picked", async () => {
+    putPreferences.mockResolvedValue({ benchmarkSymbol: "^GDAXI", riskFreeRate: null });
+    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("DAX"));
+    fireEvent.click(screen.getByRole("button", { name: /Save/i }));
+
+    await waitFor(() => {
+      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: "^GDAXI", riskFreeRate: null });
+    });
+  });
+
+  it("allows removing the benchmark", async () => {
+    putPreferences.mockResolvedValue({ benchmarkSymbol: null, riskFreeRate: null });
+    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Remove/i }));
+
+    await waitFor(() => {
+      expect(putPreferences).toHaveBeenCalledWith({ benchmarkSymbol: null, riskFreeRate: null });
+    });
   });
 });

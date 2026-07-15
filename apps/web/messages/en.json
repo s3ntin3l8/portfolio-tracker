@@ -225,7 +225,17 @@
       "activeReturn": "Active return",
       "trackingError": "Tracking error",
       "correlation": "Correlation",
-      "vs": "vs {symbol}"
+      "vs": "vs {symbol}",
+      "editBenchmark": "Edit benchmark",
+      "editBenchmarkHint": "Choose a market index or ETF as your benchmark reference.",
+      "searchBenchmark": "Search benchmark...",
+      "suggested": "Suggested",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "remove": "Remove",
+      "setBenchmark": "Set benchmark",
+      "setBenchmarkHint": "Choose a benchmark to compare your portfolio against."
     },
     "concentrationTrend": {
       "title": "Concentration Trend",

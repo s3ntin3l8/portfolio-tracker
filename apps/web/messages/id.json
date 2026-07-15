@@ -225,7 +225,17 @@
       "activeReturn": "Imbal hasil aktif",
       "trackingError": "Error pelacakan",
       "correlation": "Korelasi",
-      "vs": "vs {symbol}"
+      "vs": "vs {symbol}",
+      "editBenchmark": "Ubah benchmark",
+      "editBenchmarkHint": "Pilih indeks pasar atau ETF sebagai referensi benchmark Anda.",
+      "searchBenchmark": "Cari benchmark...",
+      "suggested": "Disarankan",
+      "save": "Simpan",
+      "saving": "Menyimpan…",
+      "cancel": "Batal",
+      "remove": "Hapus",
+      "setBenchmark": "Atur benchmark",
+      "setBenchmarkHint": "Pilih benchmark untuk membandingkan portofolio Anda."
     },
     "concentrationTrend": {
       "title": "Tren Konsentrasi",

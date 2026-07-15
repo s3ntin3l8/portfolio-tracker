@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { benchmarkPrices, userPreferences } from "@portfolio/db";
 import { chainIndex, type DailyValueFlow } from "@portfolio/core";
 import type { MarketDataService } from "@portfolio/market-data";
@@ -29,7 +29,17 @@ export async function getUserBenchmarkConfig(
     .where(eq(userPreferences.userId, userId))
     .limit(1);
   const symbol = prefs?.symbol || DEFAULT_BENCHMARK_SYMBOL;
-  return { symbol, currency: DEFAULT_BENCHMARK_CURRENCY };
+
+  // Infer the benchmark's native currency from stored price data (e.g. ^GDAXI → EUR,
+  // ^N225 → JPY). If no prices have been fetched yet, fall back to the default.
+  const [priceRow] = await db
+    .select({ currency: benchmarkPrices.currency })
+    .from(benchmarkPrices)
+    .where(and(eq(benchmarkPrices.userId, userId), eq(benchmarkPrices.symbol, symbol)))
+    .orderBy(desc(benchmarkPrices.date))
+    .limit(1);
+
+  return { symbol, currency: priceRow?.currency ?? DEFAULT_BENCHMARK_CURRENCY };
 }
 
 export async function fetchBenchmarkPrices(
