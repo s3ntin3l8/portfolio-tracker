@@ -87,10 +87,9 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
         </Table>
       </div>
 
-      {/* Mobile: stacked card list. CSS hides it at `md` and up. The same sorted
-          array feeds this view, so changing sort on desktop re-orders the mobile
-          cards on next render. Each card is a single tap target that navigates to
-          the instrument detail page (the original Symbol-link request). */}
+      {/* Mobile: compact card list — no badge, instrument + yield% on line 1,
+          trailing/value/YoC inline on line 2. The same sorted array feeds this
+          view, so changing sort on desktop re-orders the mobile cards too. */}
       <div className="md:hidden">
         <div className="divide-y divide-line">
           {sorted.map((y) => (
@@ -101,39 +100,40 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
               aria-label={t("openInstrument", { symbol: y.symbol ?? "—" })}
               className="block px-4 py-3 transition-colors hover:bg-[var(--row-hover)]"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <MonogramBadge label={y.symbol ?? "—"} assetClass={y.assetClass} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className={TABLE_LABEL}>{y.symbol}</div>
-                      {y.displayName ?? y.name ? (
-                        <div className={TABLE_SUBLABEL}>{y.displayName ?? y.name}</div>
-                      ) : null}
-                    </div>
-                    <div className={cn(TABLE_VALUE_STRONG, "shrink-0")}>
-                      {y.yield !== null ? formatPercent(Number(y.yield), locale) : "—"}
-                    </div>
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between gap-2 text-[12px] text-text-2">
-                    <span>
-                      <span className="text-text-mute">{t("yieldCardTrailing")} </span>
-                      {formatMoney(Number(y.trailingIncome), y.currency, locale)}
-                    </span>
-                    <span>
-                      <span className="text-text-mute">{t("yieldCardValue")} </span>
-                      {formatMoney(Number(y.marketValue), y.currency, locale)}
-                    </span>
-                  </div>
-                  {y.yieldOnCost !== null ? (
-                    <div className="mt-1 text-[11px] text-text-3">
-                      {t("yieldCardYieldOnCost")}{" "}
-                      <span className="font-semibold text-text-2">
-                        {formatPercent(Number(y.yieldOnCost), locale)}
-                      </span>
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[15px] font-bold">{y.symbol}</div>
+                  {y.displayName ?? y.name ? (
+                    <div className="truncate text-xs font-medium text-text-2">
+                      {y.displayName ?? y.name}
                     </div>
                   ) : null}
                 </div>
+                <div className="tabular shrink-0 text-sm font-bold">
+                  {y.yield !== null ? formatPercent(Number(y.yield), locale) : "—"}
+                </div>
+              </div>
+              <div className="mt-1 text-[12px] text-text-2">
+                <span>
+                  <span className="text-text-mute">{t("yieldCardTrailing")} </span>
+                  {formatMoney(Number(y.trailingIncome), y.currency, locale)}
+                </span>
+                <span className="mx-1.5 text-text-3">·</span>
+                <span>
+                  <span className="text-text-mute">{t("yieldCardValue")} </span>
+                  {formatMoney(Number(y.marketValue), y.currency, locale)}
+                </span>
+                {y.yieldOnCost !== null ? (
+                  <>
+                    <span className="mx-1.5 text-text-3">·</span>
+                    <span>
+                      <span className="text-text-mute">{t("yieldCardYieldOnCost")} </span>
+                      <span className="font-semibold text-text-2">
+                        {formatPercent(Number(y.yieldOnCost), locale)}
+                      </span>
+                    </span>
+                  </>
+                ) : null}
               </div>
             </Link>
           ))}

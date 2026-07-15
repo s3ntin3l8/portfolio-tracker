@@ -97,15 +97,15 @@ describe("YieldsTable", () => {
     expect(screen.getAllByText("Raw Broker Style Name").length).toBeGreaterThan(0);
   });
 
-  it("hides the table element on mobile and renders a card list with a MonogramBadge", () => {
+  it("hides the table element on mobile and renders a compact card list", () => {
     const { container } = wrap(<YieldsTable rows={ROWS} />);
     // Both the desktop table and the mobile card list are in the DOM (CSS toggles them).
     // The mobile layout must be present as a stack of cards, not a <table>.
     const mobileCards = container.querySelectorAll('[data-testid="yield-card"]');
     expect(mobileCards.length).toBe(ROWS.length);
-    // Each card renders a MonogramBadge (the reference uses a size-[38px] square).
+    // Each card shows the symbol (no badge in the compact layout).
     for (const card of Array.from(mobileCards)) {
-      expect(within(card as HTMLElement).getByText(/^MS$|^MI$|^BA$|^BB$|^BC$/)).toBeInTheDocument();
+      expect(within(card as HTMLElement).getByText(/^MSFT$|^BBCA$/)).toBeInTheDocument();
     }
   });
 });
