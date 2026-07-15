@@ -871,7 +871,10 @@ export async function adminRoute(app: FastifyInstance) {
   // Revoke all personal access tokens for a user.
   app.post(
     "/admin/users/:id/revoke-tokens",
-    { preHandler: app.requireAdmin },
+    {
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      preHandler: app.requireAdmin,
+    },
     async (request) => {
       const { id } = request.params as { id: string };
 
@@ -903,8 +906,13 @@ export async function adminRoute(app: FastifyInstance) {
       config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
       preHandler: app.requireAdmin,
     },
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params as { id: string };
+
+      // Prevent admins from deleting their own account.
+      if (id === request.user!.id) {
+        return reply.code(400).send({ error: "cannot_delete_self" });
+      }
 
       // Capture document storage keys before cascade delete removes the rows.
       const docs = await app.db
@@ -917,11 +925,6 @@ export async function adminRoute(app: FastifyInstance) {
         await deleteStorageObjectsByKey(app, docs, `admin-delete-user-${id}`);
       }
 
-      // Delete the user — FK cascade handles portfolios, transactions, documents,
-      // api_tokens, account_holders, etc. RLS on the documents table may need the
-      // admin to bypass; we're running as the server-side user so RLS is enforced.
-      // The cascade will fail if any referencing row blocks it (should not happen
-      // with onDelete: cascade on everything).
       await app.db.delete(users).where(eq(users.id, id));
 
       await app.db.insert(adminAuditLog).values({

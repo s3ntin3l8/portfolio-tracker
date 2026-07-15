@@ -1,6 +1,15 @@
 import crypto from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
+import { eq, sql } from "drizzle-orm";
+import {
+  adminAuditLog,
+  apiTokens,
+  documents,
+  portfolios,
+  transactions,
+  users,
+} from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 import {
@@ -599,5 +608,121 @@ describe("admin provider config", () => {
       headers: auth(t),
       payload: { strategy: "parser_first" },
     });
+  });
+
+  // ── Admin users management (#486) ──────────────────────────────────────────────────
+
+  /** Register a user and return their id. */
+  async function ensureUser(sub: string, isAdmin = true): Promise<string> {
+    const claims: Record<string, unknown> = { email: `${sub}@test.example` };
+    if (isAdmin) claims.groups = [ADMIN_GROUP];
+    const t = await new SignJWT(claims)
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject(sub)
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(privateKey);
+    const res = await app.inject({ method: "GET", url: "/me", headers: { authorization: `Bearer ${t}` } });
+    return (res.json() as { id: string }).id;
+  }
+
+  it("rejects unauthenticated requests with 401 on all user endpoints", async () => {
+    for (const url of ["/admin/users", "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens", "/admin/users/00000000-0000-0000-0000-000000000000/delete"]) {
+      const res = await app.inject({ method: url === "/admin/users" ? "GET" : "POST", url });
+      expect(res.statusCode).toBe(401);
+    }
+  });
+
+  it("rejects non-admin requests with 403", async () => {
+    const id = await ensureUser("plain-user-admin-test", false);
+    const t = await token("plain-user-admin-test");
+    for (const url of ["/admin/users", "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens", "/admin/users/00000000-0000-0000-0000-000000000000/delete"]) {
+      const res = await app.inject({ method: url === "/admin/users" ? "GET" : "POST", url, headers: auth(t) });
+      expect(res.statusCode).toBe(403);
+    }
+    await app.db.delete(users).where(eq(users.id, id));
+  });
+
+  it("lists all users with aggregated counts", async () => {
+    const idA = await ensureUser("user-list-a");
+    const idB = await ensureUser("user-list-b");
+
+    const [portA] = await app.db.insert(portfolios).values({ userId: idA, name: "List Test" }).returning({ id: portfolios.id });
+    await app.db.insert(transactions).values({
+      portfolioId: portA.id, type: "buy", quantity: "10", price: "100", currency: "USD", executedAt: new Date(),
+    });
+    await app.db.insert(documents).values({ userId: idA, storageKey: "test/a.pdf", mimeType: "application/pdf", sizeBytes: 2048 });
+
+    const res = await app.inject({ method: "GET", url: "/admin/users", headers: auth(await token("admin-list-check", [ADMIN_GROUP])) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { id: string; email: string; portfolioCount: number; transactionCount: number; documentCount: number; storageBytes: number; tokenCount: number }[];
+    const userA = body.find((u) => u.id === idA);
+    const userB = body.find((u) => u.id === idB);
+    expect(userA).toBeDefined();
+    expect(userB).toBeDefined();
+    expect(userA!.portfolioCount).toBe(1);
+    expect(userA!.transactionCount).toBe(1);
+    expect(userA!.documentCount).toBe(1);
+    expect(userA!.storageBytes).toBe(2048);
+    expect(userA!.tokenCount).toBe(0);
+    expect(userB!.portfolioCount).toBe(0);
+    expect(userB!.transactionCount).toBe(0);
+    expect(userB!.documentCount).toBe(0);
+    expect(userB!.storageBytes).toBe(0);
+
+    await app.db.delete(users).where(eq(users.id, idA));
+    await app.db.delete(users).where(eq(users.id, idB));
+  });
+
+  it("revokes all tokens for a user", async () => {
+    const id = await ensureUser("revoke-test");
+
+    const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
+    await app.db.insert(apiTokens).values({ userId: id, name: "t1", tokenHash: hash("t1"), tokenPrefix: "pt_t1_", scope: "read" });
+    await app.db.insert(apiTokens).values({ userId: id, name: "t2", tokenHash: hash("t2"), tokenPrefix: "pt_t2_", scope: "write" });
+
+    const res = await app.inject({ method: "POST", url: `/admin/users/${id}/revoke-tokens`, headers: auth(await token("admin-revoke", [ADMIN_GROUP])) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ revoked: 2 });
+
+    const remaining = await app.db.select({ id: apiTokens.id }).from(apiTokens).where(eq(apiTokens.userId, id));
+    expect(remaining).toHaveLength(0);
+
+    await app.db.delete(users).where(eq(users.id, id));
+  });
+
+  it("deletes a user, cascades data, and removes S3 docs", async () => {
+    const id = await ensureUser("delete-cascade-test");
+
+    const [port] = await app.db.insert(portfolios).values({ userId: id, name: "Delete Test" }).returning({ id: portfolios.id });
+    await app.db.insert(transactions).values({
+      portfolioId: port.id, type: "buy", quantity: "5", price: "50", currency: "EUR", executedAt: new Date(),
+    });
+    await app.db.insert(documents).values({ userId: id, storageKey: "test/delete-me.pdf", mimeType: "application/pdf", sizeBytes: 4096 });
+
+    const res = await app.inject({ method: "POST", url: `/admin/users/${id}/delete`, headers: auth(await token("admin-delete-run", [ADMIN_GROUP])) });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ deleted: true });
+
+    const userRows = await app.db.select({ id: users.id }).from(users).where(eq(users.id, id));
+    expect(userRows).toHaveLength(0);
+
+    const log = await app.db.select().from(adminAuditLog).where(eq(adminAuditLog.action, "delete_user")).orderBy(sql`${adminAuditLog.at} desc`).limit(1);
+    expect(log[0]?.target).toBe(id);
+    expect((log[0]?.meta as { docCount: number }).docCount).toBe(1);
+  });
+
+  it("rejects deleting your own account with 400", async () => {
+    const t = await token("admin-self", [ADMIN_GROUP]);
+    const me = await app.inject({ method: "GET", url: "/me", headers: auth(t) });
+    const myId = (me.json() as { id: string }).id;
+
+    const res = await app.inject({ method: "POST", url: `/admin/users/${myId}/delete`, headers: auth(t) });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: "cannot_delete_self" });
+
+    await app.db.delete(users).where(eq(users.id, myId));
   });
 });

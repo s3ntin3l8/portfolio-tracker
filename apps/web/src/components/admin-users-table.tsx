@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import type { AdminUser } from "@portfolio/api-client";
 import { AdminUserActions } from "@/components/admin-user-actions";
 
@@ -8,9 +9,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export function AdminUsersTable({ users }: { users: AdminUser[] }) {
+export async function AdminUsersTable({ users }: { users: AdminUser[] }) {
+  const t = await getTranslations("Admin");
+
   if (users.length === 0) {
-    return <p className="text-sm text-muted-foreground italic">No users registered yet.</p>;
+    return <p className="text-sm text-muted-foreground italic">{t("usersNoUsers")}</p>;
   }
 
   return (
@@ -18,15 +21,15 @@ export function AdminUsersTable({ users }: { users: AdminUser[] }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left">
-            <th className="px-3 py-2 font-medium text-muted-foreground">Email</th>
-            <th className="px-3 py-2 font-medium text-muted-foreground">Name</th>
-            <th className="px-3 py-2 font-medium text-muted-foreground">Signed up</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Portfolios</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Transactions</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Documents</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Storage</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Tokens</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
+            <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersEmail")}</th>
+            <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersName")}</th>
+            <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersSignupDate")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersPortfolios")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersTransactions")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersDocuments")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersStorage")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersTokens")}</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersActions")}</th>
           </tr>
         </thead>
         <tbody>

@@ -307,7 +307,19 @@
     "deleteUser": "Hapus pengguna",
     "deleteUserConfirm": "Hapus {email} dan semua data mereka secara permanen? Tindakan ini tidak dapat dibatalkan.",
     "deleteUserDone": "Pengguna dihapus.",
-    "usersNoUsers": "Belum ada pengguna terdaftar."
+    "usersNoUsers": "Belum ada pengguna terdaftar.",
+    "usersEmail": "Email",
+    "usersName": "Nama",
+    "usersSignupDate": "Terdaftar",
+    "usersPortfolios": "Portofolio",
+    "usersTransactions": "Transaksi",
+    "usersDocuments": "Dokumen",
+    "usersStorage": "Penyimpanan",
+    "usersTokens": "Token",
+    "usersActions": "Aksi",
+    "confirmActionCancel": "Batal",
+    "confirmActionTypeToConfirm": "Ketik \"Delete\" untuk konfirmasi",
+    "confirmActionInputPlaceholder": "Delete"
   },
   "Income": {
     "title": "Pendapatan",

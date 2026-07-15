@@ -307,7 +307,19 @@
     "deleteUser": "Delete user",
     "deleteUserConfirm": "Permanently delete {email} and all their data? This cannot be undone.",
     "deleteUserDone": "User deleted.",
-    "usersNoUsers": "No users registered yet."
+    "usersNoUsers": "No users registered yet.",
+    "usersEmail": "Email",
+    "usersName": "Name",
+    "usersSignupDate": "Signed up",
+    "usersPortfolios": "Portfolios",
+    "usersTransactions": "Transactions",
+    "usersDocuments": "Documents",
+    "usersStorage": "Storage",
+    "usersTokens": "Tokens",
+    "usersActions": "Actions",
+    "confirmActionCancel": "Cancel",
+    "confirmActionTypeToConfirm": "Type \"Delete\" to confirm",
+    "confirmActionInputPlaceholder": "Delete"
   },
   "Income": {
     "title": "Income",
