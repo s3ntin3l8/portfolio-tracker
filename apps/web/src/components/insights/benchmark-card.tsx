@@ -25,7 +25,7 @@ export function BenchmarkCard({
       <p className="mt-1 text-xs font-medium text-text-2">{t("activeReturn")}</p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-text-2">
         <span>
-          {t("trackingError")}: <span className="font-semibold">{trackingError > 0 ? `${(trackingError * 100).toFixed(1)}%` : "—"}</span>
+          {t("trackingError")}: <span className="font-semibold">{trackingError > 0 ? formatPercent(trackingError, locale) : "—"}</span>
         </span>
         <span>
           {t("correlation")}: <span className="font-semibold">{correlation ? correlation.toFixed(2) : "—"}</span>

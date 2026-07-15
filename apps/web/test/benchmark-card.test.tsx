@@ -22,6 +22,10 @@ describe("BenchmarkCard", () => {
     // the card must not also prepend one (that produced "++3.20%" before the fix).
     expect(screen.getByText("+3.20%")).toBeInTheDocument();
     expect(screen.queryByText("++3.20%")).not.toBeInTheDocument();
+    // Tracking error: API returns a fraction (0.021 = 2.1%); the card must not also
+    // multiply by 100 a second time (that produced "210.0%" before the fix).
+    expect(screen.getByText(/2\.10%/)).toBeInTheDocument();
+    expect(screen.queryByText(/210\.0/)).not.toBeInTheDocument();
   });
 
   it("falls back to the raw ticker for an unrecognized benchmark symbol", () => {
