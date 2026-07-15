@@ -16,7 +16,7 @@
 
 const DERIVATION_CACHE_TTL_MS = 60_000;
 
-interface CacheEntry<T> {
+export interface CacheEntry<T> {
   expiresAt: number;
   promise: Promise<T>;
 }
