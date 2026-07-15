@@ -50,6 +50,17 @@ function Sheet({
   // instead of centering it, making the sheet look completely blank. Removed —
   // `useFocusScroll`, below, is sufficient on its own now that the container is
   // correctly sized.)
+  //
+  // Shrinking alone isn't enough on iOS: SheetContent is `position: fixed; bottom: 0`,
+  // anchored to the *layout* viewport. iOS shrinks only the *visual* viewport when the
+  // keyboard opens and overlays the keyboard on top of the layout viewport, so a
+  // `bottom: 0` element stays pinned behind it — shrinking it from the top doesn't lift
+  // it clear. (Android resizes the layout viewport itself, so `bottom: 0` already lands
+  // above the keyboard there — no lift needed.) `--keyboard-inset` is the gap between
+  // the layout and visual viewports (the keyboard's height on iOS, ~0 on Android since
+  // both shrink together), applied as `bottom` on SheetContent below to lift it clear.
+  // This is exactly the "lift" half of vaul's own `repositionInputs` (disabled below) —
+  // reimplemented here since only `bottom` is needed, not vaul's stale-prone `height`.
   React.useEffect(() => {
     if (!open || typeof window === "undefined" || !window.visualViewport) return;
 
@@ -57,6 +68,8 @@ function Sheet({
     const dh = document.documentElement;
     const updateViewport = () => {
       dh.style.setProperty("--visual-viewport-height", `${vv.height}px`);
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      dh.style.setProperty("--keyboard-inset", `${inset}px`);
     };
 
     updateViewport();
@@ -67,6 +80,7 @@ function Sheet({
       vv.removeEventListener("resize", updateViewport);
       vv.removeEventListener("scroll", updateViewport);
       dh.style.removeProperty("--visual-viewport-height");
+      dh.style.removeProperty("--keyboard-inset");
     };
   }, [open]);
 
@@ -175,6 +189,14 @@ function SheetContent({
             side === "bottom"
               ? "min(90dvh, calc(var(--visual-viewport-height, 100vh) * 0.9))"
               : undefined,
+          // Lifts the sheet clear of the iOS keyboard — see the `--keyboard-inset`
+          // comment in `Sheet` above. `bottom`, not `transform`: vaul writes its own
+          // inline `transform` for the drag/slide gesture and would clobber a
+          // Tailwind/inline translateX on the same property. With `repositionInputs={false}`
+          // below, vaul itself never sets `bottom`, so this is the sole writer of it.
+          // `bottom-0` in `className` is the resting value when no keyboard is open
+          // (`--keyboard-inset` is unset then, so the `var()` fallback applies).
+          bottom: side === "bottom" ? "var(--keyboard-inset, 0px)" : undefined,
           ...props.style,
         }}
         className={cn(
