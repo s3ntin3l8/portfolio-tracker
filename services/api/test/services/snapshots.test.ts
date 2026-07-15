@@ -5,6 +5,7 @@ import {
   portfolioIntradaySnapshots,
   portfolios,
   portfolioSnapshots,
+  prices,
   transactions,
   users,
 } from "@portfolio/db";
@@ -89,6 +90,132 @@ describe("recordDailySnapshots", () => {
       .from(portfolioSnapshots)
       .where(eq(portfolioSnapshots.portfolioId, portfolioId));
     expect(again).toHaveLength(1);
+  });
+
+  it("carries forward last-known close for an unpriced held instrument (≤7d stale)", async () => {
+    const db = getDb();
+    const [u] = await db
+      .insert(users)
+      .values({ authSub: "carry-user", email: "carry@example.com" })
+      .returning();
+    const [p] = await db
+      .insert(portfolios)
+      .values({ userId: u.id, name: "Carry", baseCurrency: "IDR", cashCounted: true })
+      .returning();
+    const [instA] = await db
+      .insert(instruments)
+      .values({
+        symbol: "INSTA",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Inst A (priced)",
+      })
+      .returning();
+    const [instB] = await db
+      .insert(instruments)
+      .values({
+        symbol: "INSTB",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Inst B (historical only)",
+      })
+      .returning();
+
+    // Both held, same quantity × price.
+    await db.insert(transactions).values([
+      { portfolioId: p.id, instrumentId: instA.id, type: "buy", quantity: "10", price: "1000", currency: "IDR", executedAt: new Date("2026-01-10") },
+      { portfolioId: p.id, instrumentId: instB.id, type: "buy", quantity: "10", price: "2000", currency: "IDR", executedAt: new Date("2026-01-10") },
+    ]);
+
+    // Seed historical price for B (2 days ago = ≤7d cap).
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setUTCDate(twoDaysAgo.getUTCDate() - 2);
+    await db.insert(prices).values({
+      instrumentId: instB.id,
+      date: twoDaysAgo.toISOString().slice(0, 10),
+      close: "2500",
+      currency: "IDR",
+    });
+
+    // FixtureProvider only returns a quote for A, not B.
+    const svc = new MarketDataService([new FixtureProvider({ INSTA: "1100" })]);
+    const now = new Date();
+
+    const count = await recordDailySnapshots(db, svc, 10_000, now);
+    expect(count).toBeGreaterThanOrEqual(1);
+
+    const rows = await db
+      .select()
+      .from(portfolioSnapshots)
+      .where(eq(portfolioSnapshots.portfolioId, p.id));
+    expect(rows).toHaveLength(1);
+    // MV: 10×1100 (A) + 10×2500 (B carried) = 36,000. No cash tracked (no deposit).
+    expect(rows[0].marketValue).toBe("36000");
+    // Net worth same as MV (no cash).
+    expect(rows[0].netWorth).toBe("36000");
+  });
+
+  it("leaves a held instrument unpriced when last close is older than 7 days", async () => {
+    const db = getDb();
+    const [u] = await db
+      .insert(users)
+      .values({ authSub: "stale-user", email: "stale@example.com" })
+      .returning();
+    const [p] = await db
+      .insert(portfolios)
+      .values({ userId: u.id, name: "Stale", baseCurrency: "IDR", cashCounted: true })
+      .returning();
+    const [instA] = await db
+      .insert(instruments)
+      .values({
+        symbol: "FRESHA",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Fresh A (priced)",
+      })
+      .returning();
+    const [instB] = await db
+      .insert(instruments)
+      .values({
+        symbol: "STALEB",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Stale B (old price)",
+      })
+      .returning();
+
+    await db.insert(transactions).values([
+      { portfolioId: p.id, instrumentId: instA.id, type: "buy", quantity: "10", price: "1000", currency: "IDR", executedAt: new Date("2026-01-10") },
+      { portfolioId: p.id, instrumentId: instB.id, type: "buy", quantity: "10", price: "2000", currency: "IDR", executedAt: new Date("2026-01-10") },
+    ]);
+
+    // Seed historical price for B — 30 days ago (beyond 7-day cap).
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
+    await db.insert(prices).values({
+      instrumentId: instB.id,
+      date: thirtyDaysAgo.toISOString().slice(0, 10),
+      close: "2500",
+      currency: "IDR",
+    });
+
+    const svc = new MarketDataService([new FixtureProvider({ FRESHA: "1100" })]);
+    const now = new Date();
+
+    const count = await recordDailySnapshots(db, svc, 10_000, now);
+    expect(count).toBeGreaterThanOrEqual(1);
+
+    const rows = await db
+      .select()
+      .from(portfolioSnapshots)
+      .where(eq(portfolioSnapshots.portfolioId, p.id));
+    expect(rows).toHaveLength(1);
+    // Only A contributes: 10×1100 = 11,000. B is too stale → unpriced.
+    expect(rows[0].marketValue).toBe("11000");
   });
 });
 

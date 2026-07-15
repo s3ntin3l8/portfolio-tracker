@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import { corporateActions, instruments, transactions } from "@portfolio/db";
+import { and, desc, eq, inArray, lte } from "drizzle-orm";
+import { corporateActions, instruments, prices as pricesTable, transactions } from "@portfolio/db";
 import {
   summarizePortfolio,
   openLots,
@@ -135,6 +135,33 @@ export async function valuePortfolio(
   for (const i of instrumentRows) {
     if (i.assetClass === "bond" && i.faceValue && !prices[i.id]) {
       prices[i.id] = { price: i.faceValue, currency: i.currency };
+    }
+  }
+
+  // Historical-price fallback: carry forward the last known close for held
+  // instruments whose live price lookup returned null (cache miss + provider
+  // miss — market holiday, provider outage, etc).  A 7-day staleness cap
+  // ensures a genuinely delisted instrument eventually reverts to unpriced
+  // rather than being carried forever at a stale value.
+  {
+    const today = new Date().toISOString().slice(0, 10);
+    const missingIds = instrumentIds.filter((id) => !prices[id]);
+    if (missingIds.length > 0) {
+      const historical = await db
+        .select()
+        .from(pricesTable)
+        .where(and(inArray(pricesTable.instrumentId, missingIds), lte(pricesTable.date, today)))
+        .orderBy(pricesTable.instrumentId, desc(pricesTable.date));
+      const seen = new Set<string>();
+      for (const row of historical) {
+        if (seen.has(row.instrumentId)) continue;
+        seen.add(row.instrumentId);
+        const daysAgo =
+          (Date.now() - new Date(row.date).getTime()) / 86_400_000;
+        if (daysAgo <= 7) {
+          prices[row.instrumentId] = { price: row.close, currency: row.currency };
+        }
+      }
     }
   }
 
