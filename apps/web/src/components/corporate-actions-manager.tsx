@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { ChevronRight, Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import type { CorporateAction } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -56,6 +62,8 @@ export function CorporateActionsManager({
   const [type, setType] = useState<(typeof TYPES)[number]>("split");
   const [ratio, setRatio] = useState("");
   const [exDate, setExDate] = useState("");
+  const [sheetCa, setSheetCa] = useState<CorporateAction | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function beginEdit(ca: CorporateAction) {
     setConfirmId(null);
@@ -75,6 +83,7 @@ export function CorporateActionsManager({
       });
       setItems((prev) => prev.map((c) => (c.id === id ? updated : c)));
       setEditingId(null);
+      setSheetCa(null);
       router.refresh();
     } finally {
       setBusy(false);
@@ -90,6 +99,8 @@ export function CorporateActionsManager({
     } finally {
       setBusy(false);
       setConfirmId(null);
+      setSheetCa(null);
+      setConfirmDelete(false);
     }
   }
 
@@ -251,19 +262,101 @@ export function CorporateActionsManager({
           </TableBody>
         </Table>
       </div>
+
       <div className="space-y-3 md:hidden">
         {sorted.map((ca) => (
-          <div key={ca.id} className="rounded-[20px] bg-card shadow-card px-4 py-3">
-            <div className="flex items-center justify-between">
+          <div
+            key={ca.id}
+            className="flex cursor-pointer items-center justify-between rounded-[20px] bg-card shadow-card px-4 py-3"
+            onClick={() => {
+              setConfirmId(null);
+              setEditingId(null);
+              setType(ca.type as (typeof TYPES)[number]);
+              setRatio(ca.ratio);
+              setExDate(ca.exDate.slice(0, 10));
+              setConfirmDelete(false);
+              setSheetCa(ca);
+            }}
+          >
+            <div>
               <Badge variant="outline">{tt(ca.type)}</Badge>
-              <span className="tabular-nums text-sm font-medium">{ca.ratio}</span>
+              <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+                {ca.ratio} · {df.format(new Date(ca.exDate))}
+              </div>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground tabular-nums">
-              {df.format(new Date(ca.exDate))}
-            </div>
+            <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
           </div>
         ))}
       </div>
+
+      <Sheet open={sheetCa !== null} onOpenChange={(o) => { if (!o) { setSheetCa(null); setConfirmDelete(false); } }}>
+        <SheetContent side="bottom" className="px-4 pb-8">
+          <SheetHeader>
+            <SheetTitle>{tc("edit")}</SheetTitle>
+          </SheetHeader>
+          {sheetCa && (
+            <div className="space-y-4 pt-4">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("type")}</span>
+                <Select
+                  aria-label={tc("type")}
+                  value={type}
+                  onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}
+                >
+                  {TYPES.map((ty) => (
+                    <option key={ty} value={ty}>{tt(ty)}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("ratio")}</span>
+                <Input
+                  aria-label={tc("ratio")}
+                  inputMode="decimal"
+                  value={ratio}
+                  onChange={(e) => setRatio(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("exDate")}</span>
+                <DatePicker
+                  label={tc("exDate")}
+                  value={exDate}
+                  onChange={(e) => setExDate(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button disabled={busy} onClick={() => save(sheetCa.id)}>
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                  {tc("save")}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => { setSheetCa(null); setConfirmDelete(false); }}>
+                  <X className="size-4" />
+                  {tc("cancel")}
+                </Button>
+              </div>
+              <div className="border-t border-border pt-4">
+                {confirmDelete ? (
+                  <div className="flex gap-2">
+                    <Button variant="destructive" onClick={async () => { await remove(sheetCa.id); }}>
+                      {busy && <Loader2 className="size-3.5 animate-spin" />}
+                      {tc("delete")}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                      {tc("cancel")}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 className="size-4" />
+                    {tc("delete")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
