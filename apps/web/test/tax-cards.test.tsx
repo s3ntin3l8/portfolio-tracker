@@ -204,7 +204,7 @@ describe("HarvestRow", () => {
     render(<HarvestRow s={suggestion} money={money} t={t} />);
     expect(screen.getByText("NIO Inc.")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Harvest" });
-    expect(link).toHaveAttribute("href", "/transactions/new?harvestInstrument=i-nio");
+    expect(link).toHaveAttribute("href", "/tax?harvestInstrument=i-nio");
   });
 
   it("shows the Teilfreistellung note when a TF rate applies", () => {

@@ -66,14 +66,17 @@ export function EditTransactionSheet({
   const tm = useTranslations("Manage.tx");
 
   return (
-    // handleOnly: the form scrolls in a nested container, so drag-to-close is restricted
-    // to the handle rather than fighting the form's own scroll (#472).
+    // handleOnly: restrict drag-to-close to the handle — the form scrolls within
+    // SheetContent and vaul's at-top scroll gating must not intercept it (#472).
     <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetContent side="bottom" className="p-0">
         <SheetHeader className="px-5 pb-1 pt-1">
           <SheetTitle className="text-[19px]">{tm("editTitle")}</SheetTitle>
         </SheetHeader>
-        <div className="overflow-y-auto px-5 pb-7 pt-3">
+        {/* Note: no nested overflow-y-auto here — SheetContent is the single scroll
+            container. Nested scroll containers can confuse vaul's at-top drag gating
+            and cause the form scroll vs. drag-to-close conflict (#472). */}
+        <div className="px-5 pb-7 pt-3">
           {tx && (
             <AddTransactionForm
               client={api}

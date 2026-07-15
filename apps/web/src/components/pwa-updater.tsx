@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Serwist } from "@serwist/window";
@@ -16,6 +16,11 @@ const TOAST_ID = "pwa-update-available";
  */
 export function PwaUpdater() {
   const t = useTranslations("Install");
+  const tRef = useRef(t);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     // Serwist is disabled outside production (see next.config.mjs), so there's no
@@ -26,11 +31,11 @@ export function PwaUpdater() {
     const serwist = new Serwist("/sw.js", { scope: "/" });
 
     serwist.addEventListener("waiting", () => {
-      toast.info(t("updateAvailable"), {
+      toast.info(tRef.current("updateAvailable"), {
         id: TOAST_ID,
         duration: Infinity,
         action: {
-          label: t("reload"),
+          label: tRef.current("reload"),
           onClick: () => {
             serwist.addEventListener("controlling", () => window.location.reload());
             void serwist.messageSkipWaiting();
@@ -40,7 +45,7 @@ export function PwaUpdater() {
     });
 
     void serwist.register();
-  }, [t]);
+  }, []);
 
   return null;
 }

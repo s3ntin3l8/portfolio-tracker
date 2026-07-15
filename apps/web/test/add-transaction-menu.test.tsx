@@ -16,16 +16,25 @@ vi.mock("@/i18n/navigation", () => ({
   usePathname: () => "/transactions",
 }));
 
+const listPortfolios = vi.fn(async () => [] as { id: string; name: string; brokerage: string | null; accountHolder: string | null }[]);
+const getInstrument = vi.fn();
+const getSummary = vi.fn();
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ listPortfolios: vi.fn(async () => []) }),
+  useApiClient: () => ({ listPortfolios, getInstrument, getSummary }),
 }));
 
 // Stub the heavy flows — we only assert the right step/sheet renders.
 vi.mock("@/components/import-flow-client", () => ({
   ImportFlowClient: () => <div data-testid="import-flow" />,
 }));
+// Captures the props NewEntryTabs was last rendered with, so deep-link tests can assert
+// the tab/prefill actually threaded through rather than just that the sheet opened.
+const lastEntryTabsProps = { current: null as Record<string, unknown> | null };
 vi.mock("@/components/new-entry-tabs", () => ({
-  NewEntryTabs: () => <div data-testid="entry-tabs" />,
+  NewEntryTabs: (props: Record<string, unknown>) => {
+    lastEntryTabsProps.current = props;
+    return <div data-testid="entry-tabs" />;
+  },
 }));
 
 import { AddTransactionMenu } from "../src/components/add-transaction-menu";
@@ -48,6 +57,11 @@ describe("AddTransactionMenu", () => {
   beforeEach(() => {
     search.value = "";
     replace.mockClear();
+    listPortfolios.mockClear();
+    listPortfolios.mockResolvedValue([]);
+    getInstrument.mockReset();
+    getSummary.mockReset();
+    lastEntryTabsProps.current = null;
   });
 
   it("opens the add sheet with the three reference method cards", () => {
@@ -160,5 +174,122 @@ describe("AddTransactionMenu", () => {
       screen.queryByRole("dialog", { name: messages.Import.title }),
     ).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  // Deep-link params from the retired `/transactions/new` page's redirect + the tax
+  // page's harvest CTA (#505 consolidation).
+  describe("manual-entry deep links", () => {
+    it("auto-opens the manual entry tabs on ?entry=corporate-action and clears the param", async () => {
+      search.value = "entry=corporate-action";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(lastEntryTabsProps.current).toMatchObject({
+        defaultTab: "corporate-action",
+        initialTransaction: undefined,
+      });
+      expect(replace).toHaveBeenCalledWith("/transactions");
+    });
+
+    it("auto-opens the manual entry tabs on ?entry=merger", async () => {
+      search.value = "entry=merger";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(lastEntryTabsProps.current).toMatchObject({ defaultTab: "merger" });
+    });
+
+    it("ignores an unrecognized ?entry value, falling back to the transaction tab", async () => {
+      search.value = "entry=bogus";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(lastEntryTabsProps.current).toMatchObject({ defaultTab: "transaction" });
+    });
+
+    it("ignores ?entry without autoOpenFromParams (only the shell instance owns it)", async () => {
+      search.value = "entry=merger";
+      renderMenu();
+      await Promise.resolve();
+      expect(screen.queryByTestId("entry-tabs")).not.toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("prefills a Sell draft from ?harvestInstrument=<id>, summing open lots in the first portfolio", async () => {
+      listPortfolios.mockResolvedValue([
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      ]);
+      getInstrument.mockResolvedValue({
+        id: "i1",
+        symbol: "NVDA",
+        name: "NVIDIA Corp",
+        assetClass: "equity",
+        unit: "shares",
+        currency: "USD",
+      });
+      getSummary.mockResolvedValue({
+        displayCurrency: "IDR",
+        holdings: [
+          {
+            instrumentId: "i1",
+            lots: [
+              { acqDate: "2024-01-01", qty: "2", unitCost: "10", cost: "20" },
+              { acqDate: "2024-06-01", qty: "3", unitCost: "12", cost: "36" },
+            ],
+          },
+        ],
+      });
+      search.value = "harvestInstrument=i1";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(getSummary).toHaveBeenCalledWith("p1");
+      expect(lastEntryTabsProps.current).toMatchObject({
+        defaultTab: "transaction",
+        initialTransaction: {
+          type: "sell",
+          instrumentId: "i1",
+          instrument: { symbol: "NVDA", name: "NVIDIA Corp", assetClass: "equity", unit: "shares" },
+          currency: "USD",
+          quantity: "5",
+        },
+      });
+      expect(replace).toHaveBeenCalledWith("/transactions");
+    });
+
+    it("leaves quantity blank when the harvested instrument isn't held", async () => {
+      listPortfolios.mockResolvedValue([
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      ]);
+      getInstrument.mockResolvedValue({
+        id: "i2",
+        symbol: "ASML",
+        name: "ASML Holding",
+        assetClass: "equity",
+        unit: "shares",
+        currency: "EUR",
+      });
+      getSummary.mockResolvedValue({ displayCurrency: "IDR", holdings: [] });
+      search.value = "harvestInstrument=i2";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(lastEntryTabsProps.current).toMatchObject({
+        initialTransaction: { quantity: "" },
+      });
+    });
+
+    it("still opens the manual tabs with no prefill when the harvest lookup fails", async () => {
+      listPortfolios.mockResolvedValue([
+        { id: "p1", name: "Main", brokerage: null, accountHolder: null },
+      ]);
+      getInstrument.mockRejectedValue(new Error("not found"));
+      getSummary.mockResolvedValue({ displayCurrency: "IDR", holdings: [] });
+      search.value = "harvestInstrument=ghost";
+      renderMenu({ autoOpenFromParams: true });
+
+      await waitFor(() => expect(screen.getByTestId("entry-tabs")).toBeInTheDocument());
+      expect(lastEntryTabsProps.current).toMatchObject({ initialTransaction: undefined });
+    });
   });
 });

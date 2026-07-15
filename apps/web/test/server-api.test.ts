@@ -528,75 +528,10 @@ describe("aggregate + misc loaders", () => {
   });
 });
 
-describe("loadHarvestPrefill", () => {
-  it("prefills instrument metadata + summed open-lot quantity when the instrument is held", async () => {
-    h.client.listPortfolios = async () => PF;
-    h.cookies = { pf: "p1" };
-    h.client.getInstrument = async () => ({
-      id: "i1",
-      symbol: "NVDA",
-      name: "NVIDIA Corp",
-      assetClass: "equity",
-      unit: "shares",
-      currency: "USD",
-    });
-    h.client.getSummary = async () => ({
-      displayCurrency: "IDR",
-      holdings: [
-        {
-          instrumentId: "i1",
-          quantity: "5",
-          lots: [
-            { acqDate: "2024-01-01", qty: "2", unitCost: "10", cost: "20" },
-            { acqDate: "2024-06-01", qty: "3", unitCost: "12", cost: "36" },
-          ],
-        },
-      ],
-    });
-    h.client.listTransactions = async () => [];
-
-    const res = await api.loadHarvestPrefill("i1");
-    expect(res).toMatchObject({
-      instrument: { symbol: "NVDA", name: "NVIDIA Corp", assetClass: "equity", unit: "shares" },
-      currency: "USD",
-      quantity: "5",
-    });
-  });
-
-  it("leaves quantity empty when the instrument isn't held in the active scope", async () => {
-    h.client.listPortfolios = async () => PF;
-    h.cookies = { pf: "p1" };
-    h.client.getInstrument = async () => ({
-      id: "i2",
-      symbol: "ASML",
-      name: "ASML Holding",
-      assetClass: "equity",
-      unit: "shares",
-      currency: "EUR",
-    });
-    h.client.getSummary = async () => ({ displayCurrency: "IDR", holdings: [] });
-    h.client.listTransactions = async () => [];
-
-    const res = await api.loadHarvestPrefill("i2");
-    expect(res).toMatchObject({ quantity: "" });
-  });
-
-  it("returns null when the instrument lookup fails", async () => {
-    h.client.listPortfolios = async () => PF;
-    h.client.getInstrument = async () => {
-      throw new Error("not found");
-    };
-    h.client.getSummary = async () => ({ displayCurrency: "IDR", holdings: [] });
-    h.client.listTransactions = async () => [];
-
-    expect(await api.loadHarvestPrefill("ghost")).toBeNull();
-  });
-
-  it("returns null when not signed in", async () => {
-    h.accessToken = null;
-    expect(await api.loadHarvestPrefill("i1")).toBeNull();
-  });
-});
+// loadHarvestPrefill's tests were retired along with the function itself: the
+// harvest-suggestion prefill is now built client-side by `loadHarvestPrefill` in
+// `add-transaction-menu.tsx` (see add-transaction-menu.test.tsx), since the
+// `/transactions/new` full page it served is now a redirect into the Add sheet.
 
 describe("loadNetworthTax — Indonesian regime (blocker fix)", () => {
   // ID final tax has no allowance/FSA concept, so loadNetworthTax must never call the

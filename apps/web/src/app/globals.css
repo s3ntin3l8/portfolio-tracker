@@ -192,6 +192,65 @@
 }
 
 @layer base {
+  /* iOS PWA viewport height cascade (fix #472): `100dvh` is the modern, generally
+     correct fix for the classic mobile-Safari "URL bar" viewport bug, so it's what
+     wins in an ordinary browser tab (last declaration in the cascade, `100vh` as the
+     universal fallback for browsers without `dvh` support). But in *standalone* PWA
+     mode specifically, iOS's `100dvh`/`100svh` (and `-webkit-fill-available`, which
+     resolves the same) report the "safe" viewport — screen height minus the top
+     safe-area inset (measured live on a Dynamic Island device: 812px vs. an 874px
+     screen, a 62px gap exactly matching the inset) — not the full physical screen.
+     `100lvh`/`100vh` are the values that actually resolve to the full 874px there, so
+     the `display-mode: standalone` override re-applies `100lvh` last, taking
+     precedence only in that mode. (An earlier version of this fix used
+     `-webkit-fill-available` on the theory that it "fills the physical screen" in
+     standalone mode — live measurement disproved that; it resolves identically to
+     `100dvh`, 62px short, which is what caused the persistent gap below the bottom
+     nav. Kept as more history than rationale, in case regressions ever need it
+     re-diagnosed.)
+     Applied to `html` AND two utility classes below (not just `html`, with
+     `<body>`/the app shell inheriting via a percentage `height`): a percentage
+     `height` on a child only resolves against a parent whose OWN `height` property is
+     non-`auto` — `min-height` alone doesn't count, even once it's constrained the
+     parent to a definite rendered size. `<body>` and the app-shell root both used
+     their own independent `100dvh` utility (`min-h-dvh`, `h-dvh`) that completely
+     bypassed the `html` fix rather than inheriting or overriding it — so the original
+     fix was a no-op in practice. Applying this cascade directly, redundantly, at every
+     level that needs to be viewport-tall sidesteps the whole inheritance question.
+     Two variants: `.h-app-viewport` (hard `height`, for the app-shell root, which
+     deliberately clips its own content via `overflow-hidden` and manages scrolling
+     internally) and `.min-h-app-viewport` (`<body>`, which wraps some pages — e.g.
+     the signed-out login screen — that don't go through the app shell's own internal
+     scroll regions and may need to grow taller than one screen). */
+  html,
+  .h-app-viewport {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .min-h-app-viewport {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  /* `@supports (-webkit-touch-callout: none)`: the standard feature-query trick for
+     "this is WebKit/iOS Safari, not just any browser." `display-mode: standalone`
+     alone matches ANY installed PWA, including Android Chrome, and Android's
+     installed PWA is already correctly sized by the base `100dvh` above — this
+     `100dvh`-underreporting-the-safe-area quirk is iOS-only, so scope the override to
+     WebKit specifically (also avoids re-litigating the Android scroll regression an
+     earlier, broader version of this override caused). */
+  @media (display-mode: standalone) {
+    @supports (-webkit-touch-callout: none) {
+      html,
+      .h-app-viewport {
+        height: 100vh;
+        height: 100lvh;
+      }
+      .min-h-app-viewport {
+        min-height: 100vh;
+        min-height: 100lvh;
+      }
+    }
+  }
   * {
     border-color: var(--border);
   }

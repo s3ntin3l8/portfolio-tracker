@@ -773,51 +773,6 @@ export async function loadInstrumentScope(
   };
 }
 
-export interface HarvestPrefill {
-  instrument: { symbol: string; name: string; assetClass: string; unit: string };
-  currency: string;
-  /** Sum of the instrument's standing open FIFO lots (from `HoldingValuation.lots`,
-   *  PR #386) in the active scope — a starting-point quantity for a full-position
-   *  harvest sell, not a precise partial-harvest amount. Empty string when the
-   *  instrument isn't held in the active scope (the form is left for manual entry). */
-  quantity: string;
-}
-
-/**
- * Prefill data for a harvest-suggestion "Sell" draft (`/tax`'s harvest rows →
- * `/transactions/new?harvestInstrument=<id>`). Pure lookup, no new backend: instrument
- * metadata from the catalog, quantity from the open lots already attached to the active
- * scope's holdings.
- */
-export async function loadHarvestPrefill(instrumentId: string): Promise<HarvestPrefill | null> {
-  const api = await getServerApi();
-  if (!api) return null;
-  try {
-    const [instrument, scope] = await Promise.all([
-      api.getInstrument(instrumentId),
-      loadInstrumentScope(instrumentId),
-    ]);
-    const lots = scope.holding?.lots ?? [];
-    // Estimate only (a prefilled, user-editable default) — summing decimal-string lot
-    // quantities as numbers is fine here since nothing is submitted without review.
-    const quantity = lots.length > 0
-      ? lots.reduce((sum, l) => sum + Number(l.qty), 0).toString()
-      : "";
-    return {
-      instrument: {
-        symbol: instrument.symbol,
-        name: instrument.name,
-        assetClass: instrument.assetClass,
-        unit: instrument.unit,
-      },
-      currency: instrument.currency,
-      quantity,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export type IncomeStatsView =
   | { status: "ok"; data: IncomeStats }
   | { status: "empty" }

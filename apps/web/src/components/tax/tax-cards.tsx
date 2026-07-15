@@ -250,8 +250,11 @@ export function HarvestRow({
         <p className="tabular text-[13px] font-bold text-success">{money(s.unrealizedGross)}</p>
         <p className="text-[10px] font-semibold text-text-3">{t("harvest.unrealized")}</p>
       </div>
+      {/* Stays on /tax (unlike the retired `/transactions/new` full page) — the shell's
+          `AddTransactionMenu` picks up `?harvestInstrument=` reactively and opens the Add
+          sheet on a prefilled Sell draft, matching the app's one everyday add flow. */}
       <Link
-        href={`/transactions/new?harvestInstrument=${s.instrumentId}`}
+        href={`/tax?harvestInstrument=${s.instrumentId}`}
         className="shrink-0 rounded-[10px] px-[13px] py-2 text-xs font-bold text-[#7C5CFC] transition-transform active:scale-95"
         style={{ backgroundColor: "rgba(124,92,252,.13)" }}
       >

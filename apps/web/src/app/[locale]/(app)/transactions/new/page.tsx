@@ -1,13 +1,16 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowLeft, Plus, Wallet } from "lucide-react";
-import { Link } from "@/i18n/navigation";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/empty-state";
-import { NewEntryTabs, type NewEntryTab } from "@/components/new-entry-tabs";
-import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
-import { resolveSelection, loadHarvestPrefill } from "@/lib/server-api";
-import type { AddTransactionInitial } from "@/components/add-transaction-form";
+import { setRequestLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 
+/**
+ * The full-page manual-entry form (tabbed Transaction/Corporate action/Merger, inline
+ * submit) is retired in favor of the Add-transaction bottom sheet
+ * (`add-transaction-menu.tsx`), the app's one everyday add flow — it now handles both
+ * deep-link cases this page used to serve directly: a harvest-suggestion prefill
+ * (`?harvestInstrument=`) and a specific starting tab (`?kind=`, remapped to the sheet's
+ * `?entry=`). Kept as a redirect, not deleted, so existing bookmarks/links (including
+ * `/corporate-actions/new`'s own redirect here) still land somewhere useful — the shell's
+ * `AddTransactionMenu` auto-opens on these params via its reactive effect.
+ */
 export default async function NewTransactionPage({
   params,
   searchParams,
@@ -18,96 +21,13 @@ export default async function NewTransactionPage({
   const { locale } = await params;
   const { kind, harvestInstrument } = await searchParams;
   setRequestLocale(locale);
-  const tm = await getTranslations("Manage");
-  const tf = await getTranslations("PortfolioForm");
-  const te = await getTranslations("Empty");
 
-  const selection = await resolveSelection();
+  const query: Record<string, string> = {};
+  if (harvestInstrument) {
+    query.harvestInstrument = harvestInstrument;
+  } else if (kind === "corporate-action" || kind === "merger") {
+    query.entry = kind;
+  }
 
-  // Harvest-suggestion prefill (`/tax` → "Harvest" button): a Sell draft for the
-  // suggested instrument, quantity seeded from its standing open lots.
-  const harvestPrefill = harvestInstrument ? await loadHarvestPrefill(harvestInstrument) : null;
-  const initialTransaction: AddTransactionInitial | undefined = harvestPrefill
-    ? {
-        type: "sell",
-        instrumentId: harvestInstrument!,
-        instrument: harvestPrefill.instrument,
-        quantity: harvestPrefill.quantity,
-        price: "",
-        fees: "",
-        currency: harvestPrefill.currency,
-        executedAt: new Date().toISOString().slice(0, 10),
-      }
-    : undefined;
-  // The transaction lands in the switcher-selected portfolio, or the first one when the
-  // aggregate ("All portfolios") scope is active; the picker in NewEntryTabs makes that
-  // explicit and switchable.
-  const initialPortfolioId =
-    selection.status === "ok" && selection.portfolios.length > 0
-      ? (selection.selectedId ?? selection.portfolios[0].id)
-      : "";
-
-  const creatingPortfolio =
-    selection.status === "ok" && selection.portfolios.length === 0;
-  const ns = creatingPortfolio ? "Manage.portfolio" : "Manage.tx";
-  const t = await getTranslations(ns);
-  const defaultTab: NewEntryTab =
-    kind === "corporate-action" ? "corporate-action" : kind === "merger" ? "merger" : "transaction";
-  // Neutral H1 so it reads correctly across both tabs (the empty/creating-portfolio
-  // branches keep their own portfolio-specific title).
-  const heading = creatingPortfolio ? t("title") : tm("tx.entryTitle");
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          size="icon"
-          asChild
-          aria-label={tm("back")}
-          className="rounded-xl bg-card shadow-card"
-        >
-          <Link href="/transactions">
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">{heading}</h1>
-          <p className="text-sm text-muted-foreground">
-            {creatingPortfolio ? tm("portfolio.needFirst") : t("subtitle")}
-          </p>
-        </div>
-      </div>
-
-      {selection.status === "unavailable" ? (
-        <EmptyState
-          icon={Wallet}
-          title={te("unavailableTitle")}
-          description={te("unavailableBody")}
-        />
-      ) : creatingPortfolio ? (
-        <PortfolioFormDialog
-          mode="create"
-          trigger={
-            <Button>
-              <Plus className="size-4" />
-              {tf("new")}
-            </Button>
-          }
-        />
-      ) : (
-        <NewEntryTabs
-          portfolios={selection.portfolios.map((p) => ({
-            id: p.id,
-            name: p.name,
-            brokerage: p.brokerage,
-            accountHolder: p.accountHolder,
-          }))}
-          initialPortfolioId={initialPortfolioId}
-          defaultTab={defaultTab}
-          initialTransaction={initialTransaction}
-        />
-      )}
-    </div>
-  );
+  redirect({ href: { pathname: "/transactions", query }, locale });
 }

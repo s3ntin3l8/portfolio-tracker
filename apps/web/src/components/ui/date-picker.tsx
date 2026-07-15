@@ -101,7 +101,7 @@ export const DatePicker = React.forwardRef<HTMLInputElement, DatePickerProps>(
           onChange={onChange}
           disabled={disabled}
           tabIndex={-1}
-          className="sr-only"
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base pointer-events-auto [@media(pointer:fine)]:sr-only [@media(pointer:fine)]:pointer-events-none"
           {...rest}
         />
       </div>

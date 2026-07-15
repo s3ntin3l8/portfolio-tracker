@@ -321,9 +321,8 @@ export function TransactionDetailSheet({
   const canSetStatus = status !== "draft";
   const hasOverflow = (canReassign && onReassign) || showReceipt || canSetStatus;
 
-  // handleOnly: this sheet nests its own scroll container below the sticky header (#472 —
-  // content-drag was closing the sheet since vaul saw the outer content permanently at
-  // scrollTop 0). Drag-to-close stays on the handle; X/backdrop/Escape are unaffected.
+  // handleOnly: drag-to-close is restricted to the handle so content scrolling and the
+  // close gesture don't conflict (#472). SheetContent is the single scroll container.
   return (
     <Sheet open={open} onOpenChange={onOpenChange} handleOnly>
       <SheetContent className="p-0" side="bottom" hideClose>
@@ -408,7 +407,9 @@ export function TransactionDetailSheet({
           </div>
         </SheetHeader>
 
-        <div className="overflow-y-auto px-5 pb-7 pt-1.5">
+        {/* Note: no nested overflow-y-auto — SheetContent is the single scroll
+            container (#472). */}
+        <div className="px-5 pb-7 pt-1.5">
           {/* ── Hero amount + source pill ── */}
           <div className="py-2.5 pb-[18px] text-center">
             <div

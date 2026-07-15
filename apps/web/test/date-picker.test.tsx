@@ -76,7 +76,8 @@ describe("DatePicker", () => {
     expect(input).toHaveAttribute("type", "date");
     expect(input).toHaveAttribute("id", "d");
     expect(input).toHaveValue("2026-02-03");
-    expect(input).toHaveClass("sr-only");
+    expect(input).toHaveClass("opacity-0");
+    expect(input).toHaveClass("[@media(pointer:fine)]:sr-only");
     expect(input).toHaveAttribute("tabindex", "-1");
     expect(input).not.toHaveAttribute("aria-hidden");
   });
