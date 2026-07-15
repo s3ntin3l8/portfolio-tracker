@@ -175,6 +175,55 @@ describe("preferences", () => {
     expect(body.period).toBe("max");
   });
 
+  it("PUT /me/preferences sets and clears benchmarkSymbol and riskFreeRate", async () => {
+    const t = await token("prefs-user-benchmark-1");
+
+    const get0 = await app.inject({
+      method: "GET",
+      url: "/me/preferences",
+      headers: auth(t),
+    });
+    expect(get0.statusCode).toBe(200);
+    expect(get0.json().benchmarkSymbol).toBeNull();
+    expect(get0.json().riskFreeRate).toBeNull();
+
+    const put1 = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { benchmarkSymbol: "^GSPC", riskFreeRate: 0.05 },
+    });
+    expect(put1.statusCode).toBe(200);
+    expect(put1.json().benchmarkSymbol).toBe("^GSPC");
+    expect(put1.json().riskFreeRate).toBe(0.05);
+
+    const get1 = await app.inject({
+      method: "GET",
+      url: "/me/preferences",
+      headers: auth(t),
+    });
+    expect(get1.json().benchmarkSymbol).toBe("^GSPC");
+    expect(get1.json().riskFreeRate).toBe(0.05);
+
+    const put2 = await app.inject({
+      method: "PUT",
+      url: "/me/preferences",
+      headers: auth(t),
+      payload: { benchmarkSymbol: null, riskFreeRate: null },
+    });
+    expect(put2.statusCode).toBe(200);
+    expect(put2.json().benchmarkSymbol).toBeNull();
+    expect(put2.json().riskFreeRate).toBeNull();
+
+    const get2 = await app.inject({
+      method: "GET",
+      url: "/me/preferences",
+      headers: auth(t),
+    });
+    expect(get2.json().benchmarkSymbol).toBeNull();
+    expect(get2.json().riskFreeRate).toBeNull();
+  });
+
   it("PUT /me/preferences rejects invalid period", async () => {
     const t = await token("prefs-user-bad");
     const res = await app.inject({
