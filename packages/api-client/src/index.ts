@@ -2026,9 +2026,10 @@ export function createApiClient(config: ApiClientConfig) {
         "GET",
         `/portfolios/${portfolioId}/history?range=${encodeURIComponent(range)}`,
       ),
-    getInsights: (range = "all", holderId?: string) => {
+    getInsights: (range = "all", opts?: { holderId?: string; portfolioId?: string }) => {
       const params = new URLSearchParams({ range });
-      if (holderId) params.set("holderId", holderId);
+      if (opts?.holderId) params.set("holderId", opts.holderId);
+      if (opts?.portfolioId) params.set("portfolioId", opts.portfolioId);
       return request<InsightsResponse>("GET", `/insights?${params.toString()}`);
     },
 

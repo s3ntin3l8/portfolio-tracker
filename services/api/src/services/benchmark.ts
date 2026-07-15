@@ -112,14 +112,29 @@ export function computeActiveReturn(
   if (portfolioIndex.length === 0 || benchmarkIndex.length === 0) return null;
 
   const bmByDate = new Map(benchmarkIndex.map((p) => [p.date, Number(p.pct)]));
-  const common: { pf: number; bm: number }[] = [];
+  const raw: { pf: number; bm: number }[] = [];
   for (const p of portfolioIndex) {
     const bmPct = bmByDate.get(p.date);
     if (bmPct !== undefined) {
-      common.push({ pf: Number(p.pct), bm: bmPct });
+      raw.push({ pf: Number(p.pct), bm: bmPct });
     }
   }
-  if (common.length < 2) return null;
+  if (raw.length < 2) return null;
+
+  // `portfolioIndex`/`benchmarkIndex` are each chained from their OWN first element
+  // (chainIndex's base), which don't necessarily coincide with the first date they
+  // both actually have data for — e.g. the portfolio's earliest snapshot falling on a
+  // weekend/holiday the benchmark market was closed, or benchmark history not yet
+  // backfilled all the way to the portfolio's start. Left uncorrected, "pfFinal -
+  // bmFinal" would compare the portfolio's return since ITS base against the
+  // benchmark's return since a DIFFERENT (later) base — an apples-to-oranges number
+  // that can be wildly wrong. Rebase both series to their first common date so every
+  // downstream figure (active return, tracking error, correlation) measures the same
+  // window for both.
+  const pfBase = raw[0].pf;
+  const bmBase = raw[0].bm;
+  const rebase = (pct: number, base: number) => ((1 + pct / 100) / (1 + base / 100) - 1) * 100;
+  const common = raw.map(({ pf, bm }) => ({ pf: rebase(pf, pfBase), bm: rebase(bm, bmBase) }));
 
   // Active return = portfolio total return - benchmark total return (at end of series)
   const pfFinal = common[common.length - 1].pf;
@@ -162,9 +177,15 @@ export function computeActiveReturn(
   }
   const correlation = varPf > 0 && varBm > 0 ? cov / Math.sqrt(varPf * varBm) : 0;
 
+  // `pf`/`bm` (and thus activeReturn/trackingError above) are in percentage-POINT
+  // units, because chainIndex's `pct` is already ×100 (e.g. 12.5 meaning +12.5%).
+  // Divide by 100 here so both come out as fractions, matching every other rate the
+  // API returns (and what the web card's formatPercent — an Intl percent formatter
+  // that itself multiplies by 100 — expects). Correlation is a dimensionless Pearson
+  // r and is scale-invariant, so it's returned as-is.
   return {
-    activeReturn: String(activeReturn),
-    trackingError: String(trackingError),
+    activeReturn: String(activeReturn / 100),
+    trackingError: String(trackingError / 100),
     correlation: String(correlation),
   };
 }

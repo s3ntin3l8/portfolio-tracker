@@ -1,6 +1,7 @@
 import { useTranslations } from "next-intl";
 import { Card } from "@/components/ui/card";
 import { cn, formatPercent } from "@/lib/utils";
+import { benchmarkLabel } from "@/lib/benchmark-labels";
 import type { InsightsBenchmark } from "@portfolio/api-client";
 
 export function BenchmarkCard({
@@ -17,9 +18,9 @@ export function BenchmarkCard({
 
   return (
     <Card className="rounded-[20px] bg-card p-4 shadow-card">
-      <p className="text-xs font-semibold text-text-2">{t("vs", { symbol: benchmark.symbol })}</p>
+      <p className="text-xs font-semibold text-text-2">{t("vs", { symbol: benchmarkLabel(benchmark.symbol) })}</p>
       <p className={cn("tabular mt-1 text-[22px] font-extrabold leading-none", activeReturn >= 0 ? "text-success" : "text-destructive")}>
-        {activeReturn >= 0 ? "+" : ""}{formatPercent(activeReturn, locale)}
+        {formatPercent(activeReturn, locale)}
       </p>
       <p className="mt-1 text-xs font-medium text-text-2">{t("activeReturn")}</p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-text-2">

@@ -4042,22 +4042,24 @@ export async function transactionsRoute(app: FastifyInstance) {
   );
 
   // ── Insights (risk metrics, drawdown, volatility, streaks, benchmark, concentration trend) ──────
-  app.get<{ Querystring: { range?: string; holderId?: string } }>(
+  app.get<{ Querystring: { range?: string; holderId?: string; portfolioId?: string } }>(
     "/insights",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const t0 = performance.now();
       const { id } = requireUser(request);
-      const { holderId } = request.query;
+      const { holderId, portfolioId } = request.query;
       const range = request.query.range ?? "all";
 
       const pfs = await app.db
         .select({ id: portfolios.id, includeInAggregate: portfolios.includeInAggregate, cashCounted: portfolios.cashCounted })
         .from(portfolios)
         .where(
-          holderId != null
-            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
-            : eq(portfolios.userId, id),
+          portfolioId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.id, portfolioId))
+            : holderId != null
+              ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+              : eq(portfolios.userId, id),
         );
       if (pfs.length === 0) {
         return reply.send({
@@ -4076,7 +4078,7 @@ export async function transactionsRoute(app: FastifyInstance) {
         .limit(1);
       const display = u?.displayCurrency ?? "IDR";
 
-      const cacheKey = `insights:${id}:${range}:${holderId ?? ""}`;
+      const cacheKey = `insights:${id}:${range}:${holderId ?? ""}:${portfolioId ?? ""}`;
       const result = await withDerivationCache(insightsCache, cacheKey, async () => {
         // ── Portfolio history (TWR index) ──────────────────────────────
         const start = rangeStart(range);
@@ -4123,23 +4125,13 @@ export async function transactionsRoute(app: FastifyInstance) {
         }
 
         const aggregated = aggregateValueFlows(allFlows);
-
-        // Build net worth series (converted to display currency)
-        const nwByDate = new Map<string, string>();
-        for (const r of snapshots) {
-          const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
-          const nw = Number(convert(r.netWorth, r.currency, display, fx));
-          const prev = Number(nwByDate.get(r.date) ?? 0);
-          nwByDate.set(r.date, String(prev + nw));
-        }
-        const netWorthSeries = aggregated.map((p) => ({
-          date: p.date,
-          netWorth: nwByDate.get(p.date) ?? "0",
-        }));
         const indexed = chainIndex(aggregated);
 
         // ── Drawdown ───────────────────────────────────────────────────
-        const drawdown = maxDrawdown(netWorthSeries);
+        // Fed the cashflow-normalized TWR index (same series volatility/streaks use
+        // below), not raw net worth: a deposit/withdrawal moves net worth without
+        // being a real gain/loss, and would otherwise register as a phantom drawdown.
+        const drawdown = maxDrawdown(indexed.map((p) => ({ date: p.date, netWorth: p.index })));
 
         // ── Volatility & Sharpe ────────────────────────────────────────
         const idxPoints = indexed.map((p) => ({ date: p.date, index: p.index }));

@@ -1637,14 +1637,23 @@ export interface InsightsView {
   data: InsightsResponse;
 }
 
+/**
+ * Insights for the active scope: a single portfolio when one is selected, an
+ * account-holder aggregate when a holder is selected, else the cross-portfolio
+ * aggregate — mirrors `loadNetWorthHistory`'s scope resolution so Insights reacts to
+ * the same portfolio selector as the rest of the app instead of always aggregating.
+ */
 export async function loadInsights(
   range = "all",
-  holderId?: string,
 ): Promise<InsightsView | { status: "empty" | "unavailable" }> {
   try {
     const api = await getServerApi();
     if (!api) return { status: "unavailable" };
-    const data = await api.getInsights(range, holderId);
+    const portfolios = await listPortfoliosCached();
+    const wanted = await getSelectedPortfolioId();
+    const selected = portfolios.find((p) => p.id === wanted);
+    const holderId = selected ? undefined : await resolveHolderScope(portfolios);
+    const data = await api.getInsights(range, { holderId, portfolioId: selected?.id });
     return { status: "ok", data };
   } catch {
     return { status: "unavailable" };
