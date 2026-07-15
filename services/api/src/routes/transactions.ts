@@ -180,8 +180,13 @@ export async function transactionsRoute(app: FastifyInstance) {
   // portfolio-scoped, matching corporateActionsFor's own usage elsewhere.
   async function deriveIncomeShares(
     rowsByPortfolio: Map<string, (typeof transactions.$inferSelect)[]>,
-  ): Promise<Map<string, { perShare: string | null; shares: string | null }>> {
-    const patch = new Map<string, { perShare: string | null; shares: string | null }>();
+  ): Promise<
+    Map<string, { perShare: string | null; shares: string | null; sharesEstimated: true }>
+  > {
+    const patch = new Map<
+      string,
+      { perShare: string | null; shares: string | null; sharesEstimated: true }
+    >();
 
     const isCandidate = (r: (typeof transactions.$inferSelect)) =>
       r.type === "dividend" && r.instrumentId !== null && (r.perShare === null || r.shares === null);
@@ -217,7 +222,11 @@ export async function transactionsRoute(app: FastifyInstance) {
           const gross = new Decimal(r.price).plus(r.tax !== null ? new Decimal(r.tax) : 0);
           perShare = gross.div(sharesDec).toString();
         }
-        patch.set(r.id, { shares: r.shares ?? sharesDec.toString(), perShare });
+        // Marks the row as carrying at least one derived (not source-provided) value — the
+        // detail sheet uses this to hint that the figure is approximate, since a derived
+        // EUR-convention perShare can otherwise look identically authoritative next to a
+        // real, native-currency value parsed from a settlement PDF (#508).
+        patch.set(r.id, { shares: r.shares ?? sharesDec.toString(), perShare, sharesEstimated: true });
       }
     }
 

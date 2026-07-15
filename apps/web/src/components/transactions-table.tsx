@@ -234,6 +234,10 @@ export interface TxRow {
   nativeCurrency?: string | null;
   /** Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax. */
   grossNative?: string | null;
+  /** True when `shares`/`perShare` were derived read-time from holdings history (#508)
+   *  rather than parsed from the source — an approximation, may disagree with a later
+   *  authoritative value for the same payment. */
+  sharesEstimated?: boolean;
   currency: string;
   /** Present only when the list was fetched with a scope currency (#465): the rate to
    *  multiply an amount in `currency` by to land in `displayCurrency`, at this row's own

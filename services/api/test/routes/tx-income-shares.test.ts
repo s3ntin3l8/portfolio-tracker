@@ -140,8 +140,13 @@ describe("dividend perShare/shares (#508)", () => {
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
     });
-    const row = (list.json() as { id: string; perShare: string }[]).find((r) => r.id === tx.id);
+    const row = (list.json() as { id: string; perShare: string; sharesEstimated?: boolean }[]).find(
+      (r) => r.id === tx.id,
+    );
     expect(row?.perShare).toBe("0.27");
+    // A manually-entered (authoritative) value is never flagged as estimated, even though a
+    // derivation is possible for this row (a buy exists for the same instrument above).
+    expect(row?.sharesEstimated).toBeFalsy();
   });
 
   it("derives shares/perShare for a dividend with no source-provided value, from the holdings history at the pay date", async () => {
@@ -185,12 +190,20 @@ describe("dividend perShare/shares (#508)", () => {
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
     });
-    const row = (list.json() as { id: string; type: string; perShare: string; shares: string }[]).find(
-      (r) => r.id === div.json().id,
-    );
+    const row = (
+      list.json() as {
+        id: string;
+        type: string;
+        perShare: string;
+        shares: string;
+        sharesEstimated?: boolean;
+      }[]
+    ).find((r) => r.id === div.json().id);
     // 10 shares held; gross = price(8) + tax(2) = 10 → perShare = 10/10 = 1.
     expect(row?.shares).toBe("10");
     expect(row?.perShare).toBe("1");
+    // Flagged as derived (#508) — the UI hints this is approximate, not source-provided.
+    expect(row?.sharesEstimated).toBe(true);
   });
 
   it("does not derive shares for a dividend on an instrument never held (no positive holding)", async () => {

@@ -664,6 +664,11 @@ export interface Transaction {
   nativeCurrency?: string | null;
   /** Gross payment amount in `nativeCurrency`, before FX conversion and withholding tax. */
   grossNative?: string | null;
+  /** True when `shares`/`perShare` were derived read-time from holdings history (#508)
+   *  rather than parsed from the source — the value is an approximation (own-currency
+   *  gross/shares, not the native-currency rate a settlement PDF would print) and may
+   *  disagree with a later-imported authoritative value for the same payment. */
+  sharesEstimated?: boolean;
   /** Free-text memo (counterparty, merchant, transfer reference). */
   description: string | null;
   /** User-defined labels for filtering and reporting. */

@@ -169,6 +169,45 @@ describe("TransactionDetailSheet", () => {
     expect(screen.getByText("1.1452")).toBeInTheDocument();
   });
 
+  it("#508: flags derived shares/per-share with an approximate (≈) hint, but not a source-provided pair", () => {
+    renderSheet({
+      tx: {
+        ...TX,
+        id: "div-derived",
+        type: "dividend",
+        quantity: "0",
+        price: "8",
+        currency: "EUR",
+        shares: "10",
+        perShare: "1",
+        sharesEstimated: true,
+        instrument: { symbol: "MO", name: "Altria" },
+      },
+    });
+    expect(screen.getByText("≈ 10")).toBeInTheDocument();
+    expect(screen.getByText(/≈.*€1\.00/)).toBeInTheDocument();
+  });
+
+  it("does not show the approximate hint for a source-provided (parsed) shares/per-share pair", () => {
+    renderSheet({
+      tx: {
+        ...TX,
+        id: "div-authoritative",
+        type: "dividend",
+        quantity: "0",
+        price: "0.65",
+        currency: "EUR",
+        shares: "1",
+        perShare: "0.91",
+        nativeCurrency: "USD",
+        instrument: { symbol: "MSFT", name: "Microsoft" },
+      },
+    });
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText(/≈ 1\b/)).toBeNull();
+    expect(screen.queryByText(/≈.*\$0\.91/)).toBeNull();
+  });
+
   it("resolves the Account line from the portfolios prop when the row omits portfolioName", () => {
     // The reported bug: portfolioName is absent (single-portfolio scope) → the account line
     // vanished. It must now fall back to the portfolios lookup by portfolioId.

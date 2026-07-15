@@ -439,18 +439,29 @@ export function TransactionDetailSheet({
           <SectionHeading>{t("breakdown")}</SectionHeading>
           <DetailCard>
             {/* qty stays "0" for income rows by convention (see TxRow doc comments) — fall
-                back to the informational shares/perShare pair (parsed from a settlement PDF)
-                instead of hiding these rows entirely. */}
+                back to the informational shares/perShare pair (parsed from a settlement PDF,
+                or — when `sharesEstimated` — derived read-time from holdings history, #508:
+                flagged with the same "≈" treatment as the display-currency conversion above,
+                since a derived value can otherwise look identically authoritative next to a
+                real one parsed from a settlement PDF). */}
             {(qty !== 0 || tx.shares != null) && (
               <Row label={t("quantity")}>
-                {qty !== 0 ? numFmt.format(qty) : numFmt.format(Number(tx.shares))}
+                {qty !== 0
+                  ? numFmt.format(qty)
+                  : tx.sharesEstimated
+                    ? t("approxDisplay", { amount: numFmt.format(Number(tx.shares)) })
+                    : numFmt.format(Number(tx.shares))}
               </Row>
             )}
             {(qty !== 0 || tx.perShare != null) && (
               <Row label={t("price")}>
                 {qty !== 0
                   ? m(Number(tx.price), tx.currency)
-                  : m(Number(tx.perShare), tx.nativeCurrency ?? tx.currency)}
+                  : tx.sharesEstimated
+                    ? t("approxDisplay", {
+                        amount: m(Number(tx.perShare), tx.nativeCurrency ?? tx.currency),
+                      })
+                    : m(Number(tx.perShare), tx.nativeCurrency ?? tx.currency)}
               </Row>
             )}
             {tx.grossNative != null && tx.nativeCurrency && (
