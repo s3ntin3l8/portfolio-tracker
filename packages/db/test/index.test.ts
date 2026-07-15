@@ -1,6 +1,7 @@
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { eq } from "drizzle-orm";
@@ -19,7 +20,7 @@ let db: ReturnType<typeof drizzle<typeof schema>>;
 
 describe("@portfolio/db schema", () => {
   beforeAll(async () => {
-    client = new PGlite();
+    client = new PGlite({ extensions: { pg_trgm } });
     db = drizzle(client, { schema });
     await migrate(db, { migrationsFolder });
   });

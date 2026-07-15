@@ -2,6 +2,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { migrationsDir } from "@portfolio/db";
@@ -23,7 +24,7 @@ export const PGLITE_TEMPLATE_DIR = path.join(os.tmpdir(), "portfolio-vitest-pgli
  */
 export default async function setup(): Promise<() => void> {
   fs.rmSync(PGLITE_TEMPLATE_DIR, { recursive: true, force: true });
-  const client = new PGlite(PGLITE_TEMPLATE_DIR);
+  const client = new PGlite(PGLITE_TEMPLATE_DIR, { extensions: { pg_trgm } });
   const db = drizzle(client, {});
   await migrate(db, { migrationsFolder: migrationsDir });
   // Must close cleanly before any file copies from this directory, or the snapshot on

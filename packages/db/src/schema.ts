@@ -342,7 +342,13 @@ export const instruments = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex("instruments_market_symbol_idx").on(t.market, t.symbol)],
+  (t) => [
+    uniqueIndex("instruments_market_symbol_idx").on(t.market, t.symbol),
+    index("instruments_symbol_trgm_idx").using("gin", t.symbol.op("gin_trgm_ops")),
+    index("instruments_name_trgm_idx").using("gin", t.name.op("gin_trgm_ops")),
+    index("instruments_isin_trgm_idx").using("gin", t.isin.op("gin_trgm_ops")),
+    index("instruments_wkn_trgm_idx").using("gin", t.wkn.op("gin_trgm_ops")),
+  ],
 ).enableRLS();
 
 // Screenshot/CSV import drafts. The raw image is deleted after a confirmed parse;
@@ -730,6 +736,8 @@ export const transactions = pgTable(
     index("transactions_instrument_id_idx").on(t.instrumentId),
     // Speed up import-related queries (DELETE/SELECT/GROUP BY import_id).
     index("transactions_import_id_status_idx").on(t.importId, t.status),
+    // Trigram index for leading-wildcard ILIKE search on description (migration 0068).
+    index("transactions_description_trgm_idx").using("gin", t.description.op("gin_trgm_ops")),
     // Prevent double-importing the same source row into a portfolio.
     uniqueIndex("transactions_dedup_idx")
       .on(t.portfolioId, t.source, t.externalId)
