@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { cn, formatPercent } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils";
 import type { InsightsStreaks } from "@portfolio/api-client";
 
 export function StreaksCard({
