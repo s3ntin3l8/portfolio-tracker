@@ -77,6 +77,8 @@ export async function valuePortfolio(
   costBasisMode?: CostBasisMode,
   cashCounted = true,
   _log?: FastifyBaseLogger,
+  /** Injectable clock for deterministic date handling. Defaults to the real clock. */
+  now: Date = new Date(),
 ): Promise<Valuation> {
   const t0 = performance.now();
   const rows = await db
@@ -144,7 +146,7 @@ export async function valuePortfolio(
   // ensures a genuinely delisted instrument eventually reverts to unpriced
   // rather than being carried forever at a stale value.
   {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = now.toISOString().slice(0, 10);
     const missingIds = instrumentIds.filter((id) => !prices[id]);
     if (missingIds.length > 0) {
       const historical = await db
@@ -152,12 +154,13 @@ export async function valuePortfolio(
         .from(pricesTable)
         .where(and(inArray(pricesTable.instrumentId, missingIds), lte(pricesTable.date, today)))
         .orderBy(pricesTable.instrumentId, desc(pricesTable.date));
+      const todayMs = new Date(`${today}T00:00:00.000Z`).getTime();
       const seen = new Set<string>();
       for (const row of historical) {
         if (seen.has(row.instrumentId)) continue;
         seen.add(row.instrumentId);
-        const daysAgo =
-          (Date.now() - new Date(row.date).getTime()) / 86_400_000;
+        const rowMs = new Date(`${row.date}T00:00:00.000Z`).getTime();
+        const daysAgo = (todayMs - rowMs) / 86_400_000;
         if (daysAgo <= 7) {
           prices[row.instrumentId] = { price: row.close, currency: row.currency };
         }
@@ -288,6 +291,7 @@ export async function valuePortfolioCached(
     costBasisMode,
     cashCounted,
     _log,
+    new Date(now),
   );
   derivationCache.set(key, { expiresAt: now + DERIVATION_CACHE_TTL_MS, promise });
   // A failed computation must not poison the cache for the rest of the TTL window — drop
