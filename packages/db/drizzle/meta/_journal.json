@@ -477,6 +477,13 @@
       "when": 1784043995125,
       "tag": "0067_cuddly_lord_hawal",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1784361600000,
+      "tag": "0068_pg_trgm_indexes",
+      "breakpoints": true
     }
   ]
 }
