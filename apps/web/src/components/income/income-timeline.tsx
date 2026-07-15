@@ -28,12 +28,25 @@ function totalsByCurrency(events: IncomeEventRow[]): Record<string, number> {
 
 type StatusFilter = "all" | "received" | "forecast";
 
+type TimelineGroup = {
+  year: string;
+  rows?: IncomeEventRow[];
+  subtitle?: string;
+  subtotal?: string;
+  assumptions?: ReactNode;
+};
+
 /**
  * "Payments timeline" card — year dropdown + received/forecast chips + search over
  * the merged historical/upcoming rows, grouped by year (newest first, next-year
  * forecasts split into their own section) after filtering. Filters are local,
  * ephemeral `useState` (matches the Activity/transactions and Trades pages — not
  * URL-persisted).
+ *
+ * Year groups are collapsible (accordion-style). Current year + next-year forecast
+ * start expanded; all others start collapsed. Older years without pre-loaded rows
+ * are loaded on demand via a "Load {year}" button (like activity's load-more),
+ * then auto-expand.
  */
 export function IncomeTimeline({
   rows,
@@ -50,6 +63,22 @@ export function IncomeTimeline({
   const [query, setQuery] = useState("");
   const [loadedYears, setLoadedYears] = useState<Map<string, IncomeEventRow[]>>(new Map());
   const [loadingYear, setLoadingYear] = useState<string | null>(null);
+
+  // Collapsible state — current year + next year expanded by default
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    const current = String(new Date().getUTCFullYear());
+    s.add(current);
+    s.add(String(current + 1));
+    return s;
+  });
+  const toggle = (year: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
 
   const yearOptions = useMemo(
     () => [...new Set(rows.map((r) => r.date.slice(0, 4)))].sort((a, b) => b.localeCompare(a)),
@@ -105,13 +134,7 @@ export function IncomeTimeline({
       .map(([cur, amount]) => formatMoney(amount, cur, locale))
       .join(" · ");
 
-  const timelineGroups: {
-    year: string;
-    rows: IncomeEventRow[];
-    subtitle: string;
-    subtotal: string;
-    assumptions?: ReactNode;
-  }[] = [];
+  const timelineGroups: TimelineGroup[] = [];
 
   async function loadYear(year: string) {
     if (loadedYears.has(year) || loadingYear === year) return;
@@ -121,6 +144,7 @@ export function IncomeTimeline({
       if (!res.ok) return;
       const data = await res.json();
       setLoadedYears(prev => new Map(prev).set(year, data.events));
+      setExpanded((prev) => new Set(prev).add(year));
     } catch {
       // Ignore — user can retry by clicking again
     } finally {
@@ -151,6 +175,23 @@ export function IncomeTimeline({
       subtotal: subtotalOf(yearRows),
     });
   }
+
+  // Add already-loaded lazy years
+  const existingYears = new Set(timelineGroups.map((g) => g.year));
+  for (const y of olderYears.filter((y) => loadedYears.has(y) && !existingYears.has(y)).sort((a, b) => Number(b) - Number(a))) {
+    const yr = loadedYears.get(y)!;
+    timelineGroups.push({ year: y, rows: yr, subtitle: yearSubtitle(yr), subtotal: subtotalOf(yr) });
+  }
+
+  // If yearFilter targets a lazy year not yet loaded, add a placeholder so the
+  // user can see it and expand to trigger the fetch.
+  if (yearFilter !== "all" && olderYears.includes(yearFilter) && !loadedYears.has(yearFilter) && !existingYears.has(yearFilter)) {
+    timelineGroups.push({ year: yearFilter });
+  }
+
+  const hasActiveTextFilter = statusFilter !== "all" || query.trim() !== "";
+  const sortedOlder = olderYears.filter((y) => !loadedYears.has(y)).sort((a, b) => Number(b) - Number(a));
+  const nextOlder = yearFilter === "all" && !hasActiveTextFilter ? sortedOlder[0] : null;
 
   return (
     <div className="rounded-[20px] bg-card p-[22px] shadow-card">
@@ -216,7 +257,10 @@ export function IncomeTimeline({
                 {["all", ...yearOptions].map((y) => (
                   <DropdownMenuItem
                     key={y}
-                    onSelect={() => setYearFilter(y)}
+                    onSelect={() => {
+                      setYearFilter(y);
+                      if (y !== "all") setExpanded((prev) => new Set(prev).add(y));
+                    }}
                     className="justify-between gap-3"
                   >
                     {y === "all" ? t("allYears") : y}
@@ -249,52 +293,75 @@ export function IncomeTimeline({
         </div>
       </div>
 
-      {timelineGroups.length === 0 ? (
+      {timelineGroups.length === 0 && !nextOlder ? (
         <p className="py-8 text-center text-sm text-muted-foreground">{t("noMatches")}</p>
       ) : (
         <>
-          <TimelineColumnHeader />
+          {timelineGroups.length > 0 && <TimelineColumnHeader />}
 
-          {timelineGroups.map((g) => (
-            <div key={g.year} className="mt-3.5">
-              <div className="sticky top-0 z-[2] flex items-baseline justify-between border-b border-border bg-card/95 py-2 backdrop-blur-sm">
-                <div className="flex items-baseline gap-2.5">
-                  <span className="text-[15px] font-extrabold">{g.year}</span>
-                  <span className="text-[11px] font-semibold text-text-3">{g.subtitle}</span>
-                </div>
-                <span className="tabular text-[13px] font-bold text-text-mute">{g.subtotal}</span>
-              </div>
-              {g.assumptions && <p className="pt-2 text-xs text-text-2">{g.assumptions}</p>}
-              <IncomeEventsTable rows={g.rows} />
-            </div>
-          ))}
-          {olderYears.length > 0 && (
-            <div className="mt-6 space-y-0.5">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-text-3">
-                {t("olderYears")}
-              </h3>
-              {olderYears.map((year) => (
-                <div key={year}>
-                  <button
-                    type="button"
-                    onClick={() => loadYear(year)}
-                    className="flex w-full items-center justify-between border-b border-border py-2.5 text-left hover:bg-muted/30"
-                  >
-                    <span className="text-[15px] font-extrabold">{year}</span>
-                    {loadingYear === year ? (
-                      <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          {timelineGroups.map((g) => {
+            const isOpen = expanded.has(g.year) || hasActiveTextFilter;
+            const hasRows = Boolean(g.rows);
+            const lazyRows = loadedYears.get(g.year);
+            const displayRows = hasRows ? g.rows! : lazyRows;
+
+            return (
+              <div key={g.year} className="mt-3.5">
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    toggle(g.year);
+                    if (!hasRows && !lazyRows && loadingYear !== g.year) loadYear(g.year);
+                  }}
+                  className="sticky top-0 z-[2] flex w-full items-baseline justify-between border-b border-border bg-card/95 py-2 backdrop-blur-sm text-left hover:bg-muted/30"
+                >
+                  <div className="flex items-baseline gap-2.5 min-w-0">
+                    {loadingYear === g.year && !lazyRows ? (
+                      <Loader2 className="size-4 shrink-0 animate-spin text-text-3" />
+                    ) : isOpen ? (
+                      <ChevronDown className="size-4 shrink-0 text-text-3" />
                     ) : (
-                      <ChevronRight className="size-4 text-muted-foreground" />
+                      <ChevronRight className="size-4 shrink-0 text-text-3" />
                     )}
-                  </button>
-                  {loadedYears.has(year) && (
-                    <div className="pt-2">
-                      <IncomeEventsTable rows={loadedYears.get(year)!} />
-                    </div>
+                    <span className="text-[15px] font-extrabold">{g.year}</span>
+                    {g.subtitle && (
+                      <span className="truncate text-[11px] font-semibold text-text-3">{g.subtitle}</span>
+                    )}
+                  </div>
+                  {g.subtotal && (
+                    <span className="tabular shrink-0 text-[13px] font-bold text-text-mute">{g.subtotal}</span>
                   )}
-                </div>
-              ))}
-            </div>
+                </button>
+
+                {isOpen && (
+                  <>
+                    {g.assumptions && <p className="pt-2 text-xs text-text-2">{g.assumptions}</p>}
+                    {loadingYear === g.year && !lazyRows ? (
+                      <div className="flex justify-center py-6">
+                        <Loader2 className="size-5 animate-spin text-text-3" />
+                      </div>
+                    ) : displayRows ? (
+                      <IncomeEventsTable rows={displayRows} groupByMonth />
+                    ) : null}
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          {nextOlder && (
+            <button
+              type="button"
+              onClick={() => loadYear(nextOlder)}
+              className="mt-4 flex w-full items-center justify-center gap-2 py-3 text-sm font-semibold text-text-3 hover:text-foreground"
+            >
+              {loadingYear === nextOlder ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <>{t("loadOlderYear", { year: nextOlder })} →</>
+              )}
+            </button>
           )}
         </>
       )}

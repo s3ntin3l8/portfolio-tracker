@@ -60,6 +60,8 @@ function wrap(rows: IncomeEventRow[]) {
 describe("IncomeTimeline", () => {
   it("groups rows by year, newest first, under the 'All' chip by default", () => {
     wrap([bbca2026, tlkm2026Forecast, sap2025]);
+    // 2025 is collapsed by default — expand it to see its rows
+    fireEvent.click(screen.getByText("2025"));
     expect(screen.getAllByText("BBCA").length).toBeGreaterThan(0);
     expect(screen.getAllByText("TLKM").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SAP").length).toBeGreaterThan(0);
@@ -83,6 +85,8 @@ describe("IncomeTimeline", () => {
 
   it("narrows rows by search text (symbol match)", () => {
     wrap([bbca2026, sap2025]);
+    // 2025 is collapsed — expand it so its rows can be found
+    fireEvent.click(screen.getByText("2025"));
     fireEvent.change(screen.getByPlaceholderText("Search income…"), {
       target: { value: "sap" },
     });
@@ -136,6 +140,8 @@ describe("IncomeTimeline", () => {
 
   it("clears the search query via the clear button", () => {
     wrap([bbca2026, sap2025]);
+    // 2025 is collapsed — expand it so its rows are visible after search
+    fireEvent.click(screen.getByText("2025"));
     fireEvent.change(screen.getByPlaceholderText("Search income…"), {
       target: { value: "sap" },
     });

@@ -451,7 +451,7 @@
     "searchPlaceholder": "Search income…",
     "searchClear": "Clear search",
     "noMatches": "No payments match your filters.",
-    "olderYears": "Older years"
+    "loadOlderYear": "Load {year}"
   },
   "Savings": {
     "title": "Savings",
