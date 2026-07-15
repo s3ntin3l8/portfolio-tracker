@@ -21,6 +21,7 @@ export function registerListRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/transactions",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      const t0 = performance.now();
       const { id } = requireUser(request);
       const portfolio = await ownedPortfolio(app, id, request.params.portfolioId);
       if (!portfolio) {
@@ -109,7 +110,7 @@ export function registerListRoutes(app: FastifyInstance) {
             summaryRows = s;
             _rows = [];
           }
-          return enrichRows(app, _rows, cnt, summaryRows, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log);
+          return enrichRows(app, _rows, cnt, summaryRows, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log, t0);
         });
         const years = await app.db
           .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
@@ -124,7 +125,7 @@ export function registerListRoutes(app: FastifyInstance) {
         .select()
         .from(transactions)
         .where(and(...conditions));
-      const result = await enrichRows(app, rows, rows.length, undefined, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log);
+      const result = await enrichRows(app, rows, rows.length, undefined, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log, t0);
       return result.rows;
     },
   );

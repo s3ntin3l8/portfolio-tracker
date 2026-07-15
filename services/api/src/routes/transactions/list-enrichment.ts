@@ -72,8 +72,9 @@ export async function enrichRows(
   paginate: boolean,
   page: number,
   log: FastifyBaseLogger,
+  handlerT0?: number,
 ) {
-  const t0 = performance.now();
+  const t0 = handlerT0 ?? performance.now();
   const allImportIds = rows
     .map((r) => r.importId)
     .filter((x): x is string => x !== null);

@@ -12,7 +12,7 @@ import { enqueueRecompute } from "../../services/scheduler.js";
 import { reassignTransactions } from "../../services/reassign.js";
 import { mergeTransactions, previewMerge, MergeBlockedError } from "../../services/merge.js";
 import { deleteReceiptsForTransactions } from "../../storage/receipts.js";
-import type { PortfolioParams} from "./shared.js";
+import type { PortfolioParams } from "./shared.js";
 import { ownedPortfolio, bulkDeleteSchema } from "./shared.js";
 
 export function registerCrudRoutes(app: FastifyInstance) {
