@@ -366,6 +366,50 @@ describe("TWR: V_{t-1} = 0 carry-forward (no divide-by-zero)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 8b. Price-gap collapse: a single unpriced day for a held instrument must not
+//     permanently zero the index (the real-world bug behind a phantom -100%
+//     drawdown / "-176% vs benchmark").
+// ---------------------------------------------------------------------------
+
+describe("TWR: a single MV=0/flow=0 gap day does not permanently zero the index", () => {
+  it("carries the index forward through a price-gap day instead of collapsing to 0", () => {
+    /**
+     * Reproduces a snapshot-generation gap: a held instrument's price goes missing for
+     * one day (recorded upstream as marketValue=0, effectiveFlow=0) with no compensating
+     * flow, then the price returns.
+     *   Day 01: mv=1000, flow=1000 (initial buy) → index = 100 (first point).
+     *   Day 02: mv=1100, flow=0 → +10% → index = 110.
+     *   Day 03 (gap): mv=0, flow=0 → naive rt = (0-0)/1100 - 1 = -1 → would zero the index.
+     *   Day 04 (recovered): mv=1150, flow=0.
+     */
+    const series: DailyValueFlow[] = [
+      { date: "2026-01-01", marketValue: "1000", effectiveFlow: "1000" },
+      { date: "2026-01-02", marketValue: "1100", effectiveFlow: "0" },
+      { date: "2026-01-03", marketValue: "0", effectiveFlow: "0" }, // gap day
+      { date: "2026-01-04", marketValue: "1150", effectiveFlow: "0" },
+    ];
+
+    const index = chainIndex(series);
+
+    expect(Number(index[0].index)).toBeCloseTo(100, 6);
+    expect(Number(index[1].index)).toBeCloseTo(110, 6);
+    // Gap day: index carries forward at 110, NOT collapsed to 0 (-100%).
+    expect(Number(index[2].index)).toBeCloseTo(110, 6);
+    expect(Number(index[2].pct)).toBeCloseTo(10, 6);
+    // Recovery day: prevMv is 0 (the gap day's mv) → carries forward again, matching the
+    // existing V_{t-1}=0 reset-proof semantics (see test 7) rather than computing a
+    // spurious jump from 0 to 1150.
+    expect(Number(index[3].index)).toBeCloseTo(110, 6);
+
+    // Every point stays finite and never goes to (or through) zero.
+    for (const pt of index) {
+      expect(Number.isFinite(Number(pt.index))).toBe(true);
+      expect(Number(pt.index)).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 8. Aggregate ≠ average of per-portfolio indices (dollar-weighted)
 // ---------------------------------------------------------------------------
 

@@ -191,6 +191,14 @@ const BASE = 100;
 /**
  * Chain the TWR index from a (marketValue, effectiveFlow) series.
  * V_{t-1} = 0: r_t = 0, index carries forward (no reset).
+ *
+ * Guard: r_t ≤ −1 (a ≥100% single-day loss) is carried forward instead of applied.
+ * A held, long-only position cannot legitimately lose 100%+ of its value in one day —
+ * this only happens when a snapshot's marketValue was recorded as ~0 with no offsetting
+ * flow (a stale/missing price for a still-held instrument, a data artifact upstream in
+ * snapshot generation, not a real return). Applying it would multiply the index by ≤0,
+ * permanently zeroing (or flipping the sign of) every subsequent point — one bad day
+ * would otherwise read as a portfolio-wide -100% drawdown forever after.
  */
 export function chainIndex(series: DailyValueFlow[], base = BASE): IndexPoint[] {
   const result: IndexPoint[] = [];
@@ -204,7 +212,11 @@ export function chainIndex(series: DailyValueFlow[], base = BASE): IndexPoint[] 
     if (prevMv !== null && !prevMv.isZero()) {
       // r_t = (V_t − flow_t) / V_{t-1} − 1
       const rt = mv.sub(flow).div(prevMv).sub(1);
-      index = index.mul(D(1).add(rt));
+      const growth = D(1).add(rt);
+      if (growth.gt(0)) {
+        index = index.mul(growth);
+      }
+      // growth ≤ 0: impossible single-day return — data artifact, carry index forward.
     }
     // prevMv === null: first point, index stays at base.
     // prevMv.isZero(): reset-proof carry-forward (index unchanged).
