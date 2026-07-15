@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Multipart } from "@fastify/multipart";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
-import { documents, portfolios } from "@portfolio/db";
+import { documents, portfolios, transactions, transactionSources } from "@portfolio/db";
 import { documentUploadFieldsSchema, documentListQuerySchema } from "@portfolio/schema";
 import { requireUser } from "../plugins/auth.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
@@ -14,6 +14,8 @@ import {
 } from "../storage/inbox.js";
 import { ownedPortfolio } from "./imports/helpers.js";
 import { shortHash } from "../services/parsers/hash.js";
+import { getDocumentForTransaction } from "../storage/receipts.js";
+import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
 
 const documentsCache = createStore<{ rows: unknown[]; total: number }>();
 
@@ -220,6 +222,237 @@ export async function documentsRoute(app: FastifyInstance) {
       request.log.info({ documentId: doc.id }, "inbox document deleted");
       reply.code(204);
       return null;
+    },
+  );
+
+  // ── Transaction-linked document endpoints (moved from transactions.ts) ───────
+  // Return a signed URL for the document linked to a transaction.
+  app.get<{ Params: { portfolioId: string; txId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId/document-url",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId } = request.params;
+      if (!(await ownedPortfolio(app, id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      const [tx] = await app.db
+        .select({ id: transactions.id, importId: transactions.importId })
+        .from(transactions)
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
+        .limit(1);
+      if (!tx) return reply.code(404).send({ error: "transaction_not_found" });
+
+      const doc = await getDocumentForTransaction(app, tx.id, tx.importId);
+      if (!doc) return reply.code(404).send({ error: "document_not_found" });
+      if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
+
+      let filename: string | null = doc.originalFilename;
+      try {
+        const parts = await gatherDocumentNaming(app, { doc, portfolioId, txId: tx.id });
+        filename = buildDocumentName(parts);
+      } catch {
+        // Non-fatal: fall back to originalFilename.
+      }
+
+      const url = await app.storage.getSignedUrl(doc.storageKey, undefined, {
+        downloadName: filename ?? undefined,
+      });
+      return { url, filename, mimeType: doc.mimeType };
+    },
+  );
+
+  // Return a signed URL for the document linked to a specific transaction_sources row.
+  app.get<{ Params: { portfolioId: string; txId: string; sourceId: string } }>(
+    "/portfolios/:portfolioId/transactions/:txId/sources/:sourceId/document-url",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId, txId, sourceId } = request.params;
+      if (!(await ownedPortfolio(app, id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      const [tx] = await app.db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(eq(transactions.id, txId), eq(transactions.portfolioId, portfolioId)))
+        .limit(1);
+      if (!tx) return reply.code(404).send({ error: "transaction_not_found" });
+
+      let doc: {
+        id: string;
+        storageKey: string;
+        originalFilename: string | null;
+        mimeType: string;
+        source: string | null;
+        storedAt: Date;
+        importId: string | null;
+        transactionId: string | null;
+        userId: string;
+      } | null;
+
+      if (sourceId.startsWith("doc:")) {
+        const documentId = sourceId.slice("doc:".length);
+        const [row] = await app.db
+          .select({
+            id: documents.id,
+            storageKey: documents.storageKey,
+            originalFilename: documents.originalFilename,
+            mimeType: documents.mimeType,
+            source: documents.source,
+            storedAt: documents.storedAt,
+            importId: documents.importId,
+            transactionId: documents.transactionId,
+            userId: documents.userId,
+          })
+          .from(documents)
+          .where(and(eq(documents.id, documentId), eq(documents.transactionId, txId)))
+          .limit(1);
+        doc = row ?? null;
+      } else {
+        const [sourceRow] = await app.db
+          .select({
+            id: transactionSources.id,
+            documentId: transactionSources.documentId,
+            importId: transactionSources.importId,
+          })
+          .from(transactionSources)
+          .where(
+            and(eq(transactionSources.id, sourceId), eq(transactionSources.transactionId, txId)),
+          )
+          .limit(1);
+        if (!sourceRow) return reply.code(404).send({ error: "source_not_found" });
+
+        if (sourceRow.documentId) {
+          const [row] = await app.db
+            .select({
+              id: documents.id,
+              storageKey: documents.storageKey,
+              originalFilename: documents.originalFilename,
+              mimeType: documents.mimeType,
+              source: documents.source,
+              storedAt: documents.storedAt,
+              importId: documents.importId,
+              transactionId: documents.transactionId,
+              userId: documents.userId,
+            })
+            .from(documents)
+            .where(eq(documents.id, sourceRow.documentId))
+            .limit(1);
+          doc = row ?? null;
+        } else {
+          doc = await getDocumentForTransaction(app, txId, sourceRow.importId);
+        }
+      }
+      if (!doc) return reply.code(404).send({ error: "document_not_found" });
+      if (doc.userId !== id) return reply.code(403).send({ error: "forbidden" });
+
+      let filename: string | null = doc.originalFilename;
+      try {
+        const parts = await gatherDocumentNaming(app, { doc, portfolioId, txId });
+        filename = buildDocumentName(parts);
+      } catch {
+        // Non-fatal: fall back to originalFilename.
+      }
+
+      const url = await app.storage.getSignedUrl(doc.storageKey, undefined, {
+        downloadName: filename ?? undefined,
+      });
+      return { url, filename, mimeType: doc.mimeType };
+    },
+  );
+
+  // Bulk-export all retained documents for a portfolio as a zip archive.
+  app.get<{ Params: { portfolioId: string } }>(
+    "/portfolios/:portfolioId/documents/export",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const { id } = requireUser(request);
+      const { portfolioId } = request.params;
+      if (!(await ownedPortfolio(app, id, portfolioId))) {
+        return reply.code(404).send({ error: "portfolio_not_found" });
+      }
+
+      const docs = await app.db
+        .select({
+          id: documents.id,
+          storageKey: documents.storageKey,
+          mimeType: documents.mimeType,
+          originalFilename: documents.originalFilename,
+          source: documents.source,
+          storedAt: documents.storedAt,
+          importId: documents.importId,
+          transactionId: documents.transactionId,
+          userId: documents.userId,
+        })
+        .from(documents)
+        .where(
+          and(eq(documents.portfolioId, portfolioId), eq(documents.status, "retained")),
+        );
+
+      if (docs.length === 0) {
+        return reply.code(404).send({ error: "no_documents" });
+      }
+
+      const usedNames = new Set<string>();
+
+      function dedupeFilename(name: string): string {
+        if (!usedNames.has(name)) {
+          usedNames.add(name);
+          return name;
+        }
+        const dotIdx = name.lastIndexOf(".");
+        const base = dotIdx >= 0 ? name.slice(0, dotIdx) : name;
+        const ext = dotIdx >= 0 ? name.slice(dotIdx) : "";
+        let n = 2;
+        let candidate = `${base}-${n}${ext}`;
+        while (usedNames.has(candidate)) {
+          n++;
+          candidate = `${base}-${n}${ext}`;
+        }
+        usedNames.add(candidate);
+        return candidate;
+      }
+
+      const { zipSync } = await import("fflate");
+      const entries: Record<string, Uint8Array> = {};
+
+      for (const doc of docs) {
+        let entryName: string;
+        try {
+          const parts = await gatherDocumentNaming(app, { doc, portfolioId });
+          entryName = buildDocumentName(parts);
+        } catch {
+          entryName = doc.originalFilename ?? `document_${doc.id.slice(0, 8)}`;
+        }
+        entryName = dedupeFilename(entryName);
+
+        const buf = await app.storage.get(doc.storageKey);
+        if (!buf) {
+          app.log.warn({ docId: doc.id, key: doc.storageKey }, "export: object not found, skipping");
+          continue;
+        }
+        entries[entryName] = new Uint8Array(buf);
+      }
+
+      const [portfolio] = await app.db
+        .select({ name: portfolios.name })
+        .from(portfolios)
+        .where(eq(portfolios.id, portfolioId))
+        .limit(1);
+
+      const archiveName = portfolio
+        ? `${portfolio.name.replace(/[^\w-]/g, "-")}_documents.zip`
+        : "documents.zip";
+
+      const zipped = zipSync(entries);
+
+      void reply.header("Content-Type", "application/zip");
+      void reply.header("Content-Disposition", `attachment; filename="${archiveName}"`);
+      void reply.header("Content-Length", String(zipped.length));
+      return reply.code(200).send(Buffer.from(zipped));
     },
   );
 }
