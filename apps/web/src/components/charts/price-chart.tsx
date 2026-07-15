@@ -19,6 +19,7 @@ export function PriceChart({
   unit = "currency",
   theme = "default",
   minimal = false,
+  showYAxis = true,
   height = 280,
 }: {
   data: Candle[];
@@ -28,6 +29,8 @@ export function PriceChart({
   theme?: "default" | "inverse";
   /** Hide axes/grid — just the area+line, for a compact sparkline (e.g. the Holdings hero). */
   minimal?: boolean;
+  /** Show Y-axis on the left. Disable on narrow viewports — the tooltip cursor already shows the price. */
+  showYAxis?: boolean;
   height?: number;
 }) {
   const locale = useLocale();
@@ -87,13 +90,15 @@ export function PriceChart({
                 tickLine={false}
                 minTickGap={32}
               />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                tickLine={false}
-                axisLine={false}
-                width={72}
-                tickFormatter={formatValue}
-              />
+              {showYAxis && (
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={72}
+                  tickFormatter={formatValue}
+                />
+              )}
             </>
           )}
           <Tooltip

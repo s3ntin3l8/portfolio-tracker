@@ -8,6 +8,7 @@ import { PriceChart } from "@/components/charts/price-chart";
 import { InstrumentRangeToggle } from "@/components/charts/instrument-range-toggle";
 import { EmptyState } from "@/components/empty-state";
 import { useApiClient } from "@/lib/api";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { toApiRange, type InstrumentPriceRange } from "@/lib/instrument-price-range";
 import type { LastPriceInfo } from "@/lib/instrument-price";
 import { cn, formatMoney, formatSignedMoney, formatPercent } from "@/lib/utils";
@@ -39,6 +40,7 @@ export function InstrumentPriceCard({
   const t = useTranslations("Instrument");
   const locale = useLocale();
   const api = useApiClient();
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const [range, setRange] = useState<InstrumentPriceRange>(initialRange);
   const [history, setHistory] = useState<Candle[]>(initialHistory);
   const [loading, setLoading] = useState(false);
@@ -88,7 +90,7 @@ export function InstrumentPriceCard({
       )}
       <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
         {history.length > 0 ? (
-          <PriceChart data={history} currency={history[0]?.currency ?? currency} />
+          <PriceChart data={history} currency={history[0]?.currency ?? currency} showYAxis={isDesktop} />
         ) : (
           <EmptyState icon={LineChart} title={t("priceHistory")} description={t("noHistory")} />
         )}

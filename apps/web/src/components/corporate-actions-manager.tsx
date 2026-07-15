@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Check, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { ChevronRight, Check, Loader2, Pencil, Trash2, X } from "lucide-react";
 import type { CorporateAction } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -56,6 +62,8 @@ export function CorporateActionsManager({
   const [type, setType] = useState<(typeof TYPES)[number]>("split");
   const [ratio, setRatio] = useState("");
   const [exDate, setExDate] = useState("");
+  const [sheetCa, setSheetCa] = useState<CorporateAction | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   function beginEdit(ca: CorporateAction) {
     setConfirmId(null);
@@ -75,6 +83,7 @@ export function CorporateActionsManager({
       });
       setItems((prev) => prev.map((c) => (c.id === id ? updated : c)));
       setEditingId(null);
+      setSheetCa(null);
       router.refresh();
     } finally {
       setBusy(false);
@@ -90,6 +99,8 @@ export function CorporateActionsManager({
     } finally {
       setBusy(false);
       setConfirmId(null);
+      setSheetCa(null);
+      setConfirmDelete(false);
     }
   }
 
@@ -99,152 +110,267 @@ export function CorporateActionsManager({
     );
   }
 
+  const sorted = sort(items);
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("type")}</SortableTableHead>
-          <SortableTableHead colKey="ratio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("ratio")}</SortableTableHead>
-          <SortableTableHead colKey="exDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("exDate")}</SortableTableHead>
-          <TableCell className="h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground">
-            <span className="sr-only">{tc("edit")}</span>
-          </TableCell>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sort(items).map((ca) =>
-          editingId === ca.id ? (
-            <TableRow key={ca.id}>
-              <TableCell colSpan={4}>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      {tc("type")}
-                    </span>
-                    <Select
-                      aria-label={tc("type")}
-                      value={type}
-                      onChange={(e) =>
-                        setType(e.target.value as (typeof TYPES)[number])
-                      }
-                    >
-                      {TYPES.map((ty) => (
-                        <option key={ty} value={ty}>
-                          {tt(ty)}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      {tc("ratio")}
-                    </span>
-                    <Input
-                      aria-label={tc("ratio")}
-                      inputMode="decimal"
-                      className="w-24"
-                      value={ratio}
-                      onChange={(e) => setRatio(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      {tc("exDate")}
-                    </span>
-                    <DatePicker
-                      label={tc("exDate")}
-                      className="w-40"
-                      value={exDate}
-                      onChange={(e) => setExDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tc("save")}
-                      disabled={busy}
-                      onClick={() => save(ca.id)}
-                    >
-                      {busy ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Check className="size-4" />
-                      )}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tc("cancel")}
-                      disabled={busy}
-                      onClick={() => setEditingId(null)}
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  </div>
-                </div>
+    <>
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("type")}</SortableTableHead>
+              <SortableTableHead colKey="ratio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("ratio")}</SortableTableHead>
+              <SortableTableHead colKey="exDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("exDate")}</SortableTableHead>
+              <TableCell className="h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground">
+                <span className="sr-only">{tc("edit")}</span>
               </TableCell>
             </TableRow>
-          ) : (
-            <TableRow key={ca.id}>
-              <TableCell>
-                <Badge variant="outline">{tt(ca.type)}</Badge>
-              </TableCell>
-              <TableCell className="tabular text-muted-foreground">
-                {ca.ratio}
-              </TableCell>
-              <TableCell className="tabular text-muted-foreground">
-                {df.format(new Date(ca.exDate))}
-              </TableCell>
-              <TableCell className="text-right">
-                {confirmId === ca.id ? (
-                  <span className="flex items-center justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={busy}
-                      onClick={() => remove(ca.id)}
-                    >
+          </TableHeader>
+          <TableBody>
+            {sorted.map((ca) =>
+              editingId === ca.id ? (
+                <TableRow key={ca.id}>
+                  <TableCell colSpan={4}>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">
+                          {tc("type")}
+                        </span>
+                        <Select
+                          aria-label={tc("type")}
+                          value={type}
+                          onChange={(e) =>
+                            setType(e.target.value as (typeof TYPES)[number])
+                          }
+                        >
+                          {TYPES.map((ty) => (
+                            <option key={ty} value={ty}>
+                              {tt(ty)}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">
+                          {tc("ratio")}
+                        </span>
+                        <Input
+                          aria-label={tc("ratio")}
+                          inputMode="decimal"
+                          className="w-24"
+                          value={ratio}
+                          onChange={(e) => setRatio(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">
+                          {tc("exDate")}
+                        </span>
+                        <DatePicker
+                          label={tc("exDate")}
+                          className="w-40"
+                          value={exDate}
+                          onChange={(e) => setExDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tc("save")}
+                          disabled={busy}
+                          onClick={() => save(ca.id)}
+                        >
+                          {busy ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Check className="size-4" />
+                          )}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tc("cancel")}
+                          disabled={busy}
+                          onClick={() => setEditingId(null)}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <TableRow key={ca.id}>
+                  <TableCell>
+                    <Badge variant="outline">{tt(ca.type)}</Badge>
+                  </TableCell>
+                  <TableCell className="tabular text-muted-foreground">
+                    {ca.ratio}
+                  </TableCell>
+                  <TableCell className="tabular text-muted-foreground">
+                    {df.format(new Date(ca.exDate))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {confirmId === ca.id ? (
+                      <span className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => remove(ca.id)}
+                        >
+                          {busy && <Loader2 className="size-3.5 animate-spin" />}
+                          {tc("delete")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => setConfirmId(null)}
+                        >
+                          {tc("cancel")}
+                        </Button>
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-end gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tc("edit")}
+                          onClick={() => beginEdit(ca)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={tc("delete")}
+                          onClick={() => {
+                            setEditingId(null);
+                            setConfirmId(ca.id);
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ),
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {sorted.map((ca) => (
+          <div
+            key={ca.id}
+            role="button"
+            tabIndex={0}
+            className="flex cursor-pointer items-center justify-between rounded-[20px] bg-card shadow-card px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => {
+              setConfirmId(null);
+              setEditingId(null);
+              setType(ca.type as (typeof TYPES)[number]);
+              setRatio(ca.ratio);
+              setExDate(ca.exDate.slice(0, 10));
+              setConfirmDelete(false);
+              setSheetCa(ca);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setConfirmId(null);
+                setEditingId(null);
+                setType(ca.type as (typeof TYPES)[number]);
+                setRatio(ca.ratio);
+                setExDate(ca.exDate.slice(0, 10));
+                setConfirmDelete(false);
+                setSheetCa(ca);
+              }
+            }}
+          >
+            <div>
+              <Badge variant="outline">{tt(ca.type)}</Badge>
+              <div className="mt-1 text-xs text-muted-foreground tabular-nums">
+                {ca.ratio} · {df.format(new Date(ca.exDate))}
+              </div>
+            </div>
+            <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+          </div>
+        ))}
+      </div>
+
+      <Sheet open={sheetCa !== null} onOpenChange={(o) => { if (!o) { setSheetCa(null); setConfirmDelete(false); } }}>
+        <SheetContent side="bottom" className="px-4 pb-8">
+          <SheetHeader>
+            <SheetTitle>{tc("edit")}</SheetTitle>
+          </SheetHeader>
+          {sheetCa && (
+            <div className="space-y-4 pt-4">
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("type")}</span>
+                <Select
+                  aria-label={tc("type")}
+                  value={type}
+                  onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}
+                >
+                  {TYPES.map((ty) => (
+                    <option key={ty} value={ty}>{tt(ty)}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("ratio")}</span>
+                <Input
+                  aria-label={tc("ratio")}
+                  inputMode="decimal"
+                  value={ratio}
+                  onChange={(e) => setRatio(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">{tc("exDate")}</span>
+                <DatePicker
+                  label={tc("exDate")}
+                  value={exDate}
+                  onChange={(e) => setExDate(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button disabled={busy} onClick={() => save(sheetCa.id)}>
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                  {tc("save")}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => { setSheetCa(null); setConfirmDelete(false); }}>
+                  <X className="size-4" />
+                  {tc("cancel")}
+                </Button>
+              </div>
+              <div className="border-t border-border pt-4">
+                {confirmDelete ? (
+                  <div className="flex gap-2">
+                    <Button variant="destructive" onClick={async () => { await remove(sheetCa.id); }}>
                       {busy && <Loader2 className="size-3.5 animate-spin" />}
                       {tc("delete")}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => setConfirmId(null)}
-                    >
+                    <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
                       {tc("cancel")}
                     </Button>
-                  </span>
+                  </div>
                 ) : (
-                  <span className="flex items-center justify-end gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tc("edit")}
-                      onClick={() => beginEdit(ca)}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={tc("delete")}
-                      onClick={() => {
-                        setEditingId(null);
-                        setConfirmId(ca.id);
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </span>
+                  <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 className="size-4" />
+                    {tc("delete")}
+                  </Button>
                 )}
-              </TableCell>
-            </TableRow>
-          ),
-        )}
-      </TableBody>
-    </Table>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

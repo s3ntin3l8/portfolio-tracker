@@ -31,8 +31,8 @@ describe("InstrumentLotsTable", () => {
       { acqDate: "2024-01-15", qty: "50", unitCost: "9500", cost: "475000" },
     ];
     renderTable(lots, "IDR");
-    expect(screen.getByText(/475,000/)).toBeInTheDocument();
-    expect(screen.getByText(/9,500/)).toBeInTheDocument();
+    expect(screen.getAllByText(/475,000/)).toHaveLength(2); // table + mobile card
+    expect(screen.getAllByText(/9,500/)).toHaveLength(2);   // table + mobile card
   });
 
   it("renders nothing when there are no open lots", () => {
