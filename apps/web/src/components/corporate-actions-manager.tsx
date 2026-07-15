@@ -267,7 +267,9 @@ export function CorporateActionsManager({
         {sorted.map((ca) => (
           <div
             key={ca.id}
-            className="flex cursor-pointer items-center justify-between rounded-[20px] bg-card shadow-card px-4 py-3"
+            role="button"
+            tabIndex={0}
+            className="flex cursor-pointer items-center justify-between rounded-[20px] bg-card shadow-card px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               setConfirmId(null);
               setEditingId(null);
@@ -276,6 +278,18 @@ export function CorporateActionsManager({
               setExDate(ca.exDate.slice(0, 10));
               setConfirmDelete(false);
               setSheetCa(ca);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setConfirmId(null);
+                setEditingId(null);
+                setType(ca.type as (typeof TYPES)[number]);
+                setRatio(ca.ratio);
+                setExDate(ca.exDate.slice(0, 10));
+                setConfirmDelete(false);
+                setSheetCa(ca);
+              }
             }}
           >
             <div>
