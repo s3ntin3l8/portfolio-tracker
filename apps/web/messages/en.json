@@ -318,6 +318,8 @@
     "apiKey": "API key",
     "keyNone": "none",
     "keyNotNeeded": "Not needed",
+    "reorder": "Reorder",
+    "done": "Done",
     "editCredential": "Edit API key",
     "storage": "Object storage",
     "storageHint": "Configure the storage backend (S3-compatible or local folder), manage credentials, and view usage stats.",

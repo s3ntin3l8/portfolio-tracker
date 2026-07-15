@@ -318,6 +318,8 @@
     "apiKey": "Kunci API",
     "keyNone": "tidak ada",
     "keyNotNeeded": "Tidak diperlukan",
+    "reorder": "Urutkan ulang",
+    "done": "Selesai",
     "editCredential": "Edit kunci API",
     "storage": "Penyimpanan berkas",
     "storageHint": "Konfigurasi backend penyimpanan (S3-kompatibel atau folder lokal), kelola kredensial, dan lihat statistik penggunaan.",
