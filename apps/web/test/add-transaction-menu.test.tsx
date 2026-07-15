@@ -17,10 +17,11 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 const listPortfolios = vi.fn(async () => [] as { id: string; name: string; brokerage: string | null; accountHolder: string | null }[]);
+const listAccountHolders = vi.fn(async () => [] as { id: string; name: string }[]);
 const getInstrument = vi.fn();
 const getSummary = vi.fn();
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ listPortfolios, getInstrument, getSummary }),
+  useApiClient: () => ({ listPortfolios, listAccountHolders, getInstrument, getSummary }),
 }));
 
 // Stub the heavy flows — we only assert the right step/sheet renders.
@@ -59,6 +60,8 @@ describe("AddTransactionMenu", () => {
     replace.mockClear();
     listPortfolios.mockClear();
     listPortfolios.mockResolvedValue([]);
+    listAccountHolders.mockClear();
+    listAccountHolders.mockResolvedValue([]);
     getInstrument.mockReset();
     getSummary.mockReset();
     lastEntryTabsProps.current = null;
@@ -174,6 +177,41 @@ describe("AddTransactionMenu", () => {
       screen.queryByRole("dialog", { name: messages.Import.title }),
     ).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  describe("portfolio and account-holder shortcuts", () => {
+    it("shows the Add portfolio card (always visible)", () => {
+      renderMenu();
+      openMenu();
+      expect(
+        screen.getByText(messages.Manage.addMenu.createPortfolio),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the Add account holder card when no holders exist", async () => {
+      listAccountHolders.mockResolvedValue([]);
+      renderMenu();
+      openMenu();
+
+      // Initially hidden (hasHolders starts true), then appears after fetch.
+      await waitFor(() =>
+        expect(
+          screen.getByText(messages.Manage.addMenu.createAccountHolder),
+        ).toBeInTheDocument(),
+      );
+    });
+
+    it("hides the Add account holder card when holders already exist", async () => {
+      listAccountHolders.mockResolvedValue([{ id: "h1", name: "Me" }]);
+      renderMenu();
+      openMenu();
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(messages.Manage.addMenu.createAccountHolder),
+        ).not.toBeInTheDocument();
+      });
+    });
   });
 
   // Deep-link params from the retired `/transactions/new` page's redirect + the tax

@@ -1334,7 +1334,11 @@
       "csv": "Impor CSV",
       "csvDesc": "Dari ekspor broker mana pun — kolom dipetakan otomatis",
       "manual": "Tambah manual",
-      "manualDesc": "Masukkan satu transaksi sendiri"
+      "manualDesc": "Masukkan satu transaksi sendiri",
+      "createPortfolio": "Tambah portofolio",
+      "createPortfolioDesc": "Buat portofolio baru untuk melacak investasi",
+      "createAccountHolder": "Tambah pemilik akun",
+      "createAccountHolderDesc": "Atur orang (diri sendiri, anak, atau lainnya) yang memiliki investasi"
     },
     "createPortfolio": "Buat portofolio",
     "back": "Kembali",

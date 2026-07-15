@@ -62,10 +62,12 @@ export function PortfolioFormDialog({
   mode,
   portfolio,
   trigger,
+  onSuccess,
 }: {
   mode: "create" | "edit";
   portfolio?: EditablePortfolio;
   trigger: React.ReactNode;
+  onSuccess?: () => void;
 }) {
   const t = useTranslations("PortfolioForm");
   const ttr = useTranslations("TradeRepublic");
@@ -279,10 +281,12 @@ export function PortfolioFormDialog({
       if (mode === "edit" && portfolio) {
         await api.updatePortfolio(portfolio.id, input);
         router.refresh();
+        onSuccess?.();
         setOpen(false);
       } else {
         const created = await api.createPortfolio(input);
         router.refresh();
+        onSuccess?.();
         if ((isTr && created.portfolioType !== "child") || isIbkr) {
           // Stay open and reveal the broker connection section bound to the new portfolio.
           // TR child accounts can't sync, so close like a non-TR portfolio.
