@@ -223,7 +223,7 @@
     },
     "concentrationTrend": {
       "title": "Tren Konsentrasi",
-      "topHolding": "Top holding · HHI {hhi}",
+      "topHolding": "Holding teratas · HHI {hhi}",
       "hhiTrend": "Tren HHI",
       "top1Trend": "Top 1%",
       "samples": "{count} sampel bulanan · {classes} kelas aset",

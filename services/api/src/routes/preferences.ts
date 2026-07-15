@@ -46,7 +46,7 @@ export async function preferencesRoute(app: FastifyInstance) {
           costBasisMode: body.costBasisMode ?? "purchase_price",
           taxRegime: body.taxRegime ?? "DE",
           benchmarkSymbol: body.benchmarkSymbol ?? null,
-          riskFreeRate: body.riskFreeRate !== undefined ? String(body.riskFreeRate) : null,
+          riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null,
           createdAt: now,
           updatedAt: now,
         })
@@ -67,7 +67,7 @@ export async function preferencesRoute(app: FastifyInstance) {
               ? { benchmarkSymbol: body.benchmarkSymbol || null }
               : {}),
             ...(body.riskFreeRate !== undefined
-              ? { riskFreeRate: String(body.riskFreeRate) }
+              ? { riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null }
               : {}),
             updatedAt: now,
           },

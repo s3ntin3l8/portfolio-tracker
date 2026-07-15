@@ -50,7 +50,7 @@ export function ConcentrationTrendCard({
             {t("topHolding", { hhi: (latest.hhi * 100).toFixed(1) })}
             {first && first.hhi !== latest.hhi && (
               <span className={latest.hhi < first.hhi ? " text-success" : " text-destructive"}>
-                {" "}({latest.hhi > first.hhi ? "+" : ""}{(latest.hhi - first.hhi).toFixed(2)} since {first.date})
+                {" "}({latest.hhi > first.hhi ? "+" : ""}{((latest.hhi - first.hhi) * 100).toFixed(2)} since {first.date})
               </span>
             )}
           </p>
