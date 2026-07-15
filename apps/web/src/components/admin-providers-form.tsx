@@ -285,28 +285,42 @@ function SortableRow({
 /** Drag-sortable mobile card wrapping one provider (iOS reorder mode). */
 function SortableCard({
   id,
+  disabled,
+  dragHandleLabel,
   children,
 }: {
   id: string;
-  children: React.ReactNode;
+  disabled: boolean;
+  dragHandleLabel: string;
+  children: (handle: React.ReactNode) => React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
+    useSortable({ id, disabled });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
+  const handle = (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      aria-label={dragHandleLabel}
+      className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+    >
+      <GripVertical className="size-5" />
+    </button>
+  );
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={`rounded-[14px] border border-border bg-card p-3.5${isDragging ? " opacity-50" : ""}`}
     >
-      {children}
+      {children(handle)}
     </div>
   );
 }
@@ -418,8 +432,9 @@ export function AdminProvidersForm({
         </div>
       )}
 
+      {/* Desktop: separate DndContext so useSortable ids don't collide with mobile */}
       <DndContext
-        id="admin-providers"
+        id="admin-providers-desktop"
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
@@ -491,8 +506,16 @@ export function AdminProvidersForm({
             </tbody>
           </table>
         </div>
+      </DndContext>
 
-        {/* Mobile: reorder toggle + cards */}
+      {/* Mobile: reorder toggle + cards. Separate DndContext to avoid useSortable
+          id collisions with the always-mounted desktop SortableRows. */}
+      <DndContext
+        id="admin-providers-mobile"
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <div className="md:hidden">
           <div className="mb-3 flex items-center justify-end">
             <Button
@@ -510,17 +533,24 @@ export function AdminProvidersForm({
               {rows.map((p, i) => {
                 if (reorderMode) {
                   return (
-                    <SortableCard key={p.id} id={p.id}>
-                      <div className="flex items-center gap-3">
-                        <GripVertical className="size-5 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-bold">{p.label}</div>
-                          {!p.configured && (
-                            <div className="text-xs text-muted-foreground">{t("notConfigured")}</div>
-                          )}
+                    <SortableCard
+                      key={p.id}
+                      id={p.id}
+                      disabled={false}
+                      dragHandleLabel={t("dragHandle")}
+                    >
+                      {(handle) => (
+                        <div className="flex items-center gap-3">
+                          {handle}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-bold">{p.label}</div>
+                            {!p.configured && (
+                              <div className="text-xs text-muted-foreground">{t("notConfigured")}</div>
+                            )}
+                          </div>
+                          <span className="tabular-nums text-xs text-muted-foreground">#{i + 1}</span>
                         </div>
-                        <span className="tabular-nums text-xs text-muted-foreground">#{i + 1}</span>
-                      </div>
+                      )}
                     </SortableCard>
                   );
                 }
