@@ -155,9 +155,20 @@ export function AddTransactionMenu({
 
   return (
     <>
-      <Button aria-label={tm("addTransaction")} onClick={() => onAddOpenChange(true)}>
+      <Button
+        aria-label={tm("addTransaction")}
+        onClick={() => onAddOpenChange(true)}
+        className="hidden md:inline-flex"
+      >
         <Plus className="size-4" />
         <span className="hidden sm:inline">{tm("addMenu.add")}</span>
+      </Button>
+      <Button
+        className="fixed bottom-[calc(7rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-full shadow-lg md:hidden"
+        aria-label={tm("addTransaction")}
+        onClick={() => onAddOpenChange(true)}
+      >
+        <Plus className="size-6" />
       </Button>
 
       {/* One sheet, three steps (choose/manual/import) swapped via `step` — swapping content
