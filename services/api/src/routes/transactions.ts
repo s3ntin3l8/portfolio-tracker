@@ -4178,12 +4178,24 @@ export async function transactionsRoute(app: FastifyInstance) {
             // portfolio's TWR index would be compared against a USD price series, injecting
             // the full USD↔display FX drift into both the active-return level and (via
             // daily diffs) the tracking error.
+            let bmFxMissingDates = 0;
             const bmPrices = bmDates
               .filter((d) => refreshedBm.has(d))
               .map((d) => {
-                const fx = makeFxRateFn(ratesByDate.get(d) ?? {}, display);
+                const dayRates = ratesByDate.get(d) ?? {};
+                // makeFxRateFn falls back to "1" (unconverted) for a pair it has no rate
+                // for; count that so it can be flagged below instead of silently leaving
+                // that day's benchmark close in its native currency.
+                if (bmConfig.currency !== display && !dayRates[bmConfig.currency]) bmFxMissingDates++;
+                const fx = makeFxRateFn(dayRates, display);
                 return { date: d, close: convert(refreshedBm.get(d)!, bmConfig.currency, display, fx) };
               });
+            if (bmFxMissingDates > 0) {
+              app.log.warn(
+                { userId: id, symbol: bmConfig.symbol, currency: bmConfig.currency, display, missingDates: bmFxMissingDates },
+                "insights: benchmark FX rate missing for some dates — those days left unconverted",
+              );
+            }
             const bmIndex = computeBenchmarkIndex(bmPrices);
             const active = computeActiveReturn(
               indexed.map((p) => ({ date: p.date, pct: p.pct })),

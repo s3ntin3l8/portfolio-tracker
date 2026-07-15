@@ -24,10 +24,13 @@ export interface StreakResult {
 
 /**
  * Resample a (possibly daily) index series down to one point per calendar month — the
- * last point on or before each month's end. Callers may pass either genuinely monthly
- * points (each already the sole point in its month — resampling is then a no-op pass-
- * through) or a daily TWR index (the real-world case, e.g. from `chainIndex`); either
- * way the streaks below are computed over true calendar months, not raw series points.
+ * last point on or before each month's end. Always rebuilds the series (it's a real
+ * grouping pass, not a short-circuit); the rebuild is only *observably* an identity map
+ * when the input already has exactly one point per month (each point is already the
+ * sole entry for its month, so it's kept as-is). Callers may pass either such
+ * genuinely-monthly points, or a daily TWR index (the real-world case, e.g. from
+ * `chainIndex`) — either way the streaks below are computed over true calendar months,
+ * not raw series points.
  */
 function monthEndPoints(points: IndexPoint[]): IndexPoint[] {
   const byMonth = new Map<string, IndexPoint>();
