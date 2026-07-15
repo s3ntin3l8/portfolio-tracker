@@ -132,15 +132,47 @@ describe("useTableSort", () => {
 
     act(() => result.current.toggle("f"));
 
-    // COLS_A's get returns r.n → "a" < "z"
     expect(result.current.sort(ROWS).map((r) => r.n)).toEqual(["a", "z"]);
 
-    // Re-render with a different COLS identity (same key, different get)
     rerender({ cols: COLS_B });
 
-    // The sort callback reads colsRef.current (latest cols), so it uses COLS_B's
-    // get which returns "same" for both — stable sort preserves original order.
-    // Without the ref fix it would still use COLS_A (stale closure) → "a", "z".
     expect(result.current.sort(ROWS).map((r) => r.n)).toEqual(["z", "a"]);
+  });
+
+  it("places null/empty dates at end when sorting ascending", () => {
+    const rows: Row[] = [
+      { name: "A", amount: "1", date: "2026-02-01" },
+      { name: "B", amount: "2", date: "" },
+      { name: "C", amount: "3", date: "2026-01-01" },
+    ];
+    const { result } = renderHook(() => useTableSort<Row>(COLS));
+    act(() => result.current.toggle("date"));
+    const sorted = result.current.sort(rows);
+    expect(sorted.map((r) => r.name)).toEqual(["C", "A", "B"]);
+  });
+
+  it("places null/empty dates at end when sorting descending", () => {
+    const rows: Row[] = [
+      { name: "A", amount: "1", date: "2026-02-01" },
+      { name: "B", amount: "2", date: "" },
+      { name: "C", amount: "3", date: "2026-01-01" },
+    ];
+    const { result } = renderHook(() => useTableSort<Row>(COLS));
+    act(() => result.current.toggle("date"));
+    act(() => result.current.toggle("date")); // now desc
+    const sorted = result.current.sort(rows);
+    expect(sorted.map((r) => r.name)).toEqual(["A", "C", "B"]);
+  });
+
+  it("handles both-missing dates without reordering", () => {
+    const rows: Row[] = [
+      { name: "A", amount: "1", date: "2026-01-01" },
+      { name: "B", amount: "2", date: "" },
+      { name: "C", amount: "3", date: "" },
+    ];
+    const { result } = renderHook(() => useTableSort<Row>(COLS));
+    act(() => result.current.toggle("date"));
+    const sorted = result.current.sort(rows);
+    expect(sorted.map((r) => r.name)).toEqual(["A", "B", "C"]);
   });
 });

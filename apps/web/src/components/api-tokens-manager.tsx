@@ -22,8 +22,8 @@ import { useTableSort, type ColDef } from "@/lib/table-sort";
 const TOKEN_COLS: ColDef<ApiToken>[] = [
   { key: "name", get: (t) => t.name, type: "text" },
   { key: "scope", get: (t) => t.scope, type: "text" },
-  { key: "lastUsed", get: (t) => t.lastUsedAt ?? "", type: "date" },
-  { key: "expires", get: (t) => t.expiresAt ?? "", type: "date" },
+  { key: "lastUsed", get: (t) => t.lastUsedAt, type: "date" },
+  { key: "expires", get: (t) => t.expiresAt, type: "date" },
 ];
 
 /** The slice of the API client this manager needs (injectable for tests). */
