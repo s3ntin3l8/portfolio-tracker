@@ -885,6 +885,10 @@ export interface UserPreferences {
   costBasisMode: "purchase_price" | "total_paid";
   /** Global tax regime — drives the Tax screen (DE/ID) and the sparplan harvest gate. */
   taxRegime: "DE" | "ID";
+  /** User's benchmark symbol for comparison (e.g. "^GSPC"). Null = disabled. */
+  benchmarkSymbol: string | null;
+  /** Risk-free rate for Sharpe/Sortino (decimal fraction). Null = auto-detect. */
+  riskFreeRate: number | null;
 }
 
 /** A personal access token's metadata (never the secret). */
@@ -923,6 +927,10 @@ export interface PerformancePoint {
   index?: string;
   /** Percentage return since inception: (index/100 − 1) × 100. Optional for back-compat. */
   pct?: string;
+  /** TWR index of the user's benchmark symbol (e.g. S&P 500), base 100. */
+  benchmarkIndex?: string;
+  /** Benchmark percentage return since inception. */
+  benchmarkPct?: string;
 }
 
 /**
@@ -943,6 +951,64 @@ export type HistoryPoint = PerformancePoint | IntradayPoint;
 /** True when a HistoryPoint came from the 1d/7d intraday branch. */
 export function isIntradayPoint(p: HistoryPoint): p is IntradayPoint {
   return "at" in p;
+}
+
+// ── Insights (risk metrics, drawdown, streaks, benchmark comparison) ──────
+
+export interface InsightsDrawdown {
+  maxDrawdownPct: string;
+  peakDate: string | null;
+  troughDate: string | null;
+  recoveryDate?: string;
+  recoveryDays?: number;
+  currentDrawdownPct: string;
+}
+
+export interface InsightsVolatility {
+  annualizedVolatility: string | null;
+  sharpeRatio: string | null;
+  sortinoRatio: string | null;
+}
+
+export interface InsightsStreak {
+  length: number;
+  totalReturnPct: string;
+  start: string;
+  end: string;
+}
+
+export interface InsightsStreaks {
+  bestStreak: InsightsStreak | null;
+  worstStreak: InsightsStreak | null;
+  bestMonth: { date: string; returnPct: string } | null;
+  worstMonth: { date: string; returnPct: string } | null;
+  bestYear: { year: number; returnPct: string } | null;
+  worstYear: { year: number; returnPct: string } | null;
+  positiveMonths: number;
+  negativeMonths: number;
+  totalMonths: number;
+}
+
+export interface InsightsBenchmark {
+  symbol: string;
+  activeReturn: string;
+  trackingError: string;
+  correlation: string;
+}
+
+export interface ConcentrationPoint {
+  date: string;
+  hhi: number;
+  top1Pct: number;
+  classCount: number;
+}
+
+export interface InsightsResponse {
+  drawdown: InsightsDrawdown;
+  volatility: InsightsVolatility;
+  streaks: InsightsStreaks;
+  benchmark: InsightsBenchmark | null;
+  concentrationTrend: ConcentrationPoint[];
 }
 
 /** A projected future coupon payment for a held bond (instrument currency). */
@@ -1904,6 +1970,8 @@ export function createApiClient(config: ApiClientConfig) {
         dashboardKpis: string[];
         costBasisMode: "purchase_price" | "total_paid";
         taxRegime: "DE" | "ID";
+        benchmarkSymbol: string | null;
+        riskFreeRate: number | null;
       }>,
     ) => request<UserPreferences>("PUT", "/me/preferences", prefs),
     getIncome: (holderId?: string) =>
@@ -1953,6 +2021,11 @@ export function createApiClient(config: ApiClientConfig) {
         "GET",
         `/portfolios/${portfolioId}/history?range=${encodeURIComponent(range)}`,
       ),
+    getInsights: (range = "all", holderId?: string) => {
+      const params = new URLSearchParams({ range });
+      if (holderId) params.set("holderId", holderId);
+      return request<InsightsResponse>("GET", `/insights?${params.toString()}`);
+    },
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
     listPortfolioValues: () => request<{ id: string; netWorth: string }[]>("GET", "/portfolios/values"),

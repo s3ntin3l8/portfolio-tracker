@@ -138,3 +138,12 @@ export {
   type ReconciliationGap,
 } from "./anomalies.js";
 export { openLots, type LotView } from "./lots.js";
+export { maxDrawdown, type DrawdownResult, type NetWorthPoint } from "./drawdown.js";
+export {
+  dailyReturns,
+  annualizedVolatility,
+  sharpeRatio,
+  sortinoRatio,
+  type IndexPoint as VolIndexPoint,
+} from "./volatility.js";
+export { streakAnalysis, type StreakResult, type Streak } from "./streaks.js";

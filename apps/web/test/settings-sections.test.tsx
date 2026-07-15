@@ -50,7 +50,7 @@ const { DataConnectionsSection } = await import(
 describe("InvestingSection", () => {
   it("defaults to German / purchase_price chips active when no prefs row exists", async () => {
     const element = await InvestingSection({ prefs: null });
-    render(element as React.ReactElement);
+    renderWithIntl(element as React.ReactElement);
     expect(screen.getByRole("button", { name: "Settings.taxCodeGermany" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -64,9 +64,9 @@ describe("InvestingSection", () => {
 
   it("reflects a stored ID/total_paid preference and persists a chip change", async () => {
     const element = await InvestingSection({
-      prefs: { dashboardPeriod: "max", dashboardKpis: null, taxRegime: "ID", costBasisMode: "total_paid" },
+      prefs: { dashboardPeriod: "max", dashboardKpis: null, taxRegime: "ID", costBasisMode: "total_paid", benchmarkSymbol: null, riskFreeRate: null },
     });
-    render(element as React.ReactElement);
+    renderWithIntl(element as React.ReactElement);
     expect(screen.getByRole("button", { name: "Settings.taxCodeIndonesia" })).toHaveAttribute(
       "aria-pressed",
       "true",

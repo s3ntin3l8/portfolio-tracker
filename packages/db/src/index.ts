@@ -57,3 +57,5 @@ export type TransactionSource = typeof schema.transactionSources.$inferSelect;
 export type NewTransactionSource = typeof schema.transactionSources.$inferInsert;
 export type IbkrConnection = typeof schema.ibkrConnections.$inferSelect;
 export type NewIbkrConnection = typeof schema.ibkrConnections.$inferInsert;
+export type BenchmarkPrice = typeof schema.benchmarkPrices.$inferSelect;
+export type NewBenchmarkPrice = typeof schema.benchmarkPrices.$inferInsert;

@@ -3,11 +3,17 @@ import { Scale } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { RebalancingCard } from "@/components/insights/rebalancing-card";
 import { BestWorstCard } from "@/components/insights/best-worst-card";
+import { DrawdownCard } from "@/components/insights/drawdown-card";
+import { VolatilityCard } from "@/components/insights/volatility-card";
+import { StreaksCard } from "@/components/insights/streaks-card";
+import { BenchmarkCard } from "@/components/insights/benchmark-card";
+import { ConcentrationTrendCard } from "@/components/insights/concentration-trend-card";
 import {
   loadNetWorth,
   loadNetWorthHistory,
   loadHoldings,
   loadPreferences,
+  loadInsights,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
 import { bestAndWorst } from "@/lib/movers";
@@ -30,27 +36,21 @@ export default async function InsightsPage({
   const tc = await getTranslations("AssetClass");
   const te = await getTranslations("Empty");
 
-  // Cost basis is a single global preference — thread it into loadNetWorth so this
-  // page's summary agrees with Holdings on P&L cost basis (it previously silently
-  // defaulted to purchase_price regardless of the user's choice elsewhere).
-  // loadHoldings() below only feeds the day-change "Best & worst" movers, which are
-  // priced off today's move, not cost basis — no threading needed there.
-  // loadPreferences() used to be awaited before anything else — a full serial round trip
-  // blocking the whole page. The loaders that don't need costBasis are kicked off
-  // immediately instead; only loadNetWorth waits on it.
   const prefsPromise = loadPreferences();
   const historyPromise = loadNetWorthHistory("all");
   const holdingsPromise = loadHoldings();
   const selectedIdPromise = getSelectedPortfolioId();
+  const insightsPromise = loadInsights("all");
 
   const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
-  const [result, history, holdingsView, selectedId] = await Promise.all([
+  const [result, history, holdingsView, selectedId, insights] = await Promise.all([
     loadNetWorth(costBasis),
     historyPromise,
     holdingsPromise,
     selectedIdPromise,
+    insightsPromise,
   ]);
 
   if (TIMING) {
@@ -84,8 +84,6 @@ export default async function InsightsPage({
   const summary = result.data;
   const allocation = summary.allocation;
 
-  // "since Jan {year}" — the earliest inception-scoped snapshot's year (range="all" is
-  // always day-grained, so every point here carries `.date`, never intraday `.at`).
   const firstPoint = history.find((p) => !isIntradayPoint(p));
   const sinceYear = firstPoint ? Number((firstPoint as { date: string }).date.slice(0, 4)) : new Date().getUTCFullYear();
 
@@ -103,6 +101,8 @@ export default async function InsightsPage({
     holdingsView.status === "ok" ? holdingsView.holdings.filter((h) => Number(h.quantity) !== 0) : [],
   );
 
+  const insightsData = insights.status === "ok" ? insights.data : null;
+
   return (
     <div className="space-y-5">
       <header className="space-y-1">
@@ -112,7 +112,6 @@ export default async function InsightsPage({
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          {/* XIRR hero — reference stacks label → figure → caption with tight 4px gaps. */}
           <div
             className="rounded-[20px] p-6 text-white"
             style={{ background: "linear-gradient(135deg,#11211a,#1d3a2c)" }}
@@ -136,7 +135,6 @@ export default async function InsightsPage({
         <div className="space-y-4">
           {allocation && (
             <div className="grid grid-cols-2 gap-4">
-              {/* Concentration — reference: big 22px figure + "Top: … · tone" subtext. */}
               <div className="rounded-[20px] bg-card p-4 shadow-card">
                 <p className="text-xs font-semibold text-text-2">{t("concentration.label")}</p>
                 <p className="tabular mt-1 text-[22px] font-extrabold leading-none">
@@ -158,7 +156,6 @@ export default async function InsightsPage({
                 )}
               </div>
 
-              {/* Diversification — reference: "{n} classes" big, "{x} markets · {y} currencies". */}
               <div className="rounded-[20px] bg-card p-4 shadow-card">
                 <p className="text-xs font-semibold text-text-2">{t("diversification.label")}</p>
                 <p className="mt-1 text-[22px] font-extrabold leading-none">
@@ -183,6 +180,24 @@ export default async function InsightsPage({
           )}
         </div>
       </div>
+
+      {insightsData && (
+        <section className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <DrawdownCard drawdown={insightsData.drawdown} locale={locale} />
+            <VolatilityCard volatility={insightsData.volatility} />
+            <StreaksCard streaks={insightsData.streaks} locale={locale} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {insightsData.benchmark && (
+              <BenchmarkCard benchmark={insightsData.benchmark} locale={locale} />
+            )}
+            {insightsData.concentrationTrend.length > 0 && (
+              <ConcentrationTrendCard trend={insightsData.concentrationTrend} />
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

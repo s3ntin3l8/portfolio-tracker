@@ -43,6 +43,7 @@ import {
   type ApiToken,
   type InboxDocument,
   type DocumentCategory,
+  type InsightsResponse,
 } from "@portfolio/api-client";
 import type { IdYearInput } from "@portfolio/core";
 import {
@@ -1629,4 +1630,23 @@ export async function loadTaxYearDetail(
   );
 
   return result;
+}
+
+export interface InsightsView {
+  status: "ok";
+  data: InsightsResponse;
+}
+
+export async function loadInsights(
+  range = "all",
+  holderId?: string,
+): Promise<InsightsView | { status: "empty" | "unavailable" }> {
+  try {
+    const api = await getServerApi();
+    if (!api) return { status: "unavailable" };
+    const data = await api.getInsights(range, holderId);
+    return { status: "ok", data };
+  } catch {
+    return { status: "unavailable" };
+  }
 }

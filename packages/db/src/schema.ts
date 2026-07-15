@@ -1109,9 +1109,36 @@ export const userPreferences = pgTable("user_preferences", {
   // harvest-cap gate uses. Default 'DE' preserves existing behavior for accounts
   // with no row yet.
   taxRegime: text("tax_regime").notNull().default("DE"),
+  // User's benchmark symbol for comparison (e.g. "^GSPC"). Null = disabled.
+  benchmarkSymbol: text("benchmark_symbol"),
+  // Risk-free rate for Sharpe/Sortino (decimal fraction, e.g. 0.03 for 3%).
+  // Null = auto-detect from display currency's central bank rate.
+  riskFreeRate: numeric("risk_free_rate"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
+
+// Historical daily closes for user-configured benchmark symbols (e.g. ^GSPC for S&P 500).
+// Separate from `prices` (per-instrument) since benchmarks aren't held instruments.
+export const benchmarkPrices = pgTable(
+  "benchmark_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    symbol: text("symbol").notNull(),
+    date: date("date").notNull(),
+    close: numeric("close").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    source: text("source").notNull().default("yahoo"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("benchmark_prices_user_symbol_date_idx").on(t.userId, t.symbol, t.date),
+    index("benchmark_prices_user_symbol_idx").on(t.userId, t.symbol),
+  ],
+).enableRLS();
 
 // FX rates for converting to a portfolio/display currency.
 export const fxRates = pgTable(

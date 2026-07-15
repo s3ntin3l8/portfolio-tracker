@@ -14,6 +14,7 @@ import {
   portfolioIntradaySnapshots,
   portfolios,
   portfolioSnapshots,
+  prices,
   transactions,
   transactionSources,
   trConnections,
@@ -58,6 +59,12 @@ import {
   mergeTradeLogs,
   allowanceUsageYTD,
   harvestSuggestions,
+  maxDrawdown,
+  dailyReturns,
+  annualizedVolatility,
+  sharpeRatio,
+  sortinoRatio,
+  streakAnalysis,
   type Anomaly,
   type CoreTransaction,
   type CostBasisMode,
@@ -78,6 +85,13 @@ import { getMarketData } from "../services/market-data.js";
 import { valuePortfolioCached, derivationCacheKey, getCachedFifoTradeLog, type InstrumentMeta } from "../services/valuation.js";
 import { toCoreTxns } from "../services/tx-core.js";
 import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../services/fx.js";
+import {
+  getUserBenchmarkConfig,
+  fetchBenchmarkPrices,
+  getBenchmarkPrices,
+  computeBenchmarkIndex,
+  computeActiveReturn,
+} from "../services/benchmark.js";
 import { rangeStart } from "../services/snapshots.js";
 import { requireUser } from "../plugins/auth.js";
 import { enqueueRecompute, enqueueInstrumentMetadata } from "../services/scheduler.js";
@@ -96,6 +110,7 @@ const transactionsCache = createStore<{ rows: unknown[]; total: number; summary?
 const tradesCache = createStore<{ trades: unknown[]; realizedByYear: unknown[]; dividendsByYear: unknown[] }>();
 const performanceCache = createStore<{ xirr: number | null; netWorth: string; asOf: string }>();
 const historyCache = createStore<unknown[]>();
+const insightsCache = createStore<unknown>();
 
 const sparplanCache = createStore<SparplanStats>();
 const networthSparplanCache = createStore<SparplanStats>();
@@ -3042,13 +3057,45 @@ export async function transactionsRoute(app: FastifyInstance) {
             nwByDate.set(r.date, (nwByDate.get(r.date) ?? 0) + nw);
           }
 
-          return aggregated.map((p) => ({
+          const result = aggregated.map((p) => ({
             date: p.date,
             netWorth: String(nwByDate.get(p.date) ?? 0),
             marketValue: p.marketValue,
             index: indexById.get(p.date)?.index ?? "100",
             pct: indexById.get(p.date)?.pct ?? "0",
           }));
+
+          // Benchmark comparison: fetch prices and compute parallel TWR index.
+          const bmConfig = await getUserBenchmarkConfig(app.db, id, display);
+          if (result.length > 0) {
+            const bmDates = result.map((p) => p.date);
+            const existingBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
+            const missingDates = bmDates.filter((d) => !existingBm.has(d));
+            if (missingDates.length > 0) {
+              const earliest = missingDates[0];
+              try {
+                const md = await getMarketData();
+                await fetchBenchmarkPrices(app.db, md, id, bmConfig.symbol, earliest);
+              } catch { /* non-fatal — benchmark is best-effort */ }
+            }
+            const refreshedBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
+            if (refreshedBm.size > 1) {
+              const bmPrices = bmDates
+                .filter((d) => refreshedBm.has(d))
+                .map((d) => ({ date: d, close: refreshedBm.get(d)! }));
+              const bmIndex = computeBenchmarkIndex(bmPrices);
+              const bmById = new Map(bmIndex.map((p) => [p.date, p]));
+              for (const p of result) {
+                const bp = bmById.get(p.date);
+                if (bp) {
+                  (p as { benchmarkIndex?: string; benchmarkPct?: string }).benchmarkIndex = bp.index;
+                  (p as { benchmarkIndex?: string; benchmarkPct?: string }).benchmarkPct = bp.pct;
+                }
+              }
+            }
+          }
+
+          return result;
         },
       );
       const durationMs = performance.now() - t0;
@@ -3893,6 +3940,252 @@ export async function transactionsRoute(app: FastifyInstance) {
         .orderBy(desc(transactions.executedAt));
 
       return rows;
+    },
+  );
+
+  // ── Insights (risk metrics, drawdown, volatility, streaks, benchmark, concentration trend) ──────
+  app.get<{ Querystring: { range?: string; holderId?: string } }>(
+    "/insights",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const t0 = performance.now();
+      const { id } = requireUser(request);
+      const { holderId } = request.query;
+      const range = request.query.range ?? "all";
+
+      const pfs = await app.db
+        .select({ id: portfolios.id, includeInAggregate: portfolios.includeInAggregate, cashCounted: portfolios.cashCounted })
+        .from(portfolios)
+        .where(
+          holderId != null
+            ? and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holderId))
+            : eq(portfolios.userId, id),
+        );
+      if (pfs.length === 0) {
+        return reply.send({
+          drawdown: { maxDrawdownPct: "0", peakDate: null, troughDate: null, currentDrawdownPct: "0" },
+          volatility: { annualizedVolatility: null, sharpeRatio: null, sortinoRatio: null },
+          streaks: { bestStreak: null, worstStreak: null, bestMonth: null, worstMonth: null, bestYear: null, worstYear: null, positiveMonths: 0, negativeMonths: 0, totalMonths: 0 },
+          benchmark: null,
+          concentrationTrend: [],
+        });
+      }
+
+      const [u] = await app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      const display = u?.displayCurrency ?? "IDR";
+
+      const cacheKey = `insights:${id}:${range}:${holderId ?? ""}`;
+      const result = await withDerivationCache(insightsCache, cacheKey, async () => {
+        // ── Portfolio history (TWR index) ──────────────────────────────
+        const start = rangeStart(range);
+        const conds = [inArray(portfolioSnapshots.portfolioId, pfs.map((p) => p.id))];
+        if (start) conds.push(gte(portfolioSnapshots.date, start));
+        const snapshots = await app.db
+          .select()
+          .from(portfolioSnapshots)
+          .where(and(...conds))
+          .orderBy(asc(portfolioSnapshots.date));
+
+        if (snapshots.length === 0) {
+          return {
+            drawdown: { maxDrawdownPct: "0", peakDate: null, troughDate: null, currentDrawdownPct: "0" },
+            volatility: { annualizedVolatility: null, sharpeRatio: null, sortinoRatio: null },
+            streaks: { bestStreak: null, worstStreak: null, bestMonth: null, worstMonth: null, bestYear: null, worstYear: null, positiveMonths: 0, negativeMonths: 0, totalMonths: 0 },
+            benchmark: null,
+            concentrationTrend: [],
+          } as const;
+        }
+
+        const currencies = [...new Set(snapshots.map((r) => r.currency))];
+        const dates = [...new Set(snapshots.map((r) => r.date))];
+        const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
+
+        const perPortfolio = new Map<string, { date: string; marketValue: string; effectiveFlow: string; netWorth: string; currency: string }[]>();
+        for (const r of snapshots) {
+          const list = perPortfolio.get(r.portfolioId) ?? [];
+          list.push(r);
+          perPortfolio.set(r.portfolioId, list);
+        }
+
+        const allFlows: { date: string; marketValue: string; effectiveFlow: string }[][] = [];
+        for (const [, pfRows] of perPortfolio) {
+          const converted = pfRows.map((r) => {
+            const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+            return {
+              date: r.date,
+              marketValue: convert(r.marketValue ?? "0", r.currency, display, fx),
+              effectiveFlow: convert(r.effectiveFlow ?? "0", r.currency, display, fx),
+            };
+          });
+          allFlows.push(converted);
+        }
+
+        const aggregated = aggregateValueFlows(allFlows);
+
+        // Build net worth series (converted to display currency)
+        const nwByDate = new Map<string, string>();
+        for (const r of snapshots) {
+          const fx = makeFxRateFn(ratesByDate.get(r.date) ?? {}, display);
+          const nw = Number(convert(r.netWorth, r.currency, display, fx));
+          const prev = Number(nwByDate.get(r.date) ?? 0);
+          nwByDate.set(r.date, String(prev + nw));
+        }
+        const netWorthSeries = aggregated.map((p) => ({
+          date: p.date,
+          netWorth: nwByDate.get(p.date) ?? "0",
+        }));
+        const indexed = chainIndex(aggregated);
+
+        // ── Drawdown ───────────────────────────────────────────────────
+        const drawdown = maxDrawdown(netWorthSeries);
+
+        // ── Volatility & Sharpe ────────────────────────────────────────
+        const idxPoints = indexed.map((p) => ({ date: p.date, index: p.index }));
+        const returns = dailyReturns(idxPoints);
+
+        // Read risk-free rate from preference first, fall back to currency-based auto-detect
+        const [rfrPref] = await app.db
+          .select({ rate: userPreferences.riskFreeRate })
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, id))
+          .limit(1);
+        const autoRfr: Record<string, number> = { EUR: 0.03, USD: 0.05, IDR: 0.06 };
+        const riskFreeRate = Number(rfrPref?.rate ?? autoRfr[display] ?? 0.04);
+        const volatility = {
+          annualizedVolatility: returns.length >= 2 ? String(annualizedVolatility(returns)) : null,
+          sharpeRatio: returns.length >= 2 ? String(sharpeRatio(returns, riskFreeRate)) : null,
+          sortinoRatio: returns.length >= 2 ? String(sortinoRatio(returns, riskFreeRate)) : null,
+        };
+
+        // ── Streaks ────────────────────────────────────────────────────
+        const streaks = streakAnalysis(idxPoints);
+
+        // ── Benchmark comparison ───────────────────────────────────────
+        const bmConfig = await getUserBenchmarkConfig(app.db, id, display);
+        let benchmark: { symbol: string; activeReturn: string; trackingError: string; correlation: string } | null = null;
+        if (indexed.length > 0) {
+          const bmDates = indexed.map((p) => p.date);
+          const existingBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
+          const missingDates = bmDates.filter((d) => !existingBm.has(d));
+          if (missingDates.length > 0) {
+            try {
+              const md = await getMarketData();
+              await fetchBenchmarkPrices(app.db, md, id, bmConfig.symbol, missingDates[0]);
+            } catch { /* non-fatal */ }
+          }
+          const refreshedBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
+          if (refreshedBm.size > 1) {
+            const bmPrices = bmDates
+              .filter((d) => refreshedBm.has(d))
+              .map((d) => ({ date: d, close: refreshedBm.get(d)! }));
+            const bmIndex = computeBenchmarkIndex(bmPrices);
+            const active = computeActiveReturn(
+              indexed.map((p) => ({ date: p.date, pct: p.pct })),
+              bmIndex.map((p) => ({ date: p.date, pct: p.pct })),
+            );
+            if (active) {
+              benchmark = { symbol: bmConfig.symbol, ...active };
+            }
+          }
+        }
+
+        // ── Concentration trend (monthly, simplified) ──────────────────
+        const concentrationTrend: { date: string; hhi: number; top1Pct: number; classCount: number }[] = [];
+        const months = [...new Set(dates.map((d) => d.slice(0, 7)))].slice(-60);
+        const pfIds = pfs.map((p) => p.id);
+
+        if (months.length > 0) {
+          const allTxRows = await app.db
+            .select()
+            .from(transactions)
+            .where(inArray(transactions.portfolioId, pfIds));
+          const instIds = [...new Set(allTxRows.filter((t) => t.instrumentId).map((t) => t.instrumentId!))];
+          const allInstRows = await app.db
+            .select()
+            .from(instruments)
+            .where(inArray(instruments.id, instIds));
+          const instMap = new Map(allInstRows.map((i) => [i.id, i]));
+          const corpActionRows = await app.db
+            .select()
+            .from(corporateActions)
+            .where(inArray(corporateActions.instrumentId, instIds));
+          const corpActions: CorporateAction[] = corpActionRows.map((ca) => ({
+            instrumentId: ca.instrumentId,
+            type: ca.type,
+            ratio: ca.ratio,
+            exDate: new Date(ca.exDate),
+          }));
+
+          // Fetch all prices for held instruments (≤60 months × few dozen instruments)
+          const allPrices = await app.db
+            .select()
+            .from(prices)
+            .where(inArray(prices.instrumentId, instIds))
+            .orderBy(asc(prices.date));
+          const pricesByInst: Map<string, { date: string; close: string }[]> = new Map();
+          for (const p of allPrices) {
+            const list = pricesByInst.get(p.instrumentId) ?? [];
+            list.push({ date: p.date, close: p.close });
+            pricesByInst.set(p.instrumentId, list);
+          }
+          const latestPriceBefore = (instId: string, asOfDate: string): string | null => {
+            const list = pricesByInst.get(instId);
+            if (!list || list.length === 0) return null;
+            for (let i = list.length - 1; i >= 0; i--) {
+              if (list[i].date <= asOfDate) return list[i].close;
+            }
+            return null;
+          };
+
+          const coreTxns = toCoreTxns(allTxRows);
+          for (const month of months) {
+            const monthDates = dates.filter((d) => d.startsWith(month));
+            if (monthDates.length === 0) continue;
+            const asOfDate = monthDates[monthDates.length - 1];
+            const asOf = new Date(`${asOfDate}T23:59:59.999Z`);
+
+            const holdings = computeHoldings(coreTxns, corpActions, asOf);
+
+            // Compute market values using closest-known prices
+            let totalMv = 0;
+            const mvByInst: { mv: number; assetClass: string }[] = [];
+            for (const h of holdings) {
+              const qty = Number(h.quantity);
+              if (qty <= 0 || !h.instrumentId) continue;
+              const price = latestPriceBefore(h.instrumentId, asOfDate);
+              if (!price) continue;
+              const mv = qty * Number(price);
+              const inst = instMap.get(h.instrumentId);
+              mvByInst.push({ mv, assetClass: inst?.assetClass ?? "equity" });
+              totalMv += mv;
+            }
+
+            if (totalMv > 0 && mvByInst.length > 0) {
+              const fractions = mvByInst.map((x) => x.mv / totalMv);
+              const hhi = fractions.reduce((sum, f) => sum + f * f, 0);
+              const top1Fraction = Math.max(...fractions);
+              const classes = new Set(mvByInst.map((x) => x.assetClass));
+
+              concentrationTrend.push({
+                date: month,
+                hhi: Math.round(hhi * 10000) / 10000,
+                top1Pct: Math.round(top1Fraction * 10000) / 100,
+                classCount: classes.size,
+              });
+            }
+          }
+        }
+
+        return { drawdown, volatility, streaks, benchmark, concentrationTrend };
+      });
+
+      const durationMs = performance.now() - t0;
+      logTiming(request, "GET /insights", durationMs, {});
+      return result;
     },
   );
 }

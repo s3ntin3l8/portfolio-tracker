@@ -22,11 +22,10 @@ export async function preferencesRoute(app: FastifyInstance) {
       return {
         dashboardPeriod: prefs?.dashboardPeriod ?? "max",
         dashboardKpis: prefs?.dashboardKpis ?? null,
-        // Defaults here mirror the column defaults so a user with NO row at all (the
-        // common case pre-this-change) sees byte-for-byte the same German tax +
-        // purchase_price P&L as before — nothing shifts until they pick a chip.
         costBasisMode: prefs?.costBasisMode ?? "purchase_price",
         taxRegime: prefs?.taxRegime ?? "DE",
+        benchmarkSymbol: prefs?.benchmarkSymbol ?? null,
+        riskFreeRate: prefs?.riskFreeRate ? Number(prefs.riskFreeRate) : null,
       };
     },
   );
@@ -46,15 +45,14 @@ export async function preferencesRoute(app: FastifyInstance) {
           dashboardKpis: body.dashboardKpis ?? null,
           costBasisMode: body.costBasisMode ?? "purchase_price",
           taxRegime: body.taxRegime ?? "DE",
+          benchmarkSymbol: body.benchmarkSymbol ?? null,
+          riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null,
           createdAt: now,
           updatedAt: now,
         })
         .onConflictDoUpdate({
           target: userPreferences.userId,
           set: {
-            // Only overwrite fields actually sent in this PUT — lets the Settings
-            // "Tax code" chip and the Tax-page regime toggle each write just their
-            // own field without clobbering the other (same pattern for cost basis).
             ...(body.dashboardPeriod !== undefined
               ? { dashboardPeriod: body.dashboardPeriod }
               : {}),
@@ -65,6 +63,12 @@ export async function preferencesRoute(app: FastifyInstance) {
               ? { costBasisMode: body.costBasisMode }
               : {}),
             ...(body.taxRegime !== undefined ? { taxRegime: body.taxRegime } : {}),
+            ...(body.benchmarkSymbol !== undefined
+              ? { benchmarkSymbol: body.benchmarkSymbol || null }
+              : {}),
+            ...(body.riskFreeRate !== undefined
+              ? { riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null }
+              : {}),
             updatedAt: now,
           },
         })
@@ -74,6 +78,8 @@ export async function preferencesRoute(app: FastifyInstance) {
         dashboardKpis: updated?.dashboardKpis ?? null,
         costBasisMode: updated?.costBasisMode ?? "purchase_price",
         taxRegime: updated?.taxRegime ?? "DE",
+        benchmarkSymbol: updated?.benchmarkSymbol ?? null,
+        riskFreeRate: updated?.riskFreeRate ? Number(updated.riskFreeRate) : null,
       };
     },
   );

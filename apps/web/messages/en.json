@@ -193,6 +193,41 @@
       "best": "Best performer",
       "worst": "Worst performer",
       "empty": "Not enough day-change data yet."
+    },
+    "drawdown": {
+      "title": "Max Drawdown",
+      "current": "Current",
+      "recoveredIn": "Recovered in {days}d",
+      "stillUnderwater": "Still underwater",
+      "insufficientData": "Insufficient data"
+    },
+    "volatility": {
+      "title": "Volatility & Risk",
+      "annualized": "Annualized volatility",
+      "sharpe": "Sharpe",
+      "sortino": "Sortino"
+    },
+    "streaks": {
+      "title": "Streaks",
+      "bestRun": "Best run",
+      "worstRun": "Worst run",
+      "bestMonth": "Best mo",
+      "worstMonth": "Worst mo",
+      "positiveMonths": "{pct}% positive months ({pos}/{total})"
+    },
+    "benchmark": {
+      "activeReturn": "Active return",
+      "trackingError": "Tracking error",
+      "correlation": "Correlation",
+      "vs": "vs {symbol}"
+    },
+    "concentrationTrend": {
+      "title": "Concentration Trend",
+      "topHolding": "Top holding · HHI {hhi}",
+      "hhiTrend": "HHI trend",
+      "top1Trend": "Top 1%",
+      "samples": "{count} monthly samples · {classes} asset classes",
+      "insufficientData": "Insufficient data"
     }
   },
   "Admin": {
@@ -1056,7 +1091,7 @@
     "navAccount": "Account",
     "navAccountSub": "Currency, language & appearance",
     "navInvesting": "Investing",
-    "navInvestingSub": "Tax code & cost basis",
+    "navInvestingSub": "Tax code, cost basis & benchmarks",
     "navData": "Data & connections",
     "navDataSub": "Tokens, sources & imports",
     "navInstall": "Install App",
@@ -1071,6 +1106,11 @@
     "taxCodeIndonesia": "Indonesia",
     "investingTaxNoteDe": "Sparerpauschbetrag allowance tracking, Abgeltungsteuer estimates and harvest suggestions on the Tax screen.",
     "investingTaxNoteId": "Flat 0.1% tax on share sales and 10% on dividends, both withheld at source — see the Tax screen.",
+    "benchmarkLabel": "Benchmark & risk-free rate",
+    "benchmarkSymbolLabel": "Benchmark symbol",
+    "benchmarkSymbolHint": "S&P 500 (^GSPC) by default. Yahoo Finance ticker for comparison.",
+    "riskFreeRateLabel": "Risk-free rate",
+    "riskFreeRateHint": "Annual rate for Sharpe/Sortino — auto-detected from display currency when empty.",
     "portfoliosLabel": "Portfolios",
     "dataSourcesLabel": "Connected sources",
     "dataSourceImport": "Screenshot & CSV import",

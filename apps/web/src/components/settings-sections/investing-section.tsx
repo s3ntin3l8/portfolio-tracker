@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
+import { BenchmarkSettingsForm } from "@/components/settings-sections/benchmark-settings-form";
 import type { UserPreferences } from "@portfolio/api-client";
 
 /**
@@ -61,6 +62,20 @@ export async function InvestingSection({
             <p className="mt-2.5 px-0.5 text-xs text-muted-foreground">
               {t("investingCostBasisNote")}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-[.04em] text-text-3">
+          {t("benchmarkLabel")}
+        </p>
+        <Card>
+          <CardContent className="p-4">
+            <BenchmarkSettingsForm
+              symbol={prefs?.benchmarkSymbol ?? null}
+              rate={prefs?.riskFreeRate ?? null}
+            />
           </CardContent>
         </Card>
       </div>

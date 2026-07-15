@@ -193,6 +193,41 @@
       "best": "Kinerja terbaik",
       "worst": "Kinerja terburuk",
       "empty": "Data perubahan harian belum cukup."
+    },
+    "drawdown": {
+      "title": "Penarikan Maks",
+      "current": "Saat ini",
+      "recoveredIn": "Pulih dalam {days}h",
+      "stillUnderwater": "Masih terendam",
+      "insufficientData": "Data tidak mencukupi"
+    },
+    "volatility": {
+      "title": "Volatilitas & Risiko",
+      "annualized": "Volatilitas tahunan",
+      "sharpe": "Sharpe",
+      "sortino": "Sortino"
+    },
+    "streaks": {
+      "title": "Rentetan",
+      "bestRun": "Terbaik",
+      "worstRun": "Terburuk",
+      "bestMonth": "Bulan terbaik",
+      "worstMonth": "Bulan terburuk",
+      "positiveMonths": "{pct}% bulan positif ({pos}/{total})"
+    },
+    "benchmark": {
+      "activeReturn": "Imbal hasil aktif",
+      "trackingError": "Error pelacakan",
+      "correlation": "Korelasi",
+      "vs": "vs {symbol}"
+    },
+    "concentrationTrend": {
+      "title": "Tren Konsentrasi",
+      "topHolding": "Holding teratas · HHI {hhi}",
+      "hhiTrend": "Tren HHI",
+      "top1Trend": "Top 1%",
+      "samples": "{count} sampel bulanan · {classes} kelas aset",
+      "insufficientData": "Data tidak mencukupi"
     }
   },
   "Admin": {
@@ -1054,7 +1089,7 @@
     "navAccount": "Akun",
     "navAccountSub": "Mata uang, bahasa & tampilan",
     "navInvesting": "Investasi",
-    "navInvestingSub": "Kode pajak & basis biaya",
+    "navInvestingSub": "Kode pajak, basis biaya & benchmark",
     "navData": "Data & koneksi",
     "navDataSub": "Token, sumber & impor",
     "navInstall": "Instal Aplikasi",
@@ -1069,6 +1104,11 @@
     "taxCodeIndonesia": "Indonesia",
     "investingTaxNoteDe": "Pelacakan keringanan Sparerpauschbetrag, estimasi Abgeltungsteuer, dan saran panen rugi di layar Pajak.",
     "investingTaxNoteId": "Pajak final 0,1% atas penjualan saham dan 10% atas dividen, keduanya dipotong di sumber — lihat layar Pajak.",
+    "benchmarkLabel": "Benchmark & tingkat bebas risiko",
+    "benchmarkSymbolLabel": "Simbol benchmark",
+    "benchmarkSymbolHint": "S&P 500 (^GSPC) secara default. Ticker Yahoo Finance untuk perbandingan.",
+    "riskFreeRateLabel": "Tingkat bebas risiko",
+    "riskFreeRateHint": "Tingkat tahunan untuk Sharpe/Sortino — terdeteksi otomatis dari mata uang tampilan jika kosong.",
     "portfoliosLabel": "Portofolio",
     "dataSourcesLabel": "Sumber terhubung",
     "dataSourceImport": "Impor tangkapan layar & CSV",
