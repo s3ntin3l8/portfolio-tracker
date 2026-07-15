@@ -77,6 +77,7 @@ import {
   type TradeLog,
   type TradeMethod,
   contributionSplit,
+  splitAdjustmentFactor,
   type SparplanStats,
   type DriftRow,
   type TradeAction,
@@ -4331,10 +4332,21 @@ export async function transactionsRoute(app: FastifyInstance) {
             const movers: PeriodMoverResult[] = [];
             for (const instId of heldAtEnd.keys()) {
               if (!heldAtStartSet.has(instId)) continue;
-              const startPrice = latestPriceBefore(instId, startDate);
-              const endPrice = latestPriceBefore(instId, latestDate);
-              if (!startPrice || !endPrice || Number(startPrice) <= 0) continue;
-              const pct = Number(endPrice) / Number(startPrice) - 1;
+              const rawStart = latestPriceBefore(instId, startDate);
+              const rawEnd = latestPriceBefore(instId, latestDate);
+              if (!rawStart || !rawEnd || Number(rawStart) <= 0) continue;
+
+              // Split-adjust both prices so a stock split or bonus inside the
+              // window doesn't manufacture a phantom gain/loss.  The adjustment
+              // factor is applied per-instrument per-date: each raw close is
+              // divided by the cumulative factor for future splits.
+              const saStart = splitAdjustmentFactor(corpActions, instId, startDate);
+              const saEnd = splitAdjustmentFactor(corpActions, instId, latestDate);
+              if (saStart.isZero() || saEnd.isZero()) continue;
+              const adjustedStart = new Decimal(rawStart).div(saStart);
+              const adjustedEnd = new Decimal(rawEnd).div(saEnd);
+              const pct = adjustedEnd.div(adjustedStart).toNumber() - 1;
+
               const inst = instMap.get(instId);
               if (!inst) continue;
               movers.push({

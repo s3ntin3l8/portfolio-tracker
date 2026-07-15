@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
-import { instruments, portfolioSnapshots, prices, transactions } from "@portfolio/db";
+import { corporateActions, instruments, portfolioSnapshots, prices, transactions } from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 
@@ -201,6 +201,60 @@ describe("GET /insights", () => {
       expect(body.bestWorstYearly.best.pct).toBeCloseTo(0.5, 6);
       expect(body.bestWorstYearly.worst.instrumentId).toBe(instB.id);
       expect(body.bestWorstYearly.worst.pct).toBeCloseTo(-0.4, 6);
+    });
+
+    it("split-adjusts period returns so a 2:1 split doesn't look like -50%", async () => {
+      const t = await token("insights-split-user");
+      const create = await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Split Test", baseCurrency: "IDR" },
+      });
+      const portfolioId = create.json().id;
+
+      // Two instruments held before and during Jan 2026.
+      const [instA] = await app.db.insert(instruments).values({
+        symbol: "SPLIT", name: "Split Co", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
+      }).returning({ id: instruments.id });
+      const [instB] = await app.db.insert(instruments).values({
+        symbol: "NORMAL", name: "Normal Co", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
+      }).returning({ id: instruments.id });
+
+      await app.db.insert(transactions).values({ portfolioId, instrumentId: instA.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2025-12-15") });
+      await app.db.insert(transactions).values({ portfolioId, instrumentId: instB.id, type: "buy", quantity: "10", price: "50", currency: "IDR", executedAt: new Date("2025-12-15") });
+
+      // Inst A has a 2:1 split on Jan 15 — raw close on Jan 31 is half the start.
+      await app.db.insert(corporateActions).values({
+        instrumentId: instA.id, type: "split", ratio: "2", exDate: "2026-01-15",
+      });
+
+      await app.db.insert(prices).values([
+        { instrumentId: instA.id, date: "2025-12-15", close: "100", currency: "IDR" },
+        // Raw close after split is exactly half — no real gain/loss after adjustment.
+        { instrumentId: instA.id, date: "2026-01-31", close: "50", currency: "IDR" },
+        { instrumentId: instB.id, date: "2025-12-15", close: "50", currency: "IDR" },
+        { instrumentId: instB.id, date: "2026-01-31", close: "75", currency: "IDR" },
+      ]);
+
+      await app.db.insert(portfolioSnapshots).values([
+        { portfolioId, date: "2026-01-01", netWorth: "1500", marketValue: "1500", effectiveFlow: "1500", currency: "IDR" },
+        { portfolioId, date: "2026-01-15", netWorth: "1500", marketValue: "1500", effectiveFlow: "0", currency: "IDR" },
+        { portfolioId, date: "2026-01-31", netWorth: "1250", marketValue: "1250", effectiveFlow: "0", currency: "IDR" },
+      ]);
+
+      const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      // Split-adjusted: A = (50/1) / (100/2) - 1 = 50/50 - 1 = 0%
+      // B = 75/50 - 1 = +50%
+      // Best = B (+50%), worst = A (0%)
+      expect(body.bestWorstMonthly.best).not.toBeNull();
+      expect(body.bestWorstMonthly.best.instrumentId).toBe(instB.id);
+      expect(body.bestWorstMonthly.best.pct).toBeCloseTo(0.5, 6);
+      expect(body.bestWorstMonthly.worst.instrumentId).toBe(instA.id);
+      expect(body.bestWorstMonthly.worst.pct).toBeCloseTo(0, 6);
     });
 
     it("returns null for both best/worst when fewer than 2 held instruments have a period-start price", async () => {
