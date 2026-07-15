@@ -298,7 +298,16 @@
     "storageTotalBytes": "Penyimpanan digunakan",
     "storageFreeBytes": "Disk tersedia",
     "storageDiskTotal": "Total disk",
-    "storageStatsUnavailable": "Statistik tidak tersedia"
+    "storageStatsUnavailable": "Statistik tidak tersedia",
+    "users": "Pengguna",
+    "usersHint": "Lihat pengguna terdaftar, penggunaan penyimpanan mereka, dan kelola akses.",
+    "revokeTokens": "Cabut token",
+    "revokeTokensConfirm": "Cabut semua token akses pribadi untuk {email}? Mereka harus login lagi untuk membuat token baru.",
+    "revokeTokensDone": "{count} token dicabut.",
+    "deleteUser": "Hapus pengguna",
+    "deleteUserConfirm": "Hapus {email} dan semua data mereka secara permanen? Tindakan ini tidak dapat dibatalkan.",
+    "deleteUserDone": "Pengguna dihapus.",
+    "usersNoUsers": "Belum ada pengguna terdaftar."
   },
   "Income": {
     "title": "Pendapatan",

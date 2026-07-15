@@ -182,6 +182,19 @@ export interface AdminStats {
       };
 }
 
+/** One user as returned by GET /admin/users. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  createdAt: string;
+  portfolioCount: number;
+  transactionCount: number;
+  documentCount: number;
+  storageBytes: number;
+  tokenCount: number;
+}
+
 /** Storage provider admin config (GET /admin/storage-providers). */
 export interface AdminStorageS3Config {
   endpoint: string;
@@ -1863,6 +1876,13 @@ export function createApiClient(config: ApiClientConfig) {
         `/admin/jobs/${encodeURIComponent(name)}/trigger`,
         opts?.force ? { force: true } : undefined,
       ),
+
+    // Admin: user management (#486).
+    getAdminUsers: () => request<AdminUser[]>("GET", "/admin/users"),
+    adminRevokeUserTokens: (id: string) =>
+      request<{ revoked: number }>("POST", `/admin/users/${encodeURIComponent(id)}/revoke-tokens`),
+    adminDeleteUser: (id: string) =>
+      request<{ deleted: boolean }>("POST", `/admin/users/${encodeURIComponent(id)}/delete`),
 
     getNetWorth: (
       costBasis?: "purchase_price" | "total_paid",

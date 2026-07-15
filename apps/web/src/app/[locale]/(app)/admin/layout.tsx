@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { LineChart, Eye, ArrowDownUp, HardDrive, Database, Clock, ChevronLeft } from "lucide-react";
+import { LineChart, Eye, ArrowDownUp, HardDrive, Database, Clock, Users, ChevronLeft } from "lucide-react";
 import { SettingsShell, type ShellNavItem } from "@/components/settings-shell";
 import { Link } from "@/i18n/navigation";
 import { loadMe } from "@/lib/server-api";
@@ -72,6 +72,15 @@ export default async function AdminLayout({
       subtitle: t("statsHint"),
       color: "var(--gold-fg)",
       bg: "rgba(224,165,58,.16)",
+    },
+    {
+      key: "users",
+      href: "/admin/users",
+      icon: <Users />,
+      title: t("users"),
+      subtitle: t("usersHint"),
+      color: "#F59E0B",
+      bg: "rgba(245,158,11,.15)",
     },
     {
       key: "jobs",

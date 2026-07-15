@@ -298,7 +298,16 @@
     "storageTotalBytes": "Storage used",
     "storageFreeBytes": "Disk free",
     "storageDiskTotal": "Disk total",
-    "storageStatsUnavailable": "Statistics unavailable"
+    "storageStatsUnavailable": "Statistics unavailable",
+    "users": "Users",
+    "usersHint": "View registered users, their storage usage, and manage access.",
+    "revokeTokens": "Revoke tokens",
+    "revokeTokensConfirm": "Revoke all personal access tokens for {email}? They will need to log in again to mint new ones.",
+    "revokeTokensDone": "Revoked {count} token(s).",
+    "deleteUser": "Delete user",
+    "deleteUserConfirm": "Permanently delete {email} and all their data? This cannot be undone.",
+    "deleteUserDone": "User deleted.",
+    "usersNoUsers": "No users registered yet."
   },
   "Income": {
     "title": "Income",

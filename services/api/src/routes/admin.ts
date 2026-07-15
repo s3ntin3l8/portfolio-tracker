@@ -1,11 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import {
-  providerSettings,
-  visionProviderSettings,
-  providerCredentials,
   adminAuditLog,
+  apiTokens,
+  documents,
   importSettings,
+  portfolios,
+  providerCredentials,
+  providerSettings,
+  transactions,
+  users,
+  visionProviderSettings,
 } from "@portfolio/db";
 import {
   providerSettingsUpdateSchema,
@@ -43,6 +48,7 @@ import {
   FolderProvider,
   S3Provider,
 } from "../storage/index.js";
+import { deleteStorageObjectsByKey } from "../storage/receipts.js";
 import {
   refreshAntamBuyback,
   refreshGaleri24Buyback,
@@ -817,6 +823,115 @@ export async function adminRoute(app: FastifyInstance) {
         meta: { strategy },
       });
       return { strategy };
+    },
+  );
+
+  // ─── User management (#486) ────────────────────────────────────────────────
+
+  // List all registered users with per-user aggregates (portfolio/transaction/doc
+  // counts, S3 storage bytes, active token count). Ordered by signup date descending.
+  app.get(
+    "/admin/users",
+    {
+      config: { rateLimit: { max: 40, timeWindow: "1 minute" } },
+      preHandler: app.requireAdmin,
+    },
+    async () => {
+      const rows = await app.db
+        .select({
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          createdAt: users.createdAt,
+          portfolioCount: sql<number>`count(distinct ${portfolios.id})`,
+          transactionCount: sql<number>`count(distinct ${transactions.id})`,
+          documentCount: sql<number>`count(distinct ${documents.id})`,
+          storageBytes: sql<number>`coalesce(sum(${documents.sizeBytes}), 0)`,
+          tokenCount: sql<number>`count(distinct ${apiTokens.id})`,
+        })
+        .from(users)
+        .leftJoin(portfolios, eq(portfolios.userId, users.id))
+        .leftJoin(transactions, eq(transactions.portfolioId, portfolios.id))
+        .leftJoin(documents, eq(documents.userId, users.id))
+        .leftJoin(apiTokens, eq(apiTokens.userId, users.id))
+        .groupBy(users.id)
+        .orderBy(sql`${users.createdAt} desc`);
+
+      return rows.map((r) => ({
+        ...r,
+        portfolioCount: Number(r.portfolioCount),
+        transactionCount: Number(r.transactionCount),
+        documentCount: Number(r.documentCount),
+        storageBytes: Number(r.storageBytes),
+        tokenCount: Number(r.tokenCount),
+      }));
+    },
+  );
+
+  // Revoke all personal access tokens for a user.
+  app.post(
+    "/admin/users/:id/revoke-tokens",
+    { preHandler: app.requireAdmin },
+    async (request) => {
+      const { id } = request.params as { id: string };
+
+      // Count first so we can report how many were revoked.
+      const [{ count }] = await app.db
+        .select({ count: sql<number>`count(*)` })
+        .from(apiTokens)
+        .where(eq(apiTokens.userId, id));
+
+      await app.db.delete(apiTokens).where(eq(apiTokens.userId, id));
+
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "revoke_user_tokens",
+        target: id,
+        meta: { revokedCount: Number(count) },
+      });
+
+      return { revoked: Number(count) };
+    },
+  );
+
+  // Permanently delete a user and all their data (S3 documents, DB rows via FK
+  // cascade). Pre-queries document storage keys for S3 cleanup before the cascade
+  // removes the rows.
+  app.post(
+    "/admin/users/:id/delete",
+    {
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+      preHandler: app.requireAdmin,
+    },
+    async (request) => {
+      const { id } = request.params as { id: string };
+
+      // Capture document storage keys before cascade delete removes the rows.
+      const docs = await app.db
+        .select({ id: documents.id, storageKey: documents.storageKey })
+        .from(documents)
+        .where(eq(documents.userId, id));
+
+      // Delete S3 objects (best-effort, non-fatal on failure).
+      if (docs.length > 0) {
+        await deleteStorageObjectsByKey(app, docs, `admin-delete-user-${id}`);
+      }
+
+      // Delete the user — FK cascade handles portfolios, transactions, documents,
+      // api_tokens, account_holders, etc. RLS on the documents table may need the
+      // admin to bypass; we're running as the server-side user so RLS is enforced.
+      // The cascade will fail if any referencing row blocks it (should not happen
+      // with onDelete: cascade on everything).
+      await app.db.delete(users).where(eq(users.id, id));
+
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "delete_user",
+        target: id,
+        meta: { docCount: docs.length },
+      });
+
+      return { deleted: true };
     },
   );
 }

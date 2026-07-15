@@ -30,6 +30,7 @@ import {
   type AdminProvider,
   type AdminVisionProvider,
   type AdminStats,
+  type AdminUser,
   type AdminJobsResponse,
   type ImportStrategy,
   type AdminStorageResponse,
@@ -974,6 +975,20 @@ export async function loadAdminStats(): Promise<
   try {
     const stats = await api.getAdminStats();
     return { status: "ok", stats };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+/** Admin: user list with per-user usage stats (#486), or "unavailable". */
+export async function loadAdminUsers(): Promise<
+  { status: "ok"; users: AdminUser[] } | { status: "unavailable" }
+> {
+  const api = await getServerApi();
+  if (!api) return { status: "unavailable" };
+  try {
+    const users = await api.getAdminUsers();
+    return { status: "ok", users };
   } catch {
     return { status: "unavailable" };
   }
