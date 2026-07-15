@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, PenLine, FileSpreadsheet, Camera, ChevronLeft } from "lucide-react";
+import { Plus, PenLine, FileSpreadsheet, Camera, ChevronLeft, Briefcase, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { LucideIcon } from "lucide-react";
 import type { ApiClient } from "@portfolio/api-client";
@@ -14,6 +14,8 @@ import type { AddTransactionInitial } from "@/components/add-transaction-form";
 import { useRouter, usePathname } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
 import type { ImportTargetPortfolio } from "@/components/import-flow";
+import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
+import { HolderFormDialog } from "@/components/holder-form-dialog";
 
 /**
  * The unified add-entry launcher, transcribed from `Pocket Prototype.dc.html`'s
@@ -55,6 +57,8 @@ export function AddTransactionMenu({
   // (uncontrolled) initializers, so changing them on an already-mounted instance
   // wouldn't otherwise take effect.
   const [entryNonce, setEntryNonce] = useState(0);
+  // Whether at least one account holder exists — gates the "Add account holder" card.
+  const [hasHolders, setHasHolders] = useState(true);
 
   // A screenshot shared into the app lands on /transactions?shared=1 (see sw.ts); the
   // "Import screenshot" PWA shortcut lands on ?import=1. Either auto-opens the import sheet
@@ -117,7 +121,10 @@ export function AddTransactionMenu({
 
   async function loadPortfolios() {
     if (portfolios !== null) return portfolios;
-    const fetched = await api.listPortfolios();
+    const [fetched, holders] = await Promise.all([
+      api.listPortfolios(),
+      api.listAccountHolders(),
+    ]);
     const mapped = fetched.map((p) => ({
       id: p.id,
       name: p.name,
@@ -126,6 +133,7 @@ export function AddTransactionMenu({
     }));
     setPortfolios(mapped);
     setDefaultPortfolioId(mapped[0]?.id ?? "");
+    setHasHolders(holders.length > 0);
     return mapped;
   }
 
@@ -234,6 +242,35 @@ export function AddTransactionMenu({
                   onClick={() => void openManual()}
                 />
               </div>
+
+              <hr className="my-2 border-border" />
+
+              <div className="flex flex-col gap-3">
+                <PortfolioFormDialog
+                  mode="create"
+                  trigger={
+                    <MethodCard
+                      icon={Briefcase}
+                      title={tm("addMenu.createPortfolio")}
+                      description={tm("addMenu.createPortfolioDesc")}
+                      tone="blue"
+                    />
+                  }
+                />
+                {!hasHolders && (
+                  <HolderFormDialog
+                    mode="create"
+                    trigger={
+                      <MethodCard
+                        icon={UserPlus}
+                        title={tm("addMenu.createAccountHolder")}
+                        description={tm("addMenu.createAccountHolderDesc")}
+                        tone="orange"
+                      />
+                    }
+                  />
+                )}
+              </div>
             </div>
           ) : step === "manual" ? (
             <div className="px-5 pb-7 pt-1.5">
@@ -310,15 +347,21 @@ async function loadHarvestPrefill(
   }
 }
 
-// Reference `methodCards` tones: screenshot green, CSV violet, manual gold.
+// Reference `methodCards` tones: screenshot green, CSV violet, manual gold,
+// portfolio blue, account-holder orange.
 const TONES = {
   green: { bg: "rgba(16,163,114,.14)", fg: "#0E9F6E" },
   violet: { bg: "rgba(124,92,252,.16)", fg: "#7C5CFC" },
   gold: { bg: "rgba(224,165,58,.16)", fg: "var(--gold-fg)" },
+  blue: { bg: "rgba(59,130,246,.16)", fg: "#3B82F6" },
+  orange: { bg: "rgba(249,115,22,.16)", fg: "#F97316" },
 } as const;
 
 /** One step-1 method card — icon chip 46px r14, title 700 15px, desc 500 12px,
- *  optional 700 9px "Recommended" tag; card r18 p16 bg-card + border. */
+ *  optional 700 9px "Recommended" tag; card r18 p16 bg-card + border.
+ *  `onClick` is optional — when omitted, the card is intended as the trigger of
+ *  a nested dialog (e.g. PortfolioFormDialog) which supplies its own click handler
+ *  via asChild. */
 function MethodCard({
   icon: Icon,
   title,
@@ -332,13 +375,13 @@ function MethodCard({
   description: string;
   tone: keyof typeof TONES;
   tag?: string;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-3.5 rounded-[18px] border border-border bg-card p-4 text-left shadow-[0_1px_2px_rgba(15,27,20,.04)] transition-transform active:scale-[.97]"
+      className="flex w-full items-center gap-3.5 rounded-[18px] border border-border bg-card p-4 text-left shadow-[0_1px_2px_rgba(15,27,20,.04)] transition-transform active:scale-[.97]"
     >
       <span
         className="flex size-[46px] shrink-0 items-center justify-center rounded-[14px]"

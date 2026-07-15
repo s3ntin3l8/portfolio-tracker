@@ -1336,7 +1336,11 @@
       "csv": "Import a CSV",
       "csvDesc": "From any broker export — columns mapped automatically",
       "manual": "Add manually",
-      "manualDesc": "Enter a single transaction yourself"
+      "manualDesc": "Enter a single transaction yourself",
+      "createPortfolio": "Add portfolio",
+      "createPortfolioDesc": "Create a new portfolio to track investments",
+      "createAccountHolder": "Add account holder",
+      "createAccountHolderDesc": "Set up a person (yourself, child, or other) who owns investments"
     },
     "createPortfolio": "Create portfolio",
     "back": "Back",

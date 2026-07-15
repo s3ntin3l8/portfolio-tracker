@@ -17,10 +17,11 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 const listPortfolios = vi.fn(async () => [] as { id: string; name: string; brokerage: string | null; accountHolder: string | null }[]);
+const listAccountHolders = vi.fn(async () => [] as { id: string; name: string }[]);
 const getInstrument = vi.fn();
 const getSummary = vi.fn();
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ listPortfolios, getInstrument, getSummary }),
+  useApiClient: () => ({ listPortfolios, listAccountHolders, getInstrument, getSummary }),
 }));
 
 // Stub the heavy flows — we only assert the right step/sheet renders.
@@ -59,6 +60,8 @@ describe("AddTransactionMenu", () => {
     replace.mockClear();
     listPortfolios.mockClear();
     listPortfolios.mockResolvedValue([]);
+    listAccountHolders.mockClear();
+    listAccountHolders.mockResolvedValue([]);
     getInstrument.mockReset();
     getSummary.mockReset();
     lastEntryTabsProps.current = null;
