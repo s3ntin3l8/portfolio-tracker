@@ -469,6 +469,19 @@ describe("refreshInstrumentMetadata — displayName", () => {
     return {
       getProfile: async () => null,
       search: async () => results as InstrumentSearchResult[],
+      resolveName: async () => null, // fall back to search
+    } as unknown as MarketDataService;
+  }
+
+  /** A service whose resolveName() returns the given name (preferred over search). */
+  function namingService(
+    name: string | null,
+    searchResults?: Partial<InstrumentSearchResult>[],
+  ): MarketDataService {
+    return {
+      getProfile: async () => null,
+      search: async () => (searchResults ?? []) as InstrumentSearchResult[],
+      resolveName: async () => name,
     } as unknown as MarketDataService;
   }
 
@@ -587,5 +600,87 @@ describe("refreshInstrumentMetadata — displayName", () => {
     );
     const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
     expect(row.displayName).toBe("Bitcoin");
+  });
+
+  it("prefers resolveName (Yahoo) over search (OpenFIGI) for ISIN instruments", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "PREF_NM",
+      assetClass: "equity",
+      market: "XETRA",
+      isin: "IE00PREF0011",
+    });
+    // resolveName returns nicely-cased name; search returns ALL-CAPS
+    await refreshInstrumentMetadata(
+      db,
+      namingService("iShares Core MSCI World UCITS ETF USD (Acc)", [
+        {
+          symbol: "IWDA",
+          market: "LSE",
+          name: "ISHARES CORE MSCI WORLD",
+          longName: "ISHARES CORE MSCI WORLD",
+        },
+      ]),
+    );
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.displayName).toBe("iShares Core MSCI World UCITS ETF USD (Acc)");
+  });
+
+  it("falls back to search when resolveName returns null", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "VWCE_NM",
+      assetClass: "equity",
+      market: "XETRA",
+      isin: "IE00BK5BQT80",
+    });
+    await refreshInstrumentMetadata(
+      db,
+      namingService(null, [
+        {
+          symbol: "VWCE",
+          market: "XETRA",
+          name: "VANGUARD FTSE ALL-WORLD UCITS ETF",
+          longName: "VANGUARD FTSE ALL-WORLD UCITS ETF",
+        },
+      ]),
+    );
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.displayName).toBe("VANGUARD FTSE ALL-WORLD UCITS ETF");
+  });
+
+  it("overwrites existing displayName when force is true (upgrades ALL-CAPS to clean name)", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "FORCE_NM",
+      assetClass: "equity",
+      market: "XETRA",
+      isin: "IE00FRCE0013",
+      displayName: "ISHARES CORE MSCI WORLD",
+    });
+    await refreshInstrumentMetadata(
+      db,
+      namingService("iShares Core MSCI World UCITS ETF USD (Acc)"),
+      { force: true },
+    );
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.displayName).toBe("iShares Core MSCI World UCITS ETF USD (Acc)");
+  });
+
+  it("does not overwrite existing displayName when force is false", async () => {
+    const db = getDb();
+    const id = await createHeld({
+      symbol: "NOFRC_NM",
+      assetClass: "equity",
+      market: "XETRA",
+      isin: "IE00NFRC0014",
+      displayName: "ISHARES CORE MSCI WORLD",
+    });
+    await refreshInstrumentMetadata(
+      db,
+      namingService("iShares Core MSCI World UCITS ETF USD (Acc)"),
+    );
+    const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
+    expect(row.displayName).toBe("ISHARES CORE MSCI WORLD"); // unchanged
   });
 });

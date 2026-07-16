@@ -129,6 +129,14 @@ export interface MarketDataProvider {
   resolveWKN?(
     wkn: string,
   ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null>;
+  /**
+   * Resolve a clean human-readable name for an instrument by ISIN, ticker, or
+   * free-text query. Unlike search(), this is a lightweight cosmetic lookup —
+   * the result is used purely for displayName enrichment and doesn't need a valid
+   * market/currency, so providers can return names without exchange gating.
+   * Returns null when the provider cannot resolve a name for the query.
+   */
+  resolveName?(query: string): Promise<string | null>;
   /** Live API quota/usage from the provider, when it exposes a usage endpoint. */
   getUsage?(): Promise<ProviderUsage | null>;
   /**

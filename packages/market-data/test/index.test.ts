@@ -1138,6 +1138,115 @@ describe("YahooFinanceProvider.search", () => {
   });
 });
 
+describe("YahooFinanceProvider.resolveName", () => {
+  it("returns longname from autocomplete, even for a LSE-only listing (no exchange gate)", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          quotes: [
+            {
+              symbol: "IWDA.L",
+              longname: "iShares Core MSCI World UCITS ETF USD (Acc)",
+              shortname: "iShares Core MSCI World",
+              exchange: "LSE",
+            },
+          ],
+        },
+      })),
+    });
+    const name = await provider.resolveName("IE00B4L5Y983");
+    expect(name).toBe("iShares Core MSCI World UCITS ETF USD (Acc)");
+  });
+
+  it("falls back to shortname when longname is absent", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          quotes: [{ symbol: "BBCA.JK", shortname: "Bank Central Asia Tbk", exchange: "JKT" }],
+        },
+      })),
+    });
+    const name = await provider.resolveName("ID1000109507");
+    expect(name).toBe("Bank Central Asia Tbk");
+  });
+
+  it("returns null when the API returns non-ok", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ ok: false, body: {} })),
+    });
+    expect(await provider.resolveName("IE00B4L5Y983")).toBeNull();
+  });
+
+  it("returns null when quotes array is empty", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({ body: { quotes: [] } })),
+    });
+    expect(await provider.resolveName("UNKNOWN")).toBeNull();
+  });
+
+  it("returns null when quotes have no symbol", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: { quotes: [{ longname: "Orphan Result" }] },
+      })),
+    });
+    expect(await provider.resolveName("IE00B4L5Y983")).toBeNull();
+  });
+
+  it("prefers EQUITY/ETF/MUTUALFUND quoteType over OPTION/FUTURE/CURRENCY", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          quotes: [
+            {
+              symbol: "ES=F",
+              longname: "S&P 500 Futures",
+              quoteType: "FUTURE",
+            },
+            {
+              symbol: "IWDA.L",
+              longname: "iShares Core MSCI World UCITS ETF USD (Acc)",
+              quoteType: "ETF",
+            },
+          ],
+        },
+      })),
+    });
+    const name = await provider.resolveName("IE00B4L5Y983");
+    expect(name).toBe("iShares Core MSCI World UCITS ETF USD (Acc)");
+  });
+
+  it("falls back to first-with-symbol when no preferred quoteType exists", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          quotes: [
+            { symbol: "ES=F", longname: "S&P 500 Futures", quoteType: "FUTURE" },
+            { symbol: "CL=F", longname: "Crude Oil Futures", quoteType: "FUTURE" },
+          ],
+        },
+      })),
+    });
+    const name = await provider.resolveName("IE00B4L5Y983");
+    expect(name).toBe("S&P 500 Futures"); // first with symbol wins
+  });
+
+  it("prefers EQUITY over OPTION even when OPTION is listed first", async () => {
+    const provider = new YahooFinanceProvider({
+      fetch: mockFetch(() => ({
+        body: {
+          quotes: [
+            { symbol: "AAPL250717C00250000", longname: "AAPL Call", quoteType: "OPTION" },
+            { symbol: "AAPL", longname: "Apple Inc.", quoteType: "EQUITY" },
+          ],
+        },
+      })),
+    });
+    const name = await provider.resolveName("US0378331005");
+    expect(name).toBe("Apple Inc.");
+  });
+});
+
 describe("EodhdProvider", () => {
   const xetra: InstrumentRef = {
     symbol: "AEMD",
@@ -2351,6 +2460,81 @@ describe("MarketDataService onCall hook", () => {
   it("returns [] from getDividends when no provider implements it", async () => {
     const svc = new MarketDataService([new FixtureProvider()]);
     expect(await svc.getDividends(bbca)).toEqual([]);
+  });
+});
+
+describe("MarketDataService.resolveName", () => {
+  it("fans out to providers, returning the first non-null result", async () => {
+    const noop: MarketDataProvider = {
+      name: "noop",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => null,
+    };
+    const answer: MarketDataProvider = {
+      name: "answer",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => "iShares Core MSCI World UCITS ETF USD (Acc)",
+    };
+    const svc = new MarketDataService([noop, answer]);
+    expect(await svc.resolveName("IE00B4L5Y983")).toBe(
+      "iShares Core MSCI World UCITS ETF USD (Acc)",
+    );
+  });
+
+  it("skips providers without resolveName and returns null when none implement it", async () => {
+    const plain: MarketDataProvider = {
+      name: "plain",
+      supports: () => false,
+      getQuote: async () => null,
+    };
+    const svc = new MarketDataService([plain]);
+    expect(await svc.resolveName("IE00B4L5Y983")).toBeNull();
+  });
+
+  it("returns null for an empty query", async () => {
+    const named: MarketDataProvider = {
+      name: "named",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => "ignored",
+    };
+    const svc = new MarketDataService([named]);
+    expect(await svc.resolveName("  ")).toBeNull();
+    expect(await svc.resolveName("")).toBeNull();
+  });
+
+  it("tolerates a throwing provider and falls through to the next", async () => {
+    const flaky: MarketDataProvider = {
+      name: "flaky",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => {
+        throw new Error("timeout");
+      },
+    };
+    const steady: MarketDataProvider = {
+      name: "steady",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => "Nice Name",
+    };
+    const svc = new MarketDataService([flaky, steady]);
+    expect(await svc.resolveName("IE00B4L5Y983")).toBe("Nice Name");
+  });
+
+  it("fires the onCall hook for providers that implement resolveName", async () => {
+    const calls: string[] = [];
+    const provider: MarketDataProvider = {
+      name: "resolver",
+      supports: () => false,
+      getQuote: async () => null,
+      resolveName: async () => "Name",
+    };
+    const svc = new MarketDataService([provider], { onCall: (n) => calls.push(n) });
+    await svc.resolveName("IE00B4L5Y983");
+    expect(calls).toEqual(["resolver"]);
   });
 });
 
