@@ -53,4 +53,39 @@ describe("InstrumentIncomeCard", () => {
     expect(screen.getByText("No income recorded for this position yet.")).toBeInTheDocument();
     expect(screen.queryByText("received · lifetime")).toBeNull();
   });
+
+  it("shows the bond coupon/maturity caption when bondInfo is provided", () => {
+    render(
+      <InstrumentIncomeCard
+        title="Income from this position"
+        dividendsReceived={null}
+        receivedCaption="received · lifetime"
+        emptyMessage="No income recorded for this position yet."
+        yieldOnCost={null}
+        yieldTitle="Yield on cost"
+        yieldCaption="vs current market yield"
+        bondInfo={{
+          label: "Coupon · maturity",
+          couponRate: "+5.75%",
+          maturityDate: "Jun 15, 2030",
+        }}
+      />,
+    );
+    expect(screen.getByText("Coupon · maturity: +5.75% · Jun 15, 2030")).toBeInTheDocument();
+  });
+
+  it("omits the bond caption when bondInfo is absent (the common case)", () => {
+    render(
+      <InstrumentIncomeCard
+        title="Income from this position"
+        dividendsReceived={null}
+        receivedCaption="received · lifetime"
+        emptyMessage="No income recorded for this position yet."
+        yieldOnCost={null}
+        yieldTitle="Yield on cost"
+        yieldCaption="vs current market yield"
+      />,
+    );
+    expect(screen.queryByText(/Coupon/)).toBeNull();
+  });
 });

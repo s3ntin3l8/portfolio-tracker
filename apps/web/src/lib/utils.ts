@@ -153,3 +153,11 @@ export function formatPercent(value: number, locale = "en") {
     signDisplay: "exceptZero",
   }).format(value);
 }
+
+/** Locale-formatted plain ratio (PE, beta, …) — unsigned, 1-2 decimals. */
+export function formatRatio(value: number, locale = "en") {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  }).format(value);
+}

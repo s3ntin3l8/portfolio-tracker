@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/empty-state";
 import { StatCard } from "@/components/stat-card";
 import { MonogramBadge } from "@/components/monogram-badge";
 import { InstrumentPriceCard } from "@/components/instrument-price-card";
+import { InstrumentFundamentalsCard } from "@/components/instrument-fundamentals-card";
 import { InstrumentIncomeCard } from "@/components/instrument-income-card";
 import { CorporateActionsManager } from "@/components/corporate-actions-manager";
 import { InstrumentEditDialog } from "@/components/instrument-edit-dialog";
@@ -197,6 +198,15 @@ export default async function InstrumentPage({
         </CardContent>
       </Card>
 
+      {/* Fundamentals: PE, market cap, dividend yield, analyst recs, revenue-vs-earnings —
+          client-fetched (self-heals a per-instrument DB cache), so a slow/unreachable
+          provider can't block the rest of the page. Only meaningful for equity/ETF; other
+          asset classes (gold, bond, mutual_fund, crypto, cash) never had a fundamentals
+          concept, so the card isn't even mounted for them. */}
+      {(instrument.assetClass === "equity" || instrument.assetClass === "etf") && (
+        <InstrumentFundamentalsCard instrumentId={id} />
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>{t("position")}</CardTitle>
@@ -274,6 +284,21 @@ export default async function InstrumentPage({
           }
           yieldTitle={t("yieldOnCostLabel")}
           yieldCaption={t("yieldOnCostCaption")}
+          bondInfo={
+            instrument.assetClass === "bond" &&
+            instrument.couponRate != null &&
+            instrument.maturityDate != null
+              ? {
+                  label: t("bondTermsLabel"),
+                  couponRate: formatPercent(Number(instrument.couponRate), locale),
+                  maturityDate: new Date(instrument.maturityDate).toLocaleDateString(locale, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  }),
+                }
+              : null
+          }
         />
       </div>
 

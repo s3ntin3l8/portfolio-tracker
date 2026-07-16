@@ -498,6 +498,13 @@
       "when": 1784183655878,
       "tag": "0070_outgoing_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1784187081691,
+      "tag": "0071_lethal_lily_hollister",
+      "breakpoints": true
     }
   ]
 }

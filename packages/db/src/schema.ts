@@ -316,6 +316,20 @@ export const instruments = pgTable(
      * has no data for them. Null = never attempted.
      */
     countryCheckedAt: timestamp("country_checked_at", { withTimezone: true }),
+    /**
+     * Fundamental/valuation snapshot for the instrument detail view (market cap, PE,
+     * EPS, dividend yield, 52-week range, analyst recommendations, revenue-vs-earnings,
+     * next earnings date, …) — see `InstrumentFundamentals` in `@portfolio/market-data`.
+     * Populated on-demand (self-heal) by `GET /instruments/:id/fundamentals`, not the
+     * weekly metadata job. Null until first requested, or for asset classes it doesn't
+     * apply to (gold, cash, bonds, mutual funds).
+     */
+    fundamentals: jsonb("fundamentals").$type<Record<string, unknown>>(),
+    /**
+     * Timestamp of the last fundamentals fetch *attempt* (even when the provider
+     * returned nothing). Drives the self-heal staleness check. Mirrors `sectorCheckedAt`.
+     */
+    fundamentalsCheckedAt: timestamp("fundamentals_checked_at", { withTimezone: true }),
     // Bond-specific (nullable for non-bonds).
     faceValue: numeric("face_value"),
     couponRate: numeric("coupon_rate"),

@@ -16,6 +16,7 @@ export function InstrumentIncomeCard({
   yieldOnCost,
   yieldTitle,
   yieldCaption,
+  bondInfo,
 }: {
   title: string;
   /** Formatted lifetime dividends/coupons received for this instrument, or null when the
@@ -27,6 +28,10 @@ export function InstrumentIncomeCard({
   yieldOnCost: string | null;
   yieldTitle: string;
   yieldCaption: string;
+  /** Bond coupon rate + maturity date (already formatted), shown as a small caption row.
+   *  We surface the *terms*, not a computed next-payment date — no coupon schedule anchor
+   *  (first-payment date) is stored, so a specific "next coupon" date would be a guess. */
+  bondInfo?: { label: string; couponRate: string; maturityDate: string } | null;
 }) {
   return (
     <Card>
@@ -57,6 +62,11 @@ export function InstrumentIncomeCard({
           </>
         ) : (
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        )}
+        {bondInfo && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            {bondInfo.label}: {bondInfo.couponRate} · {bondInfo.maturityDate}
+          </p>
         )}
       </CardContent>
     </Card>

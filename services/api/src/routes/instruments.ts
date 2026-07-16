@@ -7,6 +7,11 @@ import { findOrCreateInstrument, updateInstrument } from "../services/instrument
 import { getMarketData, goldSources, getBorseFrankfurt } from "../services/market-data.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 import { logTiming } from "../lib/timing.js";
+import {
+  FUNDAMENTALS_ASSET_CLASSES,
+  isFundamentalsStale,
+} from "../services/instrument-metadata.js";
+import type { InstrumentFundamentals } from "@portfolio/market-data";
 
 const instrumentsCache = createStore<{
   rows: (typeof instruments.$inferSelect)[];
@@ -184,6 +189,97 @@ export async function instrumentsRoute(app: FastifyInstance) {
         found: true,
       });
       return result;
+    },
+  );
+
+  // Fundamentals (market cap, PE, EPS, dividend yield, 52-week range, analyst
+  // recommendations, revenue-vs-earnings, next earnings date) for the instrument detail
+  // view. Equity/ETF only — other asset classes (gold, bond, mutual_fund, crypto, cash)
+  // return null without hitting a provider. Self-heals: serves the cached DB blob when
+  // fresh (< 24h), otherwise fetches live and persists. `fundamentalsCheckedAt` is stamped
+  // on every attempt that reaches the provider loop — even an empty/failed result — so a
+  // provider miss isn't re-queried on every page view, and never clobbers a previously-good
+  // cached blob with an empty result. Note: MarketDataService.getFundamentals() already
+  // swallows a per-provider exception and returns null (same convention as getQuote/
+  // getProfile/etc.), so a throwing provider is indistinguishable here from "no data" and
+  // is stamped the same way; the try/catch below only guards failures outside that loop
+  // (e.g. getMarketData() itself throwing).
+  app.get<{ Params: { id: string } }>(
+    "/instruments/:id/fundamentals",
+    { preHandler: app.authenticate },
+    async (request, reply) => {
+      const t0 = performance.now();
+      const [inst] = await app.db
+        .select()
+        .from(instruments)
+        .where(eq(instruments.id, request.params.id))
+        .limit(1);
+      if (!inst) {
+        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+          instrumentId: request.params.id,
+          found: false,
+        });
+        return reply.code(404).send({ error: "instrument_not_found" });
+      }
+
+      if (!FUNDAMENTALS_ASSET_CLASSES.has(inst.assetClass)) {
+        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+          instrumentId: request.params.id,
+          assetClass: inst.assetClass,
+          supported: false,
+        });
+        return null;
+      }
+
+      // The jsonb column is stored as a loosely-typed Record; cast at the boundary since
+      // `InstrumentFundamentals` (a concrete interface) is what actually flows through.
+      const cached = (inst.fundamentals ?? null) as InstrumentFundamentals | null;
+
+      if (!isFundamentalsStale(inst)) {
+        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+          instrumentId: request.params.id,
+          cacheHit: true,
+        });
+        return cached;
+      }
+
+      const md = await getMarketData();
+      let fetched: InstrumentFundamentals | null = null;
+      let fetchFailed = false;
+      try {
+        fetched = await md.getFundamentals({
+          symbol: inst.symbol,
+          market: inst.market,
+          assetClass: inst.assetClass,
+          currency: inst.currency,
+          isin: inst.isin ?? undefined,
+        });
+      } catch (err) {
+        fetchFailed = true;
+        request.log.warn({ err, instrumentId: inst.id }, "fundamentals fetch failed");
+      }
+
+      if (!fetchFailed) {
+        await app.db
+          .update(instruments)
+          .set({
+            fundamentalsCheckedAt: new Date(),
+            // Only overwrite the stored blob when we actually got something — an
+            // empty provider response shouldn't wipe out a previously-good snapshot.
+            ...(fetched != null
+              ? { fundamentals: fetched as unknown as Record<string, unknown> }
+              : {}),
+          })
+          .where(eq(instruments.id, inst.id));
+      }
+
+      logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+        instrumentId: request.params.id,
+        cacheHit: false,
+        fetchFailed,
+        found: fetched != null,
+      });
+      return fetched ?? cached;
     },
   );
 

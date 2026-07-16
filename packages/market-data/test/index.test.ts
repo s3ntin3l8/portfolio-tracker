@@ -1422,7 +1422,7 @@ function yahooProfileFetch(
       const ok = opts.crumbStatus === undefined || opts.crumbStatus === 200;
       return {
         ok,
-        status: ok ? 200 : (opts.crumbStatus ?? 500),
+        status: ok ? 200 : opts.crumbStatus ?? 500,
         headers: { get: () => null },
         json: async () => ({}),
         text: async () => (ok ? "test-crumb-abc123" : ""),
@@ -2668,5 +2668,172 @@ describe("MarketDataService WKN branch", () => {
     // "A1T8FV" looks like a WKN but doesn't resolve; should fall through to search
     const out = await svc.search("A1T8FV");
     expect(out[0]).toMatchObject({ symbol: "XYZ" });
+  });
+});
+
+// ─── YahooFinanceProvider getFundamentals ────────────────────────────────────
+
+/** Wrap a number as Yahoo's `{ raw, fmt }` quoteSummary format. */
+function rawNum(n: number) {
+  return { raw: n, fmt: String(n) };
+}
+
+describe("YahooFinanceProvider getFundamentals", () => {
+  const aapl: InstrumentRef = {
+    symbol: "AAPL",
+    market: "US",
+    assetClass: "equity",
+    currency: "USD",
+  };
+
+  // Trimmed from a live probe (values match a real AAPL quoteSummary response) covering
+  // every field getFundamentals reads — equities get the full set.
+  const fullEquityBody = {
+    quoteSummary: {
+      result: [
+        {
+          price: { currency: "USD", marketCap: rawNum(4810109091840) },
+          summaryDetail: {
+            trailingPE: rawNum(38.170162),
+            forwardPE: rawNum(34.04044),
+            dividendYield: rawNum(0.0034),
+            dividendRate: rawNum(1.08),
+            beta: rawNum(1.097),
+            fiftyTwoWeekLow: rawNum(201.5),
+            fiftyTwoWeekHigh: rawNum(328.73),
+            previousClose: rawNum(314.86),
+            dayLow: rawNum(317.32),
+            dayHigh: rawNum(328.72),
+            volume: rawNum(60780931),
+            averageVolume: rawNum(54481611),
+          },
+          defaultKeyStatistics: { trailingEps: rawNum(8.58) },
+          financialData: {
+            targetMeanPrice: rawNum(316.75714),
+            recommendationKey: "buy",
+            numberOfAnalystOpinions: rawNum(42),
+          },
+          calendarEvents: {
+            earnings: { earningsDate: [rawNum(1785441600)] },
+            exDividendDate: rawNum(1778457600),
+          },
+          earnings: {
+            financialsChart: {
+              yearly: [
+                { date: 2022, revenue: rawNum(394328000000), earnings: rawNum(99803000000) },
+                { date: 2023, revenue: rawNum(383285000000), earnings: rawNum(96995000000) },
+              ],
+            },
+          },
+          recommendationTrend: {
+            trend: [{ period: "0m", strongBuy: 6, buy: 22, hold: 17, sell: 1, strongSell: 1 }],
+          },
+        },
+      ],
+    },
+  };
+
+  it("returns the full fundamentals set for a US equity", async () => {
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(fullEquityBody) });
+    const f = await p.getFundamentals(aapl);
+    expect(f).toMatchObject({
+      currency: "USD",
+      marketCap: "4810109091840",
+      trailingPE: 38.170162,
+      forwardPE: 34.04044,
+      trailingEps: "8.58",
+      dividendYield: 0.0034,
+      dividendRate: "1.08",
+      beta: 1.097,
+      fiftyTwoWeekLow: "201.5",
+      fiftyTwoWeekHigh: "328.73",
+      previousClose: "314.86",
+      dayLow: "317.32",
+      dayHigh: "328.72",
+      volume: 60780931,
+      averageVolume: 54481611,
+      targetMeanPrice: "316.75714",
+      recommendationKey: "buy",
+      numberOfAnalystOpinions: 42,
+      analystTrend: { strongBuy: 6, buy: 22, hold: 17, sell: 1, strongSell: 1 },
+      earningsDate: "2026-07-30",
+      exDividendDate: "2026-05-11",
+      externalUrl: "https://finance.yahoo.com/quote/AAPL",
+    });
+    expect(f?.financials).toEqual([
+      { year: 2022, revenue: "394328000000", earnings: "99803000000" },
+      { year: 2023, revenue: "383285000000", earnings: "96995000000" },
+    ]);
+  });
+
+  it("returns a reduced set for an ETF — no PE/EPS/analyst fields", async () => {
+    const etf: InstrumentRef = {
+      symbol: "EUNL",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
+    const body = {
+      quoteSummary: {
+        result: [
+          {
+            price: { currency: "EUR" },
+            summaryDetail: {
+              previousClose: rawNum(126.06),
+              fiftyTwoWeekLow: rawNum(100.485),
+              fiftyTwoWeekHigh: rawNum(126.65),
+            },
+            fundProfile: { feesExpensesInvestment: { annualReportExpenseRatio: rawNum(0.002) } },
+          },
+        ],
+      },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    const f = await p.getFundamentals(etf);
+    expect(f).toMatchObject({
+      currency: "EUR",
+      previousClose: "126.06",
+      fiftyTwoWeekLow: "100.485",
+      fiftyTwoWeekHigh: "126.65",
+      expenseRatio: 0.002,
+      trailingPE: null,
+      forwardPE: null,
+      trailingEps: null,
+      analystTrend: null,
+      financials: null,
+    });
+  });
+
+  it("returns null for non-equity/non-etf asset classes without fetching", async () => {
+    const gold: InstrumentRef = {
+      symbol: "XAU",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "USD",
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}) });
+    expect(await p.getFundamentals(gold)).toBeNull();
+  });
+
+  it("returns null when the crumb fetch fails", async () => {
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { crumbStatus: 429 }) });
+    expect(await p.getFundamentals(aapl)).toBeNull();
+  });
+
+  it("returns null when the quoteSummary HTTP call fails", async () => {
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { summaryOk: false }) });
+    expect(await p.getFundamentals(aapl)).toBeNull();
+  });
+
+  it("returns null when every field comes back empty (unresolved symbol)", async () => {
+    const body = { quoteSummary: { result: [{}] } };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    expect(await p.getFundamentals(aapl)).toBeNull();
+  });
+
+  it("returns null when quoteSummary has no result at all", async () => {
+    const body = { quoteSummary: { result: [] } };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    expect(await p.getFundamentals(aapl)).toBeNull();
   });
 });

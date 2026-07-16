@@ -20,6 +20,36 @@ export const NAME_SKIP_ASSET_CLASSES = new Set(["gold", "cash"]);
 const STALE_DAYS = 30;
 
 /**
+ * Asset classes fundamentals are meaningful for. Everything else (gold, bond,
+ * mutual_fund, crypto, cash) has no PE/EPS/analyst-recommendation concept.
+ */
+export const FUNDAMENTALS_ASSET_CLASSES = new Set(["equity", "etf"]);
+
+/**
+ * Stale threshold for the fundamentals self-heal (`GET /instruments/:id/fundamentals`).
+ * Much shorter than {@link STALE_DAYS} — this is a live per-request cache, not a weekly
+ * batch job, and fundamentals (PE, market cap, analyst recs) move day to day.
+ */
+const FUNDAMENTALS_STALE_HOURS = 24;
+
+/**
+ * Predicate: is a cached fundamentals snapshot stale (or missing) and due for a refetch?
+ * True when the asset class doesn't support fundamentals is NOT checked here — callers
+ * should gate on {@link FUNDAMENTALS_ASSET_CLASSES} first.
+ */
+export function isFundamentalsStale(inst: {
+  fundamentalsCheckedAt?: Date | string | null;
+}): boolean {
+  if (inst.fundamentalsCheckedAt == null) return true;
+  const staleCutoff = new Date(Date.now() - FUNDAMENTALS_STALE_HOURS * 60 * 60 * 1000);
+  const checkedAt =
+    inst.fundamentalsCheckedAt instanceof Date
+      ? inst.fundamentalsCheckedAt
+      : new Date(inst.fundamentalsCheckedAt);
+  return checkedAt < staleCutoff;
+}
+
+/**
  * Predicate: should this instrument be (re-)enriched on the next sweep?
  *
  * An instrument needs enrichment when:

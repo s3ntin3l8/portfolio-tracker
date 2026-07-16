@@ -2,6 +2,7 @@ import type {
   AssetClass,
   Candle,
   DividendEvent,
+  InstrumentFundamentals,
   InstrumentProfile,
   InstrumentRef,
   InstrumentSearchResult,
@@ -105,6 +106,27 @@ export class MarketDataService {
     }
     if (parts.length === 0) return null;
     return Object.assign({}, ...parts);
+  }
+
+  /**
+   * Fetch fundamental/valuation data (market cap, PE, EPS, dividend yield, analyst
+   * recommendations, revenue-vs-earnings, next earnings date) for the instrument detail
+   * view. Unlike `getProfile`, this is first-match-wins (not merged) — the returned
+   * `currency` labels every monetary field, and merging across providers would risk
+   * mixing currencies. Only Yahoo implements it today; kept as a loop for future providers.
+   */
+  async getFundamentals(ref: InstrumentRef): Promise<InstrumentFundamentals | null> {
+    for (const provider of this.providersFor(ref.assetClass, ref.market)) {
+      if (!provider.getFundamentals) continue;
+      try {
+        this.opts.onCall?.(provider.name);
+        const fundamentals = await provider.getFundamentals(ref);
+        if (fundamentals) return fundamentals;
+      } catch {
+        // A failing provider shouldn't block the fallback chain — try the next.
+      }
+    }
+    return null;
   }
 
   /**

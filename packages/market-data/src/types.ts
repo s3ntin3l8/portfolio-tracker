@@ -97,6 +97,55 @@ export interface InstrumentProfile {
   country?: string | null;
 }
 
+/**
+ * Fundamental/valuation data for an instrument's detail view (market cap, PE, EPS,
+ * dividend yield, 52-week range, analyst recommendations, revenue-vs-earnings, next
+ * earnings date, …). Monetary fields are decimal strings (never floats) carrying the
+ * `currency` field's denomination; ratios/counts are plain numbers. Populated by
+ * providers that support it (currently Yahoo Finance only) — equities get the full
+ * set, ETFs a reduced set (no PE/EPS/analyst data), everything else is unsupported.
+ */
+export interface InstrumentFundamentals {
+  /** Native quote currency (trust this over the instrument's declared currency). */
+  currency: string;
+  /** ISO timestamp this snapshot was fetched. */
+  asOf: string;
+  marketCap?: string | null;
+  trailingPE?: number | null;
+  forwardPE?: number | null;
+  trailingEps?: string | null;
+  dividendYield?: number | null; // fraction 0–1
+  dividendRate?: string | null;
+  beta?: number | null;
+  fiftyTwoWeekLow?: string | null;
+  fiftyTwoWeekHigh?: string | null;
+  previousClose?: string | null;
+  dayLow?: string | null;
+  dayHigh?: string | null;
+  volume?: number | null;
+  averageVolume?: number | null;
+  /** ETF annual expense ratio, fraction 0–1. */
+  expenseRatio?: number | null;
+  targetMeanPrice?: string | null;
+  recommendationKey?: string | null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell" | ...
+  numberOfAnalystOpinions?: number | null;
+  analystTrend?: {
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+  } | null;
+  /** Next scheduled earnings/report date, YYYY-MM-DD. */
+  earningsDate?: string | null;
+  exDividendDate?: string | null;
+  /** Trailing annual revenue vs. earnings, oldest first. */
+  financials?: Array<{ year: number; revenue: string; earnings: string }> | null;
+  /** Link to the instrument's page on the provider's site (e.g. Yahoo Finance), using
+   *  the exact symbol the provider resolved — avoids the caller guessing exchange suffixes. */
+  externalUrl?: string | null;
+}
+
 /** A dividend event for an instrument, as returned by a market-data provider. */
 export interface DividendEvent {
   /** Ex-dividend date: YYYY-MM-DD. */
@@ -143,6 +192,12 @@ export interface MarketDataProvider {
    * instrument is not found.
    */
   getProfile?(ref: InstrumentRef): Promise<InstrumentProfile | null>;
+  /**
+   * Fetch fundamental/valuation data (market cap, PE, EPS, analyst recommendations,
+   * revenue-vs-earnings, next earnings date, …) for the instrument detail view.
+   * Returns null when unsupported (asset class, provider, or the instrument isn't found).
+   */
+  getFundamentals?(ref: InstrumentRef): Promise<InstrumentFundamentals | null>;
 }
 
 /** A 12-char ISIN: 2-letter country, 9 alphanumerics, 1 check digit. */
