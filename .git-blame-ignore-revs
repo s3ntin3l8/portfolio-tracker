@@ -1,0 +1,3 @@
+# Bulk reformat commits — these touch every file and should be skipped by
+# `git blame` to keep it useful. Add each commit hash on its own line.
+# See https://git-scm.com/docs/git-blame#Documentation/git-blame.txt---ignore-revs-file
