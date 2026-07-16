@@ -12,9 +12,14 @@ on:
 
 jobs:
   hermes:
-    # Only human comment events; the bot never re-triggers itself. The actual
+    # Only human comment events from trusted commenters; the bot never re-triggers
+    # itself. Mirrors claude.yml's author_association guard -- without it, any
+    # non-member commenter on this public repo could summon a secrets-bearing,
+    # self-hosted-runner run just by typing the mention string. The actual
     # "@<slug>" mention check lives inside the reusable workflow.
-    if: github.actor != 's3ntin3l8-hermes[bot]'
+    if: |
+      github.actor != 's3ntin3l8-hermes[bot]' &&
+      contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)
     permissions:
       contents: write
       pull-requests: write
