@@ -12,75 +12,20 @@ on:
 
 jobs:
   claude:
-    # Restrict to trusted commenters -- otherwise any user on a public repo could
-    # post "@claude" and trigger the workflow (API usage, and whatever repo access
-    # the action's own token carries).
-    if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.review.author_association)) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.issue.author_association))
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Logic (trusted-commenter/@claude gate, Node setup, review-capable tools —
+    # including mcp__github_inline_comment__create_inline_comment for inline suggested
+    # edits, previously missing) now lives in the shared reusable workflow so it isn't
+    # duplicated (and doesn't drift) across every s3ntin3l8 repo. See
+    # s3ntin3l8/.github's .github/workflows/claude-code.yml for the full implementation
+    # and s3ntin3l8/.github#34.
     permissions:
       contents: read
-      pull-requests: write # write: gh pr review (see claude_args below) needs this, not just read
+      pull-requests: write # write: gh pr review + inline comments need this, not just read
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      # Bash is otherwise the Claude Code action's sandbox: without a Node toolchain
-      # already on PATH, --allowedTools below would just let Claude fail to run npm.
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "26"
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Claude Code
-        id: claude
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-          # This is an optional setting that allows Claude to read CI results on PRs
-          additional_permissions: |
-            actions: read
-
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          #
-          # Bash is disabled for Claude by default in this action; without an allowlist
-          # entry a review can only read the diff, not run it (see PR #496's Claude
-          # review: "the sandbox blocked npm/npx/node/network access ... update
-          # --allowedTools if you'd like a future review to actually run the suite").
-          # Node + deps are set up above so these scripts are ready to run immediately.
-          #
-          # Exact-string rules (no trailing wildcard) only match that literal command —
-          # e.g. "Bash(npm run lint)" alone does NOT match "npm run lint --fix" or any
-          # other variation Claude might type. PR #500 shipped with bare exact rules and
-          # every review still hit permission_denials (confirmed in the run logs: the
-          # SDK options included the exact rules verbatim, yet Bash calls still got
-          # denied) because the CI runner is non-interactive — a rule miss has no human
-          # to fall back on and auto-denies. The trailing `*` (no space, so it also
-          # matches the bare command) covers flags/redirection variants; `npm ci` is
-          # allowed too since Claude sometimes reinstalls deps defensively even though
-          # the step above already did it.
-          #
-          # "Bash(gh pr review:*)" additionally lets Claude submit an actual GitHub
-          # review (gh pr review --approve/--request-changes/--comment) instead of only
-          # ever leaving a plain PR comment when asked to review.
-          claude_args: |
-            --allowedTools "Bash(npm run lint*)" "Bash(npm run typecheck*)" "Bash(npm run test*)" "Bash(npm test*)" "Bash(npm ci*)" "Bash(gh pr review:*)"
+    uses: s3ntin3l8/.github/.github/workflows/claude-code.yml@main
+    with:
+      setup-node: true
+      build-tools: '"Bash(npm run lint*)" "Bash(npm run typecheck*)" "Bash(npm run test*)" "Bash(npm test*)" "Bash(npm ci*)"'
+    secrets: inherit # pragma: allowlist secret
