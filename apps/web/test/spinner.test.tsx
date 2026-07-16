@@ -10,8 +10,12 @@ describe("Spinner", () => {
   });
 
   it("supports size variants", () => {
-    const { container } = render(<Spinner size="lg" />);
-    expect(container.querySelector("svg")).toHaveClass("size-7");
+    const { container: md } = render(<Spinner size="md" />);
+    expect(md.querySelector("svg")).toHaveClass("size-5");
+    const { container: lg } = render(<Spinner size="lg" />);
+    expect(lg.querySelector("svg")).toHaveClass("size-6");
+    const { container: xl } = render(<Spinner size="xl" />);
+    expect(xl.querySelector("svg")).toHaveClass("size-7");
   });
 
   it("merges a caller className", () => {

@@ -5,8 +5,8 @@ const SIZES = {
   xs: "size-3.5",
   sm: "size-4",
   md: "size-5",
-  lg: "size-7",
-  xl: "size-6",
+  lg: "size-6",
+  xl: "size-7",
 } as const;
 function Spinner({
   size = "md",

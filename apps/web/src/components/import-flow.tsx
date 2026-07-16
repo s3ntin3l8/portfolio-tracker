@@ -984,7 +984,7 @@ export function ImportFlow({
               </ul>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <Spinner size="xl" className="text-primary" />
+                <Spinner size="lg" className="text-primary" />
                 <p className="text-sm text-muted-foreground">{t("parsing")}</p>
               </div>
             )}
