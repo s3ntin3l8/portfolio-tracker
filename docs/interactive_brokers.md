@@ -227,7 +227,7 @@ New transactions appear as drafts on the **Import** page. Review and confirm the
 
 ## Sync schedule
 
-Flex statements are end-of-day — intraday data is not available. The tracker syncs once a day at **02:00 UTC** via a background job. You can also trigger an on-demand sync at any time from the portfolio edit dialog or the portfolios page sync button.
+Flex statements are end-of-day — intraday data is not available. The tracker syncs once a day at **02:00 UTC** via a background job (configurable via the `IBKR_SYNC_CRON` env var, server-side only). You can also trigger an on-demand sync at any time from the portfolio edit dialog or the portfolios page sync button.
 
 ---
 
