@@ -308,7 +308,7 @@ export function enrichContributions(
   flows: CashFlowPoint[],
   birthYear: number | null = null,
   portfolioType: "standard" | "child" = "standard",
-  opts: { totalReturn?: boolean } = {},
+  opts: { totalReturn?: boolean; retirementAge?: number | null } = {},
 ) {
   const net = Number(stats.netContributed);
   const simpleGainPct = net > 0 ? (Number(currentValue) - net) / net : null;
@@ -339,6 +339,7 @@ export function enrichContributions(
     seedAnnualReturn,
     birthYear,
     portfolioType,
+    retirementAge: opts.retirementAge ?? null,
     asOf: asOf.toISOString(),
   };
 }
@@ -351,6 +352,7 @@ export async function buildContributions(
   birthYear: number | null = null,
   portfolioType: "standard" | "child" = "standard",
   boundary: "inside" | "outside" = "inside",
+  retirementAge: number | null = null,
 ) {
   const ccys = [...new Set(coreTxns.map((t) => t.currency))];
   const rates = await getFxRates(app.db, ccys, display);
@@ -364,6 +366,7 @@ export async function buildContributions(
   const flows = await boundaryFlows(app, coreTxns, boundary, display);
   return enrichContributions(stats, summary.netWorth, flows, birthYear, portfolioType, {
     totalReturn: boundary === "outside",
+    retirementAge,
   });
 }
 

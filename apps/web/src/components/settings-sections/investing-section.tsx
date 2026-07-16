@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { PreferenceChips } from "@/components/preference-chips";
 import { BenchmarkSettingsForm } from "@/components/settings-sections/benchmark-settings-form";
+import { RetirementAgeForm } from "@/components/settings-sections/retirement-age-form";
 import type { UserPreferences } from "@portfolio/api-client";
 
 /**
@@ -58,6 +59,17 @@ export async function InvestingSection({ prefs }: { prefs: UserPreferences | nul
             <p className="mt-2.5 px-0.5 text-xs text-muted-foreground">
               {t("investingCostBasisNote")}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div>
+        <p className="mb-2 px-0.5 text-xs font-bold uppercase tracking-[.04em] text-text-3">
+          {t("retirementLabel")}
+        </p>
+        <Card>
+          <CardContent className="p-4">
+            <RetirementAgeForm age={prefs?.retirementAge ?? null} />
           </CardContent>
         </Card>
       </div>

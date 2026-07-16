@@ -23,6 +23,7 @@ export async function preferencesRoute(app: FastifyInstance) {
       taxRegime: prefs?.taxRegime ?? "DE",
       benchmarkSymbol: prefs?.benchmarkSymbol ?? null,
       riskFreeRate: prefs?.riskFreeRate ? Number(prefs.riskFreeRate) : null,
+      retirementAge: prefs?.retirementAge ?? null,
     };
   });
 
@@ -40,6 +41,7 @@ export async function preferencesRoute(app: FastifyInstance) {
         taxRegime: body.taxRegime ?? "DE",
         benchmarkSymbol: body.benchmarkSymbol ?? null,
         riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null,
+        retirementAge: body.retirementAge ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -56,6 +58,7 @@ export async function preferencesRoute(app: FastifyInstance) {
           ...(body.riskFreeRate !== undefined
             ? { riskFreeRate: body.riskFreeRate != null ? String(body.riskFreeRate) : null }
             : {}),
+          ...(body.retirementAge !== undefined ? { retirementAge: body.retirementAge } : {}),
           updatedAt: now,
         },
       })
@@ -67,6 +70,7 @@ export async function preferencesRoute(app: FastifyInstance) {
       taxRegime: updated?.taxRegime ?? "DE",
       benchmarkSymbol: updated?.benchmarkSymbol ?? null,
       riskFreeRate: updated?.riskFreeRate ? Number(updated.riskFreeRate) : null,
+      retirementAge: updated?.retirementAge ?? null,
     };
   });
 }

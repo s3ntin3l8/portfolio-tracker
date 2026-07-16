@@ -167,6 +167,7 @@ export default async function SavingsPage({ params }: { params: Promise<{ locale
           currency={currency}
           birthYear={c.birthYear}
           portfolioType={c.portfolioType}
+          retirementAge={c.retirementAge}
         />
       </div>
 

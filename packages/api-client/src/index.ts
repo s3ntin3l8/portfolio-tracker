@@ -890,6 +890,8 @@ export interface UserPreferences {
   benchmarkSymbol: string | null;
   /** Risk-free rate for Sharpe/Sortino (decimal fraction). Null = auto-detect. */
   riskFreeRate: number | null;
+  /** User's target retirement age. Null = no retirement forecast target. */
+  retirementAge: number | null;
 }
 
 /** A personal access token's metadata (never the secret). */
@@ -1219,6 +1221,8 @@ export interface ContributionStats {
   birthYear: number | null;
   /** "standard" | "child"; gates the "to age 18" forecast target. */
   portfolioType: "standard" | "child";
+  /** User's target retirement age for the "to retirement" forecast target. */
+  retirementAge: number | null;
   asOf: string;
 }
 
@@ -1990,6 +1994,7 @@ export function createApiClient(config: ApiClientConfig) {
         taxRegime: "DE" | "ID";
         benchmarkSymbol: string | null;
         riskFreeRate: number | null;
+        retirementAge: number | null;
       }>,
     ) => request<UserPreferences>("PUT", "/me/preferences", prefs),
     getIncome: (holderId?: string) =>
@@ -2125,7 +2130,9 @@ export function createApiClient(config: ApiClientConfig) {
     getFxRate: (from: string, to: string, date: string) =>
       request<{ rate: string | null }>(
         "GET",
-        `/fx-rate?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${encodeURIComponent(date)}`,
+        `/fx-rate?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
+          to,
+        )}&date=${encodeURIComponent(date)}`,
       ),
     createTransaction: (portfolioId: string, input: Omit<TransactionInput, "portfolioId">) =>
       request<Transaction>("POST", `/portfolios/${portfolioId}/transactions`, input),

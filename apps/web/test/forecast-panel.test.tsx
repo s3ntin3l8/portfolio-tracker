@@ -76,6 +76,29 @@ describe("ForecastPanel", () => {
     expect(screen.queryByRole("button", { name: "To age 18" })).not.toBeInTheDocument();
   });
 
+  it("offers a 'To retirement' preset that sets the horizon from birth year and retirement age", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    // Born 1994 → age 32 in 2026 → retirement at 67 → 35 years to retirement.
+    renderPanel({ birthYear: 1994, portfolioType: "standard", retirementAge: 67 });
+    fireEvent.click(screen.getByRole("button", { name: "To retirement" }));
+    // 100/mo * 35 years * 12 months = 42,000.
+    expect(screen.getByTestId("projected-value")).toHaveTextContent("€42,000");
+  });
+
+  it("hides the 'To retirement' preset when no retirement age is set", () => {
+    renderPanel({ birthYear: 1994, portfolioType: "standard" });
+    expect(screen.queryByRole("button", { name: "To retirement" })).not.toBeInTheDocument();
+  });
+
+  it("prefers 'To age 18' over 'To retirement' for child portfolios even with retirementAge", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    renderPanel({ birthYear: 2017, portfolioType: "child", retirementAge: 67 });
+    expect(screen.queryByRole("button", { name: "To retirement" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "To age 18" })).toBeInTheDocument();
+  });
+
   describe("scenario chips", () => {
     it("renders three chips at rate−3/rate/rate+3 with the current rate active", () => {
       // seedAnnualReturn=0.08 → returnPct=8 → chips at 5%, 8%, 11%.

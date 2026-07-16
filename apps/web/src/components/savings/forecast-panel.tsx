@@ -33,6 +33,7 @@ export function ForecastPanel({
   currency,
   birthYear = null,
   portfolioType = "standard",
+  retirementAge = null,
 }: {
   currentValue: string;
   netContributed?: string;
@@ -41,20 +42,26 @@ export function ForecastPanel({
   currency: string;
   birthYear?: number | null;
   portfolioType?: "standard" | "child";
+  retirementAge?: number | null;
 }) {
   const t = useTranslations("Savings");
   const locale = useLocale();
+  const now = new Date().getFullYear();
 
-  // Years from now until the beneficiary turns 18 (clamped to the slider range).
-  // Only child portfolios carry an age-18 target.
-  const yearsToEighteen =
-    portfolioType === "child" && birthYear
-      ? Math.min(50, Math.max(1, 18 - (new Date().getFullYear() - birthYear)))
+  // Years from now until the target age (18 for children, retirementAge for adults),
+  // clamped to the slider range. Null when there's no target age.
+  const yearsToTarget =
+    birthYear != null
+      ? portfolioType === "child"
+        ? Math.min(50, Math.max(1, 18 - (now - birthYear)))
+        : retirementAge != null
+          ? Math.min(50, Math.max(1, retirementAge - (now - birthYear)))
+          : null
       : null;
 
   const [monthly, setMonthly] = useState(Math.round(Number(monthlyAverage)));
   const [returnPct, setReturnPct] = useState(Math.round(Number(seedAnnualReturn) * 1000) / 10);
-  const [years, setYears] = useState(yearsToEighteen ?? 10);
+  const [years, setYears] = useState(yearsToTarget ?? 10);
 
   const series = useMemo(
     () =>
@@ -159,15 +166,15 @@ export function ForecastPanel({
               <Label htmlFor="forecast-years" className="text-[11px] font-semibold text-white/82">
                 {t("horizonYears")}
               </Label>
-              {yearsToEighteen !== null && (
+              {yearsToTarget !== null && (
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
                   className="h-5 px-1.5 text-[10px] text-white hover:bg-white/15 hover:text-white"
-                  onClick={() => setYears(yearsToEighteen)}
+                  onClick={() => setYears(yearsToTarget)}
                 >
-                  {t("toAge18")}
+                  {portfolioType === "child" ? t("toAge18") : t("toRetirement")}
                 </Button>
               )}
             </div>

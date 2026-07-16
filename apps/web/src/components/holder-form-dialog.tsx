@@ -81,7 +81,7 @@ export function HolderFormDialog({
     if (!trimmed || busy) return;
     setBusy(true);
     setError(false);
-    const by = type === "child" && birthYear.trim() !== "" ? Number(birthYear) : null;
+    const by = birthYear.trim() !== "" ? Number(birthYear) : null;
     const input = {
       name: trimmed,
       type,
@@ -144,20 +144,18 @@ export function HolderFormDialog({
             <HolderTypeChips value={type} onChange={setType} labelledBy="holder-type-label" />
           </div>
 
-          {type === "child" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="holder-birth-year">{tf("birthYear")}</Label>
-              <Input
-                id="holder-birth-year"
-                type="number"
-                inputMode="numeric"
-                placeholder={tf("birthYearPlaceholder")}
-                value={birthYear}
-                onChange={(e) => setBirthYear(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">{tf("birthYearHint")}</p>
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="holder-birth-year">{tf("birthYear")}</Label>
+            <Input
+              id="holder-birth-year"
+              type="number"
+              inputMode="numeric"
+              placeholder={tf("birthYearPlaceholder")}
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{tf("birthYearHint")}</p>
+          </div>
 
           {/* German tax profile (DE only, optional) */}
           <details className="rounded-md border px-3 py-2 text-sm">

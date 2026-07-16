@@ -88,7 +88,11 @@ describe("BenchmarkCard", () => {
   });
 
   it("saves a new benchmark symbol via putPreferences when a suggested benchmark is picked", async () => {
-    putPreferences.mockResolvedValue({ benchmarkSymbol: "^GDAXI", riskFreeRate: null });
+    putPreferences.mockResolvedValue({
+      benchmarkSymbol: "^GDAXI",
+      riskFreeRate: null,
+      retirementAge: null,
+    });
     renderCard({
       symbol: "^GSPC",
       activeReturn: "0.01",
@@ -109,7 +113,11 @@ describe("BenchmarkCard", () => {
   });
 
   it("allows removing the benchmark", async () => {
-    putPreferences.mockResolvedValue({ benchmarkSymbol: null, riskFreeRate: null });
+    putPreferences.mockResolvedValue({
+      benchmarkSymbol: null,
+      riskFreeRate: null,
+      retirementAge: null,
+    });
     renderCard({
       symbol: "^GSPC",
       activeReturn: "0.01",

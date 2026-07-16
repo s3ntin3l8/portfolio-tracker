@@ -69,6 +69,7 @@ describe("InvestingSection", () => {
         costBasisMode: "total_paid",
         benchmarkSymbol: null,
         riskFreeRate: null,
+        retirementAge: null,
       },
     });
     renderWithIntl(element as React.ReactElement);
