@@ -4,7 +4,7 @@ import { portfolios, transactions } from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { logTiming } from "../../lib/timing.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
-import { ownedPortfolio } from "../helpers.js";
+import { ownedPortfolio, parsePagination, cacheKey } from "../helpers.js";
 import {
   yearRange,
   ACTIVITY_INCOME_TYPES,
@@ -35,11 +35,11 @@ export function registerListRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const portfolioName = portfolio.name;
-      const paginate = request.query.page !== undefined;
-      const page = paginate ? Math.max(1, parseInt(request.query.page!, 10) || 1) : 1;
-      const pageSize = paginate
-        ? Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? "25", 10) || 25))
-        : 0;
+      const { page, pageSize } = parsePagination({
+        page: request.query.page,
+        pageSize: request.query.pageSize,
+      });
+      const paginate = pageSize > 0;
 
       const convertTo = request.query.convertTo;
       const typeFilter = request.query.type;
@@ -71,8 +71,17 @@ export function registerListRoutes(app: FastifyInstance) {
       }
 
       if (paginate) {
-        const cacheKey = `transactions:${request.params.portfolioId}:${page}:${pageSize}:${convertTo || ""}:${typeFilter || ""}:${yearFilter || ""}:${searchQuery || ""}`;
-        const cached = await withDerivationCache(transactionsCache, cacheKey, async () => {
+        const ck = cacheKey(
+          "transactions",
+          request.params.portfolioId,
+          page,
+          pageSize,
+          convertTo || "",
+          typeFilter || "",
+          yearFilter || "",
+          searchQuery || "",
+        );
+        const cached = await withDerivationCache(transactionsCache, ck, async () => {
           const merged = await app.db
             .select({
               ...getTableColumns(transactions),
@@ -170,11 +179,11 @@ export function registerListRoutes(app: FastifyInstance) {
   }>("/networth/transactions", { preHandler: app.authenticate }, async (request, _reply) => {
     const t0 = performance.now();
     const { id } = requireUser(request);
-    const paginate = request.query.page !== undefined;
-    const page = paginate ? Math.max(1, parseInt(request.query.page!, 10) || 1) : 1;
-    const pageSize = paginate
-      ? Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? "25", 10) || 25))
-      : 0;
+    const { page, pageSize } = parsePagination({
+      page: request.query.page,
+      pageSize: request.query.pageSize,
+    });
+    const paginate = pageSize > 0;
     const typeFilter = request.query.type;
     const yearFilter = request.query.year;
     const searchQuery = request.query.q;
@@ -211,8 +220,16 @@ export function registerListRoutes(app: FastifyInstance) {
     }
 
     if (paginate) {
-      const cacheKey = `${id}:networth:${page}:${pageSize}:${typeFilter ?? ""}:${yearFilter ?? ""}:${searchQuery ?? ""}`;
-      const cached = await withDerivationCache(networthTransactionsCache, cacheKey, async () => {
+      const ck = cacheKey(
+        id,
+        "networth",
+        page,
+        pageSize,
+        typeFilter ?? "",
+        yearFilter ?? "",
+        searchQuery ?? "",
+      );
+      const cached = await withDerivationCache(networthTransactionsCache, ck, async () => {
         const merged = await app.db
           .select({ ...getTableColumns(transactions), __total: sql<number>`count(*) over ()` })
           .from(transactions)

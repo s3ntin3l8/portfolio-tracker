@@ -37,6 +37,7 @@ import {
 } from "../../services/benchmark.js";
 import { rangeStart } from "../../services/snapshots.js";
 import { requireUser } from "../../plugins/auth.js";
+import { cacheKey } from "../helpers.js";
 import { insightsCache } from "./shared.js";
 import { logTiming } from "../../lib/timing.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
@@ -99,8 +100,8 @@ export function registerInsightsRoutes(app: FastifyInstance) {
         .limit(1);
       const display = u?.displayCurrency ?? "IDR";
 
-      const cacheKey = `insights:${id}:${range}:${holderId ?? ""}:${portfolioId ?? ""}`;
-      const result = await withDerivationCache(insightsCache, cacheKey, async () => {
+      const ck = cacheKey("insights", id, range, holderId ?? "", portfolioId ?? "");
+      const result = await withDerivationCache(insightsCache, ck, async () => {
         // ── Portfolio history (TWR index) ──────────────────────────────
         const start = rangeStart(range);
         const conds = [

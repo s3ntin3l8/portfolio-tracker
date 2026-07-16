@@ -11,7 +11,7 @@ import {
   contributionStats,
   type CashFlowPoint,
 } from "@portfolio/core";
-import { ownedPortfolio } from "../helpers.js";
+import { ownedPortfolio, cacheKey } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
   buildContributions,
@@ -125,7 +125,7 @@ export function registerContributionsRoutes(app: FastifyInstance) {
 
       const result = await withDerivationCache(
         networthContributionsCache,
-        `${id}:${display}:${holderId ?? ""}`,
+        cacheKey(id, display, holderId ?? ""),
         async () => {
           const perPortfolioLoad = await mapPool(
             pfs,

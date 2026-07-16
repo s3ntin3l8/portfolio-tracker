@@ -12,7 +12,7 @@ import {
   listInboxDocuments,
   getInboxDocument,
 } from "../storage/inbox.js";
-import { ownedPortfolio } from "./helpers.js";
+import { ownedPortfolio, parsePagination, cacheKey } from "./helpers.js";
 import { shortHash } from "../services/parsers/hash.js";
 import { getDocumentForTransaction } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
@@ -44,11 +44,8 @@ export async function documentsRoute(app: FastifyInstance) {
       page: rawPage,
       pageSize: rawPageSize,
     } = documentListQuerySchema.parse(request.query);
-    const paginate = rawPage !== undefined;
-    const page = paginate ? Math.max(1, parseInt(rawPage!, 10) || 1) : 1;
-    const pageSize = paginate
-      ? Math.min(100, Math.max(1, parseInt(rawPageSize ?? "25", 10) || 25))
-      : 0;
+    const { page, pageSize } = parsePagination({ page: rawPage, pageSize: rawPageSize });
+    const hasPagination = pageSize > 0;
 
     const renderRow = (
       d: {
@@ -78,15 +75,15 @@ export async function documentsRoute(app: FastifyInstance) {
 
     const t0 = performance.now();
 
-    if (paginate) {
+    if (hasPagination) {
       const conditions = [
         eq(documents.userId, userId),
         eq(documents.category, category ?? "tax_report"),
       ];
       if (portfolioId) conditions.push(eq(documents.portfolioId, portfolioId));
 
-      const cacheKey = `${userId}:${page}:${pageSize}:${category ?? ""}:${portfolioId ?? ""}`;
-      const cached = await withDerivationCache(documentsCache, cacheKey, async () => {
+      const ck = cacheKey(userId, page, pageSize, category ?? "", portfolioId ?? "");
+      const cached = await withDerivationCache(documentsCache, ck, async () => {
         const [cnt, rows] = await Promise.all([
           app.db
             .select({ count: count() })

@@ -5,6 +5,7 @@ import { instruments, providerSettings } from "@portfolio/db";
 import { assetClassSchema, instrumentInputSchema } from "@portfolio/schema";
 import { findOrCreateInstrument, updateInstrument } from "../services/instruments.js";
 import { getMarketData, goldSources, getBorseFrankfurt } from "../services/market-data.js";
+import { cacheKey } from "./helpers.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 import { logTiming } from "../lib/timing.js";
 import {
@@ -45,8 +46,8 @@ export async function instrumentsRoute(app: FastifyInstance) {
 
     if (parsed.page) {
       const page = parsed.page;
-      const cacheKey = `instruments:${q || ""}:${page}:${pageSize}`;
-      const { rows, total } = await withDerivationCache(instrumentsCache, cacheKey, async () => {
+      const ck = cacheKey("instruments", q || "", page, pageSize);
+      const { rows, total } = await withDerivationCache(instrumentsCache, ck, async () => {
         const conditions = q
           ? or(
               ilike(instruments.symbol, `%${q}%`),

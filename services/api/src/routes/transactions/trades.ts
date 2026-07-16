@@ -7,7 +7,7 @@ import { type TradeLog, mergeTradeLogs } from "@portfolio/core";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
-import { ownedPortfolio } from "../helpers.js";
+import { ownedPortfolio, cacheKey } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
   costBasisFromQuery,
@@ -36,7 +36,7 @@ export function registerTradesRoutes(app: FastifyInstance) {
       const costBasisMode = costBasisFromQuery(request.query);
       const cached = await withDerivationCache(
         tradesCache,
-        `${portfolioId}:${method}:${costBasisMode}`,
+        cacheKey(portfolioId, method, costBasisMode),
         async () => {
           const { coreTxns, prices, metaById } = await loadValuation(
             app,
@@ -97,7 +97,7 @@ export function registerTradesRoutes(app: FastifyInstance) {
 
       const result = await withDerivationCache(
         networthTradesCache,
-        `${id}:${method}:${costBasisMode}:${holderId ?? ""}`,
+        cacheKey(id, method, costBasisMode, holderId ?? ""),
         async () => {
           const [u] = await app.db
             .select({ displayCurrency: users.displayCurrency })
