@@ -37,3 +37,13 @@ __pycache__/
 .venv-pytr/
 .claude/projects/
 .superpowers
+
+# Claude Design sync (see .design-sync/NOTES.md) — staged scripts, build output,
+# and machine-generated cache; the durable set (config.json, NOTES.md,
+# conventions.md, previews/, overrides/) stays tracked.
+.ds-sync/
+ds-bundle/
+apps/web/.ds-sync-css/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
