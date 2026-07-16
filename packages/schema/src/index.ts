@@ -85,93 +85,69 @@ export const currencyCode = z
 
 // --- API inputs ----------------------------------------------------------
 
-// A person an investment account belongs to. Birth year + type live here (not on
-// the portfolio) so they are entered once and shared across that person's portfolios.
-export const accountHolderInputSchema = z.object({
+// Shared field definitions for account-holder schemas. Both Input and Patch
+// variants are composed from this base; Patch uses .partial() so every field
+// becomes optional without create-time defaults.
+const accountHolderFields = {
   name: z.string().trim().min(1),
-  // "self" | "child" | "other". A portfolio whose holder is "child" is treated as a
-  // child/Kinderdepot (drives the "to age 18" forecast and the TR Kinderdepot guard).
-  type: z.enum(["self", "child", "other"]).default("other"),
-  // Optional birth year — powers the savings forecast target (age 18 for children, retirement for adults).
+  type: z.enum(["self", "child", "other"]),
+  // German tax profile (all optional; null clears the value).
+  taxAllowanceAnnual: decimalString.nullable(),
+  capitalGainsTaxRate: decimalString.nullable(),
+  churchTax: z.boolean().nullable(),
+  taxResidence: z.string().trim().length(2).nullable(),
+};
+
+export const accountHolderInputSchema = z.object({
+  name: accountHolderFields.name,
+  type: accountHolderFields.type.default("other"),
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
-  // German tax profile (all optional).
-  taxAllowanceAnnual: decimalString.nullable().optional(),
-  capitalGainsTaxRate: decimalString.nullable().optional(),
-  churchTax: z.boolean().nullable().optional(),
-  taxResidence: z.string().trim().length(2).nullable().optional(),
+  taxAllowanceAnnual: accountHolderFields.taxAllowanceAnnual.optional(),
+  capitalGainsTaxRate: accountHolderFields.capitalGainsTaxRate.optional(),
+  churchTax: accountHolderFields.churchTax.optional(),
+  taxResidence: accountHolderFields.taxResidence.optional(),
 });
 export type AccountHolderInput = z.infer<typeof accountHolderInputSchema>;
 
-// PATCH variant: every field optional, without create-time defaults.
-export const accountHolderPatchSchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  type: z.enum(["self", "child", "other"]).optional(),
-  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
-  // German tax profile fields (all optional; null clears the value).
-  // Annual Sparerpauschbetrag — decimal string, e.g. "1000" (€1,000).
-  taxAllowanceAnnual: decimalString.nullable().optional(),
-  // Flat Kapitalertragsteuer rate — decimal string, e.g. "0.25" (25%).
-  capitalGainsTaxRate: decimalString.nullable().optional(),
-  // Church-tax surcharge flag.
-  churchTax: z.boolean().nullable().optional(),
-  // ISO-3166-1 alpha-2 tax residence, e.g. "DE".
-  taxResidence: z.string().trim().length(2).nullable().optional(),
-});
+export const accountHolderPatchSchema = z
+  .object({
+    ...accountHolderFields,
+    birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
+  })
+  .partial();
 export type AccountHolderPatch = z.infer<typeof accountHolderPatchSchema>;
 
-export const portfolioInputSchema = z.object({
+// Shared field definitions for portfolio schemas.
+const portfolioFields = {
   name: z.string().min(1),
-  baseCurrency: currencyCode.default("IDR"),
-  // The person this portfolio belongs to. Child-ness and beneficiary birth year
-  // derive from this holder. Nullable so a PATCH can unassign it.
-  accountHolderId: z.guid().nullable().optional(),
-  // Optional brokerage/custodian (free text). Nullable so a PATCH can clear it.
-  brokerage: z.string().trim().nullable().optional(),
-  // Optional account number (SID, depot number, broker account ID). Used for auto-detecting
-  // which portfolio a screenshot belongs to. Nullable so a PATCH can clear it.
-  accountNumber: z.string().trim().nullable().optional(),
-  // Optional IBAN, matched alongside accountNumber during import auto-detect. Nullable so a
-  // PATCH can clear it.
-  iban: z.string().trim().nullable().optional(),
-  // Whether this portfolio is included in the net-worth aggregate. Defaults to true
-  // so new portfolios are counted without any explicit action.
-  includeInAggregate: z.boolean().default(true),
-  // Where this portfolio's investment boundary sits. `true` = cash inside the
-  // boundary (savings/deposit account): contribution = net external cash, net worth
-  // includes cash. `false` (default) = cash outside (mixed/invest-only): contribution
-  // = net invested capital, cash excluded from net worth.
-  cashCounted: z.boolean().default(false),
-  // Opt-out for the negative-cash data-integrity guard. When true, the cash balance may dip
-  // below zero without flagging — for accounts where a buy routinely posts before its funding
-  // deposit clears. Only meaningful when cashCounted is true. Defaults to false.
-  allowNegativeCash: z.boolean().default(false),
-  // Opt-in source-document retention (issue #231). When false (default), uploaded
-  // PDFs/screenshots are parsed in memory and never persisted (privacy-by-default).
-  // When true, the source file is kept after import confirmation.
-  documentRetention: z.boolean().default(false),
-  // Per-depot Freistellungsauftrag (FSA) allocation in EUR. Must not exceed the holder's
-  // taxAllowanceAnnual cap (€1,000 single / €2,000 jointly assessed). Null = no FSA
-  // submitted for this depot; the tax page shows "unconfigured" until filled in.
-  taxAllowanceAnnual: decimalString.nullable().optional(),
+  baseCurrency: currencyCode,
+  accountHolderId: z.guid().nullable(),
+  brokerage: z.string().trim().nullable(),
+  accountNumber: z.string().trim().nullable(),
+  iban: z.string().trim().nullable(),
+  includeInAggregate: z.boolean(),
+  cashCounted: z.boolean(),
+  allowNegativeCash: z.boolean(),
+  documentRetention: z.boolean(),
+  taxAllowanceAnnual: decimalString.nullable(),
+};
+
+export const portfolioInputSchema = z.object({
+  name: portfolioFields.name,
+  baseCurrency: portfolioFields.baseCurrency.default("IDR"),
+  accountHolderId: portfolioFields.accountHolderId.optional(),
+  brokerage: portfolioFields.brokerage.optional(),
+  accountNumber: portfolioFields.accountNumber.optional(),
+  iban: portfolioFields.iban.optional(),
+  includeInAggregate: portfolioFields.includeInAggregate.default(true),
+  cashCounted: portfolioFields.cashCounted.default(false),
+  allowNegativeCash: portfolioFields.allowNegativeCash.default(false),
+  documentRetention: portfolioFields.documentRetention.default(false),
+  taxAllowanceAnnual: portfolioFields.taxAllowanceAnnual.optional(),
 });
 export type PortfolioInput = z.infer<typeof portfolioInputSchema>;
 
-// PATCH variant: every field optional and, crucially, WITHOUT the create-time
-// defaults — a partial update must never reset an omitted field (e.g. silently
-// flipping the currency back to IDR or the type back to "standard").
-export const portfolioPatchSchema = z.object({
-  name: z.string().min(1).optional(),
-  baseCurrency: currencyCode.optional(),
-  accountHolderId: z.guid().nullable().optional(),
-  brokerage: z.string().trim().nullable().optional(),
-  accountNumber: z.string().trim().nullable().optional(),
-  iban: z.string().trim().nullable().optional(),
-  includeInAggregate: z.boolean().optional(),
-  cashCounted: z.boolean().optional(),
-  allowNegativeCash: z.boolean().optional(),
-  documentRetention: z.boolean().optional(),
-  taxAllowanceAnnual: decimalString.nullable().optional(),
-});
+export const portfolioPatchSchema = z.object(portfolioFields).partial();
 export type PortfolioPatch = z.infer<typeof portfolioPatchSchema>;
 
 // Editable user profile fields. Both optional so the settings screen can PATCH a
