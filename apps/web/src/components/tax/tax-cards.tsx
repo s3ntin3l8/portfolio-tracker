@@ -1,7 +1,7 @@
 import { TriangleAlert, Info, CircleCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
-import { MonogramBadge } from "@/components/monogram-badge";
+import { InstrumentLogo } from "@/components/instrument-logo";
 import { Link } from "@/i18n/navigation";
 import type { HarvestSuggestion, TaxDistribution } from "@portfolio/api-client";
 import type { HarvestSummary } from "@portfolio/core";
@@ -238,7 +238,13 @@ export function HarvestRow({
   // Reference single-row layout: monogram | name + one meta line | gain + sublabel | CTA.
   return (
     <div className="flex items-center gap-3 border-t border-card-2 px-[22px] py-3 first:border-t-0">
-      <MonogramBadge label={label} assetClass={s.instrument?.assetClass} className="size-[38px]" />
+      <InstrumentLogo
+        label={label}
+        symbol={s.instrument?.symbol}
+        market={s.instrument?.market}
+        assetClass={s.instrument?.assetClass}
+        className="size-[38px]"
+      />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-bold">{s.instrument?.name ?? label}</p>
         <p className="truncate text-[11px] font-medium text-text-2">

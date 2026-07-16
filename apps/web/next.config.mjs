@@ -73,8 +73,9 @@ const nextConfig = {
       "script-src 'self' 'unsafe-inline'",
       // Tailwind/shadcn + Radix UI both rely on inline style attributes at runtime.
       "style-src 'self' 'unsafe-inline'",
-      // data:/blob: for uploaded-screenshot previews and canvas-rendered chart exports.
-      "img-src 'self' data: blob:",
+      // data:/blob: for uploaded-screenshot previews and canvas-rendered chart exports;
+      // img.logo.dev for hotlinked company/crypto logos (instrument-logo.tsx).
+      "img-src 'self' data: blob: https://img.logo.dev",
       "font-src 'self' data:",
       "connect-src 'self'",
       "worker-src 'self'",

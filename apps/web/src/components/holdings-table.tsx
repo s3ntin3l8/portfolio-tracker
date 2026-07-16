@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { MonogramBadge } from "@/components/monogram-badge";
+import { InstrumentLogo } from "@/components/instrument-logo";
 import { HoldingSparkline } from "@/components/holding-sparkline";
 import { Link, useRouter } from "@/i18n/navigation";
 import { formatMoney, formatPercent, formatSignedMoney, formatQuantity, cn } from "@/lib/utils";
@@ -164,8 +165,10 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                 >
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <MonogramBadge
+                      <InstrumentLogo
                         label={h.instrument?.symbol ?? h.instrumentId}
+                        symbol={h.instrument?.symbol}
+                        market={h.instrument?.market}
                         assetClass={h.instrument?.assetClass}
                       />
                       <div>
@@ -261,8 +264,10 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
               )}
               onClick={() => router.push(`/instruments/${h.instrumentId}`)}
             >
-              <MonogramBadge
+              <InstrumentLogo
                 label={h.instrument?.symbol ?? h.instrumentId}
+                symbol={h.instrument?.symbol}
+                market={h.instrument?.market}
                 assetClass={h.instrument?.assetClass}
                 className="size-[42px] rounded-[13px]"
               />

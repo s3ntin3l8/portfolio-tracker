@@ -14,7 +14,7 @@ import {
   TABLE_VALUE_STRONG,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
-import { MonogramBadge } from "@/components/monogram-badge";
+import { InstrumentLogo } from "@/components/instrument-logo";
 import { Link } from "@/i18n/navigation";
 import { formatMoney, formatPercent, cn } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
@@ -92,7 +92,11 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
               <TableRow key={y.instrumentId}>
                 <TableCell>
                   <div className="flex items-center gap-3 min-w-0">
-                    <MonogramBadge label={y.symbol ?? "—"} assetClass={y.assetClass} />
+                    <InstrumentLogo
+                      label={y.symbol ?? "—"}
+                      symbol={y.symbol}
+                      assetClass={y.assetClass}
+                    />
                     <div className="min-w-0">
                       <Link
                         href={`/instruments/${y.instrumentId}`}
@@ -100,7 +104,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
                       >
                         {y.symbol}
                       </Link>
-                      {(y.displayName ?? y.name) ? (
+                      {y.displayName ?? y.name ? (
                         <div className={TABLE_SUBLABEL}>{y.displayName ?? y.name}</div>
                       ) : null}
                     </div>
@@ -140,7 +144,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
               <div className="flex items-baseline justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-[15px] font-bold">{y.symbol}</div>
-                  {(y.displayName ?? y.name) ? (
+                  {y.displayName ?? y.name ? (
                     <div className="truncate text-xs font-medium text-text-2">
                       {y.displayName ?? y.name}
                     </div>

@@ -20,7 +20,7 @@ import {
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { MonogramBadge } from "@/components/monogram-badge";
+import { InstrumentLogo } from "@/components/instrument-logo";
 import { Link } from "@/i18n/navigation";
 import { TradeDetailSheet } from "@/components/trade-detail-sheet";
 import { formatMoney, formatPercent, formatSignedMoney, cn } from "@/lib/utils";
@@ -263,8 +263,10 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                                 isOpen && "rotate-90",
                               )}
                             />
-                            <MonogramBadge
+                            <InstrumentLogo
                               label={tr.instrument?.symbol ?? tr.instrumentId}
+                              symbol={tr.instrument?.symbol}
+                              market={tr.instrument?.market}
                               assetClass={tr.instrument?.assetClass}
                               className="shrink-0"
                             />
@@ -430,8 +432,10 @@ export function TradesTable({ trades, currency }: TradesTableProps) {
                   onClick={() => tr.status === "closed" && setDetailTrade(tr)}
                 >
                   <div className="flex min-w-0 items-start gap-2.5">
-                    <MonogramBadge
+                    <InstrumentLogo
                       label={tr.instrument?.symbol ?? tr.instrumentId}
+                      symbol={tr.instrument?.symbol}
+                      market={tr.instrument?.market}
                       assetClass={tr.instrument?.assetClass}
                       className="mt-0.5 size-[42px] rounded-[13px]"
                     />
