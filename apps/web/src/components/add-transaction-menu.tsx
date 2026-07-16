@@ -42,8 +42,10 @@ import { HolderFormDialog } from "@/components/holder-form-dialog";
  */
 export function AddTransactionMenu({
   autoOpenFromParams = false,
+  isAdmin = true,
 }: {
   autoOpenFromParams?: boolean;
+  isAdmin?: boolean;
 } = {}) {
   const tm = useTranslations("Manage");
   const ti = useTranslations("Import");
@@ -296,6 +298,7 @@ export function AddTransactionMenu({
                   defaultTab={manualDefaultTab}
                   initialTransaction={initialTransaction}
                   stickyFooter
+                  isAdmin={isAdmin}
                 />
               )}
             </div>

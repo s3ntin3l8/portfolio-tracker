@@ -998,7 +998,19 @@
       "6m": "6B",
       "1y": "1T",
       "all": "Semua"
-    }
+    },
+    "editTitle": "Ubah instrumen",
+    "isin": "ISIN",
+    "wkn": "WKN",
+    "symbol": "Simbol",
+    "name": "Nama",
+    "assetClass": "Kelas aset",
+    "market": "Pasar",
+    "editSaved": "Instrumen diperbarui.",
+    "editConflict": "ISIN atau WKN sudah digunakan oleh instrumen lain.",
+    "editError": "Gagal menyimpan instrumen.",
+    "saving": "Menyimpan…",
+    "save": "Simpan"
   },
   "CorpAction": {
     "title": "Catat aksi korporasi",
@@ -1022,7 +1034,10 @@
     "cancel": "Batal",
     "savedResults": "Portofolio Anda",
     "discoveredResults": "Pencarian pasar",
-    "notInPortfolios": "{symbol} ditemukan di data pasar tetapi belum ada di portofolio Anda. Import transaksi untuk instrumen ini terlebih dahulu."
+    "notInPortfolios": "{symbol} ditemukan di data pasar tetapi belum ada di portofolio Anda. Import transaksi untuk instrumen ini terlebih dahulu.",
+    "adminOnly": "Aksi korporasi hanya dapat dikelola oleh administrator.",
+    "saveError": "Gagal menyimpan aksi korporasi.",
+    "deleteError": "Gagal menghapus aksi korporasi."
   },
   "Merger": {
     "link": "Merger",

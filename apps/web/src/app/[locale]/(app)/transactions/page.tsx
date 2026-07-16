@@ -61,6 +61,9 @@ export default async function TransactionsPage({
   let anomalies: Anomaly[] | null = null;
   let scopeCurrency = "IDR";
 
+  const me = await loadMe();
+  const isAdmin = Boolean(me?.isAdmin);
+
   if (aggregate) {
     const result = await loadNetworthTransactionsPaginated(
       page,
@@ -73,7 +76,6 @@ export default async function TransactionsPage({
     rows = result.rows;
     total = result.total;
     if (result.status === "ok") txYears = result.years ?? [];
-    const me = await loadMe();
     scopeCurrency = me?.displayCurrency ?? "IDR";
   } else {
     const [txResult, anomalyResult] = await Promise.all([
@@ -226,7 +228,7 @@ export default async function TransactionsPage({
             icon={Receipt}
             title={te("noTransactionsTitle")}
             description={te("noTransactionsBody")}
-            action={<AddTransactionMenu />}
+            action={<AddTransactionMenu isAdmin={isAdmin} />}
           />
           {importsSection}
         </div>

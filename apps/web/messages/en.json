@@ -1000,7 +1000,19 @@
       "6m": "6M",
       "1y": "1Y",
       "all": "All"
-    }
+    },
+    "editTitle": "Edit instrument",
+    "isin": "ISIN",
+    "wkn": "WKN",
+    "symbol": "Symbol",
+    "name": "Name",
+    "assetClass": "Asset class",
+    "market": "Market",
+    "editSaved": "Instrument updated.",
+    "editConflict": "ISIN or WKN is already in use by another instrument.",
+    "editError": "Failed to save instrument.",
+    "saving": "Saving…",
+    "save": "Save"
   },
   "CorpAction": {
     "title": "Record a corporate action",
@@ -1024,7 +1036,10 @@
     "cancel": "Cancel",
     "savedResults": "Your portfolios",
     "discoveredResults": "Market discovery",
-    "notInPortfolios": "{symbol} was found in market data but is not in your portfolios yet. Import a transaction for it first."
+    "notInPortfolios": "{symbol} was found in market data but is not in your portfolios yet. Import a transaction for it first.",
+    "adminOnly": "Corporate actions can only be managed by administrators.",
+    "saveError": "Failed to save the corporate action.",
+    "deleteError": "Failed to delete the corporate action."
   },
   "Merger": {
     "link": "Merger",

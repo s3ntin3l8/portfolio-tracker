@@ -17,6 +17,7 @@ import {
   loadNetWorth,
   loadNetWorthHistory,
   loadPreferences,
+  loadMe,
   getSelectedPortfolioId,
 } from "@/lib/server-api";
 import {
@@ -82,6 +83,7 @@ export default async function HoldingsPage({
   const anomaliesPromise = loadAnomalies(portfolioParam);
   const historyPromise = loadNetWorthHistory(HERO_INITIAL_RANGE);
   const selectedIdPromise = getSelectedPortfolioId();
+  const mePromise = loadMe();
 
   const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
@@ -105,6 +107,9 @@ export default async function HoldingsPage({
       }),
     );
   }
+
+  const me = await mePromise;
+  const isAdmin = Boolean(me?.isAdmin);
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =
@@ -222,7 +227,7 @@ export default async function HoldingsPage({
                 }
               />
             ) : (
-              <AddTransactionMenu autoOpenFromParams={false} />
+              <AddTransactionMenu autoOpenFromParams={false} isAdmin={isAdmin} />
             )
           }
         />
