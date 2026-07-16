@@ -1,12 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import {
-  ImportFlow,
-  type ImportClient,
-  type ImportDraft,
-  type ImportTask,
-} from "../src/components/import-flow";
+import { ImportFlow } from "../src/components/import-flow";
+import type { ImportClient, ImportDraft, ImportTask } from "../src/components/import-flow/types";
 import messages from "../messages/en.json";
 
 // Spy on the router so the Phase-2 (auto-materialized) path's refresh is satisfied.

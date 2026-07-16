@@ -7,11 +7,10 @@ import {
   trConnections,
   trResolvedEvents,
 } from "@portfolio/db";
-import { PytrError } from "../../services/pytr/runner.js";
 import { syncTrConnection } from "../../services/pytr/sync.js";
 import { enqueueTrSync, SYNC_CLAIM_LEASE_MS } from "../../services/scheduler.js";
 import { deleteStorageObjectsByKey } from "../../storage/receipts.js";
-import { serialize, getConnection } from "./_shared.js";
+import { getConnection } from "./_shared.js";
 
 export function registerSyncRoutes(app: FastifyInstance) {
   app.post("/tr/connection/sync", { preHandler: app.authenticate }, async (request, reply) => {

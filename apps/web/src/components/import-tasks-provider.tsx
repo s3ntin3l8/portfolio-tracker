@@ -9,7 +9,7 @@ import { useRouter } from "@/i18n/navigation";
 import { useImportClient } from "@/lib/use-import-client";
 import { classifyImportError, importErrorDetail } from "@/lib/import-errors";
 import { mapPool, IMPORT_CONCURRENCY } from "@/lib/promise-pool";
-import type { ImportClient, ImportTask } from "@/components/import-flow";
+import type { ImportClient, ImportTask } from "@/components/import-flow/types";
 
 export interface ImportTasksContextValue {
   /** Fire-and-forget: run an import's write in the background, driving a status toast. */

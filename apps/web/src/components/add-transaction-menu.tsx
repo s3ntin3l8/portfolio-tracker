@@ -21,7 +21,7 @@ import { NewEntryTabs, type NewEntryTab } from "@/components/new-entry-tabs";
 import type { AddTransactionInitial } from "@/components/add-transaction-form";
 import { useRouter, usePathname } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
-import type { ImportTargetPortfolio } from "@/components/import-flow";
+import type { ImportTargetPortfolio } from "@/components/import-flow/types";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { HolderFormDialog } from "@/components/holder-form-dialog";
 

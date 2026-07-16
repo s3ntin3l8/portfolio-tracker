@@ -14,7 +14,7 @@ import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 import { Badge } from "@/components/ui/badge";
 import { PortfolioPicker } from "@/components/portfolio-picker";
-import type { ImportTargetPortfolio } from "@/components/import-flow";
+import type { ImportTargetPortfolio } from "@/components/import-flow/types";
 
 export interface ImportFilesTableProps {
   /** One row per imported file, in upload order. */

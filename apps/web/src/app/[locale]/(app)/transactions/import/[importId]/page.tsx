@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link, redirect } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { DraftReviewClient } from "@/components/draft-review-client";
-import type { ImportDraft, ImportTargetPortfolio } from "@/components/import-flow";
+import type { ImportDraft, ImportTargetPortfolio } from "@/components/import-flow/types";
 import { loadImport, loadPortfolioList } from "@/lib/server-api";
 
 export default async function ImportReviewPage({

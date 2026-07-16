@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/lib/utils";
-import type { ImportContract } from "@/components/import-flow";
+import type { ImportContract } from "@/components/import-flow/types";
 
 export interface ContractReviewProps {
   contracts: ImportContract[];

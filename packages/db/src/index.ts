@@ -1,4 +1,6 @@
 import path from "node:path";
+import * as schema from "./schema/index.js";
+export { schema };
 import type { users, apiTokens } from "./schema/users.js";
 import type { accountHolders } from "./schema/account-holders.js";
 import type { portfolios } from "./schema/portfolios.js";

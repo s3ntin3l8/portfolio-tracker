@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { ApiError } from "@portfolio/api-client";
 import { ImportTasksProvider, useImportTasks } from "../src/components/import-tasks-provider";
-import type { ImportClient, ImportTask } from "../src/components/import-flow";
+import type { ImportClient, ImportTask } from "../src/components/import-flow/types";
 import messages from "../messages/en.json";
 
 // Mutable holders the mocks read from (hoisted so vi.mock factories may reference them).

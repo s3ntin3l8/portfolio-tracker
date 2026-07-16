@@ -14,7 +14,7 @@ import {
   type ImportIssue,
   type ImportTargetPortfolio,
   type ReviewDraft,
-} from "@/components/import-flow";
+} from "@/components/import-flow/types";
 import type { DuplicateAnnotation, LikelyDuplicate } from "@portfolio/api-client";
 import { useApiClient } from "@/lib/api";
 import { useImportConfirm } from "@/lib/use-import-confirm";

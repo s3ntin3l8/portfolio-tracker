@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useApiClient } from "@/lib/api";
-import type { ImportClient, ImportResult } from "@/components/import-flow";
+import type { ImportClient, ImportResult } from "@/components/import-flow/types";
 
 /**
  * Builds the {@link ImportClient} the import flow needs, bound to the session via

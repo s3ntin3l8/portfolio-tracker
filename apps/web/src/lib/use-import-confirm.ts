@@ -8,7 +8,7 @@ import {
   type DuplicateMatch,
   type AccountMismatch,
 } from "@portfolio/api-client";
-import { stripUid, type ImportDraft, type ReviewDraft } from "@/components/import-flow";
+import { stripUid, type ImportDraft, type ReviewDraft } from "@/components/import-flow/types";
 import { useApiClient } from "@/lib/api";
 
 // ---------------------------------------------------------------------------

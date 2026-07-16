@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { ApiError } from "@portfolio/api-client";
 import messages from "../messages/en.json";
-import type { ImportDraft } from "../src/components/import-flow";
+import type { ImportDraft } from "../src/components/import-flow/types";
 
 const push = vi.fn();
 const refresh = vi.fn();

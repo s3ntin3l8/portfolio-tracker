@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { ImportReview } from "../src/components/import-review";
-import type { ReviewDraft } from "../src/components/import-flow";
+import type { ReviewDraft } from "../src/components/import-flow/types";
 import messages from "../messages/en.json";
 
 const DRAFTS: ReviewDraft[] = [

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { trConnections } from "@portfolio/db";
 import { PytrApprovalError, PytrUnavailableError } from "../../services/pytr/runner.js";
-import { serialize, getConnection, lookupPortfolio } from "./_shared.js";
+import { getConnection, lookupPortfolio } from "./_shared.js";
 
 const connectBodySchema = z.object({
   phone: z.string().min(3),

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { ContractReview } from "../src/components/contract-review";
-import type { ImportContract } from "../src/components/import-flow";
+import type { ImportContract } from "../src/components/import-flow/types";
 import messages from "../messages/en.json";
 
 const CONTRACT: ImportContract = {

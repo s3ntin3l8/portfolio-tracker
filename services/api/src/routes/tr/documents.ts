@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { and, count, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, count, eq, isNotNull, sql } from "drizzle-orm";
 import { documents, portfolios, screenshotImports, transactions } from "@portfolio/db";
 import { PytrAuthError, PytrError } from "../../services/pytr/runner.js";
 import { enrichTransactionsFromStoredDocuments } from "../../services/enrichment.js";
