@@ -2,20 +2,9 @@
 
 import { useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
 import { useTranslations } from "next-intl";
 import type { AccountHolder } from "@portfolio/api-client";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 
@@ -33,7 +22,6 @@ export function DeleteHolderDialog({
   trigger: React.ReactNode;
 }) {
   const t = useTranslations("AccountHolders");
-  const tf = useTranslations("PortfolioForm");
   const api = useApiClient();
   const router = useRouter();
 
@@ -63,14 +51,27 @@ export function DeleteHolderDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("deleteTitle", { name: holder.name })}</DialogTitle>
-          <DialogDescription>{t("deleteWarning")}</DialogDescription>
-        </DialogHeader>
+    <>
+      <span
+        className="contents"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+      >
+        {trigger}
+      </span>
 
+      <ConfirmActionDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={t("deleteTitle", { name: holder.name })}
+        description={t("deleteWarning")}
+        confirmLabel={t("confirmDelete")}
+        variant="destructive"
+        busy={busy}
+        onConfirm={handleDelete}
+      >
         {error && (
           <div
             role="alert"
@@ -80,19 +81,7 @@ export function DeleteHolderDialog({
             {t("error")}
           </div>
         )}
-
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="ghost" disabled={busy}>
-              {tf("cancel")}
-            </Button>
-          </DialogClose>
-          <Button type="button" variant="destructive" onClick={handleDelete} disabled={busy}>
-            {busy && <Spinner size="sm" />}
-            {t("confirmDelete")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </ConfirmActionDialog>
+    </>
   );
 }

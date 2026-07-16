@@ -1,6 +1,8 @@
 {
   "Common": {
-    "pickDate": "Pilih tanggal"
+    "pickDate": "Pilih tanggal",
+    "cancel": "Batal",
+    "confirm": "Konfirmasi"
   },
   "Duplicates": {
     "warning": "{count, plural, one {# transaksi terpilih} other {# transaksi terpilih}} sudah diimpor dari sumber lain. Mengimpor lagi akan membuat duplikat.",

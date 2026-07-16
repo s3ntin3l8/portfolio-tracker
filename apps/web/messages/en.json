@@ -1,6 +1,8 @@
 {
   "Common": {
-    "pickDate": "Pick a date"
+    "pickDate": "Pick a date",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
   },
   "Duplicates": {
     "warning": "{count, plural, one {# selected transaction was} other {# selected transactions were}} already imported from another source. Importing again will create duplicates.",
