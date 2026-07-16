@@ -58,10 +58,10 @@ const multiItems: CorporateAction[] = [
   },
 ];
 
-function renderManager(initial = items) {
+function renderManager(initial = items, isAdmin?: boolean) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <CorporateActionsManager items={initial} />
+      <CorporateActionsManager items={initial} isAdmin={isAdmin} />
     </NextIntlClientProvider>,
   );
 }
@@ -78,8 +78,24 @@ describe("CorporateActionsManager", () => {
     expect(screen.getByText(messages.Instrument.noCorporateActions)).toBeInTheDocument();
   });
 
+  it("hides edit and delete buttons when isAdmin is false", () => {
+    renderManager(multiItems, false);
+    expect(screen.queryByRole("button", { name: m.edit })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: m.delete })).not.toBeInTheDocument();
+    // Data rows should still be visible
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+  });
+
+  it("shows edit and delete buttons when isAdmin is true", () => {
+    renderManager(multiItems, true);
+    // Two rows → two edit buttons and two delete buttons
+    expect(screen.getAllByRole("button", { name: m.edit })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: m.delete })).toHaveLength(2);
+  });
+
   it("edits a corporate action's ratio", async () => {
-    renderManager();
+    renderManager(undefined, true);
     fireEvent.click(screen.getByRole("button", { name: m.edit }));
     fireEvent.change(screen.getByLabelText(m.ratio), {
       target: { value: "3" },
@@ -95,7 +111,7 @@ describe("CorporateActionsManager", () => {
   });
 
   it("deletes only after the two-step confirm", async () => {
-    renderManager();
+    renderManager(undefined, true);
     fireEvent.click(screen.getByRole("button", { name: m.delete }));
     expect(deleteCorporateAction).not.toHaveBeenCalled();
 

@@ -37,6 +37,7 @@ type TestPortfolio = {
 function renderTabs(
   defaultTab?: "transaction" | "corporate-action" | "merger",
   portfolios: TestPortfolio[] = [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
+  isAdmin?: boolean,
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -44,6 +45,7 @@ function renderTabs(
         portfolios={portfolios}
         initialPortfolioId={portfolios[0]?.id ?? ""}
         defaultTab={defaultTab}
+        isAdmin={isAdmin}
       />
     </NextIntlClientProvider>,
   );
@@ -51,7 +53,7 @@ function renderTabs(
 
 describe("NewEntryTabs", () => {
   it("shows the transaction form by default and switches to the corporate-action form", () => {
-    renderTabs();
+    renderTabs(undefined, undefined, true);
 
     // Transaction tab active: the manual form's submit button is shown; the corp form
     // (inactive tab) is unmounted, so its Ratio field is absent.
@@ -65,7 +67,7 @@ describe("NewEntryTabs", () => {
   });
 
   it("starts on the corporate-action tab when requested", () => {
-    renderTabs("corporate-action");
+    renderTabs("corporate-action", undefined, true);
     expect(screen.getByLabelText(ca.ratio)).toBeInTheDocument();
   });
 

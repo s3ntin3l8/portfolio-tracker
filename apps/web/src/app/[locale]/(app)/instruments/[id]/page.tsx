@@ -1,5 +1,13 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { ArrowLeft, LineChart, Receipt, Wallet, AlertCircle, AlertTriangle } from "lucide-react";
+import {
+  ArrowLeft,
+  LineChart,
+  Receipt,
+  Wallet,
+  Pencil,
+  AlertCircle,
+  AlertTriangle,
+} from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +18,7 @@ import { MonogramBadge } from "@/components/monogram-badge";
 import { InstrumentPriceCard } from "@/components/instrument-price-card";
 import { InstrumentIncomeCard } from "@/components/instrument-income-card";
 import { CorporateActionsManager } from "@/components/corporate-actions-manager";
+import { InstrumentEditDialog } from "@/components/instrument-edit-dialog";
 import { TransactionsTable } from "@/components/transactions-table";
 import { InstrumentLotsTable } from "@/components/instrument-lots-table";
 import {
@@ -18,6 +27,7 @@ import {
   loadAnomalies,
   loadIncomeStats,
   loadPreferences,
+  loadMe,
 } from "@/lib/server-api";
 import { formatMoney, formatPercent, rowAnomalyCounts } from "@/lib/utils";
 import { lastPriceInfo } from "@/lib/instrument-price";
@@ -48,6 +58,7 @@ export default async function InstrumentPage({
   const instrumentPromise = loadInstrument(id);
   const anomaliesPromise = loadAnomalies();
   const incomeStatsPromise = loadIncomeStats();
+  const mePromise = loadMe();
 
   const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
@@ -70,6 +81,9 @@ export default async function InstrumentPage({
       }),
     );
   }
+
+  const me = await mePromise;
+  const isAdmin = Boolean(me?.isAdmin);
 
   // Filter anomalies to those affecting this specific instrument. Portfolio-scoped
   // anomalies (reconciliation_gap, position_gap) are NOT instrument-specific — they used to
@@ -155,6 +169,13 @@ export default async function InstrumentPage({
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">{instrument.symbol}</h1>
             <Badge variant="outline">{tc(instrument.assetClass)}</Badge>
+            {isAdmin && (
+              <InstrumentEditDialog instrument={instrument}>
+                <Button variant="ghost" size="icon" aria-label={t("edit")}>
+                  <Pencil className="size-4" />
+                </Button>
+              </InstrumentEditDialog>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {instrument.name} · {instrument.market} · {instrument.currency}
@@ -304,7 +325,7 @@ export default async function InstrumentPage({
           <CardTitle>{t("corporateActions")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <CorporateActionsManager items={corporateActions} />
+          <CorporateActionsManager items={corporateActions} isAdmin={isAdmin} />
         </CardContent>
       </Card>
     </div>

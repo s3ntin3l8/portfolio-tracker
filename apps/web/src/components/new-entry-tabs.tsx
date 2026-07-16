@@ -29,6 +29,7 @@ export function NewEntryTabs({
   defaultTab = "transaction",
   initialTransaction,
   stickyFooter = false,
+  isAdmin = false,
 }: {
   portfolios: PickablePortfolio[];
   initialPortfolioId: string;
@@ -40,6 +41,7 @@ export function NewEntryTabs({
    *  (`add-transaction-menu.tsx`) turns this on; the full `/transactions/new` page leaves
    *  it off (a bottom-pinned bar there would sit under the fixed bottom-nav). */
   stickyFooter?: boolean;
+  isAdmin?: boolean;
 }) {
   const tt = useTranslations("Manage.tx");
   const tca = useTranslations("CorpAction");
@@ -84,7 +86,7 @@ export function NewEntryTabs({
         />
       </TabsContent>
       <TabsContent value="corporate-action">
-        <RecordCorporateAction stickyFooter={stickyFooter} />
+        <RecordCorporateAction stickyFooter={stickyFooter} isAdmin={isAdmin} />
       </TabsContent>
       <TabsContent value="merger" className="space-y-4">
         {picker}

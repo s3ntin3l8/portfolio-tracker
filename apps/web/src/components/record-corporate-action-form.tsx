@@ -27,11 +27,13 @@ export function RecordCorporateActionForm({
   client,
   onSuccess,
   stickyFooter = false,
+  isAdmin = false,
 }: {
   client: RecordCorpActionClient;
   onSuccess?: () => void;
   /** See `AddTransactionForm` — sheet contexts only. */
   stickyFooter?: boolean;
+  isAdmin?: boolean;
 }) {
   const t = useTranslations("CorpAction");
   const tt = useTranslations("TxType");
@@ -139,6 +141,14 @@ export function RecordCorporateActionForm({
   const formId = useId();
   const footerEl = useSheetFooter();
   const useFooterPortal = stickyFooter && footerEl;
+
+  if (!isAdmin) {
+    return (
+      <div className="rounded-md border border-border bg-muted/40 px-4 py-6 text-center">
+        <p className="text-sm font-medium text-muted-foreground">{t("adminOnly")}</p>
+      </div>
+    );
+  }
 
   return (
     <>

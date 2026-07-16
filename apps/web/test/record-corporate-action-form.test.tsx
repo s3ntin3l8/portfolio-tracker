@@ -31,10 +31,10 @@ function makeClient(over: Partial<RecordCorpActionClient> = {}): RecordCorpActio
   };
 }
 
-function renderForm(client: RecordCorpActionClient, onSuccess = vi.fn()) {
+function renderForm(client: RecordCorpActionClient, onSuccess = vi.fn(), isAdmin?: boolean) {
   render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <RecordCorporateActionForm client={client} onSuccess={onSuccess} />
+      <RecordCorporateActionForm client={client} onSuccess={onSuccess} isAdmin={isAdmin} />
     </NextIntlClientProvider>,
   );
   return onSuccess;
@@ -43,7 +43,7 @@ function renderForm(client: RecordCorpActionClient, onSuccess = vi.fn()) {
 describe("RecordCorporateActionForm", () => {
   it("records a split against a selected instrument", async () => {
     const client = makeClient();
-    const onSuccess = renderForm(client);
+    const onSuccess = renderForm(client, vi.fn(), true);
 
     fireEvent.change(screen.getByLabelText(m.search), {
       target: { value: "bbca" },
@@ -65,7 +65,7 @@ describe("RecordCorporateActionForm", () => {
 
   it("requires an instrument", async () => {
     const client = makeClient();
-    renderForm(client);
+    renderForm(client, vi.fn(), true);
 
     fireEvent.change(screen.getByLabelText(m.ratio), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText(m.exDate, { selector: "input" }), {
@@ -82,7 +82,7 @@ describe("RecordCorporateActionForm", () => {
   it("wraps the submit button in a sticky footer when stickyFooter is set", () => {
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <RecordCorporateActionForm client={makeClient()} onSuccess={vi.fn()} stickyFooter />
+        <RecordCorporateActionForm client={makeClient()} onSuccess={vi.fn()} stickyFooter isAdmin />
       </NextIntlClientProvider>,
     );
     expect(screen.getByRole("button", { name: m.submit }).closest(".sticky")).not.toBeNull();

@@ -180,7 +180,7 @@ export function AppShell({
                   AddTransactionMenu reads useSearchParams and this shell renders on
                   every route (avoids a CSR-bailout de-opt). */}
                 <Suspense fallback={null}>
-                  <AddTransactionMenu autoOpenFromParams />
+                  <AddTransactionMenu autoOpenFromParams isAdmin={isAdmin} />
                 </Suspense>
               </div>
             </div>
