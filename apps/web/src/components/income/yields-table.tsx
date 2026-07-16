@@ -104,7 +104,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
                       >
                         {y.symbol}
                       </Link>
-                      {y.displayName ?? y.name ? (
+                      {(y.displayName ?? y.name) ? (
                         <div className={TABLE_SUBLABEL}>{y.displayName ?? y.name}</div>
                       ) : null}
                     </div>
@@ -144,7 +144,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
               <div className="flex items-baseline justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-[15px] font-bold">{y.symbol}</div>
-                  {y.displayName ?? y.name ? (
+                  {(y.displayName ?? y.name) ? (
                     <div className="truncate text-xs font-medium text-text-2">
                       {y.displayName ?? y.name}
                     </div>

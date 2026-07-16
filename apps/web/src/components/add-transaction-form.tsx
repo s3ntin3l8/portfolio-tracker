@@ -387,12 +387,9 @@ export function AddTransactionForm({
         currency,
         executedAt: new Date(date),
         // Preserve import provenance on edit; new manual rows default to "manual".
-        source: (isEdit ? initial?.source ?? "manual" : "manual") as
-          | "manual"
-          | "screenshot"
-          | "csv"
-          | "pytr",
-        externalId: isEdit ? initial?.externalId ?? undefined : undefined,
+        source: (isEdit ? (initial?.source ?? "manual") : "manual") as
+          "manual" | "screenshot" | "csv" | "pytr",
+        externalId: isEdit ? (initial?.externalId ?? undefined) : undefined,
       };
       if (transactionId) {
         await client.updateTransaction(portfolioId, transactionId, payload);
