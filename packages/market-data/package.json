@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@portfolio/core": "*",
     "yahoo-finance2": "^4.0.0"
   }
 }
