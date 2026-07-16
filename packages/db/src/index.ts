@@ -1,61 +1,95 @@
 import path from "node:path";
-import * as schema from "./schema.js";
+import type { users, apiTokens } from "./schema/users.js";
+import type { accountHolders } from "./schema/account-holders.js";
+import type { portfolios } from "./schema/portfolios.js";
+import type { instruments } from "./schema/instruments.js";
+import type { screenshotImports } from "./schema/screenshot-imports.js";
+import type { ibkrConnections } from "./schema/connections.js";
+import type {
+  providerSettings,
+  providerUsage,
+  scrapedQuotes,
+  providerCredentials,
+  visionProviderSettings,
+  adminAuditLog,
+  importSettings,
+  storageSettings,
+} from "./schema/admin.js";
+import type { documents } from "./schema/documents.js";
+import type { transactions } from "./schema/transactions.js";
+import type { transactionSources } from "./schema/transaction-sources.js";
+import type { corporateActions, dismissedAnomalies } from "./schema/anomalies-corp-actions.js";
+import type { dividendEvents, prices, lastPrices } from "./schema/dividends-prices.js";
+import type { benchmarkPrices, fxRates } from "./schema/user-preferences.js";
 
-export * from "./schema.js";
-export { schema };
+export * from "./schema/enums.js";
+export * from "./schema/users.js";
+export * from "./schema/account-holders.js";
+export * from "./schema/portfolios.js";
+export * from "./schema/instruments.js";
+export * from "./schema/screenshot-imports.js";
+export * from "./schema/connections.js";
+export * from "./schema/admin.js";
+export * from "./schema/documents.js";
+export * from "./schema/transactions.js";
+export * from "./schema/transaction-sources.js";
+export * from "./schema/anomalies-corp-actions.js";
+export * from "./schema/loans.js";
+export * from "./schema/dividends-prices.js";
+export * from "./schema/snapshots.js";
+export * from "./schema/targets-tax.js";
+export * from "./schema/user-preferences.js";
+export * from "./schema/relations.js";
 
-// Absolute path to this package's generated SQL migrations, for the API to apply
-// at startup. Resolves relative to the built/aliased module location.
 export const migrationsDir = path.resolve(import.meta.dirname, "../drizzle");
 
-// Inferred row types (select) and insert types for each table.
-export type User = typeof schema.users.$inferSelect;
-export type NewUser = typeof schema.users.$inferInsert;
-export type ApiToken = typeof schema.apiTokens.$inferSelect;
-export type NewApiToken = typeof schema.apiTokens.$inferInsert;
-export type Portfolio = typeof schema.portfolios.$inferSelect;
-export type NewPortfolio = typeof schema.portfolios.$inferInsert;
-export type AccountHolder = typeof schema.accountHolders.$inferSelect;
-export type NewAccountHolder = typeof schema.accountHolders.$inferInsert;
-export type Instrument = typeof schema.instruments.$inferSelect;
-export type NewInstrument = typeof schema.instruments.$inferInsert;
-export type Transaction = typeof schema.transactions.$inferSelect;
-export type NewTransaction = typeof schema.transactions.$inferInsert;
-export type CorporateAction = typeof schema.corporateActions.$inferSelect;
-export type NewCorporateAction = typeof schema.corporateActions.$inferInsert;
-export type DismissedAnomaly = typeof schema.dismissedAnomalies.$inferSelect;
-export type NewDismissedAnomaly = typeof schema.dismissedAnomalies.$inferInsert;
-export type ScreenshotImport = typeof schema.screenshotImports.$inferSelect;
-export type NewScreenshotImport = typeof schema.screenshotImports.$inferInsert;
-export type Price = typeof schema.prices.$inferSelect;
-export type NewPrice = typeof schema.prices.$inferInsert;
-export type LastPrice = typeof schema.lastPrices.$inferSelect;
-export type NewLastPrice = typeof schema.lastPrices.$inferInsert;
-export type FxRate = typeof schema.fxRates.$inferSelect;
-export type NewFxRate = typeof schema.fxRates.$inferInsert;
-export type ProviderSetting = typeof schema.providerSettings.$inferSelect;
-export type NewProviderSetting = typeof schema.providerSettings.$inferInsert;
-export type ProviderUsageRow = typeof schema.providerUsage.$inferSelect;
-export type NewProviderUsageRow = typeof schema.providerUsage.$inferInsert;
-export type ScrapedQuote = typeof schema.scrapedQuotes.$inferSelect;
-export type NewScrapedQuote = typeof schema.scrapedQuotes.$inferInsert;
-export type DividendEvent = typeof schema.dividendEvents.$inferSelect;
-export type NewDividendEvent = typeof schema.dividendEvents.$inferInsert;
-export type ProviderCredential = typeof schema.providerCredentials.$inferSelect;
-export type NewProviderCredential = typeof schema.providerCredentials.$inferInsert;
-export type VisionProviderSetting = typeof schema.visionProviderSettings.$inferSelect;
-export type NewVisionProviderSetting = typeof schema.visionProviderSettings.$inferInsert;
-export type AdminAuditEntry = typeof schema.adminAuditLog.$inferSelect;
-export type NewAdminAuditEntry = typeof schema.adminAuditLog.$inferInsert;
-export type ImportSettingsRow = typeof schema.importSettings.$inferSelect;
-export type NewImportSettingsRow = typeof schema.importSettings.$inferInsert;
-export type StorageSettingsRow = typeof schema.storageSettings.$inferSelect;
-export type NewStorageSettingsRow = typeof schema.storageSettings.$inferInsert;
-export type Document = typeof schema.documents.$inferSelect;
-export type NewDocument = typeof schema.documents.$inferInsert;
-export type TransactionSource = typeof schema.transactionSources.$inferSelect;
-export type NewTransactionSource = typeof schema.transactionSources.$inferInsert;
-export type IbkrConnection = typeof schema.ibkrConnections.$inferSelect;
-export type NewIbkrConnection = typeof schema.ibkrConnections.$inferInsert;
-export type BenchmarkPrice = typeof schema.benchmarkPrices.$inferSelect;
-export type NewBenchmarkPrice = typeof schema.benchmarkPrices.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type NewApiToken = typeof apiTokens.$inferInsert;
+export type Portfolio = typeof portfolios.$inferSelect;
+export type NewPortfolio = typeof portfolios.$inferInsert;
+export type AccountHolder = typeof accountHolders.$inferSelect;
+export type NewAccountHolder = typeof accountHolders.$inferInsert;
+export type Instrument = typeof instruments.$inferSelect;
+export type NewInstrument = typeof instruments.$inferInsert;
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;
+export type CorporateAction = typeof corporateActions.$inferSelect;
+export type NewCorporateAction = typeof corporateActions.$inferInsert;
+export type DismissedAnomaly = typeof dismissedAnomalies.$inferSelect;
+export type NewDismissedAnomaly = typeof dismissedAnomalies.$inferInsert;
+export type ScreenshotImport = typeof screenshotImports.$inferSelect;
+export type NewScreenshotImport = typeof screenshotImports.$inferInsert;
+export type Price = typeof prices.$inferSelect;
+export type NewPrice = typeof prices.$inferInsert;
+export type LastPrice = typeof lastPrices.$inferSelect;
+export type NewLastPrice = typeof lastPrices.$inferInsert;
+export type FxRate = typeof fxRates.$inferSelect;
+export type NewFxRate = typeof fxRates.$inferInsert;
+export type ProviderSetting = typeof providerSettings.$inferSelect;
+export type NewProviderSetting = typeof providerSettings.$inferInsert;
+export type ProviderUsageRow = typeof providerUsage.$inferSelect;
+export type NewProviderUsageRow = typeof providerUsage.$inferInsert;
+export type ScrapedQuote = typeof scrapedQuotes.$inferSelect;
+export type NewScrapedQuote = typeof scrapedQuotes.$inferInsert;
+export type DividendEvent = typeof dividendEvents.$inferSelect;
+export type NewDividendEvent = typeof dividendEvents.$inferInsert;
+export type ProviderCredential = typeof providerCredentials.$inferSelect;
+export type NewProviderCredential = typeof providerCredentials.$inferInsert;
+export type VisionProviderSetting = typeof visionProviderSettings.$inferSelect;
+export type NewVisionProviderSetting = typeof visionProviderSettings.$inferInsert;
+export type AdminAuditEntry = typeof adminAuditLog.$inferSelect;
+export type NewAdminAuditEntry = typeof adminAuditLog.$inferInsert;
+export type ImportSettingsRow = typeof importSettings.$inferSelect;
+export type NewImportSettingsRow = typeof importSettings.$inferInsert;
+export type StorageSettingsRow = typeof storageSettings.$inferSelect;
+export type NewStorageSettingsRow = typeof storageSettings.$inferInsert;
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type TransactionSource = typeof transactionSources.$inferSelect;
+export type NewTransactionSource = typeof transactionSources.$inferInsert;
+export type IbkrConnection = typeof ibkrConnections.$inferSelect;
+export type NewIbkrConnection = typeof ibkrConnections.$inferInsert;
+export type BenchmarkPrice = typeof benchmarkPrices.$inferSelect;
+export type NewBenchmarkPrice = typeof benchmarkPrices.$inferInsert;
