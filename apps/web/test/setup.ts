@@ -27,10 +27,7 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   // type the real DOM type uses) silences it without affecting runtime
   // — the stub still no-ops on every method.
   globalThis.ResizeObserver = class ResizeObserver {
-    constructor(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      _callback: (entries: ResizeObserverEntry[], observer: ResizeObserver) => void,
-    ) {}
+    constructor(_callback: (entries: ResizeObserverEntry[], observer: ResizeObserver) => void) {}
     observe() {}
     unobserve() {}
     disconnect() {}

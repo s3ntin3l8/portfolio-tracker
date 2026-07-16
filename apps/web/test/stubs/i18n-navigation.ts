@@ -9,7 +9,6 @@ export const Link = React.forwardRef<
   return React.createElement("a", { href, ref, ...props }, children);
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const redirect = (_url: string) => {};
 export const usePathname = () => "/";
 export const useRouter = () => ({ push: () => {}, replace: () => {}, back: () => {} });

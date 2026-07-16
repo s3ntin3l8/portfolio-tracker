@@ -12,6 +12,19 @@ const eslintConfig = [
     settings: { react: { version: "19" } },
   },
   {
+    // eslint-config-next ships its own @typescript-eslint/no-unused-vars ("warn", no
+    // ignore pattern) — this config array doesn't extend the root eslint.config.js, so
+    // it doesn't inherit that config's `^_` ignore pattern. Restore it here so the
+    // leading-underscore "intentionally unused" convention (used throughout the rest of
+    // the monorepo) is honored in apps/web too, instead of silently warning on it.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
     // public/ holds static assets + serwist's generated service worker (public/sw.js);
     // coverage/ is a generated (gitignored) Vitest artifact, not source.
     ignores: [".next/**", "node_modules/**", "next-env.d.ts", "public/**", "coverage/**"],

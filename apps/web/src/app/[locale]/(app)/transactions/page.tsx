@@ -1,18 +1,15 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { Receipt, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Receipt } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { TransactionsTable, type TxRow } from "@/components/transactions-table";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { ExportDocumentsButton } from "@/components/export-documents-button";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
 import { RecentImportsSection } from "@/components/recent-imports-section";
-import { Link } from "@/i18n/navigation";
 import {
   getSelectedPortfolioId,
   loadImports,
   loadPortfolioList,
-  loadTransactionsAcrossPortfolios,
   loadNetworthTransactionsPaginated,
   loadTransactionsPaginated,
   loadAnomalies,
@@ -36,7 +33,6 @@ export default async function TransactionsPage({
   setRequestLocale(locale);
   const t = await getTranslations("Transactions");
   const te = await getTranslations("Empty");
-  const tm = await getTranslations("Manage");
 
   // Aggregate across all portfolios unless one is selected in the global switcher.
   const selectedId = await getSelectedPortfolioId();
