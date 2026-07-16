@@ -12,15 +12,19 @@ on:
 
 jobs:
   claude:
+    # Restrict to trusted commenters -- otherwise any user on a public repo could
+    # post "@claude" and trigger the workflow (API usage, and whatever repo access
+    # the action's own token carries).
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude') && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.issue.author_association))
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # write: gh pr review (see claude_args below) needs this, not just read
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
@@ -74,5 +78,9 @@ jobs:
           # matches the bare command) covers flags/redirection variants; `npm ci` is
           # allowed too since Claude sometimes reinstalls deps defensively even though
           # the step above already did it.
+          #
+          # "Bash(gh pr review:*)" additionally lets Claude submit an actual GitHub
+          # review (gh pr review --approve/--request-changes/--comment) instead of only
+          # ever leaving a plain PR comment when asked to review.
           claude_args: |
-            --allowedTools "Bash(npm run lint*)" "Bash(npm run typecheck*)" "Bash(npm run test*)" "Bash(npm test*)" "Bash(npm ci*)"
+            --allowedTools "Bash(npm run lint*)" "Bash(npm run typecheck*)" "Bash(npm run test*)" "Bash(npm test*)" "Bash(npm ci*)" "Bash(gh pr review:*)"
