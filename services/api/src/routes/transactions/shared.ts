@@ -1,11 +1,7 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import {
-  allocationTargets,
-  corporateActions,
-  instruments,
-} from "@portfolio/db";
+import { allocationTargets, corporateActions, instruments } from "@portfolio/db";
 import {
   type Anomaly,
   type CoreTransaction,

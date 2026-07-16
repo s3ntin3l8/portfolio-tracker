@@ -23,7 +23,6 @@ import { ownedPortfolio } from "./helpers.js";
  *   PUT  /portfolios/:portfolioId/targets
  */
 export async function targetsRoute(app: FastifyInstance) {
-
   /** Map DB rows to the API response shape. */
   function toTargetWeights(rows: (typeof allocationTargets.$inferSelect)[]) {
     return rows.map((r) => ({

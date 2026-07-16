@@ -4,11 +4,7 @@ import { accountHolders, portfolios } from "@portfolio/db";
 import { flattenJoinRow } from "../lib/portfolio.js";
 
 /** Unified ownership check — portfolio exists + belongs to user. */
-export async function ownedPortfolio(
-  app: FastifyInstance,
-  userId: string,
-  portfolioId: string,
-) {
+export async function ownedPortfolio(app: FastifyInstance, userId: string, portfolioId: string) {
   const [row] = await app.db
     .select()
     .from(portfolios)
@@ -23,10 +19,7 @@ export interface PaginationParams {
   pageSize: number;
 }
 
-export function parsePagination(query: {
-  page?: string;
-  pageSize?: string;
-}): PaginationParams {
+export function parsePagination(query: { page?: string; pageSize?: string }): PaginationParams {
   const rawPage = query.page;
   const rawPageSize = query.pageSize;
   if (rawPage === undefined) {
