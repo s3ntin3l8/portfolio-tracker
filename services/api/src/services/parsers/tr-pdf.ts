@@ -54,7 +54,7 @@ import {
   type TaxComponents,
 } from "@portfolio/schema";
 import { parseEuroDecimal, parseDkbDate } from "./dkb.js";
-import { collapse } from "./shared.js";
+import { collapse, tryAddDraft, type ParserError } from "./shared.js";
 
 export interface TrPdfResult {
   drafts: ParsedTransaction[];
@@ -181,9 +181,11 @@ function pushDraft(
   drafts: ParsedTransaction[],
   errors: { line: number; message: string }[],
 ): void {
-  const parsed = parsedTransactionSchema.safeParse(draft);
-  if (parsed.success) drafts.push(parsed.data);
-  else errors.push({ line: 1, message: parsed.error.issues[0]?.message ?? "invalid TR PDF" });
+  const pe: ParserError[] = [];
+  tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+  for (const e of pe) {
+    errors.push({ line: 1, message: e.issues[0]?.message ?? "invalid TR PDF" });
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
 import { shortHash } from "./hash.js";
 import { num } from "./numeric.js";
+import { tryAddDraft, type ParserError } from "./shared.js";
 
 // Interactive Brokers Flex Query "Trades" CSV (with header). Columns vary by query,
 // so we look them up by name. Quantity is signed (buy positive, sell negative);
@@ -76,7 +77,7 @@ export function parseIbkr(content: string): CsvParseResult {
     const externalId = tradeId
       ? `ibkr:${tradeId}`
       : `ibkr:${shortHash([symbol, action, executedAt, String(Math.abs(qty)), num(get(cols.price)), get(cols.currency) || "USD"].join("|"))}`;
-    const parsed = parsedTransactionSchema.safeParse({
+    const draft: Record<string, unknown> = {
       assetClass,
       action,
       ticker: symbol || undefined,
@@ -89,13 +90,12 @@ export function parseIbkr(content: string): CsvParseResult {
       executedAt,
       externalId,
       confidence: 1,
-    });
-    if (parsed.success) drafts.push(parsed.data);
-    else
-      errors.push({
-        line: i + 1,
-        message: parsed.error.issues[0]?.message ?? "invalid row",
-      });
+    };
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
+    }
   }
 
   return { drafts, errors };

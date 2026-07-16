@@ -3,6 +3,7 @@ import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
 import { formatDecimal } from "./numeric.js";
 import { collapsePerkFundedAcquisitions } from "./perk-pairing.js";
+import { tryAddDraft, type ParserError } from "./shared.js";
 
 // Trade Republic "Transaction export" CSV — the offline fallback to the pytr WebSocket
 // sync (services/pytr). TR lets you export the full account history as a CSV with a fixed,
@@ -389,9 +390,11 @@ export function parseTrCsv(content: string): CsvParseResult {
       continue;
     }
 
-    const parsed = parsedTransactionSchema.safeParse(candidate);
-    if (parsed.success) drafts.push(parsed.data);
-    else fail(parsed.error.issues[0]?.message ?? "invalid row");
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, candidate, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
+    }
   }
 
   // Collapse perk-funded buys (STOCKPERK/KINDERGELD_BONUS/BONUS + the same-day buy they fund)

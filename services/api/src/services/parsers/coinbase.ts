@@ -3,6 +3,7 @@ import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
 import { shortHash } from "./hash.js";
 import { num } from "./numeric.js";
+import { tryAddDraft, type ParserError } from "./shared.js";
 
 // Coinbase "Transaction history" CSV. The real export carries a preamble before the
 // header row, which contains "Quantity Transacted" and a spot-price column. Only Buy
@@ -50,7 +51,7 @@ export function parseCoinbase(content: string): CsvParseResult {
     // The row-index suffix meant that re-uploading an export with any preamble-row
     // difference would shift every subsequent index, bypassing the dedup unique index.
     const externalId = `coinbase:${shortHash([when, action, asset, qty, price, currency].join("|"))}`;
-    const parsed = parsedTransactionSchema.safeParse({
+    const draft: Record<string, unknown> = {
       assetClass: "crypto",
       action,
       ticker: asset || undefined,
@@ -63,13 +64,12 @@ export function parseCoinbase(content: string): CsvParseResult {
       executedAt: when,
       externalId,
       confidence: 1,
-    });
-    if (parsed.success) drafts.push(parsed.data);
-    else
-      errors.push({
-        line: i + 1,
-        message: parsed.error.issues[0]?.message ?? "invalid row",
-      });
+    };
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
+    }
   }
 
   return { drafts, errors };

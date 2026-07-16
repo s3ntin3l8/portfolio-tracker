@@ -1,4 +1,5 @@
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
+import { tryAddDraft, type ParserError } from "./shared.js";
 
 // Expected header (order-independent):
 //   date,action,assetClass,ticker,name,quantity,unit,price,fees,currency
@@ -61,7 +62,7 @@ export function parseCsv(content: string): CsvParseResult {
 
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(",");
-    const parsed = parsedTransactionSchema.safeParse({
+    const draft: Record<string, unknown> = {
       assetClass: col(cols, "assetclass"),
       action: col(cols, "action"),
       ticker: col(cols, "ticker") || undefined,
@@ -73,11 +74,11 @@ export function parseCsv(content: string): CsvParseResult {
       currency: col(cols, "currency"),
       executedAt: col(cols, "date"),
       confidence: 1,
-    });
-    if (parsed.success) {
-      drafts.push(parsed.data);
-    } else {
-      errors.push({ line: i + 1, message: parsed.error.issues[0]?.message ?? "invalid row" });
+    };
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
     }
   }
 

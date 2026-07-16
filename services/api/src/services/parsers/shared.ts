@@ -1,3 +1,4 @@
+import type { ZodSchema } from "zod";
 import {
   parsedGoldContractSchema,
   parsedTransactionSchema,
@@ -233,14 +234,38 @@ export function validateDrafts(
   const list = Array.isArray(raw) ? raw : [];
   const drafts: ParsedTransaction[] = [];
   for (let i = 0; i < list.length; i++) {
-    const result = parsedTransactionSchema.safeParse(list[i]);
-    if (result.success) {
-      drafts.push(result.data);
-    } else {
-      errors.push({ line: i + 1, message: result.error.issues[0]?.message ?? "invalid row" });
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, list[i] as Record<string, unknown>, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
     }
   }
   return drafts;
+}
+
+export interface ParserError {
+  row: Record<string, unknown>;
+  issues: { path: string; message: string }[];
+}
+
+export function tryAddDraft<T>(
+  schema: ZodSchema<T>,
+  row: Record<string, unknown>,
+  drafts: T[],
+  errors: ParserError[],
+): void {
+  const parsed = schema.safeParse(row);
+  if (parsed.success) {
+    drafts.push(parsed.data);
+  } else {
+    errors.push({
+      row,
+      issues: parsed.error.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+      })),
+    });
+  }
 }
 
 /** Validate raw model output into gold-contract drafts, skipping malformed entries. */
@@ -248,8 +273,7 @@ export function validateContracts(raw: unknown): ParsedGoldContract[] {
   const list = Array.isArray(raw) ? raw : [];
   const out: ParsedGoldContract[] = [];
   for (const r of list) {
-    const parsed = parsedGoldContractSchema.safeParse(r);
-    if (parsed.success) out.push(parsed.data);
+    tryAddDraft(parsedGoldContractSchema, r as Record<string, unknown>, out, []);
   }
   return out;
 }

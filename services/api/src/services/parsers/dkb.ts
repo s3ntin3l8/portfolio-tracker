@@ -2,7 +2,7 @@ import { Decimal } from "decimal.js";
 import { parsedTransactionSchema, type ParsedTransaction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { shortHash } from "./hash.js";
-import { collapse } from "./shared.js";
+import { collapse, tryAddDraft, type ParserError } from "./shared.js";
 import { splitCsvLine } from "./csv-line.js";
 
 /**
@@ -138,9 +138,11 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
       executedAt: parseDkbDate(cols[cDate]) ?? undefined,
       confidence: 1,
     };
-    const parsed = parsedTransactionSchema.safeParse(draft);
-    if (parsed.success) drafts.push(parsed.data);
-    else errors.push({ line: i + 1, message: parsed.error.issues[0]?.message ?? "invalid row" });
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
+    }
   }
 
   return { drafts, errors, accountNumber };
@@ -297,9 +299,11 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       };
     }
 
-    const parsed = parsedTransactionSchema.safeParse(draft);
-    if (parsed.success) drafts.push(parsed.data);
-    else errors.push({ line: i + 1, message: parsed.error.issues[0]?.message ?? "invalid row" });
+    const pe: ParserError[] = [];
+    tryAddDraft(parsedTransactionSchema, draft, drafts, pe);
+    for (const e of pe) {
+      errors.push({ line: i + 1, message: e.issues[0]?.message ?? "invalid row" });
+    }
   }
 
   return { drafts, errors, accountNumber };
