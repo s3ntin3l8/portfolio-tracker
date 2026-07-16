@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, count, desc, eq, getTableColumns, gte, inArray, lt, sql } from "drizzle-orm";
 import { portfolios, transactions } from "@portfolio/db";
-import { logTiming } from "../../lib/timing.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { parsePagination, cacheKey } from "../helpers.js";
 import {
@@ -172,7 +171,7 @@ export function registerListRoutes(app: FastifyInstance) {
   app.get<{
     Querystring: { page?: string; pageSize?: string; type?: string; year?: string; q?: string };
   }>("/networth/transactions", { preHandler: app.authenticate }, async (request, _reply) => {
-    const t0 = performance.now();
+    request.timingName = "GET /networth/transactions";
     const id = request.userId;
     const { page, pageSize } = parsePagination({
       page: request.query.page,
@@ -255,13 +254,12 @@ export function registerListRoutes(app: FastifyInstance) {
         .where(inArray(transactions.portfolioId, pfIds))
         .orderBy(sql`1 DESC`);
       const yearList = years.map((r) => String(r.year));
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /networth/transactions", durationMs, {
+      request.timingMeta = {
         page,
         pageSize,
         total: cached.total,
         portfolioCount: pfs.length,
-      });
+      };
       return { rows: cached.rows, total: cached.total, years: yearList };
     }
 
@@ -271,11 +269,10 @@ export function registerListRoutes(app: FastifyInstance) {
       .where(and(...conditions))
       .orderBy(desc(transactions.executedAt));
     const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /networth/transactions", durationMs, {
+    request.timingMeta = {
       rowCount: rows.length,
       portfolioCount: pfs.length,
-    });
+    };
     return enriched;
   });
 }

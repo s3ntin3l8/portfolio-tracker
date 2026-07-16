@@ -4,7 +4,6 @@ import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { documents, portfolios, transactions, transactionSources } from "@portfolio/db";
 import { documentUploadFieldsSchema, documentListQuerySchema } from "@portfolio/schema";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
-import { logTiming } from "../lib/timing.js";
 import {
   storeInboxDocument,
   deleteInboxDocument,
@@ -46,6 +45,8 @@ export async function documentsRoute(app: FastifyInstance) {
     const { page, pageSize } = parsePagination({ page: rawPage, pageSize: rawPageSize });
     const hasPagination = pageSize > 0;
 
+    request.timingName = "GET /documents";
+
     const renderRow = (
       d: {
         id: string;
@@ -71,8 +72,6 @@ export async function documentsRoute(app: FastifyInstance) {
       portfolioLabel: d.portfolioId ? (nameById.get(d.portfolioId) ?? null) : null,
       storedAt: d.storedAt,
     });
-
-    const t0 = performance.now();
 
     if (hasPagination) {
       const conditions = [
@@ -112,8 +111,7 @@ export async function documentsRoute(app: FastifyInstance) {
         return { rows: rows.map((d) => renderRow(d, nameById)), total: cnt };
       });
 
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /documents", durationMs, { total: cached.total, page, pageSize });
+      request.timingMeta = { total: cached.total, page, pageSize };
 
       return cached;
     }
@@ -131,8 +129,7 @@ export async function documentsRoute(app: FastifyInstance) {
       : [];
     const nameById = new Map(portfolioRows.map((p) => [p.id, p.name]));
 
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /documents", durationMs, { docCount: docs.length });
+    request.timingMeta = { docCount: docs.length };
 
     return docs.map((d) => renderRow(d, nameById));
   });

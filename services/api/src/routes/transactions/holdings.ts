@@ -8,7 +8,6 @@ import type { InstrumentMeta } from "../../services/valuation.js";
 import { needsSectorEnrichment, needsNameEnrichment } from "../../services/instrument-metadata.js";
 import { enqueueInstrumentMetadata } from "../../services/scheduler.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
-import { logTiming } from "../../lib/timing.js";
 import {
   computeHoldings,
   detectAnomalies,
@@ -32,7 +31,6 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/holdings",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -71,12 +69,12 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
       const filtered = anomalies.filter(
         (a) => !(a.transactionId && dismissedSet.has(`${a.transactionId}:${a.code}`)),
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/holdings", durationMs, {
+      request.timingName = "GET /portfolios/:id/holdings";
+      request.timingMeta = {
         portfolioId,
         holdingCount: holdings.length,
         anomalyCount: filtered.length,
-      });
+      };
       return { holdings, anomalies: filtered };
     },
   );
@@ -85,7 +83,6 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/anomalies",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -127,11 +124,8 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
         );
         return { filtered };
       });
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/anomalies", durationMs, {
-        portfolioId,
-        anomalyCount: filtered.length,
-      });
+      request.timingName = "GET /portfolios/:id/anomalies";
+      request.timingMeta = { portfolioId, anomalyCount: filtered.length };
       return { anomalies: filtered };
     },
   );
@@ -140,7 +134,6 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/summary",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -164,11 +157,8 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
         app.db,
         summary.holdings.map((h) => h.instrumentId),
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/summary", durationMs, {
-        portfolioId,
-        holdingCount: summary.holdings.length,
-      });
+      request.timingName = "GET /portfolios/:id/summary";
+      request.timingMeta = { portfolioId, holdingCount: summary.holdings.length };
       return {
         ...summary,
         holdings: summary.holdings.map((h) => ({

@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { accountHolders, portfolios, transactions, users } from "@portfolio/db";
 import { toDateKey, type CoreTransaction, aggregatePortfolios } from "@portfolio/core";
-import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
 
 import {
@@ -20,7 +19,7 @@ export function registerIncomeRoutes(app: FastifyInstance) {
     "/networth/income",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
+      request.timingName = "GET /networth/income";
       const id = request.userId;
       const { holderId, eventsYear } = request.query;
       const [u] = await app.db
@@ -102,12 +101,12 @@ export function registerIncomeRoutes(app: FastifyInstance) {
             };
           })
           .sort((a, b) => b.date.localeCompare(a.date));
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /networth/income (eventsYear)", durationMs, {
+        request.timingName = "GET /networth/income (eventsYear)";
+        request.timingMeta = {
           portfolioCount: pfs.length,
           targetYear,
           eventCount: events.length,
-        });
+        };
         return { displayCurrency: display, events };
       }
 
@@ -115,8 +114,7 @@ export function registerIncomeRoutes(app: FastifyInstance) {
       const allTxns: CoreTransaction[] = perPortfolio.flatMap((r) => r.coreTxns);
       const aggregated = aggregatePortfolios(summaries, display);
 
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /networth/income", durationMs, { portfolioCount: pfs.length });
+      request.timingMeta = { portfolioCount: pfs.length };
 
       return buildIncomeStats(app, allTxns, aggregated, display, (txId) => txPortfolioId.get(txId));
     },
@@ -126,7 +124,6 @@ export function registerIncomeRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/income",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -144,10 +141,10 @@ export function registerIncomeRoutes(app: FastifyInstance) {
         portfolio.baseCurrency,
         () => portfolioId,
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/income", durationMs, {
+      request.timingName = "GET /portfolios/:id/income";
+      request.timingMeta = {
         portfolioId,
-      });
+      };
       return result;
     },
   );

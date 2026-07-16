@@ -199,10 +199,16 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   // reliably correct rather than correct-until-someone-adds-a-route-that-forgets-to-
   // invalidate. Clearing the whole cache is cheap (a few Map entries) and only costs one
   // extra recompute per portfolio on the next read — never a staleness risk.
-  app.addHook("onResponse", async (request) => {
+  app.addHook("onResponse", async (request, reply) => {
     if (request.method !== "GET" && request.method !== "HEAD") {
       clearValuationCache(request.log);
       clearDerivationCache();
+    }
+    if (process.env.TIMING_ENABLED === "true" && request.timingName) {
+      request.log.info(
+        { durationMs: Math.round(reply.elapsedTime * 100) / 100, ...request.timingMeta },
+        `[timing] ${request.timingName}`,
+      );
     }
   });
 

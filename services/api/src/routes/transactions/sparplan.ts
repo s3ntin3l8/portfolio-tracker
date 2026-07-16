@@ -31,7 +31,6 @@ import {
   networthSparplanCache,
   PORTFOLIO_VALUATION_CONCURRENCY,
 } from "./shared.js";
-import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 
@@ -41,7 +40,7 @@ export function registerSparplanRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/sparplan",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
+      request.timingName = "GET /portfolios/:id/sparplan";
       const id = request.userId;
       const { portfolioId } = request.params;
       const includeSales = request.query.includeSales === "true";
@@ -72,11 +71,7 @@ export function registerSparplanRoutes(app: FastifyInstance) {
         );
 
       if (targetRows.length === 0) {
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /portfolios/:id/sparplan", durationMs, {
-          portfolioId,
-          hasTargets: false,
-        });
+        request.timingMeta = { portfolioId, hasTargets: false };
         return stats;
       }
 
@@ -121,12 +116,7 @@ export function registerSparplanRoutes(app: FastifyInstance) {
 
       // Phase D: tax-aware trade recommendations when ?includeSales=true.
       if (!includeSales) {
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /portfolios/:id/sparplan", durationMs, {
-          portfolioId,
-          hasTargets: true,
-          includeSales: false,
-        });
+        request.timingMeta = { portfolioId, hasTargets: true, includeSales: false };
         return { ...stats, drift, contributionSplit: split };
       }
 
@@ -151,13 +141,12 @@ export function registerSparplanRoutes(app: FastifyInstance) {
         const tradeActions: TradeAction[] = rebalancingTrades(drift, String(targetedTotal), {
           mode: "trade",
         });
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /portfolios/:id/sparplan", durationMs, {
+        request.timingMeta = {
           portfolioId,
           hasTargets: true,
           includeSales: true,
           taxRegime: "ID",
-        });
+        };
         return { ...stats, drift, contributionSplit: split, tradeActions, taxRegime };
       }
 
@@ -176,14 +165,13 @@ export function registerSparplanRoutes(app: FastifyInstance) {
       }
 
       if (!portfolio.taxAllowanceAnnual) {
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /portfolios/:id/sparplan", durationMs, {
+        request.timingMeta = {
           portfolioId,
           hasTargets: true,
           includeSales: true,
           taxRegime: prefsRow?.taxRegime ?? "DE",
           fsaConfigured: false,
-        });
+        };
         return { ...stats, drift, contributionSplit: split, taxUnavailable: true, taxRegime };
       }
 
@@ -248,15 +236,14 @@ export function registerSparplanRoutes(app: FastifyInstance) {
       const remainingNum = Number(usage.remaining);
       const allowanceUsed = String(Math.min(allowanceUsedNum, remainingNum).toFixed(2));
 
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/sparplan", durationMs, {
+      request.timingMeta = {
         portfolioId,
         hasTargets: true,
         includeSales: true,
         taxRegime,
         fsaConfigured: true,
         hasSellActions: tradeActions.some((a) => a.side === "sell"),
-      });
+      };
       return {
         ...stats,
         drift,
@@ -276,7 +263,6 @@ export function registerSparplanRoutes(app: FastifyInstance) {
     "/networth/sparplan",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { holderId } = request.query;
       const [u] = await app.db
@@ -352,8 +338,8 @@ export function registerSparplanRoutes(app: FastifyInstance) {
           };
         },
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /networth/sparplan", durationMs, { portfolioCount: pfs.length });
+      request.timingName = "GET /networth/sparplan";
+      request.timingMeta = { portfolioCount: pfs.length };
       return result;
     },
   );

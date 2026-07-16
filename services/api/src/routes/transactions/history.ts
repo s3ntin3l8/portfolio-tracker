@@ -14,7 +14,6 @@ import { aggregateValueFlows, xirr, chainIndex, convert } from "@portfolio/core"
 import { cacheKey } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import { loadValuation, historyCache, performanceCache, boundaryFlows } from "./shared.js";
-import { logTiming } from "../../lib/timing.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import {
   getUserBenchmarkConfig,
@@ -29,7 +28,7 @@ export function registerHistoryRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/history",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
+      request.timingName = "GET /portfolios/:id/history";
       const id = request.userId;
       const { portfolioId } = request.params;
       const range = request.query.range ?? "1y";
@@ -49,12 +48,11 @@ export function registerHistoryRoutes(app: FastifyInstance) {
             ),
           )
           .orderBy(asc(portfolioIntradaySnapshots.capturedAt));
-        const intradayDurationMs = performance.now() - t0;
-        logTiming(request, "GET /portfolios/:id/history", intradayDurationMs, {
+        request.timingMeta = {
           portfolioId,
           range,
           pointCount: rows.length,
-        });
+        };
         return rows.map((r) => ({
           at: r.capturedAt.toISOString(),
           netWorth: r.netWorth,
@@ -87,12 +85,11 @@ export function registerHistoryRoutes(app: FastifyInstance) {
         index: indexById.get(r.date)?.index ?? "100",
         pct: indexById.get(r.date)?.pct ?? "0",
       }));
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/history", durationMs, {
+      request.timingMeta = {
         portfolioId,
         range,
         pointCount: rows.length,
-      });
+      };
       return result;
     },
   );
@@ -102,7 +99,6 @@ export function registerHistoryRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/performance",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -131,10 +127,10 @@ export function registerHistoryRoutes(app: FastifyInstance) {
           };
         },
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/performance", durationMs, {
+      request.timingName = "GET /portfolios/:id/performance";
+      request.timingMeta = {
         portfolioId,
-      });
+      };
       return cached;
     },
   );
@@ -144,7 +140,6 @@ export function registerHistoryRoutes(app: FastifyInstance) {
   app.get<{
     Querystring: { range?: string; include?: string; exclude?: string; holderId?: string };
   }>("/networth/history", { preHandler: app.authenticate }, async (request, reply) => {
-    const t0 = performance.now();
     const id = request.userId;
     const { holderId } = request.query;
     const range = request.query.range ?? "1y";
@@ -319,12 +314,12 @@ export function registerHistoryRoutes(app: FastifyInstance) {
 
       return result;
     });
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /networth/history", durationMs, {
+    request.timingName = "GET /networth/history";
+    request.timingMeta = {
       portfolioCount: cached.length,
       range,
       resultCount: cached.length,
-    });
+    };
     return cached;
   });
 }

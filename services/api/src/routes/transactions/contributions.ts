@@ -20,7 +20,6 @@ import {
   enrichContributions,
   PORTFOLIO_VALUATION_CONCURRENCY,
 } from "./shared.js";
-import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 
@@ -30,7 +29,6 @@ export function registerContributionsRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/contributions",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -56,10 +54,8 @@ export function registerContributionsRoutes(app: FastifyInstance) {
         portfolio.cashCounted ? "inside" : "outside",
         pref?.retirementAge ?? null,
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/contributions", durationMs, {
-        portfolioId,
-      });
+      request.timingName = "GET /portfolios/:id/contributions";
+      request.timingMeta = { portfolioId };
       return result;
     },
   );
@@ -72,7 +68,6 @@ export function registerContributionsRoutes(app: FastifyInstance) {
     "/networth/contributions",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { holderId } = request.query;
       const [u] = await app.db
@@ -169,8 +164,8 @@ export function registerContributionsRoutes(app: FastifyInstance) {
           );
         },
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /networth/contributions", durationMs, { portfolioCount: pfs.length });
+      request.timingName = "GET /networth/contributions";
+      request.timingMeta = { portfolioCount: pfs.length };
       return result;
     },
   );

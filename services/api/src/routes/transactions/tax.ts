@@ -25,7 +25,6 @@ import {
   getCachedFifoTradeLog,
   type InstrumentMeta,
 } from "../../services/valuation.js";
-import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
 
 import {
@@ -214,7 +213,6 @@ export function registerTaxRoutes(app: FastifyInstance) {
     "/portfolios/:portfolioId/tax",
     { preHandler: [app.authenticate, app.requirePortfolio] },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
@@ -338,13 +336,13 @@ export function registerTaxRoutes(app: FastifyInstance) {
         usage,
       });
 
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /portfolios/:id/tax", durationMs, {
+      request.timingName = "GET /portfolios/:id/tax";
+      request.timingMeta = {
         portfolioId,
         year,
         hasHolder: holderId != null,
         carryForwardApplied,
-      });
+      };
       return {
         year,
         currency: portfolio.baseCurrency,
@@ -374,7 +372,6 @@ export function registerTaxRoutes(app: FastifyInstance) {
     "/networth/tax",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { holderId: filterHolderId } = request.query;
       const year = request.query.year
@@ -531,11 +528,11 @@ export function registerTaxRoutes(app: FastifyInstance) {
       });
       const result = perHolderResults.filter((r): r is NonNullable<typeof r> => r != null);
 
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /networth/tax", durationMs, {
+      request.timingName = "GET /networth/tax";
+      request.timingMeta = {
         holderCount: holderRows.length,
         year,
-      });
+      };
       return result;
     },
   );

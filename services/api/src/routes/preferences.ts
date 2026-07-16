@@ -2,19 +2,16 @@ import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { userPreferences } from "@portfolio/db";
 import { userPreferencesSchema } from "@portfolio/schema";
-import { logTiming } from "../lib/timing.js";
-
 export async function preferencesRoute(app: FastifyInstance) {
   app.get("/me/preferences", { preHandler: app.authenticate }, async (request) => {
-    const t0 = performance.now();
     const id = request.userId;
     const [prefs] = await app.db
       .select()
       .from(userPreferences)
       .where(eq(userPreferences.userId, id))
       .limit(1);
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /me/preferences", durationMs, {});
+    request.timingName = "GET /me/preferences";
+    request.timingMeta = {};
     return {
       dashboardPeriod: prefs?.dashboardPeriod ?? "max",
       dashboardKpis: prefs?.dashboardKpis ?? null,

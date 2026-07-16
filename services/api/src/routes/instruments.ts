@@ -7,7 +7,6 @@ import { findOrCreateInstrument, updateInstrument } from "../services/instrument
 import { getMarketData, goldSources, getBorseFrankfurt } from "../services/market-data.js";
 import { cacheKey } from "./helpers.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
-import { logTiming } from "../lib/timing.js";
 import {
   FUNDAMENTALS_ASSET_CLASSES,
   isFundamentalsStale,
@@ -39,7 +38,6 @@ const enrichQuerySchema = z.object({ q: z.string().trim().min(1) });
 export async function instrumentsRoute(app: FastifyInstance) {
   // Search instruments (shared reference data) for the manual-entry picker.
   app.get("/instruments", { preHandler: app.authenticate }, async (request) => {
-    const t0 = performance.now();
     const parsed = searchQuerySchema.parse(request.query);
     const q = parsed.q;
     const pageSize = parsed.pageSize;
@@ -84,8 +82,8 @@ export async function instrumentsRoute(app: FastifyInstance) {
         ]);
         return { rows: _rows, total: cnt };
       });
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /instruments (paginated)", durationMs, { q, page, pageSize, total });
+      request.timingName = "GET /instruments (paginated)";
+      request.timingMeta = { q, page, pageSize, total };
       return { rows, total };
     }
 
@@ -101,8 +99,8 @@ export async function instrumentsRoute(app: FastifyInstance) {
     const rows = conditions
       ? await app.db.select().from(instruments).where(conditions).orderBy(asc(instruments.symbol))
       : await app.db.select().from(instruments).orderBy(asc(instruments.symbol));
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /instruments", durationMs, { q, rowCount: rows.length });
+    request.timingName = "GET /instruments";
+    request.timingMeta = { q, rowCount: rows.length };
     return rows;
   });
 
@@ -139,14 +137,13 @@ export async function instrumentsRoute(app: FastifyInstance) {
     "/instruments/:id",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
       const [inst] = await app.db
         .select()
         .from(instruments)
         .where(eq(instruments.id, request.params.id))
         .limit(1);
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /instruments/:id", durationMs, { instrumentId: request.params.id });
+      request.timingName = "GET /instruments/:id";
+      request.timingMeta = { instrumentId: request.params.id };
       if (!inst) return reply.code(404).send({ error: "instrument_not_found" });
       return inst;
     },
@@ -157,7 +154,7 @@ export async function instrumentsRoute(app: FastifyInstance) {
     "/instruments/:id/history",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
+      request.timingName = "GET /instruments/:id/history";
       const { range } = historyQuerySchema.parse(request.query);
       const [inst] = await app.db
         .select()
@@ -165,12 +162,7 @@ export async function instrumentsRoute(app: FastifyInstance) {
         .where(eq(instruments.id, request.params.id))
         .limit(1);
       if (!inst) {
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /instruments/:id/history", durationMs, {
-          instrumentId: request.params.id,
-          range,
-          found: false,
-        });
+        request.timingMeta = { instrumentId: request.params.id, range, found: false };
         return reply.code(404).send({ error: "instrument_not_found" });
       }
       const md = await getMarketData();
@@ -183,12 +175,7 @@ export async function instrumentsRoute(app: FastifyInstance) {
         },
         range,
       );
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /instruments/:id/history", durationMs, {
-        instrumentId: request.params.id,
-        range,
-        found: true,
-      });
+      request.timingMeta = { instrumentId: request.params.id, range, found: true };
       return result;
     },
   );
@@ -209,26 +196,23 @@ export async function instrumentsRoute(app: FastifyInstance) {
     "/instruments/:id/fundamentals",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
+      request.timingName = "GET /instruments/:id/fundamentals";
       const [inst] = await app.db
         .select()
         .from(instruments)
         .where(eq(instruments.id, request.params.id))
         .limit(1);
       if (!inst) {
-        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
-          instrumentId: request.params.id,
-          found: false,
-        });
+        request.timingMeta = { instrumentId: request.params.id, found: false };
         return reply.code(404).send({ error: "instrument_not_found" });
       }
 
       if (!FUNDAMENTALS_ASSET_CLASSES.has(inst.assetClass)) {
-        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+        request.timingMeta = {
           instrumentId: request.params.id,
           assetClass: inst.assetClass,
           supported: false,
-        });
+        };
         return null;
       }
 
@@ -237,10 +221,7 @@ export async function instrumentsRoute(app: FastifyInstance) {
       const cached = (inst.fundamentals ?? null) as InstrumentFundamentals | null;
 
       if (!isFundamentalsStale(inst)) {
-        logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
-          instrumentId: request.params.id,
-          cacheHit: true,
-        });
+        request.timingMeta = { instrumentId: request.params.id, cacheHit: true };
         return cached;
       }
 
@@ -274,12 +255,12 @@ export async function instrumentsRoute(app: FastifyInstance) {
           .where(eq(instruments.id, inst.id));
       }
 
-      logTiming(request, "GET /instruments/:id/fundamentals", performance.now() - t0, {
+      request.timingMeta = {
         instrumentId: request.params.id,
         cacheHit: false,
         fetchFailed,
         found: fetched != null,
-      });
+      };
       return fetched ?? cached;
     },
   );

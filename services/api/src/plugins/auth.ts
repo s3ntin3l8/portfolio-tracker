@@ -225,5 +225,6 @@ declare module "fastify" {
     userId: string;
     portfolio: PortfolioWithHolder;
     timingMeta?: Record<string, unknown>;
+    timingName?: string;
   }
 }

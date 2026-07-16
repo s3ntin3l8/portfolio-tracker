@@ -31,7 +31,6 @@ import { reassignTransactions } from "../services/reassign.js";
 import { enqueueRecompute } from "../services/scheduler.js";
 import { registerConfirmImportRoute } from "./imports/confirm.js";
 import { registerParseImportRoutes } from "./imports/parse.js";
-import { logTiming } from "../lib/timing.js";
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 
 const importsCache = createStore<{ rows: unknown[]; importCount: number }>();
@@ -140,7 +139,6 @@ export async function importsRoute(app: FastifyInstance) {
   // List the current user's imports (newest first) — id, status, parser, draft count,
   // and document summary if one has been retained (#231).
   app.get("/imports", { preHandler: app.authenticate }, async (request) => {
-    const t0 = performance.now();
     const id = request.userId;
     const { rows, importCount } = await withDerivationCache(importsCache, id, async () => {
       const rows = await app.db
@@ -199,8 +197,8 @@ export async function importsRoute(app: FastifyInstance) {
       });
       return { rows: result, importCount: rows.length };
     });
-    const durationMs = performance.now() - t0;
-    logTiming(request, "GET /imports", durationMs, { importCount });
+    request.timingName = "GET /imports";
+    request.timingMeta = { importCount };
     return rows;
   });
 
@@ -414,7 +412,6 @@ export async function importsRoute(app: FastifyInstance) {
     "/imports/:importId",
     { preHandler: app.authenticate },
     async (request, reply) => {
-      const t0 = performance.now();
       const id = request.userId;
       const { importId } = request.params;
       const result = await withDerivationCache(importDetailCache, importId, async () => {
@@ -436,8 +433,8 @@ export async function importsRoute(app: FastifyInstance) {
         };
       });
       if (!result) return reply.code(404).send({ error: "import_not_found" });
-      const durationMs = performance.now() - t0;
-      logTiming(request, "GET /imports/:importId", durationMs, { importId });
+      request.timingName = "GET /imports/:importId";
+      request.timingMeta = { importId };
       return result;
     },
   );
