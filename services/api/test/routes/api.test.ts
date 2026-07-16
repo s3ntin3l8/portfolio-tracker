@@ -3179,7 +3179,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(bad.statusCode).toBe(404);
-    expect(bad.json().code).toBe("holder_not_found");
+    expect(bad.json().error).toBe("holder_not_found");
   });
 
   it("filters /networth/trades by holderId", async () => {
@@ -3289,7 +3289,7 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(bad.statusCode).toBe(404);
-    expect(bad.json().code).toBe("holder_not_found");
+    expect(bad.json().error).toBe("holder_not_found");
   });
 
   it("filters /networth/history by holderId (composes with includeInAggregate)", async () => {
@@ -3333,6 +3333,6 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(bad.statusCode).toBe(404);
-    expect(bad.json().code).toBe("holder_not_found");
+    expect(bad.json().error).toBe("holder_not_found");
   });
 });

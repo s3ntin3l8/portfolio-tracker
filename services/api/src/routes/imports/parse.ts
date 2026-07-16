@@ -38,9 +38,9 @@ import { isCashMovementAction } from "../../services/pytr/mapper.js";
 import {
   accountMismatchVerdict,
   normalizeAccountNumber,
-  ownedPortfolio,
   portfolioMatchesAccount,
 } from "./helpers.js";
+import { ownedPortfolio } from "../helpers.js";
 
 const materializeBodySchema = z.object({
   // Target portfolio the user picked/confirmed in the upload modal.

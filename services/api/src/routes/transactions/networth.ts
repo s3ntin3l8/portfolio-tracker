@@ -62,7 +62,7 @@ export function registerNetworthRoutes(app: FastifyInstance) {
           .from(accountHolders)
           .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
           .limit(1);
-        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+        if (!holder) return reply.status(404).send({ error: "holder_not_found" });
       }
 
       const pfs = await app.db

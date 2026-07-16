@@ -11,7 +11,8 @@ import {
 import { toDateKey } from "@portfolio/core";
 import { parsedGoldContractSchema, parsedTransactionSchema } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
-import { accountMismatchVerdict, ownedPortfolio } from "./helpers.js";
+import { accountMismatchVerdict } from "./helpers.js";
+import { ownedPortfolio } from "../helpers.js";
 import {
   buildContractLegs,
   goldInstrumentForContract,

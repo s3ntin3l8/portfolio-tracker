@@ -28,8 +28,8 @@ import {
 } from "../../services/valuation.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
+import { ownedPortfolio } from "../helpers.js";
 import {
-  ownedPortfolio,
   loadValuation,
   buildTradeLog,
   PORTFOLIO_VALUATION_CONCURRENCY,
@@ -399,7 +399,7 @@ export function registerTaxRoutes(app: FastifyInstance) {
           .from(accountHolders)
           .where(and(eq(accountHolders.id, filterHolderId), eq(accountHolders.userId, id)))
           .limit(1);
-        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+        if (!holder) return reply.status(404).send({ error: "holder_not_found" });
       }
 
       const holderRows = await app.db

@@ -12,9 +12,9 @@ import { getFxRates, getFxRatesForDates, makeFxRateFn } from "../../services/fx.
 import { getMarketData } from "../../services/market-data.js";
 import { rangeStart } from "../../services/snapshots.js";
 import { aggregateValueFlows, xirr, chainIndex, convert } from "@portfolio/core";
+import { ownedPortfolio } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
-  ownedPortfolio,
   loadValuation,
   historyCache,
   performanceCache,
@@ -169,7 +169,7 @@ export function registerHistoryRoutes(app: FastifyInstance) {
         .from(accountHolders)
         .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
         .limit(1);
-      if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      if (!holder) return reply.status(404).send({ error: "holder_not_found" });
     }
 
     const pfs = await app.db

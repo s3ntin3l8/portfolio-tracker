@@ -27,7 +27,7 @@ import {
   retainDocumentForTransaction,
 } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";
-import { ownedPortfolio } from "./imports/helpers.js";
+import { ownedPortfolio } from "./helpers.js";
 import { reassignTransactions } from "../services/reassign.js";
 import { enqueueRecompute } from "../services/scheduler.js";
 import { registerConfirmImportRoute } from "./imports/confirm.js";

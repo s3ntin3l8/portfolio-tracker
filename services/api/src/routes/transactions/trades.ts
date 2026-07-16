@@ -7,9 +7,9 @@ import { type TradeLog, mergeTradeLogs } from "@portfolio/core";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
+import { ownedPortfolio } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
-  ownedPortfolio,
   costBasisFromQuery,
   methodFromQuery,
   buildTradeLog,
@@ -83,7 +83,7 @@ export function registerTradesRoutes(app: FastifyInstance) {
           .from(accountHolders)
           .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, id)))
           .limit(1);
-        if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+        if (!holder) return reply.status(404).send({ error: "holder_not_found" });
       }
 
       const pfs = await app.db

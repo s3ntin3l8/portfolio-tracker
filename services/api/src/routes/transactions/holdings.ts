@@ -18,9 +18,9 @@ import {
   type PortfolioSummary,
   type ReconciliationGap,
 } from "@portfolio/core";
+import { ownedPortfolio } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
-  ownedPortfolio,
   corporateActionsFor,
   loadValuation,
   loadDrift,

@@ -12,7 +12,7 @@ import {
   listInboxDocuments,
   getInboxDocument,
 } from "../storage/inbox.js";
-import { ownedPortfolio } from "./imports/helpers.js";
+import { ownedPortfolio } from "./helpers.js";
 import { shortHash } from "../services/parsers/hash.js";
 import { getDocumentForTransaction } from "../storage/receipts.js";
 import { gatherDocumentNaming, buildDocumentName } from "../storage/naming.js";

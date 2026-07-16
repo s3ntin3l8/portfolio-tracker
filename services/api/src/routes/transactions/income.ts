@@ -5,8 +5,8 @@ import { requireUser } from "../../plugins/auth.js";
 import { toDateKey, type CoreTransaction, aggregatePortfolios } from "@portfolio/core";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
+import { ownedPortfolio } from "../helpers.js";
 import {
-  ownedPortfolio,
   instrumentMeta,
   ACTIVITY_INCOME_TYPES,
   yearRange,

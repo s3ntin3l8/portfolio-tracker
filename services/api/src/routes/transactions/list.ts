@@ -4,8 +4,8 @@ import { portfolios, transactions } from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { logTiming } from "../../lib/timing.js";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
+import { ownedPortfolio } from "../helpers.js";
 import {
-  ownedPortfolio,
   yearRange,
   ACTIVITY_INCOME_TYPES,
   transactionsCache,

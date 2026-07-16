@@ -29,7 +29,7 @@ export async function searchRoute(app: FastifyInstance) {
         .from(accountHolders)
         .where(and(eq(accountHolders.id, holderId), eq(accountHolders.userId, userId)))
         .limit(1);
-      if (!holder) return reply.status(404).send({ code: "holder_not_found" });
+      if (!holder) return reply.status(404).send({ error: "holder_not_found" });
     }
 
     // Resolve the user's portfolios (optionally filtered by holder).

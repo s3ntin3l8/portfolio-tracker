@@ -11,9 +11,9 @@ import {
   contributionStats,
   type CashFlowPoint,
 } from "@portfolio/core";
+import { ownedPortfolio } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
-  ownedPortfolio,
   buildContributions,
   boundaryFlows,
   loadValuation,

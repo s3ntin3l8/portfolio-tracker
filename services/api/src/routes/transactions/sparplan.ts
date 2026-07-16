@@ -21,9 +21,9 @@ import {
   type DriftRow,
   type TradeAction,
 } from "@portfolio/core";
+import { ownedPortfolio } from "../helpers.js";
 import type { PortfolioParams } from "./shared.js";
 import {
-  ownedPortfolio,
   loadValuation,
   buildSparplanStats,
   buildTradeLog,
