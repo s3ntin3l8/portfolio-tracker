@@ -157,7 +157,12 @@ describe("SparplanSection", () => {
   it("shows multiple plans in the list", () => {
     const stats = makeStats([
       makePlan({ instrumentId: "vwce", name: "VWCE Fund" }),
-      makePlan({ instrumentId: "eimi", symbol: "EIMI", name: "EM Fund", currentAmountDisplay: "25" }),
+      makePlan({
+        instrumentId: "eimi",
+        symbol: "EIMI",
+        name: "EM Fund",
+        currentAmountDisplay: "25",
+      }),
     ]);
     renderSection(stats);
     expect(screen.getByText("VWCE Fund")).toBeInTheDocument();

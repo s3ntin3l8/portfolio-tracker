@@ -15,10 +15,7 @@ export async function accountHoldersRoute(app: FastifyInstance) {
   // List the authenticated user's holders.
   app.get("/account-holders", { preHandler: app.authenticate }, async (request) => {
     const { id } = requireUser(request);
-    return app.db
-      .select()
-      .from(accountHolders)
-      .where(eq(accountHolders.userId, id));
+    return app.db.select().from(accountHolders).where(eq(accountHolders.userId, id));
   });
 
   // Create a holder for the authenticated user.
@@ -117,9 +114,7 @@ export async function accountHoldersRoute(app: FastifyInstance) {
       const rows = await app.db
         .select()
         .from(lossCarryforward)
-        .where(
-          and(eq(lossCarryforward.holderId, holderId), eq(lossCarryforward.taxYear, taxYear)),
-        );
+        .where(and(eq(lossCarryforward.holderId, holderId), eq(lossCarryforward.taxYear, taxYear)));
       return { taxYear, entries: toCarryforwardEntries(rows) };
     },
   );
@@ -161,9 +156,7 @@ export async function accountHoldersRoute(app: FastifyInstance) {
       const rows = await app.db
         .select()
         .from(lossCarryforward)
-        .where(
-          and(eq(lossCarryforward.holderId, holderId), eq(lossCarryforward.taxYear, taxYear)),
-        );
+        .where(and(eq(lossCarryforward.holderId, holderId), eq(lossCarryforward.taxYear, taxYear)));
       return { taxYear, entries: toCarryforwardEntries(rows) };
     },
   );

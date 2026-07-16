@@ -143,8 +143,12 @@ export function DisposalTable({
   const t = useTranslations("Tax") as unknown as TaxTranslator;
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { expanded, toggle } = useExpandedRows();
-  const { sortKey, sortDir, toggle: toggleSort, sort } =
-    useTableSort<TaxDisposalRow>(DISPOSAL_COLS);
+  const {
+    sortKey,
+    sortDir,
+    toggle: toggleSort,
+    sort,
+  } = useTableSort<TaxDisposalRow>(DISPOSAL_COLS);
   return (
     <Card>
       <CardHeader>
@@ -163,9 +167,35 @@ export function DisposalTable({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <SortableTableHead colKey="disposal" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="w-[46%]">{t("disposals.disposal")}</SortableTableHead>
-                <SortableTableHead colKey="proceeds" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("disposals.proceeds")}</SortableTableHead>
-                <SortableTableHead colKey="gain" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("disposals.gain")}</SortableTableHead>
+                <SortableTableHead
+                  colKey="disposal"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  className="w-[46%]"
+                >
+                  {t("disposals.disposal")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="proceeds"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  align="right"
+                  className="w-[27%]"
+                >
+                  {t("disposals.proceeds")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="gain"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  align="right"
+                  className="w-[27%]"
+                >
+                  {t("disposals.gain")}
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,8 +294,7 @@ export function IdSalesTable({
   const t = useTranslations("Tax") as unknown as TaxTranslator;
   const money = (n: string | number) => formatMoney(Number(n), currency, locale);
   const { expanded, toggle } = useExpandedRows();
-  const { sortKey, sortDir, toggle: toggleSort, sort } =
-    useTableSort<IdDisposalTax>(ID_SALES_COLS);
+  const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<IdDisposalTax>(ID_SALES_COLS);
   const salesRate = Number(ID_SALES_TAX_RATE);
   return (
     <Card>
@@ -280,9 +309,35 @@ export function IdSalesTable({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <SortableTableHead colKey="disposal" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="w-[46%]">{t("id.sales.disposal")}</SortableTableHead>
-                <SortableTableHead colKey="proceeds" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("id.sales.proceeds")}</SortableTableHead>
-                <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="w-[27%]">{t("id.sales.tax")}</SortableTableHead>
+                <SortableTableHead
+                  colKey="disposal"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  className="w-[46%]"
+                >
+                  {t("id.sales.disposal")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="proceeds"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  align="right"
+                  className="w-[27%]"
+                >
+                  {t("id.sales.proceeds")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="tax"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                  align="right"
+                  className="w-[27%]"
+                >
+                  {t("id.sales.tax")}
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

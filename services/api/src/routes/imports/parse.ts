@@ -24,11 +24,7 @@ import { parseFlexXml } from "../../services/ibkr/flex-parse.js";
 import { mapFlexToDrafts } from "../../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../../services/parsers/hash.js";
-import {
-  classifyMatch,
-  parserToTxSource,
-  isEuParser,
-} from "../../services/parsers/dedup.js";
+import { classifyMatch, parserToTxSource, isEuParser } from "../../services/parsers/dedup.js";
 import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
 import {
@@ -59,11 +55,7 @@ const materializeBodySchema = z.object({
 // on each staged import conflicts with the portfolio the user actually selected — so the
 // account-mismatch warning surfaces in the still-open modal instead of as a post-close toast.
 const accountCheckBodySchema = z.object({
-  units: z
-    .array(
-      z.object({ importId: z.string().uuid(), portfolioId: z.string().uuid() }),
-    )
-    .max(50),
+  units: z.array(z.object({ importId: z.string().uuid(), portfolioId: z.string().uuid() })).max(50),
 });
 
 const csvBodySchema = z.object({
@@ -288,8 +280,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     // off the *tx source* so deterministic-PDF parsers (dkb-pdf/tr-pdf → "pdf") count too,
     // matching the /duplicates preview route — see classifyMatch's single-conversion contract.
     const incomingTxSource = parserToTxSource(importParser);
-    const importIsFileUpload =
-      incomingTxSource === "screenshot" || incomingTxSource === "pdf";
+    const importIsFileUpload = incomingTxSource === "screenshot" || incomingTxSource === "pdf";
 
     for (const { draftIndex, matched } of await findCommittedDuplicates(
       app.db,
@@ -297,8 +288,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       drafts,
     )) {
       const draft = drafts[draftIndex];
-      const hasTaxComponents =
-        draft.taxComponents && Object.keys(draft.taxComponents).length > 0;
+      const hasTaxComponents = draft.taxComponents && Object.keys(draft.taxComponents).length > 0;
       const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
       const kind = classifyMatch(importParser, matched.source ?? "csv", draftHasEnrichment);
       (drafts[draftIndex] as Record<string, unknown>).likelyDuplicate = {
@@ -414,10 +404,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
             .update(transactionSources)
             .set({ documentId: retainedDoc.id })
             .where(
-              and(
-                eq(transactionSources.importId, imp.id),
-                isNull(transactionSources.documentId),
-              ),
+              and(eq(transactionSources.importId, imp.id), isNull(transactionSources.documentId)),
             );
         }
       } catch (err) {
@@ -444,10 +431,7 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       const force = forceFromQuery(request.query);
       const contentHash = shortHash(content);
 
-      request.log.info(
-        { requestedFormat: format, bytes: content.length },
-        "csv import started",
-      );
+      request.log.info({ requestedFormat: format, bytes: content.length }, "csv import started");
 
       // Re-upload guard: return the existing non-discarded import instead of creating
       // a duplicate draft row. Scoped per-user so the same file is blocked regardless
@@ -511,22 +495,24 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       // onConflictDoNothing handles the TOCTOU race where two concurrent identical uploads
       // both pass the existingImport check before either inserts (fix 4.1). When it fires,
       // we fetch the winning row and use its id for the response.
-      let imp = (await app.db
-        .insert(screenshotImports)
-        .values({
-          userId: id,
-          // Store the account-matched portfolio so the draft review page pre-selects it.
-          // Overwritten at confirm time with whatever the user chose in the review picker.
-          portfolioId: matchedPortfolioId ?? null,
-          parser: PARSER_TAG[resolved] ?? "csv",
-          // `result` carries `accountNumber` (DKB) so re-upload + confirm can re-match.
-          parsedJson: result,
-          contentHash,
-          batchId: batchIdFromQuery(request.query),
-          status: "draft",
-        })
-        .onConflictDoNothing()
-        .returning())[0];
+      let imp = (
+        await app.db
+          .insert(screenshotImports)
+          .values({
+            userId: id,
+            // Store the account-matched portfolio so the draft review page pre-selects it.
+            // Overwritten at confirm time with whatever the user chose in the review picker.
+            portfolioId: matchedPortfolioId ?? null,
+            parser: PARSER_TAG[resolved] ?? "csv",
+            // `result` carries `accountNumber` (DKB) so re-upload + confirm can re-match.
+            parsedJson: result,
+            contentHash,
+            batchId: batchIdFromQuery(request.query),
+            status: "draft",
+          })
+          .onConflictDoNothing()
+          .returning()
+      )[0];
 
       if (!imp) {
         // Race: another upload of the same file won. Find its row.
@@ -562,7 +548,12 @@ export function registerParseImportRoutes(app: FastifyInstance) {
       // assignment a conscious confirm even when an account matched (the mismatch guard still
       // re-confirms when the file points at a *different* portfolio than the one chosen).
       request.log.info(
-        { importId: imp.id, drafts: result.drafts.length, errors: result.errors.length, matchedPortfolioId },
+        {
+          importId: imp.id,
+          drafts: result.drafts.length,
+          errors: result.errors.length,
+          matchedPortfolioId,
+        },
         "csv parse complete",
       );
       reply.code(201);
@@ -581,232 +572,218 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   // Parse a screenshot or PDF into draft transactions and store them as a draft import.
   // The raw file is read from a multipart upload, parsed, then discarded (never persisted)
   // — privacy by default. Portfolio is NOT required at upload time; supplied at confirm time.
-  app.post(
-    "/imports/screenshot",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { id } = requireUser(request);
-      if (!app.screenshotParser.isConfigured()) {
-        request.log.warn(
-          { provider: app.screenshotParser.name },
-          "screenshot parser not configured",
-        );
-        return reply.code(503).send({ error: "screenshot_parser_not_configured" });
-      }
+  app.post("/imports/screenshot", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    if (!app.screenshotParser.isConfigured()) {
+      request.log.warn({ provider: app.screenshotParser.name }, "screenshot parser not configured");
+      return reply.code(503).send({ error: "screenshot_parser_not_configured" });
+    }
 
-      // Read the uploaded file part from the multipart body.
-      let part;
+    // Read the uploaded file part from the multipart body.
+    let part;
+    try {
+      part = await request.file();
+    } catch {
+      // Not a multipart request at all.
+      return reply.code(400).send({ error: "no_file" });
+    }
+    if (!part) return reply.code(400).send({ error: "no_file" });
+
+    const mimeType = part.mimetype || "image/png";
+    if (!isAcceptedMime(mimeType)) {
+      // Drain the stream to avoid ECONNRESET before we send the error.
+      await part.toBuffer().catch(() => {});
+      return reply.code(415).send({ error: "unsupported_media_type" });
+    }
+
+    let buf: Buffer;
+    try {
+      buf = await part.toBuffer();
+    } catch (err) {
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return reply.code(413).send({ error: "file_too_large", limitMb: 25 });
+      }
+      throw err;
+    }
+
+    // Raw-byte hash: the base64 representation so dedup semantics are preserved across
+    // both the old JSON path and the new multipart path (existing draft rows used base64
+    // hashes). Keep this formula verbatim — it's the backward-compat lookup key below.
+    const rawHash = shortHash(buf.toString("base64"));
+
+    // For PDFs with a text layer, hash the *normalized extracted text* instead of the raw
+    // bytes (#216): a re-export / re-download of the same statement differs at the byte
+    // level (embedded /ID, XMP timestamps, compression) but carries an identical text
+    // layer, so byte hashing fails to dedup it. Extracted once here and reused by the DKB
+    // fast-path below. Empty text (image-only/scanned) or a parse error falls back to the
+    // raw-byte hash for both store and lookup.
+    let pdfText: string | null = null;
+    let contentHash = rawHash;
+    if (mimeType === "application/pdf") {
       try {
-        part = await request.file();
-      } catch {
-        // Not a multipart request at all.
-        return reply.code(400).send({ error: "no_file" });
-      }
-      if (!part) return reply.code(400).send({ error: "no_file" });
-
-      const mimeType = part.mimetype || "image/png";
-      if (!isAcceptedMime(mimeType)) {
-        // Drain the stream to avoid ECONNRESET before we send the error.
-        await part.toBuffer().catch(() => {});
-        return reply.code(415).send({ error: "unsupported_media_type" });
-      }
-
-      let buf: Buffer;
-      try {
-        buf = await part.toBuffer();
+        const text = await extractPdfText(buf);
+        const normalized = text.replace(/\s+/g, " ").trim();
+        if (normalized) {
+          pdfText = text;
+          contentHash = shortHash(normalized);
+        }
       } catch (err) {
-        if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-          return reply.code(413).send({ error: "file_too_large", limitMb: 25 });
-        }
-        throw err;
+        request.log.warn({ err }, "pdf text extraction for dedup failed; using raw-byte hash");
       }
+    }
 
-      // Raw-byte hash: the base64 representation so dedup semantics are preserved across
-      // both the old JSON path and the new multipart path (existing draft rows used base64
-      // hashes). Keep this formula verbatim — it's the backward-compat lookup key below.
-      const rawHash = shortHash(buf.toString("base64"));
-
-      // For PDFs with a text layer, hash the *normalized extracted text* instead of the raw
-      // bytes (#216): a re-export / re-download of the same statement differs at the byte
-      // level (embedded /ID, XMP timestamps, compression) but carries an identical text
-      // layer, so byte hashing fails to dedup it. Extracted once here and reused by the DKB
-      // fast-path below. Empty text (image-only/scanned) or a parse error falls back to the
-      // raw-byte hash for both store and lookup.
-      let pdfText: string | null = null;
-      let contentHash = rawHash;
-      if (mimeType === "application/pdf") {
-        try {
-          const text = await extractPdfText(buf);
-          const normalized = text.replace(/\s+/g, " ").trim();
-          if (normalized) {
-            pdfText = text;
-            contentHash = shortHash(normalized);
-          }
-        } catch (err) {
-          request.log.warn({ err }, "pdf text extraction for dedup failed; using raw-byte hash");
-        }
-      }
-
-      // Account-level report PDF (e.g. Trade Republic's annual tax report), recognized
-      // before anything else: this class of document has no transactions to extract, and
-      // previously silently produced a zero-draft screenshot_imports row plus a dead-end
-      // "no transactions found" error (no deterministic parser matches it, and the
-      // vision-LLM fallback returns empty drafts). Detection-only here — no import row, no
-      // bytes persisted, unconditional regardless of importStrategy (a report should never
-      // reach the vision parser). The client re-uploads the same file to POST /documents
-      // (with a user-chosen portfolioId) once the user confirms.
-      if (pdfText) {
-        const reportMatch = detectReportPdf(pdfText);
-        if (reportMatch) {
-          request.log.info(
-            { category: reportMatch.category, taxYear: reportMatch.taxYear },
-            "PDF recognized as an account-level report",
-          );
-          return {
-            isReport: true,
-            reportCategory: reportMatch.category,
-            reportTaxYear: reportMatch.taxYear,
-            reportTitle: reportMatch.title,
-          };
-        }
-      }
-
-      request.log.info({ mimeType, bytes: buf.length }, "screenshot import started");
-
-      // Re-upload guard: same document already imported and not discarded → return it.
-      // Scoped per-user so the same document can't be re-parsed into a different portfolio.
-      // Two-tier lookup: match the forward text-layer hash *and* the legacy raw-byte hash,
-      // so byte-identical re-uploads of imports created before #216 still dedup.
-      // `resolveReuse` lets it through (force re-import, or a confirmed import whose records
-      // were all deleted) — see the CSV path (#229).
-      const existing = await resolveReuse(
-        await existingImport(id, [contentHash, rawHash]),
-        forceFromQuery(request.query),
-      );
-      if (existing) {
-        const isDraft = existing.status === "draft";
-        const storedParsed = isDraft
-          ? ((existing.parsedJson ?? {}) as {
-              drafts?: unknown[];
-              contracts?: unknown[];
-              errors?: unknown[];
-              accountNumber?: string | null;
-            })
-          : null;
-        const matchedPortfolioId = isDraft
-          ? await matchAccountNumber(id, storedParsed?.accountNumber)
-          : null;
+    // Account-level report PDF (e.g. Trade Republic's annual tax report), recognized
+    // before anything else: this class of document has no transactions to extract, and
+    // previously silently produced a zero-draft screenshot_imports row plus a dead-end
+    // "no transactions found" error (no deterministic parser matches it, and the
+    // vision-LLM fallback returns empty drafts). Detection-only here — no import row, no
+    // bytes persisted, unconditional regardless of importStrategy (a report should never
+    // reach the vision parser). The client re-uploads the same file to POST /documents
+    // (with a user-chosen portfolioId) once the user confirms.
+    if (pdfText) {
+      const reportMatch = detectReportPdf(pdfText);
+      if (reportMatch) {
         request.log.info(
-          { importId: existing.id, status: existing.status },
-          "screenshot import deduplicated",
+          { category: reportMatch.category, taxYear: reportMatch.taxYear },
+          "PDF recognized as an account-level report",
         );
-        reply.code(200);
         return {
-          importId: existing.id,
-          drafts:
-            isDraft && storedParsed && Array.isArray(storedParsed.drafts)
-              ? storedParsed.drafts
-              : [],
-          contracts:
-            isDraft && storedParsed && Array.isArray(storedParsed.contracts)
-              ? storedParsed.contracts
-              : [],
-          errors:
-            isDraft && storedParsed && Array.isArray(storedParsed.errors)
-              ? storedParsed.errors
-              : [],
-          alreadyExists: isDraft,
-          alreadyConfirmed: !isDraft,
-          matchedPortfolioId,
-          suggestedPortfolioId: matchedPortfolioId ?? (await soleOwnedPortfolioId(id)),
+          isReport: true,
+          reportCategory: reportMatch.category,
+          reportTaxYear: reportMatch.taxYear,
+          reportTitle: reportMatch.title,
         };
       }
+    }
 
-      let parsed;
-      // Admin-configured first choice (global): "parser_first" runs the deterministic
-      // broker parser before vision; "vision_only" skips it so every PDF/image goes
-      // straight to the vision-LLM. CSV imports use their own path and are unaffected.
-      const importStrategy = await getImportStrategy(app.db);
-      // Track which deterministic parser produced the drafts so the confirm endpoint can
-      // derive the correct `transactions.source` ("pdf") and `isEu` ISIN-resolution flag.
-      // Stays at the vision-parser name when the fast-path doesn't match or falls through.
-      let parserTag = app.screenshotParser.name;
-      // Deterministic fast-path for DKB securities PDFs (Wertpapierabrechnung /
-      // Dividendengutschrift / Ausschüttung): parse the text layer exactly — no LLM call,
-      // no billing, no data egress. Falls through to vision for any non-DKB / scanned PDF.
-      if (importStrategy === "parser_first" && mimeType === "application/pdf") {
-        try {
-          // Reuse the text already extracted for the dedup hash above (it's the same buffer).
-          const text = pdfText ?? (await extractPdfText(buf));
-          if (detectDkbPdf(text)) {
-            const { drafts: dkbDrafts, accountNumber: dkbAccount } = parseDkbPdf(text);
-            if (dkbDrafts.length > 0) {
-              request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
-              parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
-              parserTag = "dkb-pdf";
-            }
-          } else if (detectTrPdf(text)) {
-            // TR settlement PDFs: deterministic parse — same fast-path as DKB.
-            // Cost-information / order-confirmation docs return false from detectTrPdf.
-            const { drafts: trDrafts, errors: trErrors } = parseTrPdf(text);
-            if (trDrafts.length > 0) {
-              request.log.info({ drafts: trDrafts.length }, "TR PDF parsed deterministically");
-              parsed = { drafts: trDrafts, contracts: [], accountNumber: null };
-              parserTag = "tr-pdf";
-              if (trErrors.length > 0) {
-                request.log.warn({ errors: trErrors }, "TR PDF parse had errors");
-              }
+    request.log.info({ mimeType, bytes: buf.length }, "screenshot import started");
+
+    // Re-upload guard: same document already imported and not discarded → return it.
+    // Scoped per-user so the same document can't be re-parsed into a different portfolio.
+    // Two-tier lookup: match the forward text-layer hash *and* the legacy raw-byte hash,
+    // so byte-identical re-uploads of imports created before #216 still dedup.
+    // `resolveReuse` lets it through (force re-import, or a confirmed import whose records
+    // were all deleted) — see the CSV path (#229).
+    const existing = await resolveReuse(
+      await existingImport(id, [contentHash, rawHash]),
+      forceFromQuery(request.query),
+    );
+    if (existing) {
+      const isDraft = existing.status === "draft";
+      const storedParsed = isDraft
+        ? ((existing.parsedJson ?? {}) as {
+            drafts?: unknown[];
+            contracts?: unknown[];
+            errors?: unknown[];
+            accountNumber?: string | null;
+          })
+        : null;
+      const matchedPortfolioId = isDraft
+        ? await matchAccountNumber(id, storedParsed?.accountNumber)
+        : null;
+      request.log.info(
+        { importId: existing.id, status: existing.status },
+        "screenshot import deduplicated",
+      );
+      reply.code(200);
+      return {
+        importId: existing.id,
+        drafts:
+          isDraft && storedParsed && Array.isArray(storedParsed.drafts) ? storedParsed.drafts : [],
+        contracts:
+          isDraft && storedParsed && Array.isArray(storedParsed.contracts)
+            ? storedParsed.contracts
+            : [],
+        errors:
+          isDraft && storedParsed && Array.isArray(storedParsed.errors) ? storedParsed.errors : [],
+        alreadyExists: isDraft,
+        alreadyConfirmed: !isDraft,
+        matchedPortfolioId,
+        suggestedPortfolioId: matchedPortfolioId ?? (await soleOwnedPortfolioId(id)),
+      };
+    }
+
+    let parsed;
+    // Admin-configured first choice (global): "parser_first" runs the deterministic
+    // broker parser before vision; "vision_only" skips it so every PDF/image goes
+    // straight to the vision-LLM. CSV imports use their own path and are unaffected.
+    const importStrategy = await getImportStrategy(app.db);
+    // Track which deterministic parser produced the drafts so the confirm endpoint can
+    // derive the correct `transactions.source` ("pdf") and `isEu` ISIN-resolution flag.
+    // Stays at the vision-parser name when the fast-path doesn't match or falls through.
+    let parserTag = app.screenshotParser.name;
+    // Deterministic fast-path for DKB securities PDFs (Wertpapierabrechnung /
+    // Dividendengutschrift / Ausschüttung): parse the text layer exactly — no LLM call,
+    // no billing, no data egress. Falls through to vision for any non-DKB / scanned PDF.
+    if (importStrategy === "parser_first" && mimeType === "application/pdf") {
+      try {
+        // Reuse the text already extracted for the dedup hash above (it's the same buffer).
+        const text = pdfText ?? (await extractPdfText(buf));
+        if (detectDkbPdf(text)) {
+          const { drafts: dkbDrafts, accountNumber: dkbAccount } = parseDkbPdf(text);
+          if (dkbDrafts.length > 0) {
+            request.log.info({ drafts: dkbDrafts.length }, "DKB PDF parsed deterministically");
+            parsed = { drafts: dkbDrafts, contracts: [], accountNumber: dkbAccount };
+            parserTag = "dkb-pdf";
+          }
+        } else if (detectTrPdf(text)) {
+          // TR settlement PDFs: deterministic parse — same fast-path as DKB.
+          // Cost-information / order-confirmation docs return false from detectTrPdf.
+          const { drafts: trDrafts, errors: trErrors } = parseTrPdf(text);
+          if (trDrafts.length > 0) {
+            request.log.info({ drafts: trDrafts.length }, "TR PDF parsed deterministically");
+            parsed = { drafts: trDrafts, contracts: [], accountNumber: null };
+            parserTag = "tr-pdf";
+            if (trErrors.length > 0) {
+              request.log.warn({ errors: trErrors }, "TR PDF parse had errors");
             }
           }
-        } catch (err) {
-          request.log.warn({ err }, "DKB/TR PDF text parse failed; falling back to vision");
         }
-      }
-      try {
-        parsed ??= await app.screenshotParser.parse({ data: buf, mimeType }, request.log);
       } catch (err) {
-        // Extract the provider HTTP status from the thrown message (e.g. "claude_vision_error_429")
-        // and surface it in the response so the client can display a meaningful per-file reason.
-        const message = (err as Error)?.message ?? "";
-        const m = /vision_error_(\d+)$/.exec(message);
-        request.log.error({ err }, "screenshot parse failed");
-        return reply.code(502).send({
-          error: "screenshot_parse_failed",
-          reason: "provider_error",
-          provider: app.screenshotParser.name,
-          providerStatus: m ? Number(m[1]) : null,
-        });
+        request.log.warn({ err }, "DKB/TR PDF text parse failed; falling back to vision");
       }
+    }
+    try {
+      parsed ??= await app.screenshotParser.parse({ data: buf, mimeType }, request.log);
+    } catch (err) {
+      // Extract the provider HTTP status from the thrown message (e.g. "claude_vision_error_429")
+      // and surface it in the response so the client can display a meaningful per-file reason.
+      const message = (err as Error)?.message ?? "";
+      const m = /vision_error_(\d+)$/.exec(message);
+      request.log.error({ err }, "screenshot parse failed");
+      return reply.code(502).send({
+        error: "screenshot_parse_failed",
+        reason: "provider_error",
+        provider: app.screenshotParser.name,
+        providerStatus: m ? Number(m[1]) : null,
+      });
+    }
 
-      const { drafts, contracts, accountNumber: detectedAccountNumber } = parsed;
-      const scored = [
-        ...drafts.map((d) => d.confidence),
-        ...contracts.map((c) => c.confidence),
-      ];
-      const confidence =
-        scored.length > 0
-          ? String(scored.reduce((s, c) => s + c, 0) / scored.length)
-          : null;
-      // Assign content-hash externalIds before storing so subset-confirm is safe.
-      assignContentExternalIds(drafts, "screenshot");
-      // Store accountNumber inside parsedJson so the dedup branch can also match on re-upload.
-      const result = {
-        drafts,
-        contracts,
-        errors: [] as { line: number; message: string }[],
-        accountNumber: detectedAccountNumber ?? null,
-      };
+    const { drafts, contracts, accountNumber: detectedAccountNumber } = parsed;
+    const scored = [...drafts.map((d) => d.confidence), ...contracts.map((c) => c.confidence)];
+    const confidence =
+      scored.length > 0 ? String(scored.reduce((s, c) => s + c, 0) / scored.length) : null;
+    // Assign content-hash externalIds before storing so subset-confirm is safe.
+    assignContentExternalIds(drafts, "screenshot");
+    // Store accountNumber inside parsedJson so the dedup branch can also match on re-upload.
+    const result = {
+      drafts,
+      contracts,
+      errors: [] as { line: number; message: string }[],
+      accountNumber: detectedAccountNumber ?? null,
+    };
 
-      const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
-      // Candidate portfolio for duplicate flagging: account-matched, else the sole portfolio.
-      const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
-      await annotateLikelyDuplicates(result.drafts, candidate, parserTag);
-      const accountMismatch = candidate
-        ? await accountMismatchVerdict(app, id, detectedAccountNumber, candidate)
-        : null;
+    const matchedPortfolioId = await matchAccountNumber(id, detectedAccountNumber);
+    // Candidate portfolio for duplicate flagging: account-matched, else the sole portfolio.
+    const candidate = matchedPortfolioId ?? (await soleOwnedPortfolioId(id));
+    await annotateLikelyDuplicates(result.drafts, candidate, parserTag);
+    const accountMismatch = candidate
+      ? await accountMismatchVerdict(app, id, detectedAccountNumber, candidate)
+      : null;
 
-      // onConflictDoNothing handles the TOCTOU race (fix 4.1) — see the CSV path above.
-      let imp = (await app.db
+    // onConflictDoNothing handles the TOCTOU race (fix 4.1) — see the CSV path above.
+    let imp = (
+      await app.db
         .insert(screenshotImports)
         .values({
           userId: id,
@@ -823,57 +800,63 @@ export function registerParseImportRoutes(app: FastifyInstance) {
           status: "draft",
         })
         .onConflictDoNothing()
-        .returning())[0];
+        .returning()
+    )[0];
 
-      if (!imp) {
-        const [existing] = await app.db
-          .select()
-          .from(screenshotImports)
-          .where(
-            and(
-              eq(screenshotImports.userId, id),
-              eq(screenshotImports.contentHash, contentHash),
-              ne(screenshotImports.status, "discarded"),
-            ),
-          )
-          .limit(1);
-        if (!existing) throw app.httpErrors.internalServerError("import race recovery failed");
-        imp = existing;
-      }
+    if (!imp) {
+      const [existing] = await app.db
+        .select()
+        .from(screenshotImports)
+        .where(
+          and(
+            eq(screenshotImports.userId, id),
+            eq(screenshotImports.contentHash, contentHash),
+            ne(screenshotImports.status, "discarded"),
+          ),
+        )
+        .limit(1);
+      if (!existing) throw app.httpErrors.internalServerError("import race recovery failed");
+      imp = existing;
+    }
 
-      // Stage the raw file for potential post-confirm retention (#231).
-      // Best-effort: a storage failure never breaks the parse (see receipts.ts).
-      await storeReceipt(app, {
-        userId: id,
+    // Stage the raw file for potential post-confirm retention (#231).
+    // Best-effort: a storage failure never breaks the parse (see receipts.ts).
+    await storeReceipt(app, {
+      userId: id,
+      importId: imp.id,
+      buf,
+      mimeType,
+      originalFilename: part.filename ?? null,
+      source: parserTag,
+    });
+
+    // Always stage (no auto-materialize): the user confirms a target portfolio in the upload
+    // modal — pre-selected from `suggestedPortfolioId` (account match, else the sole
+    // portfolio) — then the materialize endpoint writes the drafts as `status='draft'` rows
+    // carrying their per-draft confidence. The mismatch guard re-confirms when the detected
+    // account points at a different portfolio than the one chosen. Gold contracts keep the
+    // confirm path (they become loans, not draft transactions).
+    request.log.info(
+      {
         importId: imp.id,
-        buf,
-        mimeType,
-        originalFilename: part.filename ?? null,
-        source: parserTag,
-      });
-
-      // Always stage (no auto-materialize): the user confirms a target portfolio in the upload
-      // modal — pre-selected from `suggestedPortfolioId` (account match, else the sole
-      // portfolio) — then the materialize endpoint writes the drafts as `status='draft'` rows
-      // carrying their per-draft confidence. The mismatch guard re-confirms when the detected
-      // account points at a different portfolio than the one chosen. Gold contracts keep the
-      // confirm path (they become loans, not draft transactions).
-      request.log.info(
-        { importId: imp.id, drafts: result.drafts.length, contracts: result.contracts.length, confidence, matchedPortfolioId },
-        "screenshot parse stored",
-      );
-      reply.code(201);
-      return {
-        importId: imp.id,
-        drafts: result.drafts,
-        contracts: result.contracts,
-        errors: result.errors,
+        drafts: result.drafts.length,
+        contracts: result.contracts.length,
+        confidence,
         matchedPortfolioId,
-        suggestedPortfolioId: candidate,
-        accountMismatch,
-      };
-    },
-  );
+      },
+      "screenshot parse stored",
+    );
+    reply.code(201);
+    return {
+      importId: imp.id,
+      drafts: result.drafts,
+      contracts: result.contracts,
+      errors: result.errors,
+      matchedPortfolioId,
+      suggestedPortfolioId: candidate,
+      accountMismatch,
+    };
+  });
 
   // Materialize a staged import's drafts into the chosen portfolio as `status='draft'` rows.
   // This is the "confirm portfolio" step of the upload flow: parse staged the drafts (+ the
@@ -885,18 +868,13 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
-      const { portfolioId, acknowledgeAccountMismatch } = materializeBodySchema.parse(
-        request.body,
-      );
+      const { portfolioId, acknowledgeAccountMismatch } = materializeBodySchema.parse(request.body);
 
       const [imp] = await app.db
         .select()
         .from(screenshotImports)
         .where(
-          and(
-            eq(screenshotImports.id, request.params.importId),
-            eq(screenshotImports.userId, id),
-          ),
+          and(eq(screenshotImports.id, request.params.importId), eq(screenshotImports.userId, id)),
         )
         .limit(1);
       if (!imp) return reply.code(404).send({ error: "import_not_found" });
@@ -968,43 +946,29 @@ export function registerParseImportRoutes(app: FastifyInstance) {
   // use (against the *selected* portfolio) and return only the units that conflict — so the modal
   // can keep itself open and show the warning before handing the write to the background runner.
   // Writes nothing. pytr imports are exempt (sync is always bound to its connection's portfolio).
-  app.post(
-    "/imports/account-check",
-    { preHandler: app.authenticate },
-    async (request) => {
-      const { id } = requireUser(request);
-      const { units } = accountCheckBodySchema.parse(request.body);
+  app.post("/imports/account-check", { preHandler: app.authenticate }, async (request) => {
+    const { id } = requireUser(request);
+    const { units } = accountCheckBodySchema.parse(request.body);
 
-      const mismatches: Array<{ importId: string } & NonNullable<
-        Awaited<ReturnType<typeof accountMismatchVerdict>>
-      >> = [];
+    const mismatches: Array<
+      { importId: string } & NonNullable<Awaited<ReturnType<typeof accountMismatchVerdict>>>
+    > = [];
 
-      for (const unit of units) {
-        const [imp] = await app.db
-          .select()
-          .from(screenshotImports)
-          .where(
-            and(
-              eq(screenshotImports.id, unit.importId),
-              eq(screenshotImports.userId, id),
-            ),
-          )
-          .limit(1);
-        // Skip silently: a missing/confirmed/pytr import simply has no warning to surface;
-        // the real write guard still re-checks, so this never gates correctness.
-        if (!imp || imp.status === "confirmed" || imp.parser === "pytr") continue;
+    for (const unit of units) {
+      const [imp] = await app.db
+        .select()
+        .from(screenshotImports)
+        .where(and(eq(screenshotImports.id, unit.importId), eq(screenshotImports.userId, id)))
+        .limit(1);
+      // Skip silently: a missing/confirmed/pytr import simply has no warning to surface;
+      // the real write guard still re-checks, so this never gates correctness.
+      if (!imp || imp.status === "confirmed" || imp.parser === "pytr") continue;
 
-        const parsed = (imp.parsedJson ?? {}) as { accountNumber?: string | null };
-        const verdict = await accountMismatchVerdict(
-          app,
-          id,
-          parsed.accountNumber,
-          unit.portfolioId,
-        );
-        if (verdict) mismatches.push({ importId: imp.id, ...verdict });
-      }
+      const parsed = (imp.parsedJson ?? {}) as { accountNumber?: string | null };
+      const verdict = await accountMismatchVerdict(app, id, parsed.accountNumber, unit.portfolioId);
+      if (verdict) mismatches.push({ importId: imp.id, ...verdict });
+    }
 
-      return { mismatches };
-    },
-  );
+    return { mismatches };
+  });
 }

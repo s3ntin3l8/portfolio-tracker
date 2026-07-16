@@ -24,8 +24,7 @@ export type IncomeEventRow = IncomeEvent & {
  * (see {@link TimelineColumnHeader}) and every data row so columns line up.
  * Date | Instrument | Type | Shares | Per share | Amount.
  */
-export const TIMELINE_GRID =
-  "grid-cols-[76px_minmax(0,1.3fr)_minmax(0,0.9fr)_76px_92px_116px]";
+export const TIMELINE_GRID = "grid-cols-[76px_minmax(0,1.3fr)_minmax(0,0.9fr)_76px_92px_116px]";
 
 /** Desktop-only column-header row for the payments timeline. */
 export function TimelineColumnHeader() {
@@ -49,7 +48,15 @@ export function TimelineColumnHeader() {
 
 /** 36×36 rounded-square badge; dashed outline for forecast rows (reference).
  *  Tinted by payment type — green for dividends, teal for coupons/interest. */
-function TimelineBadge({ label, type, forecast }: { label: string; type: string; forecast: boolean }) {
+function TimelineBadge({
+  label,
+  type,
+  forecast,
+}: {
+  label: string;
+  type: string;
+  forecast: boolean;
+}) {
   const tone =
     type === "coupon" || type === "interest"
       ? { bg: "rgba(13,148,136,.16)", fg: "#0D9488" }
@@ -69,13 +76,22 @@ function TimelineBadge({ label, type, forecast }: { label: string; type: string;
   );
 }
 
-export function IncomeEventsTable({ rows, groupByMonth }: { rows: IncomeEventRow[]; groupByMonth?: boolean }) {
+export function IncomeEventsTable({
+  rows,
+  groupByMonth,
+}: {
+  rows: IncomeEventRow[];
+  groupByMonth?: boolean;
+}) {
   const t = useTranslations("Income");
   const tt = useTranslations("TxType");
   const locale = useLocale();
   const df = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" });
   const monthFmt = useMemo(
-    () => (groupByMonth ? new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }) : null),
+    () =>
+      groupByMonth
+        ? new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" })
+        : null,
     [locale, groupByMonth],
   );
   const monthTotals = useMemo(() => {
@@ -89,7 +105,12 @@ export function IncomeEventsTable({ rows, groupByMonth }: { rows: IncomeEventRow
     }
     const result = new Map<string, string>();
     for (const [mk, byCurrency] of totals) {
-      result.set(mk, Object.entries(byCurrency).map(([cur, amt]) => formatMoney(amt, cur, locale)).join(" · "));
+      result.set(
+        mk,
+        Object.entries(byCurrency)
+          .map(([cur, amt]) => formatMoney(amt, cur, locale))
+          .join(" · "),
+      );
     }
     return result;
   }, [rows, groupByMonth, locale]);
@@ -131,17 +152,21 @@ export function IncomeEventsTable({ rows, groupByMonth }: { rows: IncomeEventRow
           e.quantity != null
             ? Number(e.quantity).toLocaleString(locale, { maximumFractionDigits: 4 })
             : "—";
-        const perShare = e.perShare != null ? formatMoney(Number(e.perShare), e.currency, locale) : "—";
+        const perShare =
+          e.perShare != null ? formatMoney(Number(e.perShare), e.currency, locale) : "—";
         // Forecast growth/contribution assumptions no longer have a dedicated row —
         // surface them on hover so the number's basis stays discoverable.
-        const title = [
-          e.growthApplied !== undefined
-            ? t("growthHint", { pct: `${e.growthApplied >= 1 ? "+" : ""}${((e.growthApplied - 1) * 100).toFixed(1)}%` })
-            : null,
-          e.assumesContributions ? t("contributionsHint") : null,
-        ]
-          .filter(Boolean)
-          .join(" · ") || undefined;
+        const title =
+          [
+            e.growthApplied !== undefined
+              ? t("growthHint", {
+                  pct: `${e.growthApplied >= 1 ? "+" : ""}${((e.growthApplied - 1) * 100).toFixed(1)}%`,
+                })
+              : null,
+            e.assumesContributions ? t("contributionsHint") : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined;
 
         const estTag = forecast && (
           <span className="shrink-0 rounded-[5px] bg-line px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-text-3">
@@ -180,17 +205,33 @@ export function IncomeEventsTable({ rows, groupByMonth }: { rows: IncomeEventRow
               )}
             >
               {/* Desktop: 6-column grid. */}
-              <div className={cn("hidden items-center gap-3.5 px-0.5 py-[11px] sm:grid", TIMELINE_GRID)}>
-                <span className="tabular whitespace-nowrap text-xs font-semibold text-text-2">{dateLabel}</span>
+              <div
+                className={cn(
+                  "hidden items-center gap-3.5 px-0.5 py-[11px] sm:grid",
+                  TIMELINE_GRID,
+                )}
+              >
+                <span className="tabular whitespace-nowrap text-xs font-semibold text-text-2">
+                  {dateLabel}
+                </span>
                 <div className="flex min-w-0 items-center gap-2.5">
                   <TimelineBadge label={label} type={e.type} forecast={forecast} />
                   <span className="truncate text-[13px] font-bold">{label}</span>
                   {estTag}
                 </div>
                 <span className="truncate text-xs font-medium text-text-2">{typeLabel}</span>
-                <span className="tabular text-right text-[13px] font-semibold text-text-mute">{shares}</span>
-                <span className="tabular text-right text-[13px] font-semibold text-text-mute">{perShare}</span>
-                <span className={cn("tabular whitespace-nowrap text-right text-sm font-bold", amountClass)}>
+                <span className="tabular text-right text-[13px] font-semibold text-text-mute">
+                  {shares}
+                </span>
+                <span className="tabular text-right text-[13px] font-semibold text-text-mute">
+                  {perShare}
+                </span>
+                <span
+                  className={cn(
+                    "tabular whitespace-nowrap text-right text-sm font-bold",
+                    amountClass,
+                  )}
+                >
                   {amountLabel}
                 </span>
               </div>
@@ -207,7 +248,9 @@ export function IncomeEventsTable({ rows, groupByMonth }: { rows: IncomeEventRow
                     {typeLabel} {" · "} {dateLabel}
                   </span>
                 </div>
-                <span className={cn("tabular shrink-0 text-sm font-bold", amountClass)}>{amountLabel}</span>
+                <span className={cn("tabular shrink-0 text-sm font-bold", amountClass)}>
+                  {amountLabel}
+                </span>
               </div>
             </div>
           </Fragment>

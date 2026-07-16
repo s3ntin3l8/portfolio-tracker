@@ -67,13 +67,7 @@ function sum(rows: { targetPct: number }[]): number {
  * 100 (±0.5). On save, the entire (portfolioId?, dimension) set is replaced
  * atomically. After save, router.refresh() pulls the updated drift into RSC.
  */
-export function TargetDialog({
-  portfolioId,
-  dimension,
-  dimensionLabel,
-  slices,
-  trigger,
-}: Props) {
+export function TargetDialog({ portfolioId, dimension, dimensionLabel, slices, trigger }: Props) {
   const t = useTranslations("TargetDialog");
   const api = useApiClient();
   const router = useRouter();

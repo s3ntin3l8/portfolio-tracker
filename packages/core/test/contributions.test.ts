@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  contributionStats,
-  mergeContributionStats,
-  type CoreTransaction,
-} from "../src/index.js";
+import { contributionStats, mergeContributionStats, type CoreTransaction } from "../src/index.js";
 
 function tx(p: Partial<CoreTransaction>): CoreTransaction {
   return {
@@ -73,7 +69,13 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     const txns: CoreTransaction[] = [
       // A deposit that "inside" would count — ignored here.
       tx({ type: "deposit", price: "9999", executedAt: new Date("2026-01-05") }),
-      tx({ type: "buy", quantity: "5", price: "100", fees: "1", executedAt: new Date("2026-01-15") }),
+      tx({
+        type: "buy",
+        quantity: "5",
+        price: "100",
+        fees: "1",
+        executedAt: new Date("2026-01-15"),
+      }),
       tx({ type: "savings_plan", quantity: "2", price: "100", executedAt: new Date("2026-02-15") }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
@@ -96,9 +98,21 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-10") }),
       // Broker-credited reinvestment — not the user's money, excluded.
-      tx({ type: "savings_plan", quantity: "1", price: "50", kind: "saveback", executedAt: new Date("2026-01-12") }),
+      tx({
+        type: "savings_plan",
+        quantity: "1",
+        price: "50",
+        kind: "saveback",
+        executedAt: new Date("2026-01-12"),
+      }),
       // Round-up is the user's own spare change — kept.
-      tx({ type: "buy", quantity: "1", price: "30", kind: "roundup", executedAt: new Date("2026-01-14") }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "30",
+        kind: "roundup",
+        executedAt: new Date("2026-01-14"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     expect(s.netContributed).toBe("530"); // 500 + 30; the 50 saveback excluded
@@ -108,7 +122,13 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-10") }),
       // Dividend reinvestment booked as a buy — return reinvested, not a contribution.
-      tx({ type: "buy", quantity: "1.01327", price: "53.79", kind: "reinvestment", executedAt: new Date("2026-05-02") }),
+      tx({
+        type: "buy",
+        quantity: "1.01327",
+        price: "53.79",
+        kind: "reinvestment",
+        executedAt: new Date("2026-05-02"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     expect(s.netContributed).toBe("500"); // only the real buy; the reinvestment excluded
@@ -117,7 +137,13 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
   it("excludes a crypto 1%-bonus buy (reward-funded, not external capital)", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "buy", quantity: "5", price: "100", executedAt: new Date("2026-01-10") }),
-      tx({ type: "buy", quantity: "0.0002", price: "100550", kind: "crypto_bonus", executedAt: new Date("2026-01-11") }),
+      tx({
+        type: "buy",
+        quantity: "0.0002",
+        price: "100550",
+        kind: "crypto_bonus",
+        executedAt: new Date("2026-01-11"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     expect(s.netContributed).toBe("500"); // crypto bonus excluded
@@ -138,7 +164,13 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
   it("counts a tagged transfer-in at its carried cost, not a bonus share", () => {
     const txns: CoreTransaction[] = [
       // Inbound securities transfer with a carried basis → contributed capital.
-      tx({ type: "bonus", quantity: "5", price: "100", kind: "transfer_in", executedAt: new Date("2026-01-15") }),
+      tx({
+        type: "bonus",
+        quantity: "5",
+        price: "100",
+        kind: "transfer_in",
+        executedAt: new Date("2026-01-15"),
+      }),
       // Free bonus / corporate-action shares (no cost) → not a contribution.
       tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2026-02-15") }),
     ];
@@ -150,7 +182,13 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
   it("never counts received income as a contribution", () => {
     const txns: CoreTransaction[] = [
       tx({ type: "dividend", quantity: "0", price: "40", executedAt: new Date("2026-01-15") }),
-      tx({ type: "interest", instrumentId: null, quantity: "0", price: "10", executedAt: new Date("2026-01-20") }),
+      tx({
+        type: "interest",
+        instrumentId: null,
+        quantity: "0",
+        price: "10",
+        executedAt: new Date("2026-01-20"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     expect(s.netContributed).toBe("0");
@@ -162,8 +200,14 @@ describe("contributionStats — cash OUTSIDE the boundary", () => {
       // A normal BUY that is the user's own money.
       tx({ type: "buy", quantity: "2", price: "100", executedAt: new Date("2026-01-15") }),
       // TR Kindergeld / promo bonus — income, never contributed capital.
-      tx({ type: "bonus_cash", instrumentId: null, quantity: "0", price: "22.86", kind: "bonus",
-        executedAt: new Date("2026-01-20") }),
+      tx({
+        type: "bonus_cash",
+        instrumentId: null,
+        quantity: "0",
+        price: "22.86",
+        kind: "bonus",
+        executedAt: new Date("2026-01-20"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     // Only the buy counts; the bonus_cash is excluded regardless of boundary.
@@ -178,10 +222,30 @@ describe("contributionStats — fund merger (sell+buy, kind:merger)", () => {
   it("is contribution-neutral in the outside boundary (no phantom inflow/outflow)", () => {
     const txns: CoreTransaction[] = [
       // External capital into the old fund: 10 @ 100 = 1000.
-      tx({ instrumentId: OLD, type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-10") }),
+      tx({
+        instrumentId: OLD,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        executedAt: new Date("2026-01-10"),
+      }),
       // Taxable merger on 2026-02-01: sell old @ market 1200, buy new @ 1200 — both kind:"merger".
-      tx({ instrumentId: OLD, type: "sell", quantity: "10", price: "120", kind: "merger", executedAt: new Date("2026-02-01") }),
-      tx({ instrumentId: NEW, type: "buy", quantity: "5", price: "240", kind: "merger", executedAt: new Date("2026-02-01") }),
+      tx({
+        instrumentId: OLD,
+        type: "sell",
+        quantity: "10",
+        price: "120",
+        kind: "merger",
+        executedAt: new Date("2026-02-01"),
+      }),
+      tx({
+        instrumentId: NEW,
+        type: "buy",
+        quantity: "5",
+        price: "240",
+        kind: "merger",
+        executedAt: new Date("2026-02-01"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     // Only the original 1000 counts; the merger legs cancel out.
@@ -193,11 +257,37 @@ describe("contributionStats — fund merger (sell+buy, kind:merger)", () => {
 
   it("draws the cost pool so a later real sell of the new fund counts correctly", () => {
     const txns: CoreTransaction[] = [
-      tx({ instrumentId: OLD, type: "buy", quantity: "10", price: "100", executedAt: new Date("2026-01-10") }),
-      tx({ instrumentId: OLD, type: "sell", quantity: "10", price: "120", kind: "merger", executedAt: new Date("2026-02-01") }),
-      tx({ instrumentId: NEW, type: "buy", quantity: "5", price: "240", kind: "merger", executedAt: new Date("2026-02-01") }),
+      tx({
+        instrumentId: OLD,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        executedAt: new Date("2026-01-10"),
+      }),
+      tx({
+        instrumentId: OLD,
+        type: "sell",
+        quantity: "10",
+        price: "120",
+        kind: "merger",
+        executedAt: new Date("2026-02-01"),
+      }),
+      tx({
+        instrumentId: NEW,
+        type: "buy",
+        quantity: "5",
+        price: "240",
+        kind: "merger",
+        executedAt: new Date("2026-02-01"),
+      }),
       // Later: a real sell of half the new fund → outflow at the (stepped-up) avg cost 240.
-      tx({ instrumentId: NEW, type: "sell", quantity: "2.5", price: "300", executedAt: new Date("2026-03-01") }),
+      tx({
+        instrumentId: NEW,
+        type: "sell",
+        quantity: "2.5",
+        price: "300",
+        executedAt: new Date("2026-03-01"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     // 1000 in, then 2.5 × 240 = 600 of cost basis out.
@@ -209,7 +299,13 @@ describe("contributionStats — fund merger (sell+buy, kind:merger)", () => {
 describe("contributionStats — shared", () => {
   it("FX-converts amounts to the display currency before summing", () => {
     const txns: CoreTransaction[] = [
-      tx({ type: "buy", quantity: "2", price: "100", currency: "USD", executedAt: new Date("2026-01-15") }),
+      tx({
+        type: "buy",
+        quantity: "2",
+        price: "100",
+        currency: "USD",
+        executedAt: new Date("2026-01-15"),
+      }),
     ];
     const fx = (from: string, to: string) => (from === "USD" && to === "EUR" ? "0.9" : "1");
     const s = contributionStats({ txns, displayCurrency: "EUR", fx, boundary: "outside" });
@@ -265,7 +361,13 @@ describe("contributionStats — day-resolution series (dailySeries)", () => {
 
   it("dates an outside-boundary buy on its actual day", () => {
     const txns: CoreTransaction[] = [
-      tx({ type: "buy", quantity: "5", price: "100", fees: "1", executedAt: new Date("2026-04-14") }),
+      tx({
+        type: "buy",
+        quantity: "5",
+        price: "100",
+        fees: "1",
+        executedAt: new Date("2026-04-14"),
+      }),
     ];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "outside" });
     expect(s.dailySeries).toEqual([{ date: "2026-04-14", contributed: "501" }]);

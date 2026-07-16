@@ -6,9 +6,7 @@ describe("global error handler", () => {
   it("masks internal error details on an unhandled 5xx (no driver/message text leaked)", async () => {
     const app = await buildApp();
     app.get("/__test_boom", async () => {
-      throw new Error(
-        'duplicate key value violates unique constraint "documents_storage_key_idx"',
-      );
+      throw new Error('duplicate key value violates unique constraint "documents_storage_key_idx"');
     });
     const res = await app.inject({ method: "GET", url: "/__test_boom" });
     expect(res.statusCode).toBe(500);

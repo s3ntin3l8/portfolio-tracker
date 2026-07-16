@@ -33,10 +33,7 @@ function annualizedReturn(dailyRets: number[], periodsPerYear: number): number {
   return Math.pow(totalReturn, periodsPerYear / n) - 1;
 }
 
-export function annualizedVolatility(
-  returns: number[],
-  periodsPerYear = 252,
-): number | null {
+export function annualizedVolatility(returns: number[], periodsPerYear = 252): number | null {
   if (returns.length < 2) return null;
   return stddev(returns) * Math.sqrt(periodsPerYear);
 }
@@ -57,7 +54,10 @@ function downsideDeviation(returns: number[], periodsPerYear: number): number {
   const negative = returns.filter((r) => r < 0);
   if (negative.length < 2) return 0;
   const sqDiffs = negative.map((v) => v ** 2);
-  return Math.sqrt(sqDiffs.reduce((a, b) => a + b, 0) / (negative.length - 1)) * Math.sqrt(periodsPerYear);
+  return (
+    Math.sqrt(sqDiffs.reduce((a, b) => a + b, 0) / (negative.length - 1)) *
+    Math.sqrt(periodsPerYear)
+  );
 }
 
 export function sortinoRatio(

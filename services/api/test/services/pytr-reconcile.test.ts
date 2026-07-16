@@ -102,7 +102,12 @@ describe("netManualAdjustments", () => {
   it("offsets derived/diff by the summed adjustment cashFlow, clearing the gap", () => {
     const result = netManualAdjustments(gap, [adjustmentTx({ price: "-26.70" })]);
     expect(result.cash).toEqual([
-      expect.objectContaining({ currency: "EUR", reported: "3437.40", derived: "3439.42", diff: "-2.02" }),
+      expect.objectContaining({
+        currency: "EUR",
+        reported: "3437.40",
+        derived: "3439.42",
+        diff: "-2.02",
+      }),
     ]);
   });
 
@@ -114,7 +119,12 @@ describe("netManualAdjustments", () => {
       adjustmentTx({ type: "dividend", source: "manual", price: "-26.70" }),
     ]);
     expect(result.cash).toEqual([
-      expect.objectContaining({ currency: "EUR", reported: "3437.40", derived: "3439.42", diff: "-2.02" }),
+      expect.objectContaining({
+        currency: "EUR",
+        reported: "3437.40",
+        derived: "3439.42",
+        diff: "-2.02",
+      }),
     ]);
   });
 
@@ -126,9 +136,7 @@ describe("netManualAdjustments", () => {
   });
 
   it("ignores a draft-status adjustment (unconfirmed, cashFlow zeroes it)", () => {
-    const result = netManualAdjustments(gap, [
-      adjustmentTx({ price: "-26.70", status: "draft" }),
-    ]);
+    const result = netManualAdjustments(gap, [adjustmentTx({ price: "-26.70", status: "draft" })]);
     expect(result).toEqual(gap);
   });
 

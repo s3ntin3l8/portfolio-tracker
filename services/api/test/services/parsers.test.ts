@@ -107,9 +107,9 @@ describe("OllamaVisionParser", () => {
     })) as unknown as typeof fetch;
 
     const p = new OllamaVisionParser({ baseUrl: "http://ollama:11434", fetch: fakeFetch });
-    await expect(
-      p.parse({ data: Buffer.from("img"), mimeType: "image/png" }),
-    ).rejects.toThrow("ollama_vision_error_404");
+    await expect(p.parse({ data: Buffer.from("img"), mimeType: "image/png" })).rejects.toThrow(
+      "ollama_vision_error_404",
+    );
   });
 });
 
@@ -196,7 +196,8 @@ describe("detectCsvFormat", () => {
   });
 
   it("detects a DKB Girokonto Umsatzliste by its column headers", () => {
-    const giro = '"Girokonto";"DE.."\n"Buchungsdatum";"Wertstellung";"Verwendungszweck";"Betrag (€)"';
+    const giro =
+      '"Girokonto";"DE.."\n"Buchungsdatum";"Wertstellung";"Verwendungszweck";"Betrag (€)"';
     expect(detectCsvFormat(giro)).toBe("dkb");
   });
 
@@ -470,9 +471,7 @@ describe("OpenRouterVisionParser", () => {
         choices: [
           {
             message: {
-              tool_calls: [
-                { function: { arguments: JSON.stringify({ transactions: [DRAFT] }) } },
-              ],
+              tool_calls: [{ function: { arguments: JSON.stringify({ transactions: [DRAFT] }) } }],
             },
           },
         ],

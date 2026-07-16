@@ -236,7 +236,10 @@ describe("allocation targets routes", () => {
         headers: auth(t),
         payload: {
           dimension: "asset_class",
-          targets: [{ key: "equity", targetPct: 60 }, { key: "bond", targetPct: 40 }],
+          targets: [
+            { key: "equity", targetPct: 60 },
+            { key: "bond", targetPct: 40 },
+          ],
         },
       });
 
@@ -247,7 +250,10 @@ describe("allocation targets routes", () => {
         headers: auth(t),
         payload: {
           dimension: "asset_class",
-          targets: [{ key: "equity", targetPct: 90 }, { key: "bond", targetPct: 10 }],
+          targets: [
+            { key: "equity", targetPct: 90 },
+            { key: "bond", targetPct: 10 },
+          ],
         },
       });
 
@@ -265,7 +271,9 @@ describe("allocation targets routes", () => {
         url: "/networth/targets?dimension=asset_class",
         headers: auth(t),
       });
-      expect(networthRes.json().find((s: { key: string }) => s.key === "equity")?.targetPct).toBe(60);
+      expect(networthRes.json().find((s: { key: string }) => s.key === "equity")?.targetPct).toBe(
+        60,
+      );
     });
   });
 });

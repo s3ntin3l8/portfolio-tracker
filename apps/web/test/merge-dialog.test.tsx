@@ -72,16 +72,12 @@ describe("MergeDialog", () => {
     });
     renderDialog();
 
-    await waitFor(() =>
-      expect(previewMergeTransactions).toHaveBeenCalledWith("p1", "a", "b"),
-    );
+    await waitFor(() => expect(previewMergeTransactions).toHaveBeenCalledWith("p1", "a", "b"));
     expect(await screen.findByText(t.previewTitle)).toBeInTheDocument();
 
     // Flip the survivor choice — the dialog re-previews with the ids swapped.
     fireEvent.click(screen.getByText(/pdf/));
-    await waitFor(() =>
-      expect(previewMergeTransactions).toHaveBeenCalledWith("p1", "b", "a"),
-    );
+    await waitFor(() => expect(previewMergeTransactions).toHaveBeenCalledWith("p1", "b", "a"));
   });
 
   it("disables confirm and shows the blocked reason when the preview refuses the merge", async () => {

@@ -8,7 +8,14 @@ import type { InboxDocument } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 import { EmptyState } from "@/components/empty-state";
@@ -149,11 +156,7 @@ export function TaxReportsInbox({
           if (file) void handleUpload(file);
         }}
       />
-      <Button
-        size="sm"
-        disabled={!canUpload}
-        onClick={() => fileInputRef.current?.click()}
-      >
+      <Button size="sm" disabled={!canUpload} onClick={() => fileInputRef.current?.click()}>
         {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
         {t("upload")}
       </Button>
@@ -188,12 +191,55 @@ export function TaxReportsInbox({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="document" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colDocument")}</SortableTableHead>
-              <SortableTableHead colKey="year" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colYear")}</SortableTableHead>
-              <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colSource")}</SortableTableHead>
-              <SortableTableHead colKey="account" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colAccount")}</SortableTableHead>
-              <SortableTableHead colKey="size" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("colSize")}</SortableTableHead>
-              <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("colDate")}</SortableTableHead>
+              <SortableTableHead
+                colKey="document"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("colDocument")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="year"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("colYear")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="source"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("colSource")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="account"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("colAccount")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="size"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("colSize")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="date"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("colDate")}
+              </SortableTableHead>
               <TableHead className="text-right">{t("colActions")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -208,11 +254,13 @@ export function TaxReportsInbox({
                 <TableCell>
                   <SourceBadge source={doc.source} />
                 </TableCell>
+                <TableCell className="text-muted-foreground">{doc.portfolioLabel ?? "—"}</TableCell>
                 <TableCell className="text-muted-foreground">
-                  {doc.portfolioLabel ?? "—"}
+                  {formatBytes(doc.sizeBytes)}
                 </TableCell>
-                <TableCell className="text-muted-foreground">{formatBytes(doc.sizeBytes)}</TableCell>
-                <TableCell className="text-muted-foreground">{df.format(new Date(doc.storedAt))}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {df.format(new Date(doc.storedAt))}
+                </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button
@@ -246,9 +294,12 @@ export function TaxReportsInbox({
           <Card key={doc.id} className="flex items-center gap-3 p-3">
             <FileText className="size-8 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{doc.originalFilename ?? t("untitled")}</p>
+              <p className="truncate text-sm font-medium">
+                {doc.originalFilename ?? t("untitled")}
+              </p>
               <p className="text-xs text-muted-foreground">
-                {doc.taxYear ?? "—"} · {formatBytes(doc.sizeBytes)} · {df.format(new Date(doc.storedAt))}
+                {doc.taxYear ?? "—"} · {formatBytes(doc.sizeBytes)} ·{" "}
+                {df.format(new Date(doc.storedAt))}
               </p>
               <div className="mt-1 flex items-center gap-2">
                 <SourceBadge source={doc.source} />

@@ -37,9 +37,7 @@ export function forecastSeries(input: ForecastInput): ForecastPoint[] {
 
   let value = new Decimal(input.presentValue);
   let contributed = new Decimal(0);
-  const points: ForecastPoint[] = [
-    { monthIndex: 0, contributed: "0", value: value.toString() },
-  ];
+  const points: ForecastPoint[] = [{ monthIndex: 0, contributed: "0", value: value.toString() }];
 
   for (let i = 1; i <= horizon; i++) {
     value = value.mul(growth).add(contribution);

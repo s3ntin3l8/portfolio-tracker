@@ -32,11 +32,7 @@ import type { DB } from "../db/client.js";
 import { actionClass, recomputeRollup, type SourceRow } from "./parsers/dedup.js";
 
 export type MergeBlockReason =
-  | "not_found"
-  | "same_transaction"
-  | "different_instrument"
-  | "incompatible_type"
-  | "loan_linked";
+  "not_found" | "same_transaction" | "different_instrument" | "incompatible_type" | "loan_linked";
 
 export class MergeBlockedError extends Error {
   constructor(public readonly reason: MergeBlockReason) {
@@ -181,14 +177,23 @@ export async function mergeTransactions(
     // Drop (rather than re-parent) any absorbed source row that would collide with an
     // identical (sourceType, externalId) already on the survivor.
     const survivorSources = await tx
-      .select({ sourceType: transactionSources.sourceType, externalId: transactionSources.externalId })
+      .select({
+        sourceType: transactionSources.sourceType,
+        externalId: transactionSources.externalId,
+      })
       .from(transactionSources)
       .where(eq(transactionSources.transactionId, survivorId));
     const survivorKeys = new Set(
-      survivorSources.filter((r) => r.externalId != null).map((r) => `${r.sourceType}|${r.externalId}`),
+      survivorSources
+        .filter((r) => r.externalId != null)
+        .map((r) => `${r.sourceType}|${r.externalId}`),
     );
     const absorbedSources = await tx
-      .select({ id: transactionSources.id, sourceType: transactionSources.sourceType, externalId: transactionSources.externalId })
+      .select({
+        id: transactionSources.id,
+        sourceType: transactionSources.sourceType,
+        externalId: transactionSources.externalId,
+      })
       .from(transactionSources)
       .where(eq(transactionSources.transactionId, absorbedId));
 
@@ -199,14 +204,22 @@ export async function mergeTransactions(
 
     if (colliding.length > 0) {
       await tx.delete(transactionSources).where(
-        inArray(transactionSources.id, colliding.map((r) => r.id)),
+        inArray(
+          transactionSources.id,
+          colliding.map((r) => r.id),
+        ),
       );
     }
     if (reparentable.length > 0) {
       await tx
         .update(transactionSources)
         .set({ transactionId: survivorId })
-        .where(inArray(transactionSources.id, reparentable.map((r) => r.id)));
+        .where(
+          inArray(
+            transactionSources.id,
+            reparentable.map((r) => r.id),
+          ),
+        );
     }
 
     // Re-parent documents (settlement PDFs etc.) attached directly to the absorbed row.
@@ -354,16 +367,20 @@ export async function previewMerge(
   ]);
 
   const survivorRows: SourceRow[] =
-    survivorSources.length > 0 ? (survivorSources as SourceRow[]) : [ownScalarsAsSourceRow(survivor)];
+    survivorSources.length > 0
+      ? (survivorSources as SourceRow[])
+      : [ownScalarsAsSourceRow(survivor)];
   const absorbedRowsRaw: SourceRow[] =
-    absorbedSources.length > 0 ? (absorbedSources as SourceRow[]) : [ownScalarsAsSourceRow(absorbed)];
+    absorbedSources.length > 0
+      ? (absorbedSources as SourceRow[])
+      : [ownScalarsAsSourceRow(absorbed)];
 
   // Simulate the collision-drop from the real write path: an absorbed row whose
   // (sourceType, externalId) already exists on the survivor contributes nothing new.
   const survivorKeys = new Set(
-    survivorRows.filter((r) => (r as { externalId?: string }).externalId != null).map(
-      (r) => `${r.sourceType}|${(r as { externalId?: string }).externalId}`,
-    ),
+    survivorRows
+      .filter((r) => (r as { externalId?: string }).externalId != null)
+      .map((r) => `${r.sourceType}|${(r as { externalId?: string }).externalId}`),
   );
   const absorbedRows = absorbedRowsRaw.filter((r) => {
     const key = (r as { externalId?: string }).externalId;

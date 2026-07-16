@@ -70,8 +70,12 @@ describe("detectSparplans — step increase", () => {
     const dates100 = monthlyDates("2025-09", 4); // 4 months @ €100
     const dates150 = monthlyDates("2026-01", 4); // 4 months @ €150
     const txns = [
-      ...dates100.map((d) => tx({ type: "savings_plan", quantity: "1", price: "100", executedAt: d })),
-      ...dates150.map((d) => tx({ type: "savings_plan", quantity: "1", price: "150", executedAt: d })),
+      ...dates100.map((d) =>
+        tx({ type: "savings_plan", quantity: "1", price: "100", executedAt: d }),
+      ),
+      ...dates150.map((d) =>
+        tx({ type: "savings_plan", quantity: "1", price: "150", executedAt: d }),
+      ),
     ];
     const stats = detectSparplans({ txns, displayCurrency: "EUR", fx: noFx, now: NOW });
     expect(stats.plans).toHaveLength(1);
@@ -110,8 +114,18 @@ describe("detectSparplans — TR same-day split fills", () => {
       // Main fill: €50
       tx({ type: "savings_plan", quantity: "0.081433", price: "614.00", executedAt: day }),
       // Fractional fills on the same day — total ≈ €4.59
-      tx({ type: "savings_plan", quantity: "0.003440", price: "610.36", executedAt: new Date("2026-05-15T14:00:00.000Z") }),
-      tx({ type: "savings_plan", quantity: "0.000655", price: "610.36", executedAt: new Date("2026-05-15T15:00:00.000Z") }),
+      tx({
+        type: "savings_plan",
+        quantity: "0.003440",
+        price: "610.36",
+        executedAt: new Date("2026-05-15T14:00:00.000Z"),
+      }),
+      tx({
+        type: "savings_plan",
+        quantity: "0.000655",
+        price: "610.36",
+        executedAt: new Date("2026-05-15T15:00:00.000Z"),
+      }),
     ];
     const stats = detectSparplans({ txns, displayCurrency: "EUR", fx: noFx, now: NOW });
     expect(stats.plans).toHaveLength(1);
@@ -206,10 +220,30 @@ describe("detectSparplans — heuristic", () => {
   it("does NOT detect irregularly-spaced buys", () => {
     // Gaps: 1, 6, 1 months — not roughly even.
     const txns = [
-      tx({ type: "buy", quantity: "0.5", price: "100", executedAt: new Date("2026-01-05T00:00:00.000Z") }),
-      tx({ type: "buy", quantity: "0.5", price: "100", executedAt: new Date("2026-02-05T00:00:00.000Z") }),
-      tx({ type: "buy", quantity: "0.5", price: "100", executedAt: new Date("2026-08-05T00:00:00.000Z") }),
-      tx({ type: "buy", quantity: "0.5", price: "100", executedAt: new Date("2026-09-05T00:00:00.000Z") }),
+      tx({
+        type: "buy",
+        quantity: "0.5",
+        price: "100",
+        executedAt: new Date("2026-01-05T00:00:00.000Z"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "0.5",
+        price: "100",
+        executedAt: new Date("2026-02-05T00:00:00.000Z"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "0.5",
+        price: "100",
+        executedAt: new Date("2026-08-05T00:00:00.000Z"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "0.5",
+        price: "100",
+        executedAt: new Date("2026-09-05T00:00:00.000Z"),
+      }),
     ];
     const stats = detectSparplans({ txns, displayCurrency: "EUR", fx: noFx, now: NOW });
     expect(stats.plans).toHaveLength(0);
@@ -224,9 +258,7 @@ describe("detectSparplans — tagged precedence", () => {
   it("uses only tagged rows when tagged rows exist, ignoring the lump buy", () => {
     const dates = monthlyDates("2026-01", 4);
     const txns = [
-      ...dates.map((d) =>
-        tx({ type: "savings_plan", quantity: "1", price: "150", executedAt: d }),
-      ),
+      ...dates.map((d) => tx({ type: "savings_plan", quantity: "1", price: "150", executedAt: d })),
       // A €1000 lump buy on a different day — should NOT pollute the plan's levels.
       tx({
         type: "buy",
@@ -366,7 +398,13 @@ describe("mergeSparplanStats", () => {
     const dates = monthlyDates("2026-01", 5);
     const makeStats = (instId: string, amount: number): SparplanStats => {
       const txns = dates.map((d) =>
-        tx({ instrumentId: instId, type: "savings_plan", quantity: "1", price: String(amount), executedAt: d }),
+        tx({
+          instrumentId: instId,
+          type: "savings_plan",
+          quantity: "1",
+          price: String(amount),
+          executedAt: d,
+        }),
       );
       return detectSparplans({ txns, displayCurrency: "EUR", fx: noFx, now: NOW });
     };

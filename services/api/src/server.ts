@@ -24,10 +24,7 @@ async function start() {
   try {
     await startScheduler(app);
   } catch (err) {
-    app.log.error(
-      { err },
-      "Price-refresh scheduler failed to start; continuing without it",
-    );
+    app.log.error({ err }, "Price-refresh scheduler failed to start; continuing without it");
   }
 
   try {

@@ -132,9 +132,7 @@ export async function buildIncomeStats(
 
   const corpActions = await corporateActionsFor(app, heldIds);
   const heldQtyMap = new Map(
-    summary.holdings
-      .filter((h) => Number(h.quantity) > 0)
-      .map((h) => [h.instrumentId, h.quantity]),
+    summary.holdings.filter((h) => Number(h.quantity) > 0).map((h) => [h.instrumentId, h.quantity]),
   );
   const holdingsCache = new Map<number, Map<string, string>>();
   const qtyAt = (instrumentId: string, at: Date): string => {
@@ -164,28 +162,20 @@ export async function buildIncomeStats(
     );
   }
   const accumulation = new Map<string, string>(
-    [...sharesAccumulated.entries()].map(([id, total]) => [
-      id,
-      String(total / 12),
-    ]),
+    [...sharesAccumulated.entries()].map(([id, total]) => [id, String(total / 12)]),
   );
 
   const projectedDividends = projectDividends(pastDivs, heldQtyMap, qtyAt, now, {
     accumulation,
   });
 
-  const projectedNextYear = projectNextYearDividends(
-    pastDivs,
-    heldQtyMap,
-    qtyAt,
-    now,
-    { accumulation, applyGrowth: true },
-  );
+  const projectedNextYear = projectNextYearDividends(pastDivs, heldQtyMap, qtyAt, now, {
+    accumulation,
+    applyGrowth: true,
+  });
 
   const todayStr = now.toISOString().slice(0, 10);
-  const nextYearEndStr = new Date(
-    Date.UTC(now.getUTCFullYear() + 1, 11, 31),
-  )
+  const nextYearEndStr = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31))
     .toISOString()
     .slice(0, 10);
   const announcedRows =
@@ -223,14 +213,10 @@ export async function buildIncomeStats(
     futureAnnouncedByInstrument.set(row.instrumentId, list);
   }
 
-  const yearEndStr = new Date(Date.UTC(now.getUTCFullYear(), 11, 31))
-    .toISOString()
-    .slice(0, 10);
+  const yearEndStr = new Date(Date.UTC(now.getUTCFullYear(), 11, 31)).toISOString().slice(0, 10);
   const instrumentsWithAnnouncedRestOfYear = new Set(
     [...futureAnnouncedByInstrument.entries()]
-      .filter(([_, rows]) =>
-        rows.some((r) => r.exDate > todayStr && r.exDate <= yearEndStr),
-      )
+      .filter(([_, rows]) => rows.some((r) => r.exDate > todayStr && r.exDate <= yearEndStr))
       .map(([id]) => id),
   );
   const blendedProjected = projectedDividends.filter(
@@ -246,9 +232,7 @@ export async function buildIncomeStats(
 
   const instrumentsWithAnnouncedNextYear = new Set(
     [...futureAnnouncedByInstrument.entries()]
-      .filter(([_, rows]) =>
-        rows.some((r) => r.exDate > yearEndStr && r.exDate <= nextYearEndStr),
-      )
+      .filter(([_, rows]) => rows.some((r) => r.exDate > yearEndStr && r.exDate <= nextYearEndStr))
       .map(([id]) => id),
   );
   const blendedNextYear = projectedNextYear.filter(
@@ -376,9 +360,7 @@ export async function buildIncomeStats(
       amount: d.amount,
       currency: d.currency,
       kind: "dividend" as const,
-      status: (d.source === "grown" ? "grown" : "projected") as
-        | "projected"
-        | "grown",
+      status: (d.source === "grown" ? "grown" : "projected") as "projected" | "grown",
       growthApplied: d.growthApplied,
       assumesContributions: d.assumesContributions,
       perShare: d.perShare,

@@ -181,18 +181,12 @@ export function parseFlexXml(xml: string): FlexStatement[] {
 
   const doc = parser.parse(xml) as Record<string, unknown>;
 
-  const root = doc["FlexQueryResponse"] as
-    | Record<string, unknown>
-    | undefined;
+  const root = doc["FlexQueryResponse"] as Record<string, unknown> | undefined;
   if (!root) {
-    throw new Error(
-      "Not a Flex XML file: root element must be <FlexQueryResponse>",
-    );
+    throw new Error("Not a Flex XML file: root element must be <FlexQueryResponse>");
   }
 
-  const statementsWrapper = root["FlexStatements"] as
-    | Record<string, unknown>
-    | undefined;
+  const statementsWrapper = root["FlexStatements"] as Record<string, unknown> | undefined;
   if (!statementsWrapper) {
     throw new Error("Missing <FlexStatements> in Flex XML");
   }
@@ -217,13 +211,9 @@ function parseStatement(raw: Record<string, unknown>): FlexStatement {
 
   // Base currency lives on the (optional) AccountInformation element. Used to label the
   // base-currency-summary cash row and as a fallback for opening-balance currency.
-  const acctInfo = raw["AccountInformation"] as
-    | Record<string, unknown>
-    | undefined;
+  const acctInfo = raw["AccountInformation"] as Record<string, unknown> | undefined;
   const baseCurrency =
-    acctInfo && typeof acctInfo === "object"
-      ? String(acctInfo["currency"] ?? "")
-      : "";
+    acctInfo && typeof acctInfo === "object" ? String(acctInfo["currency"] ?? "") : "";
 
   return {
     accountId,
@@ -231,27 +221,11 @@ function parseStatement(raw: Record<string, unknown>): FlexStatement {
     fromDate,
     toDate,
     trades: extractRows<FlexTrade>(raw, "Trades", "Trade"),
-    cashTransactions: extractRows<FlexCashTransaction>(
-      raw,
-      "CashTransactions",
-      "CashTransaction",
-    ),
+    cashTransactions: extractRows<FlexCashTransaction>(raw, "CashTransactions", "CashTransaction"),
     transfers: extractRows<FlexTransfer>(raw, "Transfers", "Transfer"),
-    openPositions: extractRows<FlexOpenPosition>(
-      raw,
-      "OpenPositions",
-      "OpenPosition",
-    ),
-    corporateActions: extractRows<FlexCorporateAction>(
-      raw,
-      "CorporateActions",
-      "CorporateAction",
-    ),
-    cashReport: extractRows<FlexCashReportCurrency>(
-      raw,
-      "CashReport",
-      "CashReportCurrency",
-    ),
+    openPositions: extractRows<FlexOpenPosition>(raw, "OpenPositions", "OpenPosition"),
+    corporateActions: extractRows<FlexCorporateAction>(raw, "CorporateActions", "CorporateAction"),
+    cashReport: extractRows<FlexCashReportCurrency>(raw, "CashReport", "CashReportCurrency"),
   };
 }
 
@@ -260,11 +234,7 @@ function parseStatement(raw: Record<string, unknown>): FlexStatement {
  * Handles both the standard single-statement format and cases where the wrapper
  * element is absent (empty section).
  */
-function extractRows<T>(
-  statement: Record<string, unknown>,
-  wrapper: string,
-  element: string,
-): T[] {
+function extractRows<T>(statement: Record<string, unknown>, wrapper: string, element: string): T[] {
   const wrapperEl = statement[wrapper] as Record<string, unknown> | undefined;
   if (!wrapperEl) return [];
 

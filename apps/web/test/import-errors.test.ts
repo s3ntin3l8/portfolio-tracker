@@ -1,16 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { ApiError } from "@portfolio/api-client";
-import {
-  importSkipReason,
-  classifyImportError,
-  importErrorDetail,
-} from "../src/lib/import-errors";
+import { importSkipReason, classifyImportError, importErrorDetail } from "../src/lib/import-errors";
 
 /** A 502 `screenshot_parse_failed` with a given provider status. */
 function visionFail(providerStatus: number | null, provider = "claude") {
   return new ApiError(
     502,
-    JSON.stringify({ error: "screenshot_parse_failed", reason: "provider_error", provider, providerStatus }),
+    JSON.stringify({
+      error: "screenshot_parse_failed",
+      reason: "provider_error",
+      provider,
+      providerStatus,
+    }),
   );
 }
 
@@ -57,7 +58,10 @@ describe("classifyImportError (rich)", () => {
   });
 
   it("maps a 502 provider 429 to rateLimited with the provider name", () => {
-    expect(classifyImportError(visionFail(429))).toEqual({ reason: "rateLimited", provider: "claude" });
+    expect(classifyImportError(visionFail(429))).toEqual({
+      reason: "rateLimited",
+      provider: "claude",
+    });
   });
 
   it("maps a 502 provider 401/403 to providerAuth", () => {
@@ -76,7 +80,11 @@ describe("classifyImportError (rich)", () => {
 
   it("attaches the real status + body code on the generic fallthrough", () => {
     const err = new ApiError(500, JSON.stringify({ error: "server_error" }));
-    expect(classifyImportError(err)).toEqual({ reason: "generic", status: 500, code: "server_error" });
+    expect(classifyImportError(err)).toEqual({
+      reason: "generic",
+      status: 500,
+      code: "server_error",
+    });
   });
 });
 

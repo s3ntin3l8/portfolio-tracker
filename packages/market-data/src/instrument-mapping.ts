@@ -220,12 +220,7 @@ export function assetClassFromType(
     base = "etf";
   } else if (t.includes("mutual") || t.includes("reksa")) {
     base = "mutual_fund";
-  } else if (
-    t.includes("bond") ||
-    t.includes("note") ||
-    t.includes("govt") ||
-    t.includes("corp")
-  ) {
+  } else if (t.includes("bond") || t.includes("note") || t.includes("govt") || t.includes("corp")) {
     base = "bond";
   } else if (t.includes("crypto") || t.includes("digital currency")) {
     base = "crypto";
@@ -243,7 +238,6 @@ export function assetClassFromType(
   // convention is an exchange-traded fund, not an open-end fund. Gated on market === "IDX"
   // so a foreign mutual_fund whose symbol happens to match the pattern (e.g. NYSE "X") is
   // never reclassified. (#120)
-  if (base === "mutual_fund" && opts?.market === "IDX" && isIdxEtfSymbol(opts.symbol))
-    return "etf";
+  if (base === "mutual_fund" && opts?.market === "IDX" && isIdxEtfSymbol(opts.symbol)) return "etf";
   return base;
 }

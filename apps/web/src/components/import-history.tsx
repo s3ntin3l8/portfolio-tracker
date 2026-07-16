@@ -2,24 +2,23 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Download, Eye, EyeOff, FolderInput, ListChecks, Loader2, Trash2, Undo2, X } from "lucide-react";
+import {
+  Download,
+  Eye,
+  EyeOff,
+  FolderInput,
+  ListChecks,
+  Loader2,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { ImportRecord } from "@portfolio/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useApiClient } from "@/lib/api";
 import { haptics } from "@/lib/haptics";
@@ -39,10 +38,7 @@ const IH_COLS: ColDef<ImportRecord>[] = [
   { key: "createdAt", get: (r) => r.createdAt, type: "date" },
 ];
 
-const STATUS_VARIANT: Record<
-  ImportRecord["status"],
-  "warning" | "success" | "outline"
-> = {
+const STATUS_VARIANT: Record<ImportRecord["status"], "warning" | "success" | "outline"> = {
   draft: "warning",
   confirmed: "success",
   discarded: "outline",
@@ -276,8 +272,7 @@ export function ImportHistory({
     [visibleItems, batchedIds],
   );
 
-  const allSelected =
-    visibleItems.length > 0 && visibleItems.every((i) => selected.has(i.id));
+  const allSelected = visibleItems.length > 0 && visibleItems.every((i) => selected.has(i.id));
 
   // Shared by desktop checkboxes and the mobile long-press gesture — deselecting the last
   // row also exits mobile selection mode (hides the checkboxes again).
@@ -303,7 +298,10 @@ export function ImportHistory({
   }
 
   function toggleAllVisible() {
-    setMany(visibleItems.map((i) => i.id), !allSelected);
+    setMany(
+      visibleItems.map((i) => i.id),
+      !allSelected,
+    );
   }
 
   const selectedItems = visibleItems.filter((i) => selected.has(i.id));
@@ -527,7 +525,10 @@ export function ImportHistory({
           <Badge variant={STATUS_VARIANT[imp.status]}>{t(statusLabelKey(imp))}</Badge>
         </TableCell>
         <TableCell className="text-muted-foreground">{t("items", { count: imp.count })}</TableCell>
-        <TableCell className="tabular whitespace-nowrap text-muted-foreground" suppressHydrationWarning>
+        <TableCell
+          className="tabular whitespace-nowrap text-muted-foreground"
+          suppressHydrationWarning
+        >
           {df.format(new Date(imp.createdAt))}
         </TableCell>
         <TableCell className="text-right">{rowActions(imp)}</TableCell>
@@ -626,7 +627,11 @@ export function ImportHistory({
             )}
             {discardedIds.length > 0 && (
               <Button size="sm" variant="ghost" disabled={clearingAll} onClick={clearAllDiscarded}>
-                {clearingAll ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                {clearingAll ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3.5" />
+                )}
                 {t("clearAll")}
               </Button>
             )}
@@ -655,7 +660,12 @@ export function ImportHistory({
                 {bulkBusy && <Loader2 className="size-3.5 animate-spin" />}
                 {t("deleteSelected")}
               </Button>
-              <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={() => setConfirmingBulk(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={bulkBusy}
+                onClick={() => setConfirmingBulk(false)}
+              >
                 {t("cancel")}
               </Button>
             </span>
@@ -663,7 +673,11 @@ export function ImportHistory({
             <span className="flex items-center gap-1">
               {selected.size > 0 && (
                 <Button size="sm" variant="destructive" disabled={bulkBusy} onClick={bulkDelete}>
-                  {bulkBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                  {bulkBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
                   {t("deleteSelected")}
                 </Button>
               )}
@@ -713,10 +727,38 @@ export function ImportHistory({
                 <TableCell className="h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground">
                   {t("file")}
                 </TableCell>
-                <SortableTableHead colKey="parser" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>Parser</SortableTableHead>
-                <SortableTableHead colKey="status" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>Status</SortableTableHead>
-                <SortableTableHead colKey="count" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>Items</SortableTableHead>
-                <SortableTableHead colKey="createdAt" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>Timestamp</SortableTableHead>
+                <SortableTableHead
+                  colKey="parser"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                >
+                  Parser
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="status"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                >
+                  Status
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="count"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                >
+                  Items
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="createdAt"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                >
+                  Timestamp
+                </SortableTableHead>
                 <TableCell className="h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground">
                   <span className="sr-only">Actions</span>
                 </TableCell>
@@ -746,8 +788,13 @@ export function ImportHistory({
                         />
                       )}
                     </TableCell>
-                    <TableCell colSpan={6} className="text-xs font-medium text-muted-foreground" suppressHydrationWarning>
-                      {t("batchLabel", { count: group.rows.length })} · {df.format(new Date(group.uploadedAt))}
+                    <TableCell
+                      colSpan={6}
+                      className="text-xs font-medium text-muted-foreground"
+                      suppressHydrationWarning
+                    >
+                      {t("batchLabel", { count: group.rows.length })} ·{" "}
+                      {df.format(new Date(group.uploadedAt))}
                     </TableCell>
                   </TableRow>,
                   ...group.rows.map((imp) => dataRow(imp)),
@@ -772,7 +819,8 @@ export function ImportHistory({
                 className="bg-muted/40 px-[15px] py-2 text-xs font-medium text-muted-foreground"
                 suppressHydrationWarning
               >
-                {t("batchLabel", { count: group.rows.length })} · {df.format(new Date(group.uploadedAt))}
+                {t("batchLabel", { count: group.rows.length })} ·{" "}
+                {df.format(new Date(group.uploadedAt))}
               </div>
               {group.rows.map((imp) => mobileRow(imp))}
             </div>

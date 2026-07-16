@@ -29,10 +29,7 @@ import {
   detectSparplans,
 } from "@portfolio/core";
 import { getMarketData } from "../../services/market-data.js";
-import {
-  valuePortfolioCached,
-  type InstrumentMeta,
-} from "../../services/valuation.js";
+import { valuePortfolioCached, type InstrumentMeta } from "../../services/valuation.js";
 import { getFxRates, makeFxRateFn } from "../../services/fx.js";
 import { flattenJoinRow } from "../../lib/portfolio.js";
 import { createStore, type CacheEntry } from "../../lib/derivation-cache.js";
@@ -71,12 +68,7 @@ export const networthTransactionsCache = createStore<{
   total: number;
 }>();
 
-export const ACTIVITY_INCOME_TYPES = [
-  "dividend",
-  "coupon",
-  "interest",
-  "bonus_cash",
-] as const;
+export const ACTIVITY_INCOME_TYPES = ["dividend", "coupon", "interest", "bonus_cash"] as const;
 
 export function yearRange(year: number): { start: Date; end: Date } {
   return {
@@ -95,11 +87,7 @@ export const bulkDeleteSchema = z.object({
   ids: z.array(z.guid()).min(1),
 });
 
-export async function ownedPortfolio(
-  app: FastifyInstance,
-  userId: string,
-  portfolioId: string,
-) {
+export async function ownedPortfolio(app: FastifyInstance, userId: string, portfolioId: string) {
   const [row] = await app.db
     .select()
     .from(portfolios)
@@ -176,9 +164,7 @@ export async function loadValuation(
 }
 
 export function costBasisFromQuery(q: { costBasis?: string }): CostBasisMode | undefined {
-  return q.costBasis === "total_paid" || q.costBasis === "purchase_price"
-    ? q.costBasis
-    : undefined;
+  return q.costBasis === "total_paid" || q.costBasis === "purchase_price" ? q.costBasis : undefined;
 }
 
 export function methodFromQuery(q: { method?: string }): TradeMethod {
@@ -204,7 +190,10 @@ export async function buildTradeLog(
   );
   const cas =
     existingCorporateActions ??
-    (await corporateActionsFor(app, coreTxns.map((t) => t.instrumentId)));
+    (await corporateActionsFor(
+      app,
+      coreTxns.map((t) => t.instrumentId),
+    ));
   return computeTrades({
     transactions: coreTxns,
     corporateActions: cas,
@@ -217,10 +206,7 @@ export async function buildTradeLog(
   });
 }
 
-export function attachInstruments(
-  log: TradeLog,
-  meta: Map<string, InstrumentMeta>,
-) {
+export function attachInstruments(log: TradeLog, meta: Map<string, InstrumentMeta>) {
   return {
     ...log,
     trades: log.trades.map((t) => ({
@@ -284,19 +270,11 @@ export async function externalFlows(
   txns: CoreTransaction[],
   target: string,
 ): Promise<CashFlowPoint[]> {
-  const relevant = txns.filter(
-    (t) => t.type === "deposit" || t.type === "withdrawal",
-  );
-  const rates = await getFxRates(
-    app.db,
-    [...new Set(relevant.map((t) => t.currency))],
-    target,
-  );
+  const relevant = txns.filter((t) => t.type === "deposit" || t.type === "withdrawal");
+  const rates = await getFxRates(app.db, [...new Set(relevant.map((t) => t.currency))], target);
   const fx = makeFxRateFn(rates, target);
   return relevant.map((t) => ({
-    amount:
-      Number(convert(t.price, t.currency, target, fx)) *
-      (t.type === "deposit" ? -1 : 1),
+    amount: Number(convert(t.price, t.currency, target, fx)) * (t.type === "deposit" ? -1 : 1),
     date: t.executedAt,
   }));
 }
@@ -309,20 +287,14 @@ export async function boundaryFlows(
 ): Promise<CashFlowPoint[]> {
   if (boundary === "inside") return externalFlows(app, txns, target);
   const isInvestmentFlow = (t: CoreTransaction): boolean => {
-    if (t.type === "sell" || t.type === "dividend" || t.type === "coupon")
-      return true;
-    if (t.type === "buy" || t.type === "savings_plan")
-      return t.kind !== "saveback";
+    if (t.type === "sell" || t.type === "dividend" || t.type === "coupon") return true;
+    if (t.type === "buy" || t.type === "savings_plan") return t.kind !== "saveback";
     if (t.type === "transfer_in" || t.type === "transfer_out") return true;
     if (t.type === "bonus") return t.kind === "transfer_in";
     return false;
   };
   const relevant = txns.filter(isInvestmentFlow);
-  const rates = await getFxRates(
-    app.db,
-    [...new Set(relevant.map((t) => t.currency))],
-    target,
-  );
+  const rates = await getFxRates(app.db, [...new Set(relevant.map((t) => t.currency))], target);
   const fx = makeFxRateFn(rates, target);
   return relevant.map((t) => ({
     amount: Number(convert(cashFlow(t).toString(), t.currency, target, fx)),
@@ -352,16 +324,11 @@ export function enrichContributions(
       : null;
 
   const asOf = new Date();
-  const allFlows: CashFlowPoint[] = [
-    ...flows,
-    { amount: Number(currentValue), date: asOf },
-  ];
+  const allFlows: CashFlowPoint[] = [...flows, { amount: Number(currentValue), date: asOf }];
   const rate = flows.length ? xirr(allFlows) : NaN;
   const xirrVal = Number.isFinite(rate) ? rate : null;
   const seedAnnualReturn =
-    xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5
-      ? xirrVal.toString()
-      : "0.07";
+    xirrVal !== null && xirrVal > -0.5 && xirrVal < 0.5 ? xirrVal.toString() : "0.07";
 
   return {
     ...stats,

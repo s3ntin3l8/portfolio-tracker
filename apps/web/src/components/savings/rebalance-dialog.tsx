@@ -271,7 +271,9 @@ export function RebalanceDialog({
   }
 
   // Build a label map from plans for the recommended split section.
-  const labelByKey = new Map(plans.map((p) => [p.instrumentId, p.name ?? p.symbol ?? p.instrumentId]));
+  const labelByKey = new Map(
+    plans.map((p) => [p.instrumentId, p.name ?? p.symbol ?? p.instrumentId]),
+  );
   const splitByKey = new Map(contributionSplit?.map((s) => [s.key, s]) ?? []);
 
   // Whether the toggle can be enabled (known unavailable only after first fetch).
@@ -360,34 +362,39 @@ export function RebalanceDialog({
         )}
 
         {/* Recommended split (contributions-only mode) */}
-        {!loading && !includeSales && drift && drift.length > 0 && contributionSplit && contributionSplit.length > 0 && (
-          <div className="border-t pt-3 mt-1">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              {t("recommendedSplit")}{" "}
-              <span className="tabular">
-                ({formatMoney(Number(activeMonthlyTotalDisplay), currency, "en")})
-              </span>
-            </p>
-            <div className="space-y-1">
-              {drift.map((d) => {
-                const s = splitByKey.get(d.key);
-                if (!s) return null;
-                const label = labelByKey.get(d.key) ?? d.key;
-                return (
-                  <div key={d.key} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-muted-foreground truncate flex-1">{label}</span>
-                    <span className="tabular font-medium shrink-0">
-                      {formatMoney(Number(s.amount), currency, "en")}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0 w-12 text-right">
-                      {s.sharePct.toFixed(1)}%
-                    </span>
-                  </div>
-                );
-              })}
+        {!loading &&
+          !includeSales &&
+          drift &&
+          drift.length > 0 &&
+          contributionSplit &&
+          contributionSplit.length > 0 && (
+            <div className="border-t pt-3 mt-1">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                {t("recommendedSplit")}{" "}
+                <span className="tabular">
+                  ({formatMoney(Number(activeMonthlyTotalDisplay), currency, "en")})
+                </span>
+              </p>
+              <div className="space-y-1">
+                {drift.map((d) => {
+                  const s = splitByKey.get(d.key);
+                  if (!s) return null;
+                  const label = labelByKey.get(d.key) ?? d.key;
+                  return (
+                    <div key={d.key} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-muted-foreground truncate flex-1">{label}</span>
+                      <span className="tabular font-medium shrink-0">
+                        {formatMoney(Number(s.amount), currency, "en")}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0 w-12 text-right">
+                        {s.sharePct.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Phase D: Trade recommendations (tax-aware sales mode). Under the Indonesian
             regime allowanceUsed/remainingAllowance are null (no allowance concept) —

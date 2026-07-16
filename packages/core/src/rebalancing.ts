@@ -89,10 +89,7 @@ export function rebalancingDrift(
     const actual = sliceByKey.get(t.key);
     const actualPct = actual?.pct ?? 0;
     const actualValue = actual?.value ?? "0";
-    const driftPct = new Decimal(actualPct)
-      .minus(t.targetPct)
-      .toDecimalPlaces(4)
-      .toNumber();
+    const driftPct = new Decimal(actualPct).minus(t.targetPct).toDecimalPlaces(4).toNumber();
 
     let status: DriftRow["status"];
     if (Math.abs(driftPct) < bandPp) {
@@ -192,19 +189,12 @@ export function rebalancingTrades(
   const underTargetSlices = drift.filter((d) => d.status === "under");
   if (underTargetSlices.length === 0) return [];
 
-  const totalUnderPct = underTargetSlices.reduce(
-    (acc, d) => acc.add(d.targetPct),
-    new Decimal(0),
-  );
+  const totalUnderPct = underTargetSlices.reduce((acc, d) => acc.add(d.targetPct), new Decimal(0));
   if (totalUnderPct.isZero()) return [];
 
   return underTargetSlices.map((d) => ({
     key: d.key,
-    deltaValue: cash
-      .mul(d.targetPct)
-      .div(totalUnderPct)
-      .toDecimalPlaces(2)
-      .toString(),
+    deltaValue: cash.mul(d.targetPct).div(totalUnderPct).toDecimalPlaces(2).toString(),
     side: "buy" as const,
   }));
 }
@@ -233,10 +223,7 @@ export function contributionSplit(
     return sleeves.map((s) => ({ key: s.key, amount: "0", sharePct: 0 }));
   }
 
-  const totalValue = sleeves.reduce(
-    (acc, s) => acc.add(new Decimal(s.value)),
-    new Decimal(0),
-  );
+  const totalValue = sleeves.reduce((acc, s) => acc.add(new Decimal(s.value)), new Decimal(0));
   // After contribution, total = totalValue + C.
   const newTotal = totalValue.add(C);
 
@@ -247,10 +234,7 @@ export function contributionSplit(
     return { key: s.key, shortfall };
   });
 
-  const totalShortfall = shortfalls.reduce(
-    (acc, s) => acc.add(s.shortfall),
-    new Decimal(0),
-  );
+  const totalShortfall = shortfalls.reduce((acc, s) => acc.add(s.shortfall), new Decimal(0));
 
   if (totalShortfall.isZero()) {
     // All sleeves already at or above target — distribute proportionally to targets.

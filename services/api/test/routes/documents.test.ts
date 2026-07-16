@@ -65,7 +65,9 @@ function multipartUpload(
   const parts: Buffer[] = [];
   for (const [name, value] of Object.entries(fields)) {
     parts.push(
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`),
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      ),
     );
   }
   parts.push(
@@ -104,7 +106,9 @@ function multipartUploadFileFirst(
   ];
   for (const [name, value] of Object.entries(fields)) {
     parts.push(
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`),
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      ),
     );
   }
   parts.push(Buffer.from(`--${boundary}--\r\n`));
@@ -165,11 +169,20 @@ async function setup(sub: string) {
 // portfolioId defaults to the owning user's own portfolio; pass `fields.portfolioId` to
 // override (e.g. testing a cross-user portfolio id, or omitting it to test the 400).
 async function upload(t: string, portfolioId: string, fields: Record<string, string> = {}) {
-  const { headers, payload } = multipartUpload(Buffer.from("%PDF-1.4 fake pdf"), "application/pdf", {
-    portfolioId,
-    ...fields,
+  const { headers, payload } = multipartUpload(
+    Buffer.from("%PDF-1.4 fake pdf"),
+    "application/pdf",
+    {
+      portfolioId,
+      ...fields,
+    },
+  );
+  return app.inject({
+    method: "POST",
+    url: "/documents",
+    headers: { ...headers, ...auth(t) },
+    payload,
   });
-  return app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
 }
 
 describe("GET /documents", () => {
@@ -205,11 +218,20 @@ describe("GET /documents", () => {
     // portfolioId (storeInboxDocument's idempotency is keyed on (userId, sourceEventId)
     // only), which would defeat this test's "two real documents" premise.
     await upload(t, firstPortfolioId, { taxYear: "2024" });
-    const second = multipartUpload(Buffer.from("%PDF-1.4 a different fake pdf"), "application/pdf", {
-      portfolioId: secondPortfolioId,
-      taxYear: "2025",
+    const second = multipartUpload(
+      Buffer.from("%PDF-1.4 a different fake pdf"),
+      "application/pdf",
+      {
+        portfolioId: secondPortfolioId,
+        taxYear: "2025",
+      },
+    );
+    await app.inject({
+      method: "POST",
+      url: "/documents",
+      headers: { ...second.headers, ...auth(t) },
+      payload: second.payload,
     });
-    await app.inject({ method: "POST", url: "/documents", headers: { ...second.headers, ...auth(t) }, payload: second.payload });
 
     const scoped = await app.inject({
       method: "GET",
@@ -221,7 +243,7 @@ describe("GET /documents", () => {
     expect(rows[0]).toMatchObject({ portfolioId: firstPortfolioId, taxYear: 2024 });
 
     const all = await app.inject({ method: "GET", url: "/documents", headers: auth(t) });
-    expect((all.json() as unknown[])).toHaveLength(2);
+    expect(all.json() as unknown[]).toHaveLength(2);
   });
 });
 
@@ -231,15 +253,29 @@ describe("POST /documents", () => {
     const putsBefore = store.puts.length;
     const res = await upload(t, portfolioId, { taxYear: "2025" });
     expect(res.statusCode).toBe(201);
-    const body = res.json() as { id: string; duplicate: boolean; category: string; taxYear: number };
+    const body = res.json() as {
+      id: string;
+      duplicate: boolean;
+      category: string;
+      taxYear: number;
+    };
     expect(body.duplicate).toBe(false);
     expect(body.category).toBe("tax_report");
     expect(body.taxYear).toBe(2025);
     expect(store.puts.slice(putsBefore).some((k) => k.startsWith("inbox/"))).toBe(true);
 
     const list = await app.inject({ method: "GET", url: "/documents", headers: auth(t) });
-    const rows = list.json() as Array<{ id: string; taxYear: number | null; source: string; portfolioId: string }>;
-    expect(rows.find((r) => r.id === body.id)).toMatchObject({ taxYear: 2025, source: "upload", portfolioId });
+    const rows = list.json() as Array<{
+      id: string;
+      taxYear: number | null;
+      source: string;
+      portfolioId: string;
+    }>;
+    expect(rows.find((r) => r.id === body.id)).toMatchObject({
+      taxYear: 2025,
+      source: "upload",
+      portfolioId,
+    });
   });
 
   it("accepts fields sent after the file part, matching the real client's field order", async () => {
@@ -247,11 +283,20 @@ describe("POST /documents", () => {
     // opposite order from this suite's `upload()` helper. Confirms the route (which awaits
     // part.toBuffer() before reading part.fields) actually handles that production order.
     const { t, portfolioId } = await setup("doc-upload-file-first-order");
-    const { headers, payload } = multipartUploadFileFirst(Buffer.from("%PDF-1.4 fake pdf, file-first order"), "application/pdf", {
-      portfolioId,
-      taxYear: "2025",
+    const { headers, payload } = multipartUploadFileFirst(
+      Buffer.from("%PDF-1.4 fake pdf, file-first order"),
+      "application/pdf",
+      {
+        portfolioId,
+        taxYear: "2025",
+      },
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/documents",
+      headers: { ...headers, ...auth(t) },
+      payload,
     });
-    const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
     expect(res.statusCode).toBe(201);
     const body = res.json() as { category: string; taxYear: number };
     expect(body.category).toBe("tax_report");
@@ -260,15 +305,34 @@ describe("POST /documents", () => {
 
   it("rejects a non-PDF upload with 415", async () => {
     const { t, portfolioId } = await setup("doc-upload-reject");
-    const { headers, payload } = multipartUpload(Buffer.from("not a pdf"), "image/png", { portfolioId }, "photo.png");
-    const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
+    const { headers, payload } = multipartUpload(
+      Buffer.from("not a pdf"),
+      "image/png",
+      { portfolioId },
+      "photo.png",
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/documents",
+      headers: { ...headers, ...auth(t) },
+      payload,
+    });
     expect(res.statusCode).toBe(415);
   });
 
   it("rejects an upload with no portfolioId with 400", async () => {
     const { t } = await setup("doc-upload-no-portfolio");
-    const { headers, payload } = multipartUpload(Buffer.from("%PDF-1.4 fake pdf"), "application/pdf", {});
-    const res = await app.inject({ method: "POST", url: "/documents", headers: { ...headers, ...auth(t) }, payload });
+    const { headers, payload } = multipartUpload(
+      Buffer.from("%PDF-1.4 fake pdf"),
+      "application/pdf",
+      {},
+    );
+    const res = await app.inject({
+      method: "POST",
+      url: "/documents",
+      headers: { ...headers, ...auth(t) },
+      payload,
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({ error: "invalid_fields" });
   });
@@ -301,7 +365,11 @@ describe("GET /documents/:documentId/url", () => {
     const uploaded = await upload(t, portfolioId);
     const documentId = (uploaded.json() as { id: string }).id;
 
-    const res = await app.inject({ method: "GET", url: `/documents/${documentId}/url`, headers: auth(t) });
+    const res = await app.inject({
+      method: "GET",
+      url: `/documents/${documentId}/url`,
+      headers: auth(t),
+    });
     expect(res.statusCode).toBe(200);
     expect((res.json() as { url: string }).url).toContain("inbox/");
   });
@@ -340,11 +408,21 @@ describe("DELETE /documents/:documentId", () => {
     // Resolve this specific document's storage key via its signed URL (the fake provider
     // encodes the key in the URL) — scanning store.puts globally would risk matching a
     // different test's still-live object with the same "inbox/" prefix.
-    const urlRes = await app.inject({ method: "GET", url: `/documents/${documentId}/url`, headers: auth(t) });
-    const key = (urlRes.json() as { url: string }).url.replace("https://fake.storage/", "").split("?")[0];
+    const urlRes = await app.inject({
+      method: "GET",
+      url: `/documents/${documentId}/url`,
+      headers: auth(t),
+    });
+    const key = (urlRes.json() as { url: string }).url
+      .replace("https://fake.storage/", "")
+      .split("?")[0];
     expect(store.data.has(key)).toBe(true);
 
-    const del = await app.inject({ method: "DELETE", url: `/documents/${documentId}`, headers: auth(t) });
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/documents/${documentId}`,
+      headers: auth(t),
+    });
     expect(del.statusCode).toBe(204);
 
     const list = await app.inject({ method: "GET", url: "/documents", headers: auth(t) });

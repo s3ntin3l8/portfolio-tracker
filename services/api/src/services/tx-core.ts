@@ -35,10 +35,7 @@ export function txRowToCore(r: TxRow): CoreTransaction {
  * confirms it (→ "normal"). `includeArchived` only re-includes archived rows, and is used
  * by the raw transactions list (the UI shows + un-archives them).
  */
-export function toCoreTxns(
-  rows: TxRow[],
-  opts?: { includeArchived?: boolean },
-): CoreTransaction[] {
+export function toCoreTxns(rows: TxRow[], opts?: { includeArchived?: boolean }): CoreTransaction[] {
   const src = rows.filter(
     (r) => r.status !== "draft" && (opts?.includeArchived || r.status !== "archived"),
   );

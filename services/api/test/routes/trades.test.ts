@@ -66,22 +66,63 @@ describe("trade log", () => {
     [tlkm] = (
       await app.db
         .insert(instruments)
-        .values({ symbol: "TLKM", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Telkom" })
+        .values({
+          symbol: "TLKM",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "Telkom",
+        })
         .returning()
     ).map((i) => i.id);
     [bbca] = (
       await app.db
         .insert(instruments)
-        .values({ symbol: "BBCA", market: "XETRA", assetClass: "equity", currency: "EUR", name: "BCA" })
+        .values({
+          symbol: "BBCA",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "BCA",
+        })
         .returning()
     ).map((i) => i.id);
 
     // A: closed round-trip (bought, fully sold) → realized 300.
-    await postTx(t, pf, { type: "buy", instrumentId: tlkm, quantity: "10", price: "100", currency: "EUR", executedAt: "2021-01-01T00:00:00.000Z" });
-    await postTx(t, pf, { type: "sell", instrumentId: tlkm, quantity: "10", price: "130", currency: "EUR", executedAt: "2021-06-01T00:00:00.000Z" });
+    await postTx(t, pf, {
+      type: "buy",
+      instrumentId: tlkm,
+      quantity: "10",
+      price: "100",
+      currency: "EUR",
+      executedAt: "2021-01-01T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "sell",
+      instrumentId: tlkm,
+      quantity: "10",
+      price: "130",
+      currency: "EUR",
+      executedAt: "2021-06-01T00:00:00.000Z",
+    });
     // B: open position with an in-window dividend (priced 9500 by the fixture).
-    await postTx(t, pf, { type: "buy", instrumentId: bbca, quantity: "5", price: "9000", currency: "EUR", executedAt: "2021-02-01T00:00:00.000Z" });
-    await postTx(t, pf, { type: "dividend", instrumentId: bbca, quantity: "0", price: "100", tax: "20", currency: "EUR", executedAt: "2021-07-01T00:00:00.000Z" });
+    await postTx(t, pf, {
+      type: "buy",
+      instrumentId: bbca,
+      quantity: "5",
+      price: "9000",
+      currency: "EUR",
+      executedAt: "2021-02-01T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "dividend",
+      instrumentId: bbca,
+      quantity: "0",
+      price: "100",
+      tax: "20",
+      currency: "EUR",
+      executedAt: "2021-07-01T00:00:00.000Z",
+    });
   });
 
   afterAll(async () => {

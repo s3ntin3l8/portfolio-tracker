@@ -41,11 +41,50 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-              <SortableTableHead colKey="trailing" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("trailing")}</SortableTableHead>
-              <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("value")}</SortableTableHead>
-              <SortableTableHead colKey="currentYield" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("currentYield")}</SortableTableHead>
-              <SortableTableHead colKey="yieldOnCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("yieldOnCost")}</SortableTableHead>
+              <SortableTableHead
+                colKey="instrument"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("instrument")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="trailing"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("trailing")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="value"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("value")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="currentYield"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("currentYield")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="yieldOnCost"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("yieldOnCost")}
+              </SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -61,7 +100,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
                       >
                         {y.symbol}
                       </Link>
-                      {y.displayName ?? y.name ? (
+                      {(y.displayName ?? y.name) ? (
                         <div className={TABLE_SUBLABEL}>{y.displayName ?? y.name}</div>
                       ) : null}
                     </div>
@@ -77,9 +116,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
                   {y.yield !== null ? formatPercent(Number(y.yield), locale) : "—"}
                 </TableCell>
                 <TableCell className={cn(TABLE_VALUE, "text-text-mute")}>
-                  {y.yieldOnCost !== null
-                    ? formatPercent(Number(y.yieldOnCost), locale)
-                    : "—"}
+                  {y.yieldOnCost !== null ? formatPercent(Number(y.yieldOnCost), locale) : "—"}
                 </TableCell>
               </TableRow>
             ))}
@@ -103,7 +140,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
               <div className="flex items-baseline justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-[15px] font-bold">{y.symbol}</div>
-                  {y.displayName ?? y.name ? (
+                  {(y.displayName ?? y.name) ? (
                     <div className="truncate text-xs font-medium text-text-2">
                       {y.displayName ?? y.name}
                     </div>

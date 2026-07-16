@@ -1,10 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import {
-  TrConnectFlow,
-  type TrConnectClient,
-} from "../src/components/tr-connect-flow";
+import { TrConnectFlow, type TrConnectClient } from "../src/components/tr-connect-flow";
 import { ApiError } from "@portfolio/api-client";
 import type { TrConnection } from "@portfolio/api-client";
 import messages from "../messages/en.json";
@@ -90,9 +87,7 @@ describe("TrConnectFlow", () => {
     // The awaiting step fires verify once (no confirmation code), then the status poll
     // observes the authoritative connection state.
     await waitFor(() => expect(client.verifyTr).toHaveBeenCalledWith());
-    expect(
-      await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 })).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
   });
 
@@ -112,9 +107,7 @@ describe("TrConnectFlow", () => {
     fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
 
-    expect(
-      await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Sync now/ }, { timeout: 4000 })).toBeTruthy();
   });
 
   it("returns to the form with an error when the status poll reports a failed pairing", async () => {
@@ -215,9 +208,7 @@ describe("TrConnectFlow", () => {
     });
     fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
-    expect(
-      await screen.findByText(/Trade Republic sync isn't set up on the server/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/Trade Republic sync isn't set up on the server/)).toBeTruthy();
   });
 
   it("binds to the portfolio it was given, with no in-form picker", async () => {
@@ -233,9 +224,7 @@ describe("TrConnectFlow", () => {
     fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "1234" } });
     fireEvent.click(screen.getByRole("button", { name: /Connect/ }));
     await waitFor(() =>
-      expect(client.connectTr).toHaveBeenCalledWith(
-        expect.objectContaining({ portfolioId: "p1" }),
-      ),
+      expect(client.connectTr).toHaveBeenCalledWith(expect.objectContaining({ portfolioId: "p1" })),
     );
   });
 

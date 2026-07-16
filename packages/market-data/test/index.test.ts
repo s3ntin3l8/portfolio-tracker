@@ -486,7 +486,12 @@ describe("YahooFinanceProvider", () => {
       fetch: mockFetch(() => ({
         body: {
           quotes: [
-            { symbol: "BBCA.JK", shortname: "Bank Central Asia", quoteType: "EQUITY", exchange: "JKT" },
+            {
+              symbol: "BBCA.JK",
+              shortname: "Bank Central Asia",
+              quoteType: "EQUITY",
+              exchange: "JKT",
+            },
           ],
         },
       })),
@@ -564,15 +569,26 @@ describe("YahooFinanceProvider", () => {
   });
 
   it("leaves gold and crypto currency determined by the symbol pair, not meta.currency", async () => {
-    const xau: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "EUR" };
+    const xau: InstrumentRef = {
+      symbol: "XAU",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "EUR",
+    };
     // meta.currency would say "EUR" from the XAUEUR=X pair; toGram conversion runs first
     const goldBody = {
       chart: {
-        result: [{
-          meta: { regularMarketPrice: 2800 * 31.1034768, currency: "EUR", regularMarketTime: 1738972800 },
-          timestamp: [],
-          indicators: { quote: [{ close: [] }] },
-        }],
+        result: [
+          {
+            meta: {
+              regularMarketPrice: 2800 * 31.1034768,
+              currency: "EUR",
+              regularMarketTime: 1738972800,
+            },
+            timestamp: [],
+            indicators: { quote: [{ close: [] }] },
+          },
+        ],
       },
     };
     const provider = new YahooFinanceProvider({ fetch: mockFetch(() => ({ body: goldBody })) });
@@ -591,7 +607,12 @@ describe("YahooFinanceProvider", () => {
   });
 
   it("stamps candle currency from meta.currency (USD for USD-priced Xetra ETF)", async () => {
-    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const mwof: InstrumentRef = {
+      symbol: "MWOF",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
     const provider = new YahooFinanceProvider({
       fetch: mockFetch(() => ({ body: chartBody(17.5, "USD") })),
     });
@@ -600,7 +621,12 @@ describe("YahooFinanceProvider", () => {
   });
 
   it("divides GBp candle closes by 100 and stamps GBP", async () => {
-    const gbEtf: InstrumentRef = { symbol: "VWRL", market: "XETRA", assetClass: "etf", currency: "GBP" };
+    const gbEtf: InstrumentRef = {
+      symbol: "VWRL",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "GBP",
+    };
     const provider = new YahooFinanceProvider({
       fetch: mockFetch(() => ({ body: chartBody(13549, "GBp") })),
     });
@@ -609,14 +635,21 @@ describe("YahooFinanceProvider", () => {
   });
 
   it("omits currency from gold/crypto candles (encoded in the symbol pair)", async () => {
-    const xau: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "EUR" };
+    const xau: InstrumentRef = {
+      symbol: "XAU",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "EUR",
+    };
     const goldHistBody = {
       chart: {
-        result: [{
-          meta: { regularMarketPrice: 0, currency: "EUR", regularMarketTime: 1738972800 },
-          timestamp: [1738972800],
-          indicators: { quote: [{ close: [2800 * 31.1034768] }] },
-        }],
+        result: [
+          {
+            meta: { regularMarketPrice: 0, currency: "EUR", regularMarketTime: 1738972800 },
+            timestamp: [1738972800],
+            indicators: { quote: [{ close: [2800 * 31.1034768] }] },
+          },
+        ],
       },
     };
     const provider = new YahooFinanceProvider({ fetch: mockFetch(() => ({ body: goldHistBody })) });
@@ -1148,7 +1181,12 @@ describe("EodhdProvider", () => {
   });
 
   it("resolves the native USD currency for a USD-priced Xetra ETF via /search", async () => {
-    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const mwof: InstrumentRef = {
+      symbol: "MWOF",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch((url) => {
@@ -1165,12 +1203,20 @@ describe("EodhdProvider", () => {
   });
 
   it("memoises ticker currency and does not re-call /search on repeated getQuote", async () => {
-    const mwof: InstrumentRef = { symbol: "MWOF", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const mwof: InstrumentRef = {
+      symbol: "MWOF",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
     let searchCalls = 0;
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch((url) => {
-        if (url.includes("/search/")) { searchCalls++; return { body: [{ Code: "MWOF", Exchange: "XETRA", Currency: "USD" }] }; }
+        if (url.includes("/search/")) {
+          searchCalls++;
+          return { body: [{ Code: "MWOF", Exchange: "XETRA", Currency: "USD" }] };
+        }
         return { body: { close: 17.973 } };
       }),
     });
@@ -1233,11 +1279,20 @@ describe("EodhdProvider", () => {
   // ── getProfile tests ──────────────────────────────────────────────────────
 
   it("getProfile: equity returns sector from General.Sector (filter=General)", async () => {
-    const msft: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const msft: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch(() => ({
-        body: { Sector: "Technology", Industry: "Software—Infrastructure", CountryName: "United States" },
+        body: {
+          Sector: "Technology",
+          Industry: "Software—Infrastructure",
+          CountryName: "United States",
+        },
       })),
     });
     const profile = await p.getProfile(msft);
@@ -1250,7 +1305,12 @@ describe("EodhdProvider", () => {
   });
 
   it("getProfile: equity treats 'N/A' as null and returns null if all fields are N/A", async () => {
-    const msft: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const msft: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch(() => ({ body: { Sector: "N/A", Industry: "N/A", CountryName: "N/A" } })),
@@ -1267,10 +1327,10 @@ describe("EodhdProvider", () => {
           General: { CountryName: "United States" },
           ETF_Data: {
             Sector_Weights: {
-              Technology:  { "Equity_%": "29.50", Relative_to_Category: "..." },
-              Financials:  { "Equity_%": "13.40", Relative_to_Category: "..." },
-              Healthcare:  { "Equity_%": "0",     Relative_to_Category: "..." }, // zero → excluded
-              Industrials: { "Equity_%": "N/A",   Relative_to_Category: "..." }, // N/A → excluded
+              Technology: { "Equity_%": "29.50", Relative_to_Category: "..." },
+              Financials: { "Equity_%": "13.40", Relative_to_Category: "..." },
+              Healthcare: { "Equity_%": "0", Relative_to_Category: "..." }, // zero → excluded
+              Industrials: { "Equity_%": "N/A", Relative_to_Category: "..." }, // N/A → excluded
             },
           },
         },
@@ -1288,7 +1348,12 @@ describe("EodhdProvider", () => {
   });
 
   it("getProfile: ETF with no ETF_Data returns null", async () => {
-    const etf: InstrumentRef = { symbol: "UNKNOWN_ETF", market: "US", assetClass: "etf", currency: "USD" };
+    const etf: InstrumentRef = {
+      symbol: "UNKNOWN_ETF",
+      market: "US",
+      assetClass: "etf",
+      currency: "USD",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch(() => ({ body: { General: { CountryName: "N/A" } } })),
@@ -1297,7 +1362,12 @@ describe("EodhdProvider", () => {
   });
 
   it("getProfile: ETF with empty Sector_Weights returns null (no country either)", async () => {
-    const etf: InstrumentRef = { symbol: "EMPTY_ETF", market: "US", assetClass: "etf", currency: "USD" };
+    const etf: InstrumentRef = {
+      symbol: "EMPTY_ETF",
+      market: "US",
+      assetClass: "etf",
+      currency: "USD",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch(() => ({ body: { ETF_Data: { Sector_Weights: {} } } })),
@@ -1306,7 +1376,12 @@ describe("EodhdProvider", () => {
   });
 
   it("getProfile: returns null on HTTP error", async () => {
-    const msft: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const msft: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const p = new EodhdProvider({
       apiKey: "k",
       fetch: mockFetch(() => ({ ok: false, body: {} })),
@@ -1337,9 +1412,7 @@ function yahooProfileFetch(
         status: 200,
         headers: {
           get: (k: string) =>
-            k.toLowerCase() === "set-cookie"
-              ? "A3=d_abc123; Path=/; Domain=.yahoo.com"
-              : null,
+            k.toLowerCase() === "set-cookie" ? "A3=d_abc123; Path=/; Domain=.yahoo.com" : null,
         },
         json: async () => ({}),
         text: async () => "",
@@ -1369,7 +1442,12 @@ function yahooProfileFetch(
 
 describe("YahooFinanceProvider getProfile", () => {
   it("returns sector/industry/country for a US equity", async () => {
-    const msft: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const msft: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const body = {
       quoteSummary: {
         result: [
@@ -1393,7 +1471,12 @@ describe("YahooFinanceProvider getProfile", () => {
   });
 
   it("returns null when all equity fields are N/A", async () => {
-    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const ref: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const body = {
       quoteSummary: {
         result: [{ assetProfile: { sector: "N/A", industry: "N/A", country: "N/A" } }],
@@ -1404,7 +1487,12 @@ describe("YahooFinanceProvider getProfile", () => {
   });
 
   it("returns sectorWeights for an ETF (XETRA, .DE suffix)", async () => {
-    const aemd: InstrumentRef = { symbol: "AEMD", market: "XETRA", assetClass: "etf", currency: "EUR" };
+    const aemd: InstrumentRef = {
+      symbol: "AEMD",
+      market: "XETRA",
+      assetClass: "etf",
+      currency: "EUR",
+    };
     let calledUrl = "";
     const body = {
       quoteSummary: {
@@ -1481,18 +1569,29 @@ describe("YahooFinanceProvider getProfile", () => {
   it("returns null when ETF sectorWeightings are all zero/empty", async () => {
     const ref: InstrumentRef = { symbol: "SPY", market: "US", assetClass: "etf", currency: "USD" };
     const body = {
-      quoteSummary: { result: [{ topHoldings: { sectorWeightings: [{ technology: { raw: 0, fmt: "0.00%" } }] } }] },
+      quoteSummary: {
+        result: [{ topHoldings: { sectorWeightings: [{ technology: { raw: 0, fmt: "0.00%" } }] } }],
+      },
     };
     const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
     expect(await p.getProfile(ref)).toBeNull();
   });
 
   it("uses IDX symbol BBCA.JK for Indonesian equity", async () => {
-    const bbcaRef: InstrumentRef = { symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR" };
+    const bbcaRef: InstrumentRef = {
+      symbol: "BBCA",
+      market: "IDX",
+      assetClass: "equity",
+      currency: "IDR",
+    };
     let calledUrl = "";
     const body = {
       quoteSummary: {
-        result: [{ assetProfile: { sector: "Financial Services", industry: "Banks", country: "Indonesia" } }],
+        result: [
+          {
+            assetProfile: { sector: "Financial Services", industry: "Banks", country: "Indonesia" },
+          },
+        ],
       },
     };
     const p = new YahooFinanceProvider({
@@ -1507,19 +1606,34 @@ describe("YahooFinanceProvider getProfile", () => {
   });
 
   it("returns null when crumb fetch fails", async () => {
-    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const ref: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { crumbStatus: 429 }) });
     expect(await p.getProfile(ref)).toBeNull();
   });
 
   it("returns null when quoteSummary HTTP error", async () => {
-    const ref: InstrumentRef = { symbol: "MSFT", market: "US", assetClass: "equity", currency: "USD" };
+    const ref: InstrumentRef = {
+      symbol: "MSFT",
+      market: "US",
+      assetClass: "equity",
+      currency: "USD",
+    };
     const p = new YahooFinanceProvider({ fetch: yahooProfileFetch({}, { summaryOk: false }) });
     expect(await p.getProfile(ref)).toBeNull();
   });
 
   it("returns null for non-equity/non-etf asset classes", async () => {
-    const gold: InstrumentRef = { symbol: "XAU", market: "XAU", assetClass: "gold", currency: "USD" };
+    const gold: InstrumentRef = {
+      symbol: "XAU",
+      market: "XAU",
+      assetClass: "gold",
+      currency: "USD",
+    };
     const p = new YahooFinanceProvider({
       fetch: yahooProfileFetch({}),
     });
@@ -1686,16 +1800,18 @@ describe("assetClassFromType", () => {
 
   it("keeps a genuine open-end reksa dana as mutual_fund even with IDX market context", () => {
     // NAV-keyed fund codes are never 4-char X-prefixed or R- prefixed.
-    expect(assetClassFromType("Reksa Dana", { symbol: "SCHRODER-DANA-PRESTASI", market: "IDX" })).toBe(
-      "mutual_fund",
-    );
+    expect(
+      assetClassFromType("Reksa Dana", { symbol: "SCHRODER-DANA-PRESTASI", market: "IDX" }),
+    ).toBe("mutual_fund");
     expect(assetClassFromType("Reksa Dana", { symbol: "BBCA", market: "IDX" })).toBe("mutual_fund");
   });
 
   it("does NOT upgrade a non-IDX mutual_fund even if the symbol pattern matches (false-positive guard)", () => {
     // E.g. NYSE "X" (US Steel) should never become etf.
     expect(assetClassFromType("Mutual Fund", { symbol: "XYZW", market: "US" })).toBe("mutual_fund");
-    expect(assetClassFromType("Reksa Dana", { symbol: "XIIT", market: "XETRA" })).toBe("mutual_fund");
+    expect(assetClassFromType("Reksa Dana", { symbol: "XIIT", market: "XETRA" })).toBe(
+      "mutual_fund",
+    );
   });
 
   it("remains backwards-compatible when opts are omitted (no reclassification without market context)", () => {
@@ -2223,9 +2339,7 @@ describe("MarketDataService onCall hook", () => {
       name: "hit",
       supports: (ac) => ac === "equity",
       getQuote: async () => null,
-      getDividends: async () => [
-        { exDate: "2026-07-15", amountPerShare: "100", currency: "IDR" },
-      ],
+      getDividends: async () => [{ exDate: "2026-07-15", amountPerShare: "100", currency: "IDR" }],
     };
     const svc = new MarketDataService([miss, hit], { onCall: (n) => calls.push(n) });
     const events = await svc.getDividends(bbca);
@@ -2249,7 +2363,11 @@ describe("TwelveDataProvider.getDividends", () => {
         return {
           body: {
             dividends: [
-              { ex_dividend_date: "2026-07-15", payment_date: "2026-07-30", dividend_amount: "100" },
+              {
+                ex_dividend_date: "2026-07-15",
+                payment_date: "2026-07-30",
+                dividend_amount: "100",
+              },
               { ex_dividend_date: "2025-12-10", payment_date: "2025-12-20", dividend_amount: 80 },
             ],
           },
@@ -2262,7 +2380,12 @@ describe("TwelveDataProvider.getDividends", () => {
     expect(seenUrl).toContain("exchange=IDX");
     expect(seenUrl).toContain("start_date=2025-01-01");
     expect(events).toHaveLength(2);
-    expect(events[0]).toMatchObject({ exDate: "2026-07-15", payDate: "2026-07-30", amountPerShare: "100", currency: "IDR" });
+    expect(events[0]).toMatchObject({
+      exDate: "2026-07-15",
+      payDate: "2026-07-30",
+      amountPerShare: "100",
+      currency: "IDR",
+    });
     expect(events[1]).toMatchObject({ exDate: "2025-12-10", amountPerShare: "80" });
   });
 
@@ -2301,19 +2424,35 @@ describe("EodhdProvider.getDividends", () => {
         seenUrl = url;
         return {
           body: [
-            { date: "2026-07-15", paymentDate: "2026-07-30", unadjustedValue: 1.5, value: 1.0, currency: "EUR" },
+            {
+              date: "2026-07-15",
+              paymentDate: "2026-07-30",
+              unadjustedValue: 1.5,
+              value: 1.0,
+              currency: "EUR",
+            },
             { date: "2025-12-10", unadjustedValue: 1.2, currency: "EUR" },
           ],
         };
       }),
     });
-    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    const xetraRef: InstrumentRef = {
+      symbol: "AAPL",
+      market: "XETRA",
+      assetClass: "equity",
+      currency: "EUR",
+    };
     const events = await provider.getDividends(xetraRef, "2025-01-01");
     expect(seenUrl).toContain("/div/AAPL.XETRA");
     expect(seenUrl).toContain("from=2025-01-01");
     expect(events).toHaveLength(2);
     // Prefers unadjustedValue over value
-    expect(events[0]).toMatchObject({ exDate: "2026-07-15", payDate: "2026-07-30", amountPerShare: "1.5", currency: "EUR" });
+    expect(events[0]).toMatchObject({
+      exDate: "2026-07-15",
+      payDate: "2026-07-30",
+      amountPerShare: "1.5",
+      currency: "EUR",
+    });
     expect(events[1]).toMatchObject({ exDate: "2025-12-10", amountPerShare: "1.2" });
   });
 
@@ -2322,7 +2461,12 @@ describe("EodhdProvider.getDividends", () => {
       apiKey: "key",
       fetch: mockFetch(() => ({ ok: false, body: {} })),
     });
-    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    const xetraRef: InstrumentRef = {
+      symbol: "AAPL",
+      market: "XETRA",
+      assetClass: "equity",
+      currency: "EUR",
+    };
     expect(await provider.getDividends(xetraRef)).toEqual([]);
   });
 
@@ -2333,7 +2477,12 @@ describe("EodhdProvider.getDividends", () => {
         body: [{ date: "2026-07-15", value: 2.0, currency: "EUR" }],
       })),
     });
-    const xetraRef: InstrumentRef = { symbol: "AAPL", market: "XETRA", assetClass: "equity", currency: "EUR" };
+    const xetraRef: InstrumentRef = {
+      symbol: "AAPL",
+      market: "XETRA",
+      assetClass: "equity",
+      currency: "EUR",
+    };
     const events = await provider.getDividends(xetraRef);
     expect(events[0].amountPerShare).toBe("2");
   });
@@ -2347,7 +2496,7 @@ describe("YahooFinanceProvider.getDividends", () => {
           events: {
             dividends: {
               "1752624000": { amount: 1.25, date: 1752624000 }, // 2025-07-16
-              "1734739200": { amount: 0.9, date: 1734739200 },  // 2024-12-21
+              "1734739200": { amount: 0.9, date: 1734739200 }, // 2024-12-21
             },
           },
         },
@@ -2483,9 +2632,7 @@ describe("MarketDataService WKN branch", () => {
     supports: () => false,
     getQuote: async () => null,
     resolveWKN: async (wkn) =>
-      wkn === "A1T8FV"
-        ? { symbol: "DPW", exchange: "GER", name: "Deutsche Post AG" }
-        : null,
+      wkn === "A1T8FV" ? { symbol: "DPW", exchange: "GER", name: "Deutsche Post AG" } : null,
   };
 
   it("routes a 6-char WKN query to resolveWKN and echoes wkn into the result", async () => {
@@ -2501,7 +2648,14 @@ describe("MarketDataService WKN branch", () => {
       supports: () => false,
       getQuote: async () => null,
       search: async () => [
-        { symbol: "XYZ", name: "Some Stock", market: "IDX", assetClass: "equity", currency: "IDR", source: "search" },
+        {
+          symbol: "XYZ",
+          name: "Some Stock",
+          market: "IDX",
+          assetClass: "equity",
+          currency: "IDR",
+          source: "search",
+        },
       ],
     };
     const emptyWkn: MarketDataProvider = {

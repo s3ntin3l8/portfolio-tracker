@@ -1,11 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
-import {
-  transactions,
-  trResolvedEvents,
-  dismissedAnomalies,
-} from "@portfolio/db";
+import { transactions, trResolvedEvents, dismissedAnomalies } from "@portfolio/db";
 import { transactionInputSchema } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
 import { enqueueRecompute } from "../../services/scheduler.js";
@@ -300,7 +296,10 @@ export function registerCrudRoutes(app: FastifyInstance) {
       if (portfolioId === targetPortfolioId) {
         return reply.code(400).send({ error: "same_portfolio" });
       }
-      if (!(await ownedPortfolio(app, id, portfolioId)) || !(await ownedPortfolio(app, id, targetPortfolioId))) {
+      if (
+        !(await ownedPortfolio(app, id, portfolioId)) ||
+        !(await ownedPortfolio(app, id, targetPortfolioId))
+      ) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
 

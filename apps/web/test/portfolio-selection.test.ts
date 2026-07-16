@@ -18,10 +18,7 @@ describe("qualifyingHolders", () => {
   });
 
   it("returns an empty list when no holder owns ≥2 portfolios", () => {
-    const portfolios = [
-      { accountHolderId: "h1" },
-      { accountHolderId: "h2" },
-    ];
+    const portfolios = [{ accountHolderId: "h1" }, { accountHolderId: "h2" }];
     expect(qualifyingHolders(portfolios, holders)).toEqual([]);
   });
 

@@ -37,8 +37,7 @@ export class TwelveDataProvider implements MarketDataProvider {
   supports(assetClass: AssetClass, market: string): boolean {
     // Only the markets the IDX-shaped `exchange=` query actually resolves; EU venues
     // (e.g. XETRA) are left to EODHD/Yahoo rather than burning a credit on a miss.
-    if (assetClass === "equity" || assetClass === "etf")
-      return market === "IDX" || market === "US";
+    if (assetClass === "equity" || assetClass === "etf") return market === "IDX" || market === "US";
     // Gold spot only (XAU); buyback valuation is the Antam provider's job.
     return assetClass === "gold" && market === "XAU";
   }
@@ -64,9 +63,7 @@ export class TwelveDataProvider implements MarketDataProvider {
     if (!data.close) return null;
 
     const toGram = (v: string) =>
-      ref.assetClass === "gold"
-        ? (Number(v) / TROY_OUNCE_GRAMS).toString()
-        : v;
+      ref.assetClass === "gold" ? (Number(v) / TROY_OUNCE_GRAMS).toString() : v;
     return {
       price: toGram(data.close),
       currency: ref.currency,
@@ -102,7 +99,10 @@ export class TwelveDataProvider implements MarketDataProvider {
         symbol: d.symbol,
         name: d.instrument_name ?? d.symbol,
         market: info?.market ?? d.exchange ?? d.mic_code ?? "",
-        assetClass: assetClassFromType(d.instrument_type, { symbol: d.symbol, market: info?.market }),
+        assetClass: assetClassFromType(d.instrument_type, {
+          symbol: d.symbol,
+          market: info?.market,
+        }),
         currency,
         source: this.name,
       });
@@ -114,9 +114,7 @@ export class TwelveDataProvider implements MarketDataProvider {
     // `/api_usage` reports credit consumption; it doesn't itself cost credits. Prefer the
     // daily window when the plan exposes it, else fall back to the per-minute counters.
     try {
-      const res = await this.doFetch(
-        `${this.baseUrl}/api_usage?apikey=${this.apiKey}`,
-      );
+      const res = await this.doFetch(`${this.baseUrl}/api_usage?apikey=${this.apiKey}`);
       if (!res.ok) return null;
       const data = (await res.json()) as {
         current_usage?: number;
@@ -148,8 +146,7 @@ export class TwelveDataProvider implements MarketDataProvider {
     // Twelve Data's `/dividends` endpoint covers IDX + US equities/ETFs.
     if (ref.assetClass === "gold") return [];
     const start =
-      fromDate ??
-      new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      fromDate ?? new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const res = await this.doFetch(
       `${this.baseUrl}/dividends?${this.query(ref)}&start_date=${start}&apikey=${this.apiKey}`,
     );

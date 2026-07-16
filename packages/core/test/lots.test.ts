@@ -42,7 +42,13 @@ describe("openLots", () => {
 
   it("includes fees in the per-unit cost of a lot", () => {
     const txns = [
-      tx({ type: "buy", quantity: "10", price: "100", fees: "10", executedAt: new Date("2021-01-01") }),
+      tx({
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        fees: "10",
+        executedAt: new Date("2021-01-01"),
+      }),
     ];
     const lots = openLots(txns);
     expect(lots.get(INST)![0]).toEqual({
@@ -134,9 +140,7 @@ describe("openLots", () => {
       tx({ type: "transfer_in", quantity: "10", price: "80", executedAt: new Date("2021-01-01") }),
     ];
     const lots = openLots(txns)!.get(INST)!;
-    expect(lots).toEqual([
-      { acqDate: "2021-01-01", qty: "10", unitCost: "80", cost: "800" },
-    ]);
+    expect(lots).toEqual([{ acqDate: "2021-01-01", qty: "10", unitCost: "80", cost: "800" }]);
   });
 
   it("tracks a zero-cost bonus lot correctly", () => {
@@ -144,9 +148,7 @@ describe("openLots", () => {
       tx({ type: "bonus", quantity: "5", price: "0", executedAt: new Date("2021-01-01") }),
     ];
     const lots = openLots(txns)!.get(INST)!;
-    expect(lots).toEqual([
-      { acqDate: "2021-01-01", qty: "5", unitCost: "0", cost: "0" },
-    ]);
+    expect(lots).toEqual([{ acqDate: "2021-01-01", qty: "5", unitCost: "0", cost: "0" }]);
   });
 
   it("excludes draft and archived transactions", () => {

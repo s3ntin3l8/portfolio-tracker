@@ -155,13 +155,7 @@ export async function getFxRates(
   const cached = await db
     .select()
     .from(fxRates)
-    .where(
-      and(
-        eq(fxRates.quote, base),
-        eq(fxRates.date, today),
-        inArray(fxRates.base, foreign),
-      ),
-    );
+    .where(and(eq(fxRates.quote, base), eq(fxRates.date, today), inArray(fxRates.base, foreign)));
   for (const r of cached) out[r.base] = r.rate;
 
   const missing = foreign.filter((c) => !(c in out));
@@ -193,9 +187,7 @@ export async function getFxRatesForDates(
   fxProvider: FxProvider | null = getFxProvider(),
 ): Promise<Map<string, Record<string, string>>> {
   const wanted = [...new Set(dates)].sort();
-  const result = new Map<string, Record<string, string>>(
-    wanted.map((d) => [d, {}]),
-  );
+  const result = new Map<string, Record<string, string>>(wanted.map((d) => [d, {}]));
   const foreign = [...new Set(currencies)].filter((c) => c && c !== base);
   if (foreign.length === 0 || wanted.length === 0) return result;
 
@@ -209,11 +201,7 @@ export async function getFxRatesForDates(
     .select()
     .from(fxRates)
     .where(
-      and(
-        eq(fxRates.quote, base),
-        lte(fxRates.date, maxDate),
-        inArray(fxRates.base, foreign),
-      ),
+      and(eq(fxRates.quote, base), lte(fxRates.date, maxDate), inArray(fxRates.base, foreign)),
     );
   for (const r of cached) byCurrency.get(r.base)?.set(r.date, r.rate);
 
@@ -263,10 +251,7 @@ export async function getFxRatesForDates(
 }
 
 /** Build a synchronous FxRateFn from a foreign→base rate map (for valuation). */
-export function makeFxRateFn(
-  rates: Record<string, string>,
-  base: string,
-): FxRateFn {
+export function makeFxRateFn(rates: Record<string, string>, base: string): FxRateFn {
   return (from, to) => {
     if (from === to) return "1";
     if (to === base && rates[from]) return rates[from];

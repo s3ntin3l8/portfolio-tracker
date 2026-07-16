@@ -79,9 +79,7 @@ export function Landing({ initialCurrency = "IDR" }: { initialCurrency?: string 
           <div className="max-w-md rounded-[22px] border border-white/15 bg-white/[0.07] p-6 backdrop-blur">
             <div className="text-sm text-white/60">{t("glanceLabel")}</div>
             <div className="mt-1 flex items-center gap-3">
-              <span className="font-mono text-3xl font-extrabold tabular-nums">
-                {demoAmount}
-              </span>
+              <span className="font-mono text-3xl font-extrabold tabular-nums">{demoAmount}</span>
               <span className="rounded-full bg-[rgba(56,225,164,0.18)] px-2 py-0.5 text-sm font-semibold text-[#5FEAB6]">
                 ▲ {demoGain}
               </span>
@@ -103,9 +101,7 @@ export function Landing({ initialCurrency = "IDR" }: { initialCurrency?: string 
             </svg>
             <div className="mt-3 flex flex-wrap items-center gap-1.5 text-sm text-white/60">
               {t("connected")}
-              <span className="font-medium text-white/90">
-                Trade Republic · IBKR · DKB
-              </span>
+              <span className="font-medium text-white/90">Trade Republic · IBKR · DKB</span>
             </div>
           </div>
         </div>
@@ -118,18 +114,12 @@ export function Landing({ initialCurrency = "IDR" }: { initialCurrency?: string 
             <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary">
               {t("kicker")}
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight">
-              {t("signInTitle")}
-            </h2>
+            <h2 className="text-3xl font-extrabold tracking-tight">{t("signInTitle")}</h2>
             <p className="text-sm text-muted-foreground">{t("signInSub")}</p>
           </div>
 
           <Button onClick={start} disabled={busy} className="w-full gap-2" size="lg">
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Shield className="size-4" />
-            )}
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Shield className="size-4" />}
             {busy ? t("ssoBusy") : t("sso")}
           </Button>
 

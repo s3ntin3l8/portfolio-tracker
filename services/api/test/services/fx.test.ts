@@ -56,9 +56,10 @@ describe("FrankfurterFxProvider", () => {
         ],
       }) as Response) as typeof fetch;
     const p = new FrankfurterFxProvider("https://fx.example/v2", fetchMock);
-    expect(
-      await p.getRateHistory("USD", "IDR", "2026-05-01", "2026-05-02"),
-    ).toEqual({ "2026-05-01": 16000, "2026-05-02": 16100 });
+    expect(await p.getRateHistory("USD", "IDR", "2026-05-01", "2026-05-02")).toEqual({
+      "2026-05-01": 16000,
+      "2026-05-02": 16100,
+    });
   });
 
   it("returns {} for a history request that errors", async () => {
@@ -88,9 +89,7 @@ describe("getFxRates", () => {
 
   it("serves a cached rate without calling the provider", async () => {
     const db = getDb();
-    await db
-      .insert(fxRates)
-      .values({ base: "USD", quote: "IDR", rate: "16000", date: today });
+    await db.insert(fxRates).values({ base: "USD", quote: "IDR", rate: "16000", date: today });
     let called = false;
     const out = await getFxRates(db, ["USD"], "IDR", new Date(), {
       getRate: async () => {
@@ -149,10 +148,7 @@ describe("getFxRatesForDates", () => {
       .select()
       .from(fxRates)
       .where(and(eq(fxRates.base, "SGD"), eq(fxRates.quote, "IDR")));
-    expect(persisted.map((r) => r.date).sort()).toEqual([
-      "2026-03-03",
-      "2026-03-04",
-    ]);
+    expect(persisted.map((r) => r.date).sort()).toEqual(["2026-03-03", "2026-03-04"]);
   });
 
   it("serves fully-cached dates without calling the provider", async () => {
@@ -182,13 +178,7 @@ describe("getFxRatesForDates", () => {
   });
 
   it("returns empty per-date maps when every currency is the base", async () => {
-    const out = await getFxRatesForDates(
-      getDb(),
-      ["IDR"],
-      "IDR",
-      ["2026-04-01"],
-      null,
-    );
+    const out = await getFxRatesForDates(getDb(), ["IDR"], "IDR", ["2026-04-01"], null);
     expect(out.get("2026-04-01")).toEqual({});
   });
 });

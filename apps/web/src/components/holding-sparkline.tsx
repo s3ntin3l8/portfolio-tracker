@@ -25,13 +25,7 @@ import { ChartTooltipPanel, type ChartTooltipRow } from "@/components/ui/chart-t
  * The tooltip's own role="tooltip" + `aria-describedby` linkage is a small follow-up
  * if a screen-reader user ever needs the tooltip content announced on focus.
  */
-export function HoldingSparkline({
-  values,
-  className,
-}: {
-  values: number[];
-  className?: string;
-}) {
+export function HoldingSparkline({ values, className }: { values: number[]; className?: string }) {
   const t = useTranslations("Holdings");
   const tip = useChartTooltip<{ rows: ChartTooltipRow[]; label: string }>();
   const { rows, rangeLabel } = useMemo(() => {

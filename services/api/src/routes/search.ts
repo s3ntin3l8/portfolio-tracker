@@ -68,12 +68,7 @@ export async function searchRoute(app: FastifyInstance) {
       const ownedRows = await app.db
         .selectDistinct({ instrumentId: transactions.instrumentId })
         .from(transactions)
-        .where(
-          and(
-            inArray(transactions.portfolioId, pfIds),
-            isNotNull(transactions.instrumentId),
-          ),
-        );
+        .where(and(inArray(transactions.portfolioId, pfIds), isNotNull(transactions.instrumentId)));
       for (const r of ownedRows) {
         if (r.instrumentId) ownedIds.add(r.instrumentId);
       }
@@ -81,12 +76,8 @@ export async function searchRoute(app: FastifyInstance) {
 
     // Sort owned instruments first, then catalog-only hits.
     const instrumentResults = [
-      ...matchedInstruments
-        .filter((i) => ownedIds.has(i.id))
-        .map((i) => ({ ...i, owned: true })),
-      ...matchedInstruments
-        .filter((i) => !ownedIds.has(i.id))
-        .map((i) => ({ ...i, owned: false })),
+      ...matchedInstruments.filter((i) => ownedIds.has(i.id)).map((i) => ({ ...i, owned: true })),
+      ...matchedInstruments.filter((i) => !ownedIds.has(i.id)).map((i) => ({ ...i, owned: false })),
     ];
 
     // ── Transactions query ───────────────────────────────────────────────────
@@ -129,7 +120,9 @@ export async function searchRoute(app: FastifyInstance) {
         .limit(limit);
 
       // Enrich each result with instrument symbol + name for display.
-      const instrIds = [...new Set(txRows.map((r) => r.instrumentId).filter((x): x is string => x !== null))];
+      const instrIds = [
+        ...new Set(txRows.map((r) => r.instrumentId).filter((x): x is string => x !== null)),
+      ];
       const instrMap = new Map<string, { symbol: string; name: string }>();
       if (instrIds.length > 0) {
         const instrRows = await app.db

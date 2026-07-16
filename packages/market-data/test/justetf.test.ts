@@ -6,10 +6,7 @@ describe("JustEtfProvider", () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
 
   const mockProfilePage = "<html>ETF profile page</html>";
-  const mockCookies = [
-    "JSESSIONID=ABC123; Path=/; HttpOnly",
-    "XSRF-TOKEN=xyz; Path=/; HttpOnly",
-  ];
+  const mockCookies = ["JSESSIONID=ABC123; Path=/; HttpOnly", "XSRF-TOKEN=xyz; Path=/; HttpOnly"];
 
   function mockSuccess(xml: string) {
     // First call: profile page with cookies

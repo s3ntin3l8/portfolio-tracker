@@ -164,7 +164,10 @@ export class MarketDataService {
       symbol: resolved.symbol,
       name: resolved.name ?? resolved.symbol,
       market: info?.market ?? resolved.exchange,
-      assetClass: assetClassFromType(resolved.type, { symbol: resolved.symbol, market: info?.market }),
+      assetClass: assetClassFromType(resolved.type, {
+        symbol: resolved.symbol,
+        market: info?.market,
+      }),
       currency: info?.currency ?? "USD",
       isin,
       source: provider.name,
@@ -182,7 +185,10 @@ export class MarketDataService {
       symbol: resolved.symbol,
       name: resolved.name ?? resolved.symbol,
       market: info?.market ?? resolved.exchange,
-      assetClass: assetClassFromType(resolved.type, { symbol: resolved.symbol, market: info?.market }),
+      assetClass: assetClassFromType(resolved.type, {
+        symbol: resolved.symbol,
+        market: info?.market,
+      }),
       currency: info?.currency ?? "USD",
       wkn,
       source: provider.name,
@@ -202,9 +208,7 @@ export class MarketDataService {
   }
 
   /** Quote several instruments, keyed by an id you supply (e.g. instrument id). */
-  async getQuotes(
-    refs: Array<{ id: string; ref: InstrumentRef }>,
-  ): Promise<Record<string, Quote>> {
+  async getQuotes(refs: Array<{ id: string; ref: InstrumentRef }>): Promise<Record<string, Quote>> {
     const out: Record<string, Quote> = {};
     await Promise.all(
       refs.map(async ({ id, ref }) => {

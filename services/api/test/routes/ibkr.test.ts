@@ -21,13 +21,11 @@ function auth(t: string) {
   return { authorization: `Bearer ${t}`, "content-type": "application/json" };
 }
 
-const EMPTY_FLEX_XML =
-  `<?xml version="1.0"?><FlexQueryResponse queryName="Test"><FlexStatements count="0"/></FlexQueryResponse>`;
+const EMPTY_FLEX_XML = `<?xml version="1.0"?><FlexQueryResponse queryName="Test"><FlexStatements count="0"/></FlexQueryResponse>`;
 
 function okFlex(): IbkrFlexClient {
   return { fetchFlexStatement: async () => EMPTY_FLEX_XML };
 }
-
 
 let app: FastifyInstance;
 let userId: string;
@@ -161,7 +159,12 @@ describe("IBKR routes", () => {
 
       const [p] = await connApp.db
         .insert(portfolios)
-        .values({ userId: connUserId, name: "Connected Portfolio", baseCurrency: "USD", cashCounted: false })
+        .values({
+          userId: connUserId,
+          name: "Connected Portfolio",
+          baseCurrency: "USD",
+          cashCounted: false,
+        })
         .returning();
       connPortfolioId = p.id;
 

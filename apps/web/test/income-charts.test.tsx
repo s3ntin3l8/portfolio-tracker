@@ -218,15 +218,8 @@ describe("IncomeHeatmap", () => {
   });
 
   it("defaults to a 'tap a cell' hint and updates it on click", () => {
-    wrap(
-      <IncomeHeatmap
-        currency="IDR"
-        monthly={[{ month: "2026-06", total: "532000" }]}
-      />,
-    );
-    expect(
-      screen.getByText("Tap a cell to see the month's income"),
-    ).toBeInTheDocument();
+    wrap(<IncomeHeatmap currency="IDR" monthly={[{ month: "2026-06", total: "532000" }]} />);
+    expect(screen.getByText("Tap a cell to see the month's income")).toBeInTheDocument();
 
     const cell = screen.getByTitle(/Jun 2026/);
     fireEvent.click(cell);
@@ -252,12 +245,7 @@ describe("IncomeHeatmap", () => {
   });
 
   it("surfaces a floating tooltip on mouseenter with month + amount", () => {
-    wrap(
-      <IncomeHeatmap
-        currency="IDR"
-        monthly={[{ month: "2026-06", total: "532000" }]}
-      />,
-    );
+    wrap(<IncomeHeatmap currency="IDR" monthly={[{ month: "2026-06", total: "532000" }]} />);
     const cell = screen.getByTitle(/Jun 2026/);
     fireEvent.mouseEnter(cell);
     // Title row (panel heading) carries the month label.
@@ -271,12 +259,7 @@ describe("IncomeHeatmap", () => {
   });
 
   it("dismisses the floating tooltip on mouseleave", () => {
-    wrap(
-      <IncomeHeatmap
-        currency="IDR"
-        monthly={[{ month: "2026-06", total: "532000" }]}
-      />,
-    );
+    wrap(<IncomeHeatmap currency="IDR" monthly={[{ month: "2026-06", total: "532000" }]} />);
     const cell = screen.getByTitle(/Jun 2026/);
     fireEvent.mouseEnter(cell);
     expect(screen.getByText("Amount")).toBeInTheDocument();
@@ -294,12 +277,7 @@ describe("IncomeHeatmap", () => {
     // listeners.onClick (floating tooltip). If the override ever sneaks
     // back, this test fails — `Amount` (the floating tooltip's row)
     // would not be in the DOM after `click` on a touch device.
-    wrap(
-      <IncomeHeatmap
-        currency="IDR"
-        monthly={[{ month: "2026-06", total: "532000" }]}
-      />,
-    );
+    wrap(<IncomeHeatmap currency="IDR" monthly={[{ month: "2026-06", total: "532000" }]} />);
     const cell = screen.getByTitle(/Jun 2026/);
     expect(screen.queryByText("Amount")).not.toBeInTheDocument();
     fireEvent.click(cell);

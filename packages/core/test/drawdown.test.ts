@@ -16,11 +16,7 @@ describe("maxDrawdown", () => {
   });
 
   it("returns 0 drawdown for a strictly rising series", () => {
-    const series = [
-      pt("2026-01-01", "100"),
-      pt("2026-01-02", "105"),
-      pt("2026-01-03", "110"),
-    ];
+    const series = [pt("2026-01-01", "100"), pt("2026-01-02", "105"), pt("2026-01-03", "110")];
     const result = maxDrawdown(series);
     expect(result.maxDrawdownPct).toBe("0");
     expect(result.currentDrawdownPct).toBe("0");

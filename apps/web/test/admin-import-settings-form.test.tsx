@@ -69,8 +69,6 @@ describe("AdminImportSettingsForm", () => {
     fireEvent.click(screen.getByRole("radio", { name: VISION }));
     fireEvent.click(screen.getByRole("button", { name: m.importStrategySave }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.importStrategyError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.importStrategyError));
   });
 });

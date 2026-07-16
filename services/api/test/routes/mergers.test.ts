@@ -48,14 +48,35 @@ async function buy(t: string, pf: string, instrumentId: string, quantity: string
     method: "POST",
     url: `/portfolios/${pf}/transactions`,
     headers: auth(t),
-    payload: { type: "buy", instrumentId, quantity, price, currency: "EUR", executedAt: "2024-01-01T00:00:00.000Z" },
+    payload: {
+      type: "buy",
+      instrumentId,
+      quantity,
+      price,
+      currency: "EUR",
+      executedAt: "2024-01-01T00:00:00.000Z",
+    },
   });
   expect(res.statusCode).toBe(201);
 }
 
 async function holdings(t: string, pf: string) {
-  const res = await app.inject({ method: "GET", url: `/portfolios/${pf}/holdings`, headers: auth(t) });
-  return (res.json() as { holdings: { instrumentId: string; quantity: string; costBasis: string; avgCost: string; realizedPnL: string }[] }).holdings;
+  const res = await app.inject({
+    method: "GET",
+    url: `/portfolios/${pf}/holdings`,
+    headers: auth(t),
+  });
+  return (
+    res.json() as {
+      holdings: {
+        instrumentId: string;
+        quantity: string;
+        costBasis: string;
+        avgCost: string;
+        realizedPnL: string;
+      }[];
+    }
+  ).holdings;
 }
 
 describe("POST /portfolios/:id/mergers", () => {
@@ -152,7 +173,14 @@ describe("POST /portfolios/:id/mergers", () => {
       method: "POST",
       url: `/portfolios/${pf}/mergers`,
       headers: auth(t),
-      payload: { fromInstrumentId: oldI, toInstrumentId: newI, outQty: "10", inQty: "5", executedAt: "2024-02-01T00:00:00.000Z", taxable: true },
+      payload: {
+        fromInstrumentId: oldI,
+        toInstrumentId: newI,
+        outQty: "10",
+        inQty: "5",
+        executedAt: "2024-02-01T00:00:00.000Z",
+        taxable: true,
+      },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -163,7 +191,13 @@ describe("POST /portfolios/:id/mergers", () => {
       method: "POST",
       url: `/portfolios/${pf}/mergers`,
       headers: auth(t),
-      payload: { fromInstrumentId: oldI, toInstrumentId: newI, outQty: "10", inQty: "5", executedAt: "2024-02-01T00:00:00.000Z" },
+      payload: {
+        fromInstrumentId: oldI,
+        toInstrumentId: newI,
+        outQty: "10",
+        inQty: "5",
+        executedAt: "2024-02-01T00:00:00.000Z",
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe("no_position_to_merge");
@@ -218,12 +252,22 @@ describe("POST /portfolios/:id/mergers", () => {
       inQty: "5",
       executedAt: "2024-02-01T00:00:00.000Z",
     };
-    const first = await app.inject({ method: "POST", url: `/portfolios/${pf}/mergers`, headers: auth(t), payload });
+    const first = await app.inject({
+      method: "POST",
+      url: `/portfolios/${pf}/mergers`,
+      headers: auth(t),
+      payload,
+    });
     expect(first.statusCode).toBe(201);
     // Re-establish a position so the retry passes the no-position guard and actually
     // reaches the insert, where the deterministic externalIds collide on the dedup index.
     await buy(t, pf, oldI, "10", "100");
-    const second = await app.inject({ method: "POST", url: `/portfolios/${pf}/mergers`, headers: auth(t), payload });
+    const second = await app.inject({
+      method: "POST",
+      url: `/portfolios/${pf}/mergers`,
+      headers: auth(t),
+      payload,
+    });
     expect(second.statusCode).toBe(409);
     expect(second.json().error).toBe("merger_already_recorded");
   });
@@ -236,7 +280,13 @@ describe("POST /portfolios/:id/mergers", () => {
       method: "POST",
       url: `/portfolios/${pf}/mergers`,
       headers: auth(t),
-      payload: { fromInstrumentId: oldI, toInstrumentId: usdI, outQty: "10", inQty: "5", executedAt: "2024-02-01T00:00:00.000Z" },
+      payload: {
+        fromInstrumentId: oldI,
+        toInstrumentId: usdI,
+        outQty: "10",
+        inQty: "5",
+        executedAt: "2024-02-01T00:00:00.000Z",
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe("currency_mismatch");

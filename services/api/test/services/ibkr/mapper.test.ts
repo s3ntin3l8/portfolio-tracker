@@ -144,9 +144,7 @@ describe("mapFlexToDrafts — cash (deposit/withdrawal/interest)", () => {
 describe("mapFlexToDrafts — transfers", () => {
   it("maps an incoming transfer as transfer_in", () => {
     const { drafts } = mapFlexToDrafts(stmt());
-    const xfer = drafts.find(
-      (d) => d.action === "transfer_in" && d.ticker === "MSFT",
-    )!;
+    const xfer = drafts.find((d) => d.action === "transfer_in" && d.ticker === "MSFT")!;
     expect(xfer).toBeDefined();
     expect(xfer.quantity).toBe("20");
     // costBasisPrice = 310.00 from the fixture

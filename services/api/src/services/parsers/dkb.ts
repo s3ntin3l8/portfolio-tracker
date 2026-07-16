@@ -136,9 +136,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
   const drafts: ParsedTransaction[] = [];
   const errors: { line: number; message: string }[] = [];
 
-  const rows = lines
-    .map((l, i) => ({ l, i }))
-    .filter(({ l }) => l.trim().length > 0);
+  const rows = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.trim().length > 0);
   if (rows.length < 2) return { drafts, errors };
 
   const header = splitDkbLine(rows[0].l);
@@ -153,8 +151,7 @@ function parseDkbDepot(lines: string[]): CsvParseResult {
   const cDepot = idx("Depotnummer");
 
   // The Depotnummer is repeated on every row; take it from the first data row.
-  const accountNumber =
-    cDepot >= 0 ? splitDkbLine(rows[1]?.l ?? "")[cDepot]?.trim() || null : null;
+  const accountNumber = cDepot >= 0 ? splitDkbLine(rows[1]?.l ?? "")[cDepot]?.trim() || null : null;
 
   for (const { l, i } of rows.slice(1)) {
     const cols = splitDkbLine(l);
@@ -206,7 +203,10 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
   // The account's own IBAN sits in the preamble (`"Girokonto …";"DE78…"`), before the
   // transaction header. The per-row IBAN column is the *counterparty*, so only scan above.
   const accountNumber =
-    lines.slice(0, headerLineNo).map((l) => l.match(IBAN_RE)?.[1]).find(Boolean) ?? null;
+    lines
+      .slice(0, headerLineNo)
+      .map((l) => l.match(IBAN_RE)?.[1])
+      .find(Boolean) ?? null;
 
   const header = splitDkbLine(lines[headerLineNo]);
   const idx = headerIndex(header);
@@ -255,8 +255,7 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
       const name = collapse(vz.match(/Gesch\.Art\s+\S+\s+(.*?)\s+ISIN\b/)?.[1] ?? "");
       // DKB renamed the savings-plan label "Fondssparplan" → "Wertpapier-Sparplan"
       // around mid-2025; historical statements still carry the older wording, so match both.
-      const isSavingsPlan =
-        vz.includes("Wertpapier-Sparplan") || vz.includes("Fondssparplan");
+      const isSavingsPlan = vz.includes("Wertpapier-Sparplan") || vz.includes("Fondssparplan");
       const action = isSavingsPlan ? "savings_plan" : amountNum > 0 ? "sell" : "buy";
       // The cash `Betrag` is the actual settlement amount (DKB "Auszumachender Betrag")
       // — keep it as `total` (lossless, strip the sign) and back out the Provision as
@@ -312,9 +311,7 @@ function parseDkbUmsatzliste(lines: string[]): CsvParseResult {
     } else {
       // Pure cash movement: deposit (money in) or withdrawal (money out).
       const action = amountNum > 0 ? "deposit" : "withdrawal";
-      const counterparty = collapse(
-        (amountNum > 0 ? cols[cPayer] : cols[cPayee]) ?? "",
-      );
+      const counterparty = collapse((amountNum > 0 ? cols[cPayer] : cols[cPayee]) ?? "");
       const label = counterparty || collapse(vz) || "DKB cash";
       const fallbackId = shortHash(
         [cols[cDate], cols[cType], amount, cols[cPayer], cols[cPayee], vz].join("|"),

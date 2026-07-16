@@ -79,7 +79,9 @@ describe("buildShareTimelines / sharesHeldAt", () => {
   });
 
   it("a bonus corporate action scales the running quantity inline", () => {
-    const txns = [tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-01-01") })];
+    const txns = [
+      tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-01-01") }),
+    ];
     // 1:10 bonus issue → +1 share per 10 held.
     const corporateActions = [ca({ type: "bonus", ratio: "0.1", exDate: new Date("2021-06-01") })];
     const timelines = buildShareTimelines(txns, corporateActions);
@@ -87,7 +89,9 @@ describe("buildShareTimelines / sharesHeldAt", () => {
   });
 
   it("returns null for an instrument never traded, or a date before any holding", () => {
-    const txns = [tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-06-01") })];
+    const txns = [
+      tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-06-01") }),
+    ];
     const timelines = buildShareTimelines(txns);
     expect(sharesHeldAt(timelines, OTHER, new Date("2021-12-01"))).toBeNull();
     expect(sharesHeldAt(timelines, INST, new Date("2021-01-01"))).toBeNull();
@@ -95,8 +99,18 @@ describe("buildShareTimelines / sharesHeldAt", () => {
 
   it("fractional shares round-trip exactly", () => {
     const txns = [
-      tx({ type: "savings_plan", quantity: "1.234567", price: "50", executedAt: new Date("2021-01-01") }),
-      tx({ type: "savings_plan", quantity: "0.876543", price: "52", executedAt: new Date("2021-02-01") }),
+      tx({
+        type: "savings_plan",
+        quantity: "1.234567",
+        price: "50",
+        executedAt: new Date("2021-01-01"),
+      }),
+      tx({
+        type: "savings_plan",
+        quantity: "0.876543",
+        price: "52",
+        executedAt: new Date("2021-02-01"),
+      }),
     ];
     const timelines = buildShareTimelines(txns);
     expect(sharesHeldAt(timelines, INST, new Date("2021-03-01"))?.toString()).toBe("2.11111");
@@ -105,7 +119,13 @@ describe("buildShareTimelines / sharesHeldAt", () => {
   it("transfer_in adds and transfer_out subtracts, dividend/coupon/fee/deposit never mutate qty", () => {
     const txns = [
       tx({ type: "transfer_in", quantity: "10", price: "100", executedAt: new Date("2021-01-01") }),
-      tx({ type: "fee", quantity: "0", price: "5", instrumentId: null, executedAt: new Date("2021-01-15") }),
+      tx({
+        type: "fee",
+        quantity: "0",
+        price: "5",
+        instrumentId: null,
+        executedAt: new Date("2021-01-15"),
+      }),
       tx({ type: "transfer_out", quantity: "3", price: "100", executedAt: new Date("2021-02-01") }),
     ];
     const timelines = buildShareTimelines(txns);

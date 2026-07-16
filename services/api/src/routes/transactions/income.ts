@@ -50,7 +50,13 @@ export function registerIncomeRoutes(app: FastifyInstance) {
         );
 
       const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-        const { coreTxns, summary } = await loadValuation(app, p.id, display, undefined, p.cashCounted);
+        const { coreTxns, summary } = await loadValuation(
+          app,
+          p.id,
+          display,
+          undefined,
+          p.cashCounted,
+        );
         return { portfolioId: p.id, coreTxns, summary };
       });
 
@@ -63,19 +69,21 @@ export function registerIncomeRoutes(app: FastifyInstance) {
 
       if (eventsYear) {
         const targetYear = parseInt(eventsYear, 10);
-        const meta = await instrumentMeta(
-          app,
-          [...new Set(
-            perPortfolio.flatMap((p) => p.coreTxns)
+        const meta = await instrumentMeta(app, [
+          ...new Set(
+            perPortfolio
+              .flatMap((p) => p.coreTxns)
               .filter((t) => t.type === "dividend" || t.type === "coupon")
               .map((t) => t.instrumentId)
               .filter(Boolean),
-          )] as string[],
-        );
-        const events = perPortfolio.flatMap((p) => p.coreTxns)
-          .filter((t) =>
-            (t.type === "dividend" || t.type === "coupon") &&
-            t.executedAt.getUTCFullYear() === targetYear,
+          ),
+        ] as string[]);
+        const events = perPortfolio
+          .flatMap((p) => p.coreTxns)
+          .filter(
+            (t) =>
+              (t.type === "dividend" || t.type === "coupon") &&
+              t.executedAt.getUTCFullYear() === targetYear,
           )
           .map((t) => {
             const im = t.instrumentId ? meta.get(t.instrumentId) : undefined;
@@ -133,7 +141,13 @@ export function registerIncomeRoutes(app: FastifyInstance) {
         undefined,
         portfolio.cashCounted,
       );
-      const result = buildIncomeStats(app, coreTxns, summary, portfolio.baseCurrency, () => portfolioId);
+      const result = buildIncomeStats(
+        app,
+        coreTxns,
+        summary,
+        portfolio.baseCurrency,
+        () => portfolioId,
+      );
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /portfolios/:id/income", durationMs, {
         portfolioId,
@@ -158,12 +172,14 @@ export function registerIncomeRoutes(app: FastifyInstance) {
       const rows = await app.db
         .select()
         .from(transactions)
-        .where(and(
-          eq(transactions.portfolioId, request.params.portfolioId),
-          inArray(transactions.type, ACTIVITY_INCOME_TYPES),
-          gte(transactions.executedAt, start),
-          lt(transactions.executedAt, end),
-        ))
+        .where(
+          and(
+            eq(transactions.portfolioId, request.params.portfolioId),
+            inArray(transactions.type, ACTIVITY_INCOME_TYPES),
+            gte(transactions.executedAt, start),
+            lt(transactions.executedAt, end),
+          ),
+        )
         .orderBy(desc(transactions.executedAt));
 
       return rows;

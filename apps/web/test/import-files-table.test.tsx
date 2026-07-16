@@ -21,7 +21,12 @@ function renderTable(overrides: Partial<Parameters<typeof ImportFilesTable>[0]> 
       <ImportFilesTable
         groups={GROUPS}
         portfolios={PORTFOLIOS}
-        portfolioByImport={new Map([["imp-a", "p1"], ["imp-b", "p1"]])}
+        portfolioByImport={
+          new Map([
+            ["imp-a", "p1"],
+            ["imp-b", "p1"],
+          ])
+        }
         matchedImports={new Set(["imp-a"])}
         countByImport={(iid) => (iid === "imp-a" ? 3 : 5)}
         issueCountByImport={() => 0}
@@ -115,7 +120,10 @@ describe("ImportFilesTable", () => {
     const baseProps = {
       groups: GROUPS,
       portfolios: PORTFOLIOS,
-      portfolioByImport: new Map([["imp-a", "p1"], ["imp-b", "p1"]]),
+      portfolioByImport: new Map([
+        ["imp-a", "p1"],
+        ["imp-b", "p1"],
+      ]),
       matchedImports: new Set<string>(["imp-a"]),
       issueCountByImport: () => 0,
       onPortfolioChange,

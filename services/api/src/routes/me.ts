@@ -34,11 +34,7 @@ export async function meRoute(app: FastifyInstance) {
       const [row] = await app.db.select().from(users).where(eq(users.id, id)).limit(1);
       return row;
     }
-    const [row] = await app.db
-      .update(users)
-      .set(input)
-      .where(eq(users.id, id))
-      .returning();
+    const [row] = await app.db.update(users).set(input).where(eq(users.id, id)).returning();
     return row;
   });
 
@@ -64,9 +60,7 @@ export async function meRoute(app: FastifyInstance) {
     const { name, scope, expiresInDays } = apiTokenCreateSchema.parse(request.body);
     // pt_ + 43 url-safe chars (32 bytes) → ~256 bits of entropy.
     const secret = `${PAT_PREFIX}${randomBytes(32).toString("base64url")}`;
-    const expiresAt = expiresInDays
-      ? new Date(Date.now() + expiresInDays * 86_400_000)
-      : null;
+    const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 86_400_000) : null;
     const [row] = await app.db
       .insert(apiTokens)
       .values({

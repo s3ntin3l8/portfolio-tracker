@@ -9,14 +9,14 @@ describe("formatDecimal", () => {
     expect(formatDecimal(0.25)).toBe("0.25");
   });
 
-  it("normalizes zero, signed zero, and tiny rounding noise to \"0\"", () => {
+  it('normalizes zero, signed zero, and tiny rounding noise to "0"', () => {
     expect(formatDecimal(0)).toBe("0");
     expect(formatDecimal(-0)).toBe("0");
     // Below the precision floor → rounds to -0.0000000000 → must not leak as "-0".
     expect(formatDecimal(-0.00000000001)).toBe("0");
   });
 
-  it("returns \"0\" for non-finite input", () => {
+  it('returns "0" for non-finite input', () => {
     expect(formatDecimal(NaN)).toBe("0");
     expect(formatDecimal(Infinity)).toBe("0");
     expect(formatDecimal(-Infinity)).toBe("0");

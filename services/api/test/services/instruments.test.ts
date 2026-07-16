@@ -184,10 +184,7 @@ describe("findOrCreateInstrument", () => {
     });
     expect(healed.assetClass).toBe("etf");
     // Confirm it updated in place, not inserted a duplicate.
-    const rows = await getDb()
-      .select()
-      .from(instruments)
-      .where(eq(instruments.symbol, "EUNL"));
+    const rows = await getDb().select().from(instruments).where(eq(instruments.symbol, "EUNL"));
     expect(rows).toHaveLength(1);
   });
 
@@ -199,7 +196,15 @@ describe("findOrCreateInstrument", () => {
     const isin = "US0231351067"; // Amazon
     await getDb()
       .insert(instruments)
-      .values({ market: "PE", assetClass: "equity" as const, unit: "shares" as const, currency: "EUR", symbol: "AMZN", name: "Amazon", isin });
+      .values({
+        market: "PE",
+        assetClass: "equity" as const,
+        unit: "shares" as const,
+        currency: "EUR",
+        symbol: "AMZN",
+        name: "Amazon",
+        isin,
+      });
 
     const healed = await findOrCreateInstrument(getDb(), {
       symbol: "AMZN",
@@ -219,7 +224,15 @@ describe("findOrCreateInstrument", () => {
     const isin = "US1234567890";
     await getDb()
       .insert(instruments)
-      .values({ market: "PE", assetClass: "equity" as const, unit: "shares" as const, currency: "EUR", symbol: "TSTXX", name: "TestCo", isin });
+      .values({
+        market: "PE",
+        assetClass: "equity" as const,
+        unit: "shares" as const,
+        currency: "EUR",
+        symbol: "TSTXX",
+        name: "TestCo",
+        isin,
+      });
 
     const unchanged = await findOrCreateInstrument(getDb(), {
       symbol: "TSTXX",
@@ -295,7 +308,9 @@ describe("findOrCreateInstrument", () => {
         isin,
       },
       {
-        resolveMarket: async () => { throw new Error("OpenFIGI rate-limited"); },
+        resolveMarket: async () => {
+          throw new Error("OpenFIGI rate-limited");
+        },
       },
     );
     expect(created.market).toBe("PE"); // graceful fallback

@@ -42,7 +42,9 @@ describe("Sheet Visual Viewport Sync", () => {
       </Sheet>,
     );
 
-    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe("768px");
+    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe(
+      "768px",
+    );
   });
 
   it("updates --visual-viewport-height on visualViewport resize event", () => {
@@ -54,7 +56,9 @@ describe("Sheet Visual Viewport Sync", () => {
       </Sheet>,
     );
 
-    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe("768px");
+    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe(
+      "768px",
+    );
 
     // Change height and dispatch resize
     act(() => {
@@ -63,7 +67,9 @@ describe("Sheet Visual Viewport Sync", () => {
       window.visualViewport!.dispatchEvent(new Event("resize"));
     });
 
-    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe("450px");
+    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe(
+      "450px",
+    );
   });
 
   it("sets --keyboard-inset to ~0 when the visual viewport matches the layout viewport (no keyboard)", () => {
@@ -131,7 +137,9 @@ describe("Sheet Visual Viewport Sync", () => {
       </Sheet>,
     );
 
-    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe("768px");
+    expect(document.documentElement.style.getPropertyValue("--visual-viewport-height")).toBe(
+      "768px",
+    );
 
     // Close the sheet
     rerender(

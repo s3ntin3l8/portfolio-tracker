@@ -147,11 +147,7 @@ describe("/me/tokens (personal access tokens)", () => {
     const t = await jwt("pat-expired");
     // Create the user, then plant an already-expired token row directly.
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
-    const [u] = await app.db
-      .select()
-      .from(users)
-      .where(eq(users.authSub, "pat-expired"))
-      .limit(1);
+    const [u] = await app.db.select().from(users).where(eq(users.authSub, "pat-expired")).limit(1);
     const secret = `${PAT_PREFIX}expired-secret`;
     await app.db.insert(apiTokens).values({
       userId: u.id,

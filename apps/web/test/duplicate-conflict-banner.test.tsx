@@ -19,11 +19,7 @@ function makeDuplicate(overrides?: Partial<DuplicateMatch>): DuplicateMatch {
   };
 }
 
-function renderBanner(
-  conflict: DuplicateConflict,
-  onEnrich = vi.fn(),
-  onImportAnyway = vi.fn(),
-) {
+function renderBanner(conflict: DuplicateConflict, onEnrich = vi.fn(), onImportAnyway = vi.fn()) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <DuplicateConflictBanner
@@ -59,9 +55,7 @@ describe("DuplicateConflictBanner", () => {
   it("does not render 'Enrich existing' when matchedTransactionId is absent", () => {
     const duplicate = makeDuplicate({ matchedTransactionId: undefined as unknown as string });
     renderBanner({ count: 1, duplicates: [duplicate] });
-    expect(
-      screen.queryByRole("button", { name: messages.Duplicates.enrichExisting }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: messages.Duplicates.enrichExisting })).toBeNull();
   });
 
   it("fires onImportAnyway when the 'Import anyway' button is clicked", () => {

@@ -21,15 +21,16 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/i18n/navigation", () => ({
-  Link: forwardRef<HTMLAnchorElement, React.ComponentPropsWithoutRef<"a">>(
-    function Link({ children, ...props }, ref) {
-      return (
-        <a ref={ref} {...props}>
-          {children}
-        </a>
-      );
-    },
-  ),
+  Link: forwardRef<HTMLAnchorElement, React.ComponentPropsWithoutRef<"a">>(function Link(
+    { children, ...props },
+    ref,
+  ) {
+    return (
+      <a ref={ref} {...props}>
+        {children}
+      </a>
+    );
+  }),
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
@@ -93,8 +94,9 @@ describe("RecentImportsSection", () => {
 
     // Expands on demand, surfacing the review link.
     fireEvent.click(screen.getByRole("button", { expanded: false }));
-    expect(
-      desktop().getByRole("link", { name: messages.ImportHistory.review }),
-    ).toHaveAttribute("href", "/transactions/import/draft1");
+    expect(desktop().getByRole("link", { name: messages.ImportHistory.review })).toHaveAttribute(
+      "href",
+      "/transactions/import/draft1",
+    );
   });
 });

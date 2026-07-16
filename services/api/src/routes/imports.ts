@@ -62,12 +62,7 @@ export async function importsRoute(app: FastifyInstance) {
     const [imp] = await app.db
       .select()
       .from(screenshotImports)
-      .where(
-        and(
-          eq(screenshotImports.id, importId),
-          eq(screenshotImports.userId, userId),
-        ),
-      )
+      .where(and(eq(screenshotImports.id, importId), eq(screenshotImports.userId, userId)))
       .limit(1);
     return imp ?? null;
   }
@@ -164,7 +159,9 @@ export async function importsRoute(app: FastifyInstance) {
         .orderBy(desc(screenshotImports.createdAt));
       const confirmedIds = rows.filter((r) => r.status === "confirmed").map((r) => r.id);
       const allIds = rows.map((r) => r.id);
-      const syncImportIds = rows.filter((r) => r.parser === "pytr" || r.parser === "ibkr").map((r) => r.id);
+      const syncImportIds = rows
+        .filter((r) => r.parser === "pytr" || r.parser === "ibkr")
+        .map((r) => r.id);
       const [docByImport, filenameByImport, syncCountRows] = await Promise.all([
         getDocumentSummariesForImports(app, confirmedIds),
         getOriginalFilenamesForImports(app, allIds),
@@ -364,9 +361,7 @@ export async function importsRoute(app: FastifyInstance) {
       const owned = await app.db
         .select()
         .from(screenshotImports)
-        .where(
-          and(eq(screenshotImports.userId, id), inArray(screenshotImports.id, ids)),
-        );
+        .where(and(eq(screenshotImports.userId, id), inArray(screenshotImports.id, ids)));
       let discarded = 0;
       let undone = 0;
       let cleared = 0;
@@ -476,30 +471,27 @@ export async function importsRoute(app: FastifyInstance) {
       // a document, so it counts as a file upload (enrichment-capable) just like a screenshot.
       const incomingParser = imp.parser ?? "csv";
       const incomingTxSource = parserToTxSource(incomingParser);
-      const importIsFileUpload =
-        incomingTxSource === "screenshot" || incomingTxSource === "pdf";
+      const importIsFileUpload = incomingTxSource === "screenshot" || incomingTxSource === "pdf";
       const isoDay = (v: Date | string) =>
         (v instanceof Date ? v.toISOString() : new Date(v).toISOString()).slice(0, 10);
 
-      const annotations = matches.map(
-        ({ draftIndex, matched }) => {
-          const d = drafts[draftIndex];
-          const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
-          const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
-          const kind = classifyMatch(incomingParser, matched.source ?? "csv", draftHasEnrichment);
-          return {
-            draftIndex,
-            kind,
-            matchedTransactionId: matched.id,
-            matchedSource: matched.source,
-            matchedExecutedAt: isoDay(matched.executedAt),
-            name: d.name ?? d.isin ?? d.ticker ?? null,
-            action: d.action,
-            quantity: d.quantity,
-            executedAt: isoDay(d.executedAt),
-          };
-        },
-      );
+      const annotations = matches.map(({ draftIndex, matched }) => {
+        const d = drafts[draftIndex];
+        const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
+        const draftHasEnrichment = importIsFileUpload || !!hasTaxComponents;
+        const kind = classifyMatch(incomingParser, matched.source ?? "csv", draftHasEnrichment);
+        return {
+          draftIndex,
+          kind,
+          matchedTransactionId: matched.id,
+          matchedSource: matched.source,
+          matchedExecutedAt: isoDay(matched.executedAt),
+          name: d.name ?? d.isin ?? d.ticker ?? null,
+          action: d.action,
+          quantity: d.quantity,
+          executedAt: isoDay(d.executedAt),
+        };
+      });
 
       return { annotations };
     },
@@ -550,13 +542,14 @@ export async function importsRoute(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
 
-      const source = imp.parser === "pytr"
-        ? "pytr"
-        : (imp.parser === "dkb-pdf" || imp.parser === "tr-pdf")
-          ? "pdf"
-          : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
-            ? "csv"
-            : "screenshot";
+      const source =
+        imp.parser === "pytr"
+          ? "pytr"
+          : imp.parser === "dkb-pdf" || imp.parser === "tr-pdf"
+            ? "pdf"
+            : imp.parser === "csv" || imp.parser === "dkb" || imp.parser === "tr-csv"
+              ? "csv"
+              : "screenshot";
       const isEnrichPdf = imp.parser === "dkb-pdf" || imp.parser === "tr-pdf";
 
       let enriched = 0;
@@ -581,12 +574,10 @@ export async function importsRoute(app: FastifyInstance) {
           continue;
         }
 
-        await enrichTransactionFromDrafts(
-          targetTransactionId,
-          app.db,
-          [draft],
-          { importId: imp.id, importSource: source },
-        );
+        await enrichTransactionFromDrafts(targetTransactionId, app.db, [draft], {
+          importId: imp.id,
+          importSource: source,
+        });
 
         // Link and retain the staged PDF to the target transaction so it surfaces in the
         // transaction-detail view. Single-doc-per-import: only link on the first enrichment.
@@ -620,10 +611,7 @@ export async function importsRoute(app: FastifyInstance) {
               .update(transactionSources)
               .set({ documentId: retainedDoc.id })
               .where(
-                and(
-                  eq(transactionSources.importId, imp.id),
-                  isNull(transactionSources.documentId),
-                ),
+                and(eq(transactionSources.importId, imp.id), isNull(transactionSources.documentId)),
               );
             request.log.debug(
               { importId: imp.id, docId: retainedDoc.id },
@@ -631,7 +619,10 @@ export async function importsRoute(app: FastifyInstance) {
             );
           }
         } catch (err) {
-          request.log.warn({ err }, "enrich: failed to link PDF source rows to document (non-fatal)");
+          request.log.warn(
+            { err },
+            "enrich: failed to link PDF source rows to document (non-fatal)",
+          );
         }
       }
 

@@ -29,7 +29,11 @@ import {
   marketForEuInstrument,
 } from "./instruments.js";
 import { getMarketData } from "./market-data.js";
-import { resolveCryptoIsin, PRICEABLE_FOREIGN_MARKETS, isIdxEtfSymbol } from "@portfolio/market-data";
+import {
+  resolveCryptoIsin,
+  PRICEABLE_FOREIGN_MARKETS,
+  isIdxEtfSymbol,
+} from "@portfolio/market-data";
 import { findCrossSourceDuplicates, classifyMatch } from "./parsers/dedup.js";
 import { enrichTransactionFromDrafts } from "./enrichment.js";
 import { getStagedDocumentId } from "../storage/receipts.js";
@@ -269,7 +273,10 @@ export async function classifyDraftDuplicates(
     const draftHasEnrichment = hasStagedDoc || !!hasTaxComponents;
     const kind = classifyMatch(source, match.matched.source ?? "csv", draftHasEnrichment);
     if (kind === "enrichment") {
-      enrichmentMatches.push({ draftIndex: match.draftIndex, matchedTransactionId: match.matched.id });
+      enrichmentMatches.push({
+        draftIndex: match.draftIndex,
+        matchedTransactionId: match.matched.id,
+      });
       enrichmentDraftIndices.add(match.draftIndex);
     } else {
       plainDuplicates.push({ draftIndex: match.draftIndex, matched: match.matched });
@@ -286,12 +293,17 @@ export async function classifyDraftDuplicates(
 function sourceTypeForDraft(d: ParsedTransaction, source: TxSource) {
   const hasTaxComponents = d.taxComponents && Object.keys(d.taxComponents).length > 0;
   return (
-    hasTaxComponents ? "pdf"
-    : source === "pytr" ? "pytr"
-    : source === "ibkr" ? "ibkr"
-    : source === "screenshot" ? "screenshot"
-    : source === "pdf" ? "pdf"
-    : "csv"
+    hasTaxComponents
+      ? "pdf"
+      : source === "pytr"
+        ? "pytr"
+        : source === "ibkr"
+          ? "ibkr"
+          : source === "screenshot"
+            ? "screenshot"
+            : source === "pdf"
+              ? "pdf"
+              : "csv"
   ) as "pdf" | "pytr" | "ibkr" | "screenshot" | "csv" | "manual";
 }
 
@@ -388,9 +400,7 @@ export async function writeResolvedDrafts(
           shares: d.shares ?? null,
           nativeCurrency: d.nativeCurrency ?? null,
           grossNative: d.grossNative ?? null,
-          taxComponents: d.taxComponents
-            ? (d.taxComponents as Record<string, unknown>)
-            : null,
+          taxComponents: d.taxComponents ? (d.taxComponents as Record<string, unknown>) : null,
           confidence: String(d.confidence),
         })
         .onConflictDoNothing();
@@ -502,7 +512,10 @@ export async function materializeDrafts(
       enriched++;
       matchedTransactionIds.add(matchedTransactionId);
     } catch (err) {
-      ctx.log?.warn({ err, matchedTransactionId }, "materializeDrafts: enrichment failed (non-fatal)");
+      ctx.log?.warn(
+        { err, matchedTransactionId },
+        "materializeDrafts: enrichment failed (non-fatal)",
+      );
     }
     if (draft.externalId) collapsed.push(draft.externalId);
   }

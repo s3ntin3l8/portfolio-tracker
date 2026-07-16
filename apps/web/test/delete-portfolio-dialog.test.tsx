@@ -72,7 +72,9 @@ describe("DeletePortfolioDialog", () => {
     const dialog = await (renderDialog(3), open());
     expect(dialog).toHaveTextContent(messages.PortfolioForm.deleteRelatedNote);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: messages.PortfolioForm.confirmDelete }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: messages.PortfolioForm.confirmDelete }),
+    );
     await waitFor(() => expect(deletePortfolio).toHaveBeenCalledWith("p1"));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(document.cookie).not.toContain("pf=p1");

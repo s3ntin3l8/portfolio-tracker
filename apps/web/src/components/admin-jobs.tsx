@@ -60,14 +60,23 @@ function TriggerButton({ name, supportsForce, onTriggered, currentLastRunAt }: T
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex gap-1">
-        <Button size="sm" variant="outline" onClick={() => { void trigger(false); }} disabled={pending || forcePending}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            void trigger(false);
+          }}
+          disabled={pending || forcePending}
+        >
           {pending ? t("jobRunning") : t("jobRunNow")}
         </Button>
         {supportsForce && (
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => { void trigger(true); }}
+            onClick={() => {
+              void trigger(true);
+            }}
             disabled={pending || forcePending}
             aria-label={t("jobForce")}
             title={t("jobForce")}
@@ -137,9 +146,7 @@ export function AdminJobs({ initialJobs, schedulerAvailable }: AdminJobsProps) {
       });
 
       if (fresh) {
-        setJobs((prev) =>
-          prev.map((job) => fresh!.find((f) => f.name === job.name) ?? job),
-        );
+        setJobs((prev) => prev.map((job) => fresh!.find((f) => f.name === job.name) ?? job));
       }
     }, POLL_INTERVAL_MS);
 
@@ -147,9 +154,7 @@ export function AdminJobs({ initialJobs, schedulerAvailable }: AdminJobsProps) {
   }, [hasPending, api]);
 
   if (!schedulerAvailable) {
-    return (
-      <p className="text-sm text-muted-foreground italic">{t("schedulerUnavailable")}</p>
-    );
+    return <p className="text-sm text-muted-foreground italic">{t("schedulerUnavailable")}</p>;
   }
 
   return (
@@ -189,7 +194,9 @@ export function AdminJobs({ initialJobs, schedulerAvailable }: AdminJobsProps) {
                     </div>
                   </td>
                   <td className="px-3 py-2 hidden sm:table-cell">
-                    <code className="text-xs bg-muted px-1 py-0.5 rounded">{job.cron ?? "on-demand"}</code>
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                      {job.cron ?? "on-demand"}
+                    </code>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground" aria-live="polite">
                     {isPending ? (

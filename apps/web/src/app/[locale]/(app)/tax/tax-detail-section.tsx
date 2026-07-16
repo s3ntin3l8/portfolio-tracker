@@ -1,10 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  EstimatedTaxHero,
-  type TaxTranslator,
-} from "@/components/tax/tax-cards";
+import { EstimatedTaxHero, type TaxTranslator } from "@/components/tax/tax-cards";
 import {
   DividendsTable,
   ByYearTable,

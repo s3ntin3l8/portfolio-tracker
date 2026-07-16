@@ -38,14 +38,32 @@ export async function documentsRoute(app: FastifyInstance) {
   // (the only category today) — see listInboxDocuments.
   app.get("/documents", { preHandler: app.authenticate }, async (request) => {
     const { id: userId } = requireUser(request);
-    const { category, portfolioId, page: rawPage, pageSize: rawPageSize } = documentListQuerySchema.parse(request.query);
+    const {
+      category,
+      portfolioId,
+      page: rawPage,
+      pageSize: rawPageSize,
+    } = documentListQuerySchema.parse(request.query);
     const paginate = rawPage !== undefined;
     const page = paginate ? Math.max(1, parseInt(rawPage!, 10) || 1) : 1;
     const pageSize = paginate
       ? Math.min(100, Math.max(1, parseInt(rawPageSize ?? "25", 10) || 25))
       : 0;
 
-    const renderRow = (d: { id: string; category: string | null; taxYear: number | null; source: string | null; originalFilename: string | null; mimeType: string | null; sizeBytes: number | null; portfolioId: string | null; storedAt: Date }, nameById: Map<string, string>) => ({
+    const renderRow = (
+      d: {
+        id: string;
+        category: string | null;
+        taxYear: number | null;
+        source: string | null;
+        originalFilename: string | null;
+        mimeType: string | null;
+        sizeBytes: number | null;
+        portfolioId: string | null;
+        storedAt: Date;
+      },
+      nameById: Map<string, string>,
+    ) => ({
       id: d.id,
       category: d.category,
       taxYear: d.taxYear,
@@ -61,7 +79,10 @@ export async function documentsRoute(app: FastifyInstance) {
     const t0 = performance.now();
 
     if (paginate) {
-      const conditions = [eq(documents.userId, userId), eq(documents.category, category ?? "tax_report")];
+      const conditions = [
+        eq(documents.userId, userId),
+        eq(documents.category, category ?? "tax_report"),
+      ];
       if (portfolioId) conditions.push(eq(documents.portfolioId, portfolioId));
 
       const cacheKey = `${userId}:${page}:${pageSize}:${category ?? ""}:${portfolioId ?? ""}`;
@@ -81,7 +102,9 @@ export async function documentsRoute(app: FastifyInstance) {
             .offset((page - 1) * pageSize),
         ]);
 
-        const portfolioIds = [...new Set(rows.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
+        const portfolioIds = [
+          ...new Set(rows.map((d) => d.portfolioId).filter((x): x is string => Boolean(x))),
+        ];
         const portfolioRows = portfolioIds.length
           ? await app.db
               .select({ id: portfolios.id, name: portfolios.name })
@@ -101,7 +124,9 @@ export async function documentsRoute(app: FastifyInstance) {
 
     const docs = await listInboxDocuments(app, { userId, category, portfolioId });
 
-    const portfolioIds = [...new Set(docs.map((d) => d.portfolioId).filter((x): x is string => Boolean(x)))];
+    const portfolioIds = [
+      ...new Set(docs.map((d) => d.portfolioId).filter((x): x is string => Boolean(x))),
+    ];
     const portfolioRows = portfolioIds.length
       ? await app.db
           .select({ id: portfolios.id, name: portfolios.name })
@@ -188,7 +213,12 @@ export async function documentsRoute(app: FastifyInstance) {
       "inbox document uploaded",
     );
     reply.code(result.duplicate ? 200 : 201);
-    return { id: result.documentId, duplicate: Boolean(result.duplicate), category, taxYear: taxYear ?? null };
+    return {
+      id: result.documentId,
+      duplicate: Boolean(result.duplicate),
+      category,
+      taxYear: taxYear ?? null,
+    };
   });
 
   // Signed URL for downloading an inbox document. IDOR guard: only the owner can obtain a URL.
@@ -388,9 +418,7 @@ export async function documentsRoute(app: FastifyInstance) {
           userId: documents.userId,
         })
         .from(documents)
-        .where(
-          and(eq(documents.portfolioId, portfolioId), eq(documents.status, "retained")),
-        );
+        .where(and(eq(documents.portfolioId, portfolioId), eq(documents.status, "retained")));
 
       if (docs.length === 0) {
         return reply.code(404).send({ error: "no_documents" });
@@ -431,7 +459,10 @@ export async function documentsRoute(app: FastifyInstance) {
 
         const buf = await app.storage.get(doc.storageKey);
         if (!buf) {
-          app.log.warn({ docId: doc.id, key: doc.storageKey }, "export: object not found, skipping");
+          app.log.warn(
+            { docId: doc.id, key: doc.storageKey },
+            "export: object not found, skipping",
+          );
           continue;
         }
         entries[entryName] = new Uint8Array(buf);

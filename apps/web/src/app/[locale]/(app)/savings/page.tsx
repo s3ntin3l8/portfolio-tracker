@@ -1,11 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { PiggyBank } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { ContributionsChart } from "@/components/charts/contributions-chart";
 import { ForecastPanel } from "@/components/savings/forecast-panel";
@@ -18,11 +13,7 @@ import { formatMoney, formatPercent } from "@/lib/utils";
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
 
-export default async function SavingsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function SavingsPage({ params }: { params: Promise<{ locale: string }> }) {
   // eslint-disable-next-line react-hooks/purity
   const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
@@ -125,9 +116,10 @@ export default async function SavingsPage({
               {c.dailySeries.length > 0 && (
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {t("contributionsSubtitle", {
-                    date: new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(
-                      new Date(c.dailySeries[0].date),
-                    ),
+                    date: new Intl.DateTimeFormat(locale, {
+                      month: "short",
+                      year: "numeric",
+                    }).format(new Date(c.dailySeries[0].date)),
                   })}
                 </p>
               )}

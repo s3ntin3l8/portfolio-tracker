@@ -7,11 +7,7 @@ import { AuthErrorRecovery } from "@/components/auth-error-recovery";
  * callback recovers by restarting a fresh sign-in instead of dead-ending on the generic
  * 500 error page — see {@link AuthErrorRecovery}.
  */
-export default async function AuthErrorPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function AuthErrorPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   return (

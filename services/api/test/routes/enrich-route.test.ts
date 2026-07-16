@@ -39,14 +39,21 @@ function makeStorage(): StorageProvider & { data: Map<string, Buffer> } {
   const data = new Map<string, Buffer>();
   return {
     data,
-    put: async (key, body, _meta) => { data.set(key, body instanceof Buffer ? body : Buffer.from("pdf-bytes")); },
+    put: async (key, body, _meta) => {
+      data.set(key, body instanceof Buffer ? body : Buffer.from("pdf-bytes"));
+    },
     getSignedUrl: async (key) => `https://fake.storage/${key}?sig=test`,
-    delete: async (key) => { data.delete(key); },
+    delete: async (key) => {
+      data.delete(key);
+    },
     exists: async (key) => data.has(key),
     get: async (key) => data.get(key) ?? null,
     move: async (src, dest) => {
       const buf = data.get(src);
-      if (buf) { data.set(dest, buf); data.delete(src); }
+      if (buf) {
+        data.set(dest, buf);
+        data.delete(src);
+      }
     },
   };
 }
@@ -98,7 +105,9 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 let uidSuffix = 0;
-function nextSub() { return `enrich-rt-${++uidSuffix}`; }
+function nextSub() {
+  return `enrich-rt-${++uidSuffix}`;
+}
 
 /** Register a user (via /me) and create a portfolio. Returns token + ids. */
 async function setupUser(sub: string, documentRetention = false) {
@@ -185,10 +194,12 @@ describe("POST /imports/:importId/enrich — draft payload (not draftIndex)", ()
       url: "/imports/00000000-0000-0000-0000-000000000001/enrich",
       headers: auth(t),
       payload: {
-        enrichments: [{
-          draft: VALID_DRAFT,
-          targetTransactionId: "00000000-0000-0000-0000-000000000002",
-        }],
+        enrichments: [
+          {
+            draft: VALID_DRAFT,
+            targetTransactionId: "00000000-0000-0000-0000-000000000002",
+          },
+        ],
       },
     });
     expect(res.statusCode).toBe(404);
@@ -274,7 +285,12 @@ describe("GET …/sources/:sourceId/document-url", () => {
     const db = getDb();
     const [srcRow] = await db
       .insert(transactionSources)
-      .values({ transactionId: tx.id, sourceType: "csv", documentId: null, externalId: "ext-no-doc" })
+      .values({
+        transactionId: tx.id,
+        sourceType: "csv",
+        documentId: null,
+        externalId: "ext-no-doc",
+      })
       .returning();
 
     const res = await app.inject({
@@ -317,7 +333,12 @@ describe("GET …/sources/:sourceId/document-url", () => {
     // Create source row linked to the document.
     const [srcRow] = await db
       .insert(transactionSources)
-      .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id, externalId: "tr:exec:src-url-1" })
+      .values({
+        transactionId: tx.id,
+        sourceType: "pdf",
+        documentId: doc.id,
+        externalId: "tr:exec:src-url-1",
+      })
       .returning();
 
     const res = await app.inject({

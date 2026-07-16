@@ -117,9 +117,7 @@ describe("PortfolioCardMenu", () => {
 
       renderMenu({ trSync: { initialSyncing: false } });
       openMenu();
-      fireEvent.click(
-        screen.getByRole("menuitem", { name: messages.TradeRepublic.syncNow }),
-      );
+      fireEvent.click(screen.getByRole("menuitem", { name: messages.TradeRepublic.syncNow }));
 
       await waitFor(() => expect(syncTr).toHaveBeenCalled());
       await waitFor(() => expect(refresh).toHaveBeenCalled(), { timeout: 8000 });
@@ -129,9 +127,9 @@ describe("PortfolioCardMenu", () => {
       let resolveSyncTr!: () => void;
       syncTr.mockImplementationOnce(
         () =>
-          new Promise<{ queued: true }>(
-            (res) => { resolveSyncTr = () => res({ queued: true }); },
-          ),
+          new Promise<{ queued: true }>((res) => {
+            resolveSyncTr = () => res({ queued: true });
+          }),
       );
 
       renderMenu({ trSync: { initialSyncing: false } });
@@ -186,7 +184,9 @@ describe("PortfolioCardMenu", () => {
       expect(dialog).toHaveTextContent(messages.PortfolioForm.deleteRelatedNote);
 
       // The destructive confirm button performs the delete + refresh.
-      fireEvent.click(within(dialog).getByRole("button", { name: messages.PortfolioForm.confirmDelete }));
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: messages.PortfolioForm.confirmDelete }),
+      );
       await waitFor(() => expect(deletePortfolio).toHaveBeenCalledWith(PORTFOLIO.id));
       await waitFor(() => expect(refresh).toHaveBeenCalled());
     });

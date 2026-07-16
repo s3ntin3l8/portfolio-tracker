@@ -49,7 +49,13 @@ describe("merge transactions", () => {
     overrideMarketData(new MarketDataService([new FixtureProvider({ ACME: "10" })]));
     const [acme] = await app.db
       .insert(instruments)
-      .values({ symbol: "ACME", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Acme" })
+      .values({
+        symbol: "ACME",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Acme",
+      })
       .returning();
     acmeId = acme.id;
   });
@@ -130,13 +136,19 @@ describe("merge transactions", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ survivorId: csvTx.id });
 
-    const [survivor] = await app.db.select().from(transactions).where(eq(transactions.id, csvTx.id));
+    const [survivor] = await app.db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, csvTx.id));
     // PDF outranks CSV — its fees/tax/venue win the rollup even though CSV is the survivor.
     expect(survivor.fees).toBe("4.75");
     expect(survivor.tax).toBe("0.30");
     expect(survivor.venue).toBe("Xetra");
 
-    const absorbedGone = await app.db.select().from(transactions).where(eq(transactions.id, pdfTx.id));
+    const absorbedGone = await app.db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, pdfTx.id));
     expect(absorbedGone).toHaveLength(0);
 
     const sourcesNow = await app.db
@@ -176,7 +188,12 @@ describe("merge transactions", () => {
     const manualSourceRow = await app.db
       .select()
       .from(transactionSources)
-      .where(and(eq(transactionSources.transactionId, manualTx.id), eq(transactionSources.sourceType, "manual")));
+      .where(
+        and(
+          eq(transactionSources.transactionId, manualTx.id),
+          eq(transactionSources.sourceType, "manual"),
+        ),
+      );
     expect(manualSourceRow).toHaveLength(1);
   });
 
@@ -272,7 +289,13 @@ describe("merge transactions", () => {
     const { t, portfolioId } = await setup("merge-user-6");
     const [other] = await app.db
       .insert(instruments)
-      .values({ symbol: "OTHR", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Other" })
+      .values({
+        symbol: "OTHR",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Other",
+      })
       .returning();
     const a = await insertTx(portfolioId, { instrumentId: acmeId });
     const b = await insertTx(portfolioId, { instrumentId: other.id });
@@ -401,7 +424,13 @@ describe("merge transactions", () => {
     // Blocked case surfaces a reason instead of a 4xx.
     const [other] = await app.db
       .insert(instruments)
-      .values({ symbol: "PVOT", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Pivot" })
+      .values({
+        symbol: "PVOT",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Pivot",
+      })
       .returning();
     const c = await insertTx(portfolioId, { instrumentId: other.id });
     const blocked = await app.inject({

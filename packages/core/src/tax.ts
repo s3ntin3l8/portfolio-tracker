@@ -330,9 +330,7 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
   const incomeEntry: YearTax | undefined = input.tradeLog.dividendsByYear.find(
     (e) => e.year === year,
   );
-  const incomeGross = incomeEntry
-    ? D(incomeEntry.amount).plus(D(incomeEntry.tax))
-    : ZERO;
+  const incomeGross = incomeEntry ? D(incomeEntry.amount).plus(D(incomeEntry.tax)) : ZERO;
   const positiveIncome = Decimal.max(ZERO, incomeGross);
 
   // Step 3: general pot subtotal = trade gains/losses + income + Vorabpauschale net, all

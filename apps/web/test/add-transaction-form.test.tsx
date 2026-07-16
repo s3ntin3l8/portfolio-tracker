@@ -368,7 +368,9 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.currency), { target: { value: "USD" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "0.5" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "65000" } });
-    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-02-03" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
+      target: { value: "2026-02-03" },
+    });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(client.createInstrument).toHaveBeenCalled());
@@ -460,7 +462,9 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "BCA" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "9500" } });
-    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
+      target: { value: "2026-03-01" },
+    });
     fireEvent.change(screen.getByLabelText(m.tax), { target: { value: "50" } });
     fireEvent.change(screen.getByLabelText(m.notes), { target: { value: "rebalance run" } });
     fireEvent.change(screen.getByLabelText(m.tags), { target: { value: "rebalance, idt" } });
@@ -486,7 +490,9 @@ describe("AddTransactionForm", () => {
     expect(screen.queryByLabelText(m.tax)).toBeNull();
 
     fireEvent.change(screen.getByLabelText(m.amount), { target: { value: "1000000" } });
-    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-03-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
+      target: { value: "2026-03-01" },
+    });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
     await waitFor(() => expect(client.createTransaction).toHaveBeenCalled());
@@ -599,7 +605,9 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Microsoft" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "400" } });
-    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), { target: { value: "2026-05-01" } });
+    fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
+      target: { value: "2026-05-01" },
+    });
     fireEvent.change(screen.getByLabelText(m.subType), { target: { value: "saveback" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 

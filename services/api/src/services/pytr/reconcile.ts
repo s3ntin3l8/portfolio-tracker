@@ -46,10 +46,7 @@ const DRIFT_WARN_THRESHOLD = new Decimal(1);
 // row (failed write, a future shape change, a manual DB edit) shouldn't throw mid-sync.
 // Validate the shape just enough to use it safely and fall back to null otherwise; a dropped
 // reconciliation just omits the incremental drift on this run.
-export function asReconciliation(
-  v: unknown,
-  log?: FastifyBaseLogger,
-): CashReconciliation | null {
+export function asReconciliation(v: unknown, log?: FastifyBaseLogger): CashReconciliation | null {
   const o = v as Record<string, unknown> | null;
   if (o && Array.isArray(o.cash)) return o as unknown as CashReconciliation;
   if (v != null) log?.warn({ lastReconciliation: v }, "tr lastReconciliation malformed — ignoring");
@@ -76,9 +73,7 @@ export function reconcileCash(
   if (!reported || reported.length === 0) return undefined;
   // The previous sync's diff per currency, so we can report how much it moved (the
   // incremental drift the @portfolio/core guard alarms on).
-  const prevDiff = new Map<string, string>(
-    (prev?.cash ?? []).map((c) => [c.currency, c.diff]),
-  );
+  const prevDiff = new Map<string, string>((prev?.cash ?? []).map((c) => [c.currency, c.diff]));
 
   // Map the full timeline (all categories, all event states — the mapper itself skips
   // non-EXECUTED events). Convert the resulting drafts to CoreTransaction for cashBalances.
@@ -149,9 +144,7 @@ export function netManualAdjustments(
   const adjustments = transactions.filter(
     (tx) =>
       tx.type === "adjustment" ||
-      (tx.source === "manual" &&
-        INCOME_TYPES.has(tx.type) &&
-        new Decimal(tx.price).isNegative()),
+      (tx.source === "manual" && INCOME_TYPES.has(tx.type) && new Decimal(tx.price).isNegative()),
   );
   if (adjustments.length === 0) return rec;
 
@@ -199,21 +192,18 @@ export function reconcilePositions(
     }
   }
 
-  const reportedMap = new Map(
-    reported.map((p) => [p.isin, new Decimal(String(p.qty))]),
-  );
+  const reportedMap = new Map(reported.map((p) => [p.isin, new Decimal(String(p.qty))]));
   const allIsins = new Set([...reportedMap.keys(), ...derived.keys()]);
-  return [...allIsins]
-    .map((isin) => {
-      const rep = reportedMap.get(isin) ?? new Decimal(0);
-      const der = derived.get(isin) ?? new Decimal(0);
-      return {
-        isin,
-        reported: rep.toFixed(6),
-        derived: der.toFixed(6),
-        diff: rep.sub(der).toFixed(6),
-      };
-    });
+  return [...allIsins].map((isin) => {
+    const rep = reportedMap.get(isin) ?? new Decimal(0);
+    const der = derived.get(isin) ?? new Decimal(0);
+    return {
+      isin,
+      reported: rep.toFixed(6),
+      derived: der.toFixed(6),
+      diff: rep.sub(der).toFixed(6),
+    };
+  });
 }
 
 // Flag a cash-diff jump since the previous sync — the incremental drift guard. Logged (not

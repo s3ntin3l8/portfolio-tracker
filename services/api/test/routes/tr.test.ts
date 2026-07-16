@@ -44,7 +44,10 @@ class FakePytr {
   // Document download (diagnose + backfill). Configurable so route tests never spawn
   // Python. Default: one in-memory PDF per requested (eventId, docId) pair.
   downloadResult:
-    | { docs: Map<string, { buf: Buffer; mimeType: string }>; failures: { docId: string | null; error: string }[] }
+    | {
+        docs: Map<string, { buf: Buffer; mimeType: string }>;
+        failures: { docId: string | null; error: string }[];
+      }
     | Error
     | null = null;
   async downloadDocuments(
@@ -330,25 +333,29 @@ describe("Trade Republic connection (encryption enabled)", () => {
       .where(eq(trConnections.portfolioId, portfolioId));
 
     // Seed a confirmed pytr transaction, a ledger entry, and an open pytr draft.
-    await getDb().insert(transactions).values({
-      portfolioId,
-      type: "deposit",
-      price: "100",
-      currency: "EUR",
-      executedAt: new Date("2026-03-01T10:00:00.000Z"),
-      source: "pytr",
-      externalId: "ev-1",
-    });
+    await getDb()
+      .insert(transactions)
+      .values({
+        portfolioId,
+        type: "deposit",
+        price: "100",
+        currency: "EUR",
+        executedAt: new Date("2026-03-01T10:00:00.000Z"),
+        source: "pytr",
+        externalId: "ev-1",
+      });
     await getDb()
       .insert(trResolvedEvents)
       .values({ portfolioId, eventId: "ev-1", resolution: "confirmed" });
-    await getDb().insert(screenshotImports).values({
-      userId: conn.userId,
-      portfolioId,
-      parser: "pytr",
-      parsedJson: { drafts: [], errors: [] },
-      status: "draft",
-    });
+    await getDb()
+      .insert(screenshotImports)
+      .values({
+        userId: conn.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: { drafts: [], errors: [] },
+        status: "draft",
+      });
 
     const res = await app.inject({
       method: "POST",
@@ -374,7 +381,12 @@ describe("Trade Republic connection (encryption enabled)", () => {
       await getDb()
         .select()
         .from(screenshotImports)
-        .where(and(eq(screenshotImports.portfolioId, portfolioId), eq(screenshotImports.status, "draft"))),
+        .where(
+          and(
+            eq(screenshotImports.portfolioId, portfolioId),
+            eq(screenshotImports.status, "draft"),
+          ),
+        ),
     ).toHaveLength(0);
   });
 
@@ -401,10 +413,29 @@ describe("Trade Republic connection (encryption enabled)", () => {
     await app.inject({ method: "POST", url: "/tr/connection/verify", headers: auth(t) });
 
     // Seed two pytr transactions (no documentRefs — enrichment no-ops but still counts them).
-    await getDb().insert(transactions).values([
-      { portfolioId, type: "deposit", price: "100", currency: "EUR", executedAt: new Date("2026-03-01T10:00:00.000Z"), source: "pytr", externalId: "rp-ev-1" },
-      { portfolioId, type: "buy", price: "50", currency: "EUR", quantity: "2", executedAt: new Date("2026-03-02T10:00:00.000Z"), source: "pytr", externalId: "rp-ev-2" },
-    ] as const);
+    await getDb()
+      .insert(transactions)
+      .values([
+        {
+          portfolioId,
+          type: "deposit",
+          price: "100",
+          currency: "EUR",
+          executedAt: new Date("2026-03-01T10:00:00.000Z"),
+          source: "pytr",
+          externalId: "rp-ev-1",
+        },
+        {
+          portfolioId,
+          type: "buy",
+          price: "50",
+          currency: "EUR",
+          quantity: "2",
+          executedAt: new Date("2026-03-02T10:00:00.000Z"),
+          source: "pytr",
+          externalId: "rp-ev-2",
+        },
+      ] as const);
 
     const res = await app.inject({
       method: "POST",
@@ -570,7 +601,10 @@ describe("TR document diagnose + backfill", () => {
   });
 
   // Connect a user (pair → verify) and return their token + portfolioId.
-  async function connect(sub: string, retention = true): Promise<{ t: string; portfolioId: string }> {
+  async function connect(
+    sub: string,
+    retention = true,
+  ): Promise<{ t: string; portfolioId: string }> {
     const t = await token(sub);
     const portfolioId = await portfolioFor(app, t);
     await app.inject({
@@ -678,10 +712,7 @@ describe("TR document diagnose + backfill", () => {
     expect(body.linked).toBe(1);
 
     // A retained document now exists, linked to the transaction.
-    const docRows = await getDb()
-      .select()
-      .from(documents)
-      .where(eq(documents.transactionId, txId));
+    const docRows = await getDb().select().from(documents).where(eq(documents.transactionId, txId));
     expect(docRows).toHaveLength(1);
     expect(docRows[0].status).toBe("retained");
 
@@ -736,9 +767,9 @@ describe("TR document diagnose + backfill", () => {
     expect(res.json()).toEqual({ removed: 1 });
 
     // The DB row is gone (FK cascade) — and so is the storage object (explicit cleanup).
-    expect(
-      await getDb().select().from(documents).where(eq(documents.id, docRow.id)),
-    ).toHaveLength(0);
+    expect(await getDb().select().from(documents).where(eq(documents.id, docRow.id))).toHaveLength(
+      0,
+    );
     expect(storage.data.has(docRow.storageKey)).toBe(false);
   });
 });

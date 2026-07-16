@@ -13,11 +13,7 @@ import {
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 import { formatMoney } from "@/lib/utils";
-import type {
-  TaxCurrencyTotal,
-  TaxDividendRow,
-  TaxYearRow,
-} from "@/lib/server-api";
+import type { TaxCurrencyTotal, TaxDividendRow, TaxYearRow } from "@/lib/server-api";
 import type { IdDividendTax, IdYearTax } from "@portfolio/core";
 
 // ─── German regime tables ──────────────────────────────────────────────
@@ -73,10 +69,41 @@ export function DividendsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("dividendsTable.source")}</SortableTableHead>
-                <SortableTableHead colKey="gross" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("dividendsTable.gross")}</SortableTableHead>
-                <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("dividendsTable.tax")}</SortableTableHead>
-                <SortableTableHead colKey="net" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("dividendsTable.net")}</SortableTableHead>
+                <SortableTableHead
+                  colKey="source"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                >
+                  {t("dividendsTable.source")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="gross"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("dividendsTable.gross")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="tax"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("dividendsTable.tax")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="net"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("dividendsTable.net")}
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -103,8 +130,12 @@ export function DividendsTable({
             <TableFooter>
               <TableRow>
                 <TableCell className="font-semibold">{t("dividendsTable.total")}</TableCell>
-                <TableCell className="tabular text-right font-semibold">{joinTotals("gross")}</TableCell>
-                <TableCell className="tabular text-right font-semibold">{joinTotals("tax")}</TableCell>
+                <TableCell className="tabular text-right font-semibold">
+                  {joinTotals("gross")}
+                </TableCell>
+                <TableCell className="tabular text-right font-semibold">
+                  {joinTotals("tax")}
+                </TableCell>
                 <TableCell className="tabular text-right font-semibold text-emerald-600 dark:text-emerald-400">
                   {joinTotals("net")}
                 </TableCell>
@@ -153,11 +184,50 @@ export function ByYearTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="year" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("byYear.year")}</SortableTableHead>
-              <SortableTableHead colKey="realized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("byYear.realized")}</SortableTableHead>
-              <SortableTableHead colKey="dividends" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("byYear.dividends")}</SortableTableHead>
-              <SortableTableHead colKey="fsaUsed" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("byYear.fsaUsed")}</SortableTableHead>
-              <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("byYear.tax")}</SortableTableHead>
+              <SortableTableHead
+                colKey="year"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("byYear.year")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="realized"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("byYear.realized")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="dividends"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("byYear.dividends")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="fsaUsed"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("byYear.fsaUsed")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="tax"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("byYear.tax")}
+              </SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -230,10 +300,41 @@ export function IdDividendsTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("id.dividendsTable.source")}</SortableTableHead>
-                <SortableTableHead colKey="gross" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.dividendsTable.gross")}</SortableTableHead>
-                <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.dividendsTable.tax")}</SortableTableHead>
-                <SortableTableHead colKey="net" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.dividendsTable.net")}</SortableTableHead>
+                <SortableTableHead
+                  colKey="source"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                >
+                  {t("id.dividendsTable.source")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="gross"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("id.dividendsTable.gross")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="tax"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("id.dividendsTable.tax")}
+                </SortableTableHead>
+                <SortableTableHead
+                  colKey="net"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggle}
+                  align="right"
+                >
+                  {t("id.dividendsTable.net")}
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -307,10 +408,41 @@ export function IdByYearTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="year" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("id.byYear.year")}</SortableTableHead>
-              <SortableTableHead colKey="realized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.byYear.realized")}</SortableTableHead>
-              <SortableTableHead colKey="dividends" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.byYear.dividends")}</SortableTableHead>
-              <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("id.byYear.tax")}</SortableTableHead>
+              <SortableTableHead
+                colKey="year"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("id.byYear.year")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="realized"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("id.byYear.realized")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="dividends"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("id.byYear.dividends")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="tax"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("id.byYear.tax")}
+              </SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

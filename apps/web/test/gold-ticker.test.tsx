@@ -35,9 +35,7 @@ describe("GoldTicker", () => {
 
     renderTicker("EUR");
 
-    await waitFor(() =>
-      expect(screen.getByText(/as of/i)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/as of/i)).toBeInTheDocument());
     expect(getQuote).toHaveBeenCalledWith({
       symbol: "GOLD",
       market: "XAU",
@@ -74,8 +72,6 @@ describe("GoldTicker", () => {
     renderTicker();
 
     await waitFor(() => expect(getQuote).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.queryByText(messages.Gold.title)).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText(messages.Gold.title)).toBeNull());
   });
 });

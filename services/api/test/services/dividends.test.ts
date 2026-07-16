@@ -87,13 +87,17 @@ describe("refreshDividends", () => {
     const db = getDb();
     // Insert a gold instrument with a transaction.
     await db.select().from(users).limit(1);
-    const [pf] = await db
-      .select()
-      .from(portfolios)
-      .limit(1);
+    const [pf] = await db.select().from(portfolios).limit(1);
     const [goldInst] = await db
       .insert(instruments)
-      .values({ symbol: "GOLD", market: "XAU", assetClass: "gold", unit: "grams", currency: "IDR", name: "Gold" })
+      .values({
+        symbol: "GOLD",
+        market: "XAU",
+        assetClass: "gold",
+        unit: "grams",
+        currency: "IDR",
+        name: "Gold",
+      })
       .returning();
     await db.insert(transactions).values({
       portfolioId: pf.id,

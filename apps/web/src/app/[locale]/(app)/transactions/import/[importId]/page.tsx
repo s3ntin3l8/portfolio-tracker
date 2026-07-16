@@ -15,10 +15,7 @@ export default async function ImportReviewPage({
   setRequestLocale(locale);
   const t = await getTranslations("ImportHistory");
 
-  const [detail, rawPortfolios] = await Promise.all([
-    loadImport(importId),
-    loadPortfolioList(),
-  ]);
+  const [detail, rawPortfolios] = await Promise.all([loadImport(importId), loadPortfolioList()]);
   // Only draft imports are reviewable; anything else (missing, confirmed, discarded)
   // goes back to the transactions page, where the import history lives.
   if (!detail || detail.status !== "draft") {
@@ -48,9 +45,7 @@ export default async function ImportReviewPage({
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">
-            {t("reviewTitle")}
-          </h1>
+          <h1 className="text-2xl font-bold">{t("reviewTitle")}</h1>
           <p className="text-sm text-muted-foreground">{t("reviewSubtitle")}</p>
         </div>
       </div>

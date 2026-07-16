@@ -126,7 +126,9 @@ async function makeTx(
   return tx;
 }
 
-function draft(overrides: Partial<ParsedTransaction> & Pick<ParsedTransaction, "action">): ParsedTransaction {
+function draft(
+  overrides: Partial<ParsedTransaction> & Pick<ParsedTransaction, "action">,
+): ParsedTransaction {
   return {
     isin: "IE00B5BMR087",
     name: "iShares Core MSCI World",
@@ -460,7 +462,12 @@ describe("sourcesForTransactions", () => {
 
     await db.insert(transactionSources).values([
       { transactionId: tx.id, sourceType: "csv", externalId: "csv:grp-001" },
-      { transactionId: tx.id, sourceType: "pdf", externalId: "tr:exec:grp-002", taxComponents: { kapitalertragsteuer: "3.75" } },
+      {
+        transactionId: tx.id,
+        sourceType: "pdf",
+        externalId: "tr:exec:grp-002",
+        taxComponents: { kapitalertragsteuer: "3.75" },
+      },
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
@@ -499,10 +506,16 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.hasDocument).toBe(true);
     expect(row.filename).toBe(
-      expectedDisplayName({ type: "buy", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "buy",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
   });
 
@@ -529,11 +542,17 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "csv", importId: imp.id, documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.documentId).toBeNull();
     expect(row.hasDocument).toBe(true);
     expect(row.filename).toBe(
-      expectedDisplayName({ type: "buy", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".csv" }),
+      expectedDisplayName({
+        type: "buy",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".csv",
+      }),
     );
   });
 
@@ -596,7 +615,12 @@ describe("sourcesForTransactions", () => {
     expect(syntheticA.hasDocument).toBe(true);
     expect(syntheticA.documentId).toBe(docA.id);
     expect(syntheticA.filename).toBe(
-      expectedDisplayName({ type: "buy", executedAt: txA.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "buy",
+        executedAt: txA.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
 
     const pytrB = rowsB.find((r) => r.sourceType === "pytr")!;
@@ -604,7 +628,12 @@ describe("sourcesForTransactions", () => {
     const syntheticB = rowsB.find((r) => r.id !== pytrB.id)!;
     expect(syntheticB.documentId).toBe(docB.id);
     expect(syntheticB.filename).toBe(
-      expectedDisplayName({ type: "buy", executedAt: txB.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "buy",
+        executedAt: txB.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
   });
 
@@ -618,7 +647,8 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "manual", documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
   });
@@ -650,14 +680,20 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const rows =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
     const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
     expect(pytrRow.hasDocument).toBe(false);
     expect(pytrRow.filename).toBeNull();
     expect(pdfRow.hasDocument).toBe(true);
     expect(pdfRow.filename).toBe(
-      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "dividend",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
   });
 
@@ -702,7 +738,8 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const rows =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
     const pdfRow = rows.find((r) => r.sourceType === "pdf")!;
     expect(pytrRow.hasDocument).toBe(false);
@@ -713,7 +750,12 @@ describe("sourcesForTransactions", () => {
     // be identical either way — it only confirms the naming pass ran, not which doc was picked).
     expect(pdfRow.documentId).toBe(claimedDoc.id);
     expect(pdfRow.filename).toBe(
-      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "dividend",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
   });
 
@@ -746,12 +788,17 @@ describe("sourcesForTransactions", () => {
       status: "retained",
     });
     // txNoDoc has no document of its own, only a pytr row sharing the collector importId.
-    await db
-      .insert(transactionSources)
-      .values({ transactionId: txNoDoc.id, sourceType: "pytr", importId: imp.id, documentId: null });
+    await db.insert(transactionSources).values({
+      transactionId: txNoDoc.id,
+      sourceType: "pytr",
+      importId: imp.id,
+      documentId: null,
+    });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [txNoDoc.id], portfolio.id)).get(txNoDoc.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [txNoDoc.id], portfolio.id)).get(txNoDoc.id) ??
+      [];
     expect(row.hasDocument).toBe(false);
     expect(row.filename).toBeNull();
   });
@@ -776,10 +823,13 @@ describe("sourcesForTransactions", () => {
         status: "retained",
       })
       .returning();
-    await db.insert(transactionSources).values({ transactionId: tx.id, sourceType: "pytr", documentId: null });
+    await db
+      .insert(transactionSources)
+      .values({ transactionId: tx.id, sourceType: "pytr", documentId: null });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const rows =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(rows).toHaveLength(2);
 
     const pytrRow = rows.find((r) => r.sourceType === "pytr")!;
@@ -791,7 +841,12 @@ describe("sourcesForTransactions", () => {
     expect(syntheticRow.documentId).toBe(doc.id);
     expect(syntheticRow.hasDocument).toBe(true);
     expect(syntheticRow.filename).toBe(
-      expectedDisplayName({ type: "dividend", executedAt: tx.executedAt, portfolioName: portfolio.name, ext: ".pdf" }),
+      expectedDisplayName({
+        type: "dividend",
+        executedAt: tx.executedAt,
+        portfolioName: portfolio.name,
+        ext: ".pdf",
+      }),
     );
   });
 
@@ -817,7 +872,8 @@ describe("sourcesForTransactions", () => {
     ]);
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const rows = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const rows =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(rows).toHaveLength(2); // pytr + the one real pdf row — no synthetic third entry
     const pdfRows = rows.filter((r) => r.sourceType === "pdf");
     expect(pdfRows).toHaveLength(1);
@@ -855,7 +911,8 @@ describe("sourcesForTransactions", () => {
       .values({ transactionId: tx.id, sourceType: "pdf", documentId: doc.id });
 
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [tx.id], portfolio.id)).get(tx.id) ?? [];
     expect(row.filename).toBe(
       expectedDisplayName({
         type: "buy",
@@ -893,7 +950,8 @@ describe("sourcesForTransactions", () => {
     // queries (which use the real, valid `tx.id`) have already succeeded. Exercises the same
     // real failure surface the try/catch guards against, without mocking DB internals.
     const app = { db, log: { warn: vi.fn(), info: vi.fn() } };
-    const [row] = (await sourcesForTransactions(app as never, [tx.id], "not-a-valid-uuid")).get(tx.id) ?? [];
+    const [row] =
+      (await sourcesForTransactions(app as never, [tx.id], "not-a-valid-uuid")).get(tx.id) ?? [];
     expect(row.hasDocument).toBe(true);
     expect(row.filename).toBe("settlement.pdf"); // raw fallback, not a synthesized name
     expect(app.log.warn).toHaveBeenCalled();
@@ -1030,7 +1088,9 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
     expect(src.executedPrice).toBe("142.76");
     // RC#5: Steueroptimierung refund → negative realised tax + signed breakdown.
     expect(src.tax).toBe("-3.56");
-    expect((src.taxComponents as { kapitalertragsteuer?: string }).kapitalertragsteuer).toBe("-3.38");
+    expect((src.taxComponents as { kapitalertragsteuer?: string }).kapitalertragsteuer).toBe(
+      "-3.38",
+    );
   });
 
   it("enriches a dividend whose documentRef type is NOT in the old settlement allowlist", async () => {
@@ -1202,7 +1262,11 @@ describe("enrichTransactionsFromStoredDocuments — status filter", () => {
     expect(documentIds.size).toBe(2);
 
     const [updated] = await db
-      .select({ tax: transactions.tax, perShare: transactions.perShare, grossNative: transactions.grossNative })
+      .select({
+        tax: transactions.tax,
+        perShare: transactions.perShare,
+        grossNative: transactions.grossNative,
+      })
       .from(transactions)
       .where(eq(transactions.id, tx.id));
     // Rollup sums both documents: tax 0.30, perShare 0.20+0.10, grossNative 2.00+1.00.

@@ -92,9 +92,7 @@ const apiBaseUrl = process.env.API_URL ?? "";
 // Auth is only enforced once configured (mirrors the (app) layout). Without it
 // there's no access token and the API can't be reached, so reads report
 // "unavailable" rather than crashing the design-system preview.
-const authConfigured = Boolean(
-  process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER,
-);
+const authConfigured = Boolean(process.env.AUTH_SECRET && process.env.AUTHENTIK_ISSUER);
 
 /**
  * A server-bound api-client carrying the current session's access token, or null.
@@ -179,13 +177,11 @@ const getSummaryCached = cache(
   },
 );
 
-const getPerformanceCached = cache(
-  async (portfolioId: string): Promise<PortfolioPerformance> => {
-    const api = await getServerApi();
-    if (!api) throw new Error("api unavailable");
-    return api.getPerformance(portfolioId);
-  },
-);
+const getPerformanceCached = cache(async (portfolioId: string): Promise<PortfolioPerformance> => {
+  const api = await getServerApi();
+  if (!api) throw new Error("api unavailable");
+  return api.getPerformance(portfolioId);
+});
 
 const getNetWorthCached = cache(
   async (
@@ -200,9 +196,7 @@ const getNetWorthCached = cache(
 );
 
 export type NetWorthResult =
-  | { status: "ok"; data: NetWorth }
-  | { status: "empty" }
-  | { status: "unavailable" };
+  { status: "ok"; data: NetWorth } | { status: "empty" } | { status: "unavailable" };
 
 /**
  * Net worth for the active scope: a single portfolio when one is selected, else the
@@ -257,9 +251,7 @@ export async function loadPreferences(): Promise<UserPreferences | null> {
  * Net-worth-over-time for the active scope: a single portfolio's snapshot history
  * when one is selected, else the cross-portfolio aggregate series.
  */
-export async function loadNetWorthHistory(
-  range = "1y",
-): Promise<HistoryPoint[]> {
+export async function loadNetWorthHistory(range = "1y"): Promise<HistoryPoint[]> {
   const api = await getServerApi();
   if (!api) return [];
   try {
@@ -330,7 +322,8 @@ export interface Selection {
  */
 export async function resolveSelection(): Promise<Selection> {
   const api = await getServerApi();
-  if (!api) return { status: "unavailable", portfolios: [], selectedId: null, selectedHolderId: null };
+  if (!api)
+    return { status: "unavailable", portfolios: [], selectedId: null, selectedHolderId: null };
   try {
     const [portfolios, holders] = await Promise.all([
       listPortfoliosCached(),
@@ -405,8 +398,7 @@ export async function loadTransactionsAcrossPortfolios(): Promise<{
     const portfolios = holderId
       ? allPortfolios.filter((p) => p.accountHolderId === holderId)
       : allPortfolios;
-    if (portfolios.length === 0)
-      return { status: "empty", transactions: [], scopeCurrency: "IDR" };
+    if (portfolios.length === 0) return { status: "empty", transactions: [], scopeCurrency: "IDR" };
     const me = await loadMe();
     const scopeCurrency = me?.displayCurrency ?? "IDR";
     const nameById = new Map(portfolios.map((p) => [p.id, p.name]));
@@ -571,9 +563,11 @@ export async function loadContributions(): Promise<ContributionsView> {
     try {
       // range="all" always hits the day-grained daily-snapshot table (never the
       // timestamped intraday one), so this is always PerformancePoint[] in practice.
-      valueHistory = (selected
-        ? await api.getPortfolioHistory(selected.id, "all")
-        : await api.getNetWorthHistory("all", holderId ? { holderId } : undefined)) as PerformancePoint[];
+      valueHistory = (
+        selected
+          ? await api.getPortfolioHistory(selected.id, "all")
+          : await api.getNetWorthHistory("all", holderId ? { holderId } : undefined)
+      ) as PerformancePoint[];
     } catch {
       // History unavailable — chart degrades gracefully.
     }
@@ -613,9 +607,7 @@ export async function loadSparplan(): Promise<SparplanView> {
 }
 
 export type TradeLogView =
-  | { status: "ok"; data: TradeLog }
-  | { status: "empty" }
-  | { status: "unavailable" };
+  { status: "ok"; data: TradeLog } | { status: "empty" } | { status: "unavailable" };
 
 /**
  * Trade log for the active scope: a single portfolio when one is selected, else the
@@ -737,9 +729,7 @@ export async function loadInstrumentScope(
   if (aggregate) {
     const result = await loadTransactionsAcrossPortfolios();
     if (result.status === "ok") {
-      transactions = result.transactions.filter(
-        (t) => t.instrumentId === instrumentId,
-      );
+      transactions = result.transactions.filter((t) => t.instrumentId === instrumentId);
     }
   } else {
     // Single portfolio: `holdingsView.displayCurrency` is already the scope currency
@@ -774,9 +764,7 @@ export async function loadInstrumentScope(
 }
 
 export type IncomeStatsView =
-  | { status: "ok"; data: IncomeStats }
-  | { status: "empty" }
-  | { status: "unavailable" };
+  { status: "ok"; data: IncomeStats } | { status: "empty" } | { status: "unavailable" };
 
 /**
  * Income analytics for the active scope: a single portfolio when one is selected,
@@ -873,14 +861,34 @@ export async function loadTransactionsPaginated(
   year?: string,
   q?: string,
 ): Promise<
-  | { status: "ok"; rows: Transaction[]; total: number; summary?: { totalInvested: string; totalProceeds: string; totalIncome: string }; years?: string[] }
+  | {
+      status: "ok";
+      rows: Transaction[];
+      total: number;
+      summary?: { totalInvested: string; totalProceeds: string; totalIncome: string };
+      years?: string[];
+    }
   | { status: "unavailable"; rows: []; total: 0 }
 > {
   const api = await getServerApi();
   if (!api) return { status: "unavailable", rows: [], total: 0 };
   try {
-    const data = await api.listTransactionsPaginated(portfolioId, page, pageSize, convertTo, type, year, q);
-    return { status: "ok", rows: data.rows, total: data.total, summary: data.summary, years: data.years };
+    const data = await api.listTransactionsPaginated(
+      portfolioId,
+      page,
+      pageSize,
+      convertTo,
+      type,
+      year,
+      q,
+    );
+    return {
+      status: "ok",
+      rows: data.rows,
+      total: data.total,
+      summary: data.summary,
+      years: data.years,
+    };
   } catch {
     return { status: "unavailable", rows: [], total: 0 };
   }
@@ -966,7 +974,7 @@ export async function loadAdminStorageProviders(): Promise<
 
 /** Admin: background job list, or "unavailable" (signed out / non-admin / down). */
 export async function loadAdminJobs(): Promise<
-  { status: "ok" } & AdminJobsResponse | { status: "unavailable" }
+  ({ status: "ok" } & AdminJobsResponse) | { status: "unavailable" }
 > {
   const api = await getServerApi();
   if (!api) return { status: "unavailable" };
@@ -1008,9 +1016,7 @@ export async function loadAdminImportSettings(): Promise<
 }
 
 export type PortfolioResult<T> =
-  | { status: "ok"; portfolio: Portfolio; data: T }
-  | { status: "empty" }
-  | { status: "unavailable" };
+  { status: "ok"; portfolio: Portfolio; data: T } | { status: "empty" } | { status: "unavailable" };
 
 /**
  * Resolve the user's active portfolio (the one chosen in the global switcher, or the
@@ -1170,7 +1176,12 @@ export async function loadNetworthTax(
         result = await api.getPortfolioTax(selected.id, year);
       } catch (err: unknown) {
         // 422 = FSA not configured for this portfolio — show nothing (not an error).
-        if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 422) {
+        if (
+          err &&
+          typeof err === "object" &&
+          "status" in err &&
+          (err as { status: number }).status === 422
+        ) {
           return [];
         }
         throw err;
@@ -1344,12 +1355,11 @@ export async function loadTaxYearDetail(
       const holderId = entry.holder.id;
       // ID_ALL_PORTFOLIOS_ID (see loadNetworthTax) means "every portfolio in scope,
       // not grouped by account holder" — the Indonesian aggregate bucket.
-      const pfs =
-        selected
-          ? [selected]
-          : holderId === ID_ALL_PORTFOLIOS_ID
-            ? portfolios
-            : portfolios.filter((p) => p.accountHolderId === holderId);
+      const pfs = selected
+        ? [selected]
+        : holderId === ID_ALL_PORTFOLIOS_ID
+          ? portfolios
+          : portfolios.filter((p) => p.accountHolderId === holderId);
       if (pfs.length === 0) return;
 
       try {
@@ -1504,38 +1514,43 @@ export async function loadTaxYearDetail(
           ...tradeLog.realizedByYear.map((r) => r.year),
           ...tradeLog.dividendsByYear.map((d) => d.year),
         ]);
-        const byYear: TaxYearRow[] = [...years].sort((a, b) => b - a).map((y) => {
-          if (y === entry.year) {
-            // Ties out to the hero card / allowanceUsage figures already on screen.
-            // Backend-computed (u.taxableExcess) — see tax/page.tsx's identical comment.
-            const u = entry.allowanceUsage;
-            const taxable = Number(u.taxableExcess);
+        const byYear: TaxYearRow[] = [...years]
+          .sort((a, b) => b - a)
+          .map((y) => {
+            if (y === entry.year) {
+              // Ties out to the hero card / allowanceUsage figures already on screen.
+              // Backend-computed (u.taxableExcess) — see tax/page.tsx's identical comment.
+              const u = entry.allowanceUsage;
+              const taxable = Number(u.taxableExcess);
+              return {
+                year: y,
+                realized: u.realizedGainsAdjusted,
+                dividends: u.incomeYtd,
+                tax: (taxable * taxRate).toFixed(2),
+                fsaUsed: u.usedYtd,
+              };
+            }
+
+            const realized = tradeLog.realizedByYear.find((r) => r.year === y)?.amount ?? "0";
+            const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
+            const dividendsGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
+            const taxable = Math.max(0, Number(realized) + dividendsGross - allowanceAnnual);
+            // FSA-used estimate for a non-selected year: the allowance-consuming complement
+            // of `taxable` above (same inputs, no Teilfreistellung/Vorabpauschale/loss-pot
+            // precision — see this file's loadTaxYearDetail doc comment for the caveat this
+            // inherits), clamped to the annual cap since usage can never exceed it.
+            const fsaUsed = Math.min(
+              allowanceAnnual,
+              Math.max(0, Number(realized) + dividendsGross),
+            );
             return {
               year: y,
-              realized: u.realizedGainsAdjusted,
-              dividends: u.incomeYtd,
+              realized,
+              dividends: dividendsGross.toFixed(2),
               tax: (taxable * taxRate).toFixed(2),
-              fsaUsed: u.usedYtd,
+              fsaUsed: fsaUsed.toFixed(2),
             };
-          }
-
-          const realized = tradeLog.realizedByYear.find((r) => r.year === y)?.amount ?? "0";
-          const divEntry = tradeLog.dividendsByYear.find((d) => d.year === y);
-          const dividendsGross = divEntry ? Number(divEntry.amount) + Number(divEntry.tax) : 0;
-          const taxable = Math.max(0, Number(realized) + dividendsGross - allowanceAnnual);
-          // FSA-used estimate for a non-selected year: the allowance-consuming complement
-          // of `taxable` above (same inputs, no Teilfreistellung/Vorabpauschale/loss-pot
-          // precision — see this file's loadTaxYearDetail doc comment for the caveat this
-          // inherits), clamped to the annual cap since usage can never exceed it.
-          const fsaUsed = Math.min(allowanceAnnual, Math.max(0, Number(realized) + dividendsGross));
-          return {
-            year: y,
-            realized,
-            dividends: dividendsGross.toFixed(2),
-            tax: (taxable * taxRate).toFixed(2),
-            fsaUsed: fsaUsed.toFixed(2),
-          };
-        });
+          });
 
         // Indonesian "By year" rollup: per-year sale PROCEEDS (not gain) across every
         // year the trade log covers, plus per-year dividend GROSS — both needed by

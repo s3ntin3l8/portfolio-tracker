@@ -1,10 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
-import {
-  transactions,
-  dismissedAnomalies,
-  trConnections,
-} from "@portfolio/db";
+import { transactions, dismissedAnomalies, trConnections } from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { toCoreTxns } from "../../services/tx-core.js";
 import { netManualAdjustments } from "../../services/pytr/reconcile.js";
@@ -22,8 +18,7 @@ import {
   type PortfolioSummary,
   type ReconciliationGap,
 } from "@portfolio/core";
-import type {
-  PortfolioParams} from "./shared.js";
+import type { PortfolioParams } from "./shared.js";
 import {
   ownedPortfolio,
   corporateActionsFor,
@@ -46,10 +41,7 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
       const [rows, trConn, dismissed] = await Promise.all([
-        app.db
-          .select()
-          .from(transactions)
-          .where(eq(transactions.portfolioId, portfolioId)),
+        app.db.select().from(transactions).where(eq(transactions.portfolioId, portfolioId)),
         app.db
           .select({ lastReconciliation: trConnections.lastReconciliation })
           .from(trConnections)
@@ -65,12 +57,12 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
           .where(eq(dismissedAnomalies.portfolioId, portfolioId)),
       ]);
       const coreTxns: CoreTransaction[] = toCoreTxns(rows);
-      const cas = await corporateActionsFor(app, rows.map((r) => r.instrumentId));
+      const cas = await corporateActionsFor(
+        app,
+        rows.map((r) => r.instrumentId),
+      );
       const holdings = computeHoldings(coreTxns, cas);
-      const rawReconciliation = trConn?.lastReconciliation as
-        | ReconciliationGap
-        | null
-        | undefined;
+      const rawReconciliation = trConn?.lastReconciliation as ReconciliationGap | null | undefined;
       const reconciliation = rawReconciliation
         ? netManualAdjustments(rawReconciliation, coreTxns)
         : rawReconciliation;
@@ -106,10 +98,7 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
       }
       const { filtered } = await withDerivationCache(anomaliesCache, portfolioId, async () => {
         const [rows, trConn, dismissed] = await Promise.all([
-          app.db
-            .select()
-            .from(transactions)
-            .where(eq(transactions.portfolioId, portfolioId)),
+          app.db.select().from(transactions).where(eq(transactions.portfolioId, portfolioId)),
           app.db
             .select({ lastReconciliation: trConnections.lastReconciliation })
             .from(trConnections)
@@ -125,11 +114,12 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
             .where(eq(dismissedAnomalies.portfolioId, portfolioId)),
         ]);
         const coreTxns: CoreTransaction[] = toCoreTxns(rows);
-        const cas = await corporateActionsFor(app, rows.map((r) => r.instrumentId));
+        const cas = await corporateActionsFor(
+          app,
+          rows.map((r) => r.instrumentId),
+        );
         const rawReconciliation = trConn?.lastReconciliation as
-          | ReconciliationGap
-          | null
-          | undefined;
+          ReconciliationGap | null | undefined;
         const reconciliation = rawReconciliation
           ? netManualAdjustments(rawReconciliation, coreTxns)
           : rawReconciliation;
@@ -164,14 +154,14 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
-      const { summary, metaById } = await loadValuation(
+      const { summary, metaById } = (await loadValuation(
         app,
         portfolioId,
         portfolio.baseCurrency,
         costBasisFromQuery(request.query),
         portfolio.cashCounted,
         request.log,
-      ) as unknown as { summary: PortfolioSummary; metaById: Map<string, InstrumentMeta> };
+      )) as unknown as { summary: PortfolioSummary; metaById: Map<string, InstrumentMeta> };
       if (
         needsSectorEnrichment([...metaById.values()]) ||
         needsNameEnrichment([...metaById.values()])

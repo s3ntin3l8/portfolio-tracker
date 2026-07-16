@@ -32,7 +32,7 @@ describe("InstrumentLotsTable", () => {
     ];
     renderTable(lots, "IDR");
     expect(screen.getAllByText(/475,000/)).toHaveLength(2); // table + mobile card
-    expect(screen.getAllByText(/9,500/)).toHaveLength(2);   // table + mobile card
+    expect(screen.getAllByText(/9,500/)).toHaveLength(2); // table + mobile card
   });
 
   it("renders nothing when there are no open lots", () => {

@@ -38,9 +38,7 @@ describe("createApiClient", () => {
     const portfolios = await client.listPortfolios();
     expect(portfolios).toEqual([{ id: "p1", name: "BCA" }]);
     expect(seen?.url).toBe("http://api.test/portfolios");
-    expect((seen?.init.headers as Record<string, string>).authorization).toBe(
-      "Bearer tok",
-    );
+    expect((seen?.init.headers as Record<string, string>).authorization).toBe("Bearer tok");
   });
 
   it("serializes bodies on writes", async () => {
@@ -72,16 +70,12 @@ describe("createApiClient", () => {
     // Bodyless DELETE must NOT advertise application/json, or Fastify rejects the
     // empty body with FST_ERR_CTP_EMPTY_JSON_BODY → 400.
     await client.deletePortfolio("p1");
-    expect(
-      (seen?.headers as Record<string, string>)["content-type"],
-    ).toBeUndefined();
+    expect((seen?.headers as Record<string, string>)["content-type"]).toBeUndefined();
     expect(seen?.body).toBeUndefined();
 
     // A write still carries the header so the server parses it.
     await client.createPortfolio({ name: "Stockbit", baseCurrency: "IDR" });
-    expect((seen?.headers as Record<string, string>)["content-type"]).toBe(
-      "application/json",
-    );
+    expect((seen?.headers as Record<string, string>)["content-type"]).toBe("application/json");
   });
 
   it("sends a File to the screenshot import endpoint as multipart FormData", async () => {
@@ -104,9 +98,7 @@ describe("createApiClient", () => {
     expect(seen?.init.body).toBeInstanceOf(FormData);
     // FormData uploads must NOT set a content-type header — the browser/fetch runtime
     // sets it with the multipart boundary automatically.
-    expect(
-      (seen?.init.headers as Record<string, string>)["content-type"],
-    ).toBeUndefined();
+    expect((seen?.init.headers as Record<string, string>)["content-type"]).toBeUndefined();
   });
 
   it("omits the JSON content-type and sends FormData for screenshot uploads", async () => {
@@ -139,9 +131,9 @@ describe("createApiClient", () => {
 
 describe("apiErrorCode", () => {
   it("extracts the error code from an ApiError body", () => {
-    expect(
-      apiErrorCode(new ApiError(503, JSON.stringify({ error: "pytr_not_available" }))),
-    ).toBe("pytr_not_available");
+    expect(apiErrorCode(new ApiError(503, JSON.stringify({ error: "pytr_not_available" })))).toBe(
+      "pytr_not_available",
+    );
   });
 
   it("returns null for non-ApiErrors", () => {
@@ -163,9 +155,7 @@ describe("accountMismatchFromError", () => {
 
   it("returns null for ApiErrors with status other than 409", () => {
     expect(
-      accountMismatchFromError(
-        new ApiError(400, JSON.stringify({ error: "account_mismatch" })),
-      ),
+      accountMismatchFromError(new ApiError(400, JSON.stringify({ error: "account_mismatch" }))),
     ).toBeNull();
   });
 
@@ -194,18 +184,14 @@ describe("duplicatesFromError", () => {
   it("returns null for non-ApiErrors and non-409 status", () => {
     expect(duplicatesFromError(new Error("boom"))).toBeNull();
     expect(
-      duplicatesFromError(
-        new ApiError(400, JSON.stringify({ error: "duplicate_transactions" })),
-      ),
+      duplicatesFromError(new ApiError(400, JSON.stringify({ error: "duplicate_transactions" }))),
     ).toBeNull();
   });
 
   it("returns null when body is not JSON or error key doesn't match", () => {
     expect(duplicatesFromError(new ApiError(409, "not-json"))).toBeNull();
     expect(
-      duplicatesFromError(
-        new ApiError(409, JSON.stringify({ error: "account_mismatch" })),
-      ),
+      duplicatesFromError(new ApiError(409, JSON.stringify({ error: "account_mismatch" }))),
     ).toBeNull();
   });
 
@@ -299,40 +285,243 @@ describe("createApiClient request methods", () => {
 
   const cases: Case[] = [
     { name: "me", call: (c) => c.me(), method: "GET", url: "/me" },
-    { name: "updateMe", call: (c) => c.updateMe({ name: "B" }), method: "PATCH", url: "/me", body: { name: "B" } },
+    {
+      name: "updateMe",
+      call: (c) => c.updateMe({ name: "B" }),
+      method: "PATCH",
+      url: "/me",
+      body: { name: "B" },
+    },
     { name: "getNetWorth", call: (c) => c.getNetWorth(), method: "GET", url: "/networth" },
-    { name: "getNetWorth total_paid", call: (c) => c.getNetWorth("total_paid"), method: "GET", url: "/networth?costBasis=total_paid" },
-    { name: "getNetWorthHistory default", call: (c) => c.getNetWorthHistory(), method: "GET", url: "/networth/history?range=1y" },
-    { name: "getNetWorthHistory range", call: (c) => c.getNetWorthHistory("3m"), method: "GET", url: "/networth/history?range=3m" },
-    { name: "getPortfolioHistory", call: (c) => c.getPortfolioHistory("p1", "6m"), method: "GET", url: "/portfolios/p1/history?range=6m" },
+    {
+      name: "getNetWorth total_paid",
+      call: (c) => c.getNetWorth("total_paid"),
+      method: "GET",
+      url: "/networth?costBasis=total_paid",
+    },
+    {
+      name: "getNetWorthHistory default",
+      call: (c) => c.getNetWorthHistory(),
+      method: "GET",
+      url: "/networth/history?range=1y",
+    },
+    {
+      name: "getNetWorthHistory range",
+      call: (c) => c.getNetWorthHistory("3m"),
+      method: "GET",
+      url: "/networth/history?range=3m",
+    },
+    {
+      name: "getPortfolioHistory",
+      call: (c) => c.getPortfolioHistory("p1", "6m"),
+      method: "GET",
+      url: "/portfolios/p1/history?range=6m",
+    },
     { name: "listPortfolios", call: (c) => c.listPortfolios(), method: "GET", url: "/portfolios" },
-    { name: "createPortfolio", call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR", accountHolderId: null }), method: "POST", url: "/portfolios", body: { name: "X", baseCurrency: "IDR", accountHolderId: null } },
-    { name: "updatePortfolio", call: (c) => c.updatePortfolio("p1", { name: "Y" }), method: "PATCH", url: "/portfolios/p1", body: { name: "Y" } },
-    { name: "listAccountHolders", call: (c) => c.listAccountHolders(), method: "GET", url: "/account-holders" },
-    { name: "createAccountHolder", call: (c) => c.createAccountHolder({ name: "Kid", type: "child", birthYear: 2017 }), method: "POST", url: "/account-holders", body: { name: "Kid", type: "child", birthYear: 2017 } },
-    { name: "updateAccountHolder", call: (c) => c.updateAccountHolder("h1", { name: "Kid R." }), method: "PATCH", url: "/account-holders/h1", body: { name: "Kid R." } },
-    { name: "deleteAccountHolder", call: (c) => c.deleteAccountHolder("h1"), method: "DELETE", url: "/account-holders/h1" },
-    { name: "listTransactions", call: (c) => c.listTransactions("p1"), method: "GET", url: "/portfolios/p1/transactions" },
-    { name: "createTransaction", call: (c) => c.createTransaction("p1", txInput), method: "POST", url: "/portfolios/p1/transactions", body: txInput },
-    { name: "updateTransaction", call: (c) => c.updateTransaction("p1", "t1", txInput), method: "PATCH", url: "/portfolios/p1/transactions/t1", body: txInput },
-    { name: "bulkDeleteTransactions", call: (c) => c.bulkDeleteTransactions("p1", ["a", "b"]), method: "POST", url: "/portfolios/p1/transactions/bulk-delete", body: { ids: ["a", "b"] } },
-    { name: "getQuote", call: (c) => c.getQuote({ symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR" }), method: "GET", url: "/quotes?symbol=BBCA&market=IDX&assetClass=equity&currency=IDR" },
-    { name: "searchInstruments q", call: (c) => c.searchInstruments("bca"), method: "GET", url: "/instruments?q=bca" },
-    { name: "searchInstruments none", call: (c) => c.searchInstruments(), method: "GET", url: "/instruments" },
-    { name: "lookupInstruments", call: (c) => c.lookupInstruments("apple inc"), method: "GET", url: "/instruments/lookup?q=apple%20inc" },
-    { name: "getInstrument", call: (c) => c.getInstrument("i1"), method: "GET", url: "/instruments/i1" },
-    { name: "getInstrumentHistory", call: (c) => c.getInstrumentHistory("i1", "1m"), method: "GET", url: "/instruments/i1/history?range=1m" },
-    { name: "createInstrument", call: (c) => c.createInstrument({ symbol: "BBCA", market: "IDX", assetClass: "equity", unit: "shares", currency: "IDR", name: "BCA", isin: null }), method: "POST", url: "/instruments", body: { symbol: "BBCA", market: "IDX", assetClass: "equity", unit: "shares", currency: "IDR", name: "BCA", isin: null } },
-    { name: "createCorporateAction", call: (c) => c.createCorporateAction({ instrumentId: "i1", type: "split", ratio: "2", exDate: "2026-01-01" }), method: "POST", url: "/corporate-actions", body: { instrumentId: "i1", type: "split", ratio: "2", exDate: "2026-01-01" } },
-    { name: "listCorporateActions", call: (c) => c.listCorporateActions("i1"), method: "GET", url: "/instruments/i1/corporate-actions" },
-    { name: "getHoldings", call: (c) => c.getHoldings("p1"), method: "GET", url: "/portfolios/p1/holdings" },
-    { name: "getSummary", call: (c) => c.getSummary("p1"), method: "GET", url: "/portfolios/p1/summary" },
-    { name: "getSummary total_paid", call: (c) => c.getSummary("p1", "total_paid"), method: "GET", url: "/portfolios/p1/summary?costBasis=total_paid" },
-    { name: "getPerformance", call: (c) => c.getPerformance("p1"), method: "GET", url: "/portfolios/p1/performance" },
-    { name: "importCsv default auto", call: (c) => c.importCsv("x"), method: "POST", url: "/imports/csv", body: { content: "x", format: "auto" } },
-    { name: "importCsv with filename", call: (c) => c.importCsv("x", "orig.csv"), method: "POST", url: "/imports/csv", body: { content: "x", filename: "orig.csv", format: "auto" } },
-    { name: "importCsv dkb", call: (c) => c.importCsv("x", undefined, "dkb"), method: "POST", url: "/imports/csv", body: { content: "x", format: "dkb" } },
-    { name: "confirmImport", call: (c) => c.confirmImport("imp1", []), method: "POST", url: "/imports/imp1/confirm", body: { transactions: [], contracts: [], acknowledgeAccountMismatch: false, acknowledgeDuplicates: false } },
+    {
+      name: "createPortfolio",
+      call: (c) => c.createPortfolio({ name: "X", baseCurrency: "IDR", accountHolderId: null }),
+      method: "POST",
+      url: "/portfolios",
+      body: { name: "X", baseCurrency: "IDR", accountHolderId: null },
+    },
+    {
+      name: "updatePortfolio",
+      call: (c) => c.updatePortfolio("p1", { name: "Y" }),
+      method: "PATCH",
+      url: "/portfolios/p1",
+      body: { name: "Y" },
+    },
+    {
+      name: "listAccountHolders",
+      call: (c) => c.listAccountHolders(),
+      method: "GET",
+      url: "/account-holders",
+    },
+    {
+      name: "createAccountHolder",
+      call: (c) => c.createAccountHolder({ name: "Kid", type: "child", birthYear: 2017 }),
+      method: "POST",
+      url: "/account-holders",
+      body: { name: "Kid", type: "child", birthYear: 2017 },
+    },
+    {
+      name: "updateAccountHolder",
+      call: (c) => c.updateAccountHolder("h1", { name: "Kid R." }),
+      method: "PATCH",
+      url: "/account-holders/h1",
+      body: { name: "Kid R." },
+    },
+    {
+      name: "deleteAccountHolder",
+      call: (c) => c.deleteAccountHolder("h1"),
+      method: "DELETE",
+      url: "/account-holders/h1",
+    },
+    {
+      name: "listTransactions",
+      call: (c) => c.listTransactions("p1"),
+      method: "GET",
+      url: "/portfolios/p1/transactions",
+    },
+    {
+      name: "createTransaction",
+      call: (c) => c.createTransaction("p1", txInput),
+      method: "POST",
+      url: "/portfolios/p1/transactions",
+      body: txInput,
+    },
+    {
+      name: "updateTransaction",
+      call: (c) => c.updateTransaction("p1", "t1", txInput),
+      method: "PATCH",
+      url: "/portfolios/p1/transactions/t1",
+      body: txInput,
+    },
+    {
+      name: "bulkDeleteTransactions",
+      call: (c) => c.bulkDeleteTransactions("p1", ["a", "b"]),
+      method: "POST",
+      url: "/portfolios/p1/transactions/bulk-delete",
+      body: { ids: ["a", "b"] },
+    },
+    {
+      name: "getQuote",
+      call: (c) =>
+        c.getQuote({ symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR" }),
+      method: "GET",
+      url: "/quotes?symbol=BBCA&market=IDX&assetClass=equity&currency=IDR",
+    },
+    {
+      name: "searchInstruments q",
+      call: (c) => c.searchInstruments("bca"),
+      method: "GET",
+      url: "/instruments?q=bca",
+    },
+    {
+      name: "searchInstruments none",
+      call: (c) => c.searchInstruments(),
+      method: "GET",
+      url: "/instruments",
+    },
+    {
+      name: "lookupInstruments",
+      call: (c) => c.lookupInstruments("apple inc"),
+      method: "GET",
+      url: "/instruments/lookup?q=apple%20inc",
+    },
+    {
+      name: "getInstrument",
+      call: (c) => c.getInstrument("i1"),
+      method: "GET",
+      url: "/instruments/i1",
+    },
+    {
+      name: "getInstrumentHistory",
+      call: (c) => c.getInstrumentHistory("i1", "1m"),
+      method: "GET",
+      url: "/instruments/i1/history?range=1m",
+    },
+    {
+      name: "createInstrument",
+      call: (c) =>
+        c.createInstrument({
+          symbol: "BBCA",
+          market: "IDX",
+          assetClass: "equity",
+          unit: "shares",
+          currency: "IDR",
+          name: "BCA",
+          isin: null,
+        }),
+      method: "POST",
+      url: "/instruments",
+      body: {
+        symbol: "BBCA",
+        market: "IDX",
+        assetClass: "equity",
+        unit: "shares",
+        currency: "IDR",
+        name: "BCA",
+        isin: null,
+      },
+    },
+    {
+      name: "createCorporateAction",
+      call: (c) =>
+        c.createCorporateAction({
+          instrumentId: "i1",
+          type: "split",
+          ratio: "2",
+          exDate: "2026-01-01",
+        }),
+      method: "POST",
+      url: "/corporate-actions",
+      body: { instrumentId: "i1", type: "split", ratio: "2", exDate: "2026-01-01" },
+    },
+    {
+      name: "listCorporateActions",
+      call: (c) => c.listCorporateActions("i1"),
+      method: "GET",
+      url: "/instruments/i1/corporate-actions",
+    },
+    {
+      name: "getHoldings",
+      call: (c) => c.getHoldings("p1"),
+      method: "GET",
+      url: "/portfolios/p1/holdings",
+    },
+    {
+      name: "getSummary",
+      call: (c) => c.getSummary("p1"),
+      method: "GET",
+      url: "/portfolios/p1/summary",
+    },
+    {
+      name: "getSummary total_paid",
+      call: (c) => c.getSummary("p1", "total_paid"),
+      method: "GET",
+      url: "/portfolios/p1/summary?costBasis=total_paid",
+    },
+    {
+      name: "getPerformance",
+      call: (c) => c.getPerformance("p1"),
+      method: "GET",
+      url: "/portfolios/p1/performance",
+    },
+    {
+      name: "importCsv default auto",
+      call: (c) => c.importCsv("x"),
+      method: "POST",
+      url: "/imports/csv",
+      body: { content: "x", format: "auto" },
+    },
+    {
+      name: "importCsv with filename",
+      call: (c) => c.importCsv("x", "orig.csv"),
+      method: "POST",
+      url: "/imports/csv",
+      body: { content: "x", filename: "orig.csv", format: "auto" },
+    },
+    {
+      name: "importCsv dkb",
+      call: (c) => c.importCsv("x", undefined, "dkb"),
+      method: "POST",
+      url: "/imports/csv",
+      body: { content: "x", format: "dkb" },
+    },
+    {
+      name: "confirmImport",
+      call: (c) => c.confirmImport("imp1", []),
+      method: "POST",
+      url: "/imports/imp1/confirm",
+      body: {
+        transactions: [],
+        contracts: [],
+        acknowledgeAccountMismatch: false,
+        acknowledgeDuplicates: false,
+      },
+    },
     { name: "getImport", call: (c) => c.getImport("imp1"), method: "GET", url: "/imports/imp1" },
   ];
 
@@ -409,7 +598,10 @@ describe("createApiClient request methods", () => {
     let seen: { url: string; init: RequestInit } | undefined;
     const fetchImpl = mockFetch((u, init) => {
       seen = { url: u, init };
-      return { status: 200, body: { queued: true, name: "refresh-instrument-metadata", force: true } };
+      return {
+        status: 200,
+        body: { queued: true, name: "refresh-instrument-metadata", force: true },
+      };
     });
     const client = createApiClient({
       baseUrl: base,

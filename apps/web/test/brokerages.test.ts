@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  resolveBrokerage,
-  monogram,
-  tintFor,
-  KNOWN_BROKERAGES,
-} from "../src/lib/brokerages";
+import { resolveBrokerage, monogram, tintFor, KNOWN_BROKERAGES } from "../src/lib/brokerages";
 
 describe("resolveBrokerage", () => {
   it("matches a known brokerage by label, case- and punctuation-insensitively", () => {

@@ -22,7 +22,7 @@ describe("PullToRefresh", () => {
         <PullToRefresh scrollContainerRef={scrollContainerRef}>
           <div>content to refresh</div>
         </PullToRefresh>
-      </div>
+      </div>,
     );
 
     expect(getByText("content to refresh")).toBeInTheDocument();
@@ -35,7 +35,7 @@ describe("PullToRefresh", () => {
         <PullToRefresh scrollContainerRef={scrollContainerRef}>
           <div>content to refresh</div>
         </PullToRefresh>
-      </div>
+      </div>,
     );
 
     const container = scrollContainerRef.current!;
@@ -65,7 +65,7 @@ describe("PullToRefresh", () => {
         <PullToRefresh scrollContainerRef={scrollContainerRef}>
           <div>content to refresh</div>
         </PullToRefresh>
-      </div>
+      </div>,
     );
 
     const container = scrollContainerRef.current!;

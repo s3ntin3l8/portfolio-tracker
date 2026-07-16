@@ -19,9 +19,7 @@ const history: PerformancePoint[] = [
 describe("mergeContributionValue", () => {
   it("returns [] when valueHistory has fewer than 2 points", () => {
     expect(mergeContributionValue(series, [])).toEqual([]);
-    expect(
-      mergeContributionValue(series, [{ date: "2026-01-01", netWorth: "100" }]),
-    ).toEqual([]);
+    expect(mergeContributionValue(series, [{ date: "2026-01-01", netWorth: "100" }])).toEqual([]);
   });
 
   it("preserves all daily value history points in output", () => {

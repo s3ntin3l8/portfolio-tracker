@@ -188,9 +188,7 @@ describe("PytrRunner pairing", () => {
   it("rejects awaitApproval when no pairing is in progress", async () => {
     const { spawn } = makeSpawn();
     const runner = makeRunner(spawn);
-    await expect(runner.awaitApproval("nobody")).rejects.toThrow(
-      /no pairing in progress/,
-    );
+    await expect(runner.awaitApproval("nobody")).rejects.toThrow(/no pairing in progress/);
   });
 
   it("throws PytrUnavailableError when disabled or the interpreter is missing", async () => {
@@ -221,10 +219,7 @@ describe("PytrRunner export", () => {
     child.stdout.emit("data", Buffer.from('"e2"}\n'));
     child.emit("exit", 0);
     const result = await exportP;
-    expect(result.events).toEqual([
-      { id: "e1", eventType: "CREDIT" },
-      { id: "e2" },
-    ]);
+    expect(result.events).toEqual([{ id: "e1", eventType: "CREDIT" }, { id: "e2" }]);
     // the rolling cookie jar is read back (here unchanged by the fake child)
     expect(result.sessionData).toBe("JAR");
   });

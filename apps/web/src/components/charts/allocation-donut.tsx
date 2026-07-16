@@ -92,9 +92,7 @@ export function AllocationDonut({
         </ResponsiveContainer>
         {formattedTotal && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-2">
-            <span className="text-center text-[10px] font-semibold text-text-3">
-              {label}
-            </span>
+            <span className="text-center text-[10px] font-semibold text-text-3">{label}</span>
             <span className="tabular mt-0.5 text-center text-[15px] font-extrabold">
               {formattedTotal}
             </span>

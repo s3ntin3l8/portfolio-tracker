@@ -30,19 +30,19 @@ export type NamingScope = "transaction" | "statement";
 export interface TransactionNamingParts {
   scope: "transaction";
   portfolioSlug: string;
-  date: string;     // YYYY-MM-DD
-  year: string;     // YYYY (derived from date — kept to avoid re-parsing)
-  type: string;     // buy | sell | dividend | …
-  symbol: string;   // instrument ticker
-  ext: string;      // .pdf | .png | …
-  docId: string;    // first 8 chars of document uuid
+  date: string; // YYYY-MM-DD
+  year: string; // YYYY (derived from date — kept to avoid re-parsing)
+  type: string; // buy | sell | dividend | …
+  symbol: string; // instrument ticker
+  ext: string; // .pdf | .png | …
+  docId: string; // first 8 chars of document uuid
 }
 
 export interface StatementNamingParts {
   scope: "statement";
   portfolioSlug: string;
-  period: string;   // YYYY-MM
-  source: string;   // friendly source label (see SOURCE_LABELS)
+  period: string; // YYYY-MM
+  source: string; // friendly source label (see SOURCE_LABELS)
   ext: string;
   docId: string;
 }
@@ -79,13 +79,14 @@ function friendlySource(source: string | null | undefined): string {
  * Distinct from `sanitiseFilename` in receipts.ts (which targets a whole path basename).
  */
 export function slug(s: string): string {
-  return s
-    .trim()
-    .replace(/[^\w-]+/g, "-")   // non-word runs → single hyphen
-    .replace(/-{2,}/g, "-")     // collapse runs of hyphens
-    .replace(/^-+|-+$/g, "")   // strip leading/trailing
-    .slice(0, 64)
-    || "document";
+  return (
+    s
+      .trim()
+      .replace(/[^\w-]+/g, "-") // non-word runs → single hyphen
+      .replace(/-{2,}/g, "-") // collapse runs of hyphens
+      .replace(/^-+|-+$/g, "") // strip leading/trailing
+      .slice(0, 64) || "document"
+  );
 }
 
 /** Extension derived from mimeType. Exported for use in receipts.ts. */
@@ -246,9 +247,7 @@ export async function gatherDocumentMetadata(
 
   const effectiveTxIds = [
     ...new Set(
-      requests
-        .map((r) => r.txId ?? r.doc.transactionId)
-        .filter((x): x is string => x != null),
+      requests.map((r) => r.txId ?? r.doc.transactionId).filter((x): x is string => x != null),
     ),
   ];
   if (effectiveTxIds.length > 0) {
@@ -262,13 +261,15 @@ export async function gatherDocumentMetadata(
       .from(transactions)
       .where(inArray(transactions.id, effectiveTxIds));
     for (const tx of txRows) {
-      txById.set(tx.id, { type: tx.type, executedAt: tx.executedAt, instrumentId: tx.instrumentId });
+      txById.set(tx.id, {
+        type: tx.type,
+        executedAt: tx.executedAt,
+        instrumentId: tx.instrumentId,
+      });
     }
 
     const instrumentIds = [
-      ...new Set(
-        txRows.map((tx) => tx.instrumentId).filter((x): x is string => x != null),
-      ),
+      ...new Set(txRows.map((tx) => tx.instrumentId).filter((x): x is string => x != null)),
     ];
     if (instrumentIds.length > 0) {
       const instRows = await db(app)
@@ -297,10 +298,7 @@ export async function gatherDocumentMetadata(
 }
 
 /** Build the per-document naming context from pre-fetched batch metadata. */
-export function namingContextFor(
-  req: NamingRequest,
-  meta: DocumentNamingMetadata,
-): NamingContext {
+export function namingContextFor(req: NamingRequest, meta: DocumentNamingMetadata): NamingContext {
   const effectiveTxId = req.txId ?? req.doc.transactionId ?? null;
   const tx = effectiveTxId ? (meta.txById.get(effectiveTxId) ?? null) : null;
   const instrumentSymbol = tx?.instrumentId

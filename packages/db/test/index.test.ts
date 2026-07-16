@@ -5,13 +5,7 @@ import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { eq } from "drizzle-orm";
-import {
-  schema,
-  users,
-  portfolios,
-  instruments,
-  transactions,
-} from "../src/index.js";
+import { schema, users, portfolios, instruments, transactions } from "../src/index.js";
 
 const migrationsFolder = path.resolve(import.meta.dirname, "../drizzle");
 

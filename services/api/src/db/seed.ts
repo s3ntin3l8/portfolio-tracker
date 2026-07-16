@@ -18,8 +18,7 @@ export async function seed() {
 }
 
 // Allow running directly: `tsx src/db/seed.ts`.
-const invokedDirectly =
-  process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (invokedDirectly) {
   await ensureDb();
   await seed();

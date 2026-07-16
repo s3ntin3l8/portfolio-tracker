@@ -3,8 +3,20 @@ import { render, screen } from "@testing-library/react";
 import { BestWorstCard } from "../src/components/insights/best-worst-card";
 import type { Mover } from "../src/lib/movers";
 
-const best: Mover = { instrumentId: "a", symbol: "BBCA", name: "Bank Central Asia", assetClass: "equity", pct: 0.032 };
-const worst: Mover = { instrumentId: "b", symbol: "ANTM", name: "Antam", assetClass: "gold", pct: -0.018 };
+const best: Mover = {
+  instrumentId: "a",
+  symbol: "BBCA",
+  name: "Bank Central Asia",
+  assetClass: "equity",
+  pct: 0.032,
+};
+const worst: Mover = {
+  instrumentId: "b",
+  symbol: "ANTM",
+  name: "Antam",
+  assetClass: "gold",
+  pct: -0.018,
+};
 
 describe("BestWorstCard", () => {
   it("renders both rows with signed, colored percentages", () => {

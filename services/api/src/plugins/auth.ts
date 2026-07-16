@@ -37,9 +37,7 @@ export function createIssuerJwks(
   const base = issuer.endsWith("/") ? issuer : `${issuer}/`;
   return async (protectedHeader, token) => {
     if (!jwks) {
-      const res = await fetchImpl(
-        new URL(".well-known/openid-configuration", base),
-      );
+      const res = await fetchImpl(new URL(".well-known/openid-configuration", base));
       if (!res.ok) throw new Error(`oidc_discovery_failed_${res.status}`);
       const doc = (await res.json()) as { jwks_uri?: string };
       if (!doc.jwks_uri) throw new Error("oidc_no_jwks_uri");
@@ -106,131 +104,105 @@ export const authPlugin = fp<AuthPluginOptions>(async (app: FastifyInstance, opt
     }
   }
 
-  app.decorate(
-    "authenticate",
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      if (!keyResolver) {
-        return reply.code(503).send({ error: "auth_not_configured" });
-      }
+  app.decorate("authenticate", async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!keyResolver) {
+      return reply.code(503).send({ error: "auth_not_configured" });
+    }
 
-      const header = request.headers.authorization;
-      if (!header?.startsWith("Bearer ")) {
-        return reply.code(401).send({ error: "missing_token" });
-      }
-      const token = header.slice(7);
+    const header = request.headers.authorization;
+    if (!header?.startsWith("Bearer ")) {
+      return reply.code(401).send({ error: "missing_token" });
+    }
+    const token = header.slice(7);
 
-      // Personal access token: our own long-lived credential, looked up by hash on a
-      // unique index (no timing-unsafe secret comparison). PATs never grant admin and
-      // carry their own scope; the secret is never logged.
-      if (token.startsWith(PAT_PREFIX)) {
-        const [row] = await app.db
-          .select()
-          .from(apiTokens)
-          .where(eq(apiTokens.tokenHash, hashToken(token)))
-          .limit(1);
-        if (!row || (row.expiresAt && row.expiresAt.getTime() <= Date.now())) {
-          return reply.code(401).send({ error: "invalid_token" });
-        }
-        const [u] = await app.db
-          .select()
-          .from(users)
-          .where(eq(users.id, row.userId))
-          .limit(1);
-        if (!u) return reply.code(401).send({ error: "invalid_token" });
-        // Stamp last-used (one indexed UPDATE) so the token list shows activity.
-        await app.db
-          .update(apiTokens)
-          .set({ lastUsedAt: new Date() })
-          .where(eq(apiTokens.id, row.id));
-        const scope = row.scope === "write" ? "write" : "read";
-        if (scope === "read" && MUTATING_METHODS.has(request.method)) {
-          return reply.code(403).send({ error: "read_only_token" });
-        }
-        request.user = {
-          id: u.id,
-          authSub: u.authSub,
-          isAdmin: false,
-          authMethod: "pat",
-          scope,
-        };
-        return;
-      }
-
-      let sub: string;
-      let email: string;
-      let isAdmin: boolean;
-      try {
-        const verifyOpts: JWTVerifyOptions = {
-          issuer: app.config.AUTHENTIK_ISSUER || undefined,
-          audience: app.config.AUTHENTIK_AUDIENCE || undefined,
-        };
-        // Narrow the union so the right jwtVerify overload is selected.
-        const { payload } =
-          typeof keyResolver === "function"
-            ? await jwtVerify(token, keyResolver, verifyOpts)
-            : await jwtVerify(token, keyResolver, verifyOpts);
-        if (!payload.sub) throw new Error("missing sub");
-        sub = payload.sub;
-        email =
-          typeof payload.email === "string"
-            ? payload.email
-            : `${sub}@users.noreply`;
-        // Admin = membership in the configured Authentik group (empty config ⇒ no admins).
-        const groups = Array.isArray(payload.groups) ? payload.groups : [];
-        const adminGroup = app.config.AUTHENTIK_ADMIN_GROUP;
-        isAdmin = adminGroup !== "" && groups.includes(adminGroup);
-      } catch {
+    // Personal access token: our own long-lived credential, looked up by hash on a
+    // unique index (no timing-unsafe secret comparison). PATs never grant admin and
+    // carry their own scope; the secret is never logged.
+    if (token.startsWith(PAT_PREFIX)) {
+      const [row] = await app.db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.tokenHash, hashToken(token)))
+        .limit(1);
+      if (!row || (row.expiresAt && row.expiresAt.getTime() <= Date.now())) {
         return reply.code(401).send({ error: "invalid_token" });
       }
-
-      const found = await app.db
-        .select()
-        .from(users)
-        .where(eq(users.authSub, sub))
-        .limit(1);
-      let user = found[0];
-      if (!user) {
-        const [created] = await app.db
-          .insert(users)
-          .values({ authSub: sub, email })
-          .returning();
-        user = created;
+      const [u] = await app.db.select().from(users).where(eq(users.id, row.userId)).limit(1);
+      if (!u) return reply.code(401).send({ error: "invalid_token" });
+      // Stamp last-used (one indexed UPDATE) so the token list shows activity.
+      await app.db
+        .update(apiTokens)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(apiTokens.id, row.id));
+      const scope = row.scope === "write" ? "write" : "read";
+      if (scope === "read" && MUTATING_METHODS.has(request.method)) {
+        return reply.code(403).send({ error: "read_only_token" });
       }
       request.user = {
-        id: user.id,
-        authSub: user.authSub,
-        isAdmin,
-        authMethod: "jwt",
-        scope: "write",
+        id: u.id,
+        authSub: u.authSub,
+        isAdmin: false,
+        authMethod: "pat",
+        scope,
       };
-    },
-  );
+      return;
+    }
+
+    let sub: string;
+    let email: string;
+    let isAdmin: boolean;
+    try {
+      const verifyOpts: JWTVerifyOptions = {
+        issuer: app.config.AUTHENTIK_ISSUER || undefined,
+        audience: app.config.AUTHENTIK_AUDIENCE || undefined,
+      };
+      // Narrow the union so the right jwtVerify overload is selected.
+      const { payload } =
+        typeof keyResolver === "function"
+          ? await jwtVerify(token, keyResolver, verifyOpts)
+          : await jwtVerify(token, keyResolver, verifyOpts);
+      if (!payload.sub) throw new Error("missing sub");
+      sub = payload.sub;
+      email = typeof payload.email === "string" ? payload.email : `${sub}@users.noreply`;
+      // Admin = membership in the configured Authentik group (empty config ⇒ no admins).
+      const groups = Array.isArray(payload.groups) ? payload.groups : [];
+      const adminGroup = app.config.AUTHENTIK_ADMIN_GROUP;
+      isAdmin = adminGroup !== "" && groups.includes(adminGroup);
+    } catch {
+      return reply.code(401).send({ error: "invalid_token" });
+    }
+
+    const found = await app.db.select().from(users).where(eq(users.authSub, sub)).limit(1);
+    let user = found[0];
+    if (!user) {
+      const [created] = await app.db.insert(users).values({ authSub: sub, email }).returning();
+      user = created;
+    }
+    request.user = {
+      id: user.id,
+      authSub: user.authSub,
+      isAdmin,
+      authMethod: "jwt",
+      scope: "write",
+    };
+  });
 
   // Admin-only guard: authenticate, then require the Authentik admin group. Used by
   // /admin routes that mutate server-wide config (data-provider settings).
-  app.decorate(
-    "requireAdmin",
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      await app.authenticate(request, reply);
-      // authenticate already sent an error response (401/503) — don't continue.
-      if (reply.sent) return reply;
-      if (!request.user?.isAdmin) {
-        return reply.code(403).send({ error: "forbidden" });
-      }
-    },
-  );
+  app.decorate("requireAdmin", async (request: FastifyRequest, reply: FastifyReply) => {
+    await app.authenticate(request, reply);
+    // authenticate already sent an error response (401/503) — don't continue.
+    if (reply.sent) return reply;
+    if (!request.user?.isAdmin) {
+      return reply.code(403).send({ error: "forbidden" });
+    }
+  });
 });
 
 declare module "fastify" {
   interface FastifyInstance {
-    authenticate: (
-      request: FastifyRequest,
-      reply: FastifyReply,
-    ) => Promise<unknown>;
-    requireAdmin: (
-      request: FastifyRequest,
-      reply: FastifyReply,
-    ) => Promise<unknown>;
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+    requireAdmin: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
   }
   interface FastifyRequest {
     user?: AuthedUser;

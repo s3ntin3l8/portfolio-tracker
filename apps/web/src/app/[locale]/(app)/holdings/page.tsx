@@ -30,7 +30,16 @@ import {
 } from "@/lib/utils";
 import { ReconciliationBanner } from "@/components/transactions/activity-banners";
 
-const CLASS_TABS = ["all", "equity", "etf", "gold", "bond", "mutual_fund", "crypto", "cash"] as const;
+const CLASS_TABS = [
+  "all",
+  "equity",
+  "etf",
+  "gold",
+  "bond",
+  "mutual_fund",
+  "crypto",
+  "cash",
+] as const;
 
 /** Colour direction for a signed gain figure on the allocation stats strip. */
 const toneOf = (n: number): Tone => (n > 0 ? "up" : n < 0 ? "down" : "flat");
@@ -99,16 +108,13 @@ export default async function HoldingsPage({
 
   // Open positions only (computeHoldings also returns closed, zero-quantity ones).
   const holdings =
-    result.status === "ok"
-      ? result.holdings.filter((h) => Number(h.quantity) !== 0)
-      : [];
+    result.status === "ok" ? result.holdings.filter((h) => Number(h.quantity) !== 0) : [];
   const currency = result.status === "ok" ? result.displayCurrency : "IDR";
 
   // Cash for cash-inclusive portfolios (cashTracked = cashCounted && hasCashMovement).
   const cash = result.status === "ok" ? result.cash : {};
   const cashTracked = result.status === "ok" ? result.cashTracked : false;
-  const hasCash =
-    cashTracked && Object.values(cash).some((v) => Number(v) !== 0);
+  const hasCash = cashTracked && Object.values(cash).some((v) => Number(v) !== 0);
 
   // Count holdings per asset class to determine which tabs to show. Reference
   // (Pocket Prototype.dc.html) only renders a pill for classes actually held in the
@@ -119,9 +125,7 @@ export default async function HoldingsPage({
     return acc;
   }, {});
   const visibleClassTabs = CLASS_TABS.filter(
-    (key) =>
-      key === "all" ||
-      (key === "cash" ? hasCash : (classCounts[key] ?? 0) > 0),
+    (key) => key === "all" || (key === "cash" ? hasCash : (classCounts[key] ?? 0) > 0),
   );
 
   // Per-unit avgCost/price are native quotes (labeled by PriceCurrency); position
@@ -143,19 +147,7 @@ export default async function HoldingsPage({
     // Cash rows for cash-inclusive portfolios (one row per currency).
     ...Object.entries(cash)
       .filter(([, v]) => Number(v) !== 0)
-      .map(([ccy, balance]) => [
-        "Cash",
-        t("cash"),
-        "cash",
-        "",
-        "",
-        "",
-        "",
-        ccy,
-        balance,
-        "",
-        ccy,
-      ]),
+      .map(([ccy, balance]) => ["Cash", t("cash"), "cash", "", "", "", "", ccy, balance, "", ccy]),
   ];
 
   // Title + (icon-only) export share the top line; the subtitle spans the full width below
@@ -216,16 +208,8 @@ export default async function HoldingsPage({
         {Heading}
         <EmptyState
           icon={Layers}
-          title={
-            result.status === "empty"
-              ? te("noPortfolioTitle")
-              : te("noHoldingsTitle")
-          }
-          description={
-            result.status === "empty"
-              ? te("noPortfolioBody")
-              : te("noHoldingsBody")
-          }
+          title={result.status === "empty" ? te("noPortfolioTitle") : te("noHoldingsTitle")}
+          description={result.status === "empty" ? te("noPortfolioBody") : te("noHoldingsBody")}
           action={
             result.status === "empty" ? (
               <PortfolioFormDialog
@@ -312,7 +296,11 @@ export default async function HoldingsPage({
           currency={summary.displayCurrency}
           total={Number(summary.netWorth)}
           totalLabel={t("allocation.totalLabel")}
-          totalValueFormatted={formatMoney(Number(summary.netWorth), summary.displayCurrency, locale)}
+          totalValueFormatted={formatMoney(
+            Number(summary.netWorth),
+            summary.displayCurrency,
+            locale,
+          )}
           allTimeLabel={t("allocation.allTimeLabel")}
           allTimeAmount={formatSignedMoney(
             Number(summary.totalUnrealizedPnL),
@@ -321,21 +309,26 @@ export default async function HoldingsPage({
           )}
           allTimePct={
             Number(summary.totalCost) > 0
-              ? formatPercent(Number(summary.totalUnrealizedPnL) / Number(summary.totalCost), locale)
+              ? formatPercent(
+                  Number(summary.totalUnrealizedPnL) / Number(summary.totalCost),
+                  locale,
+                )
               : null
           }
           allTimeTone={toneOf(Number(summary.totalUnrealizedPnL))}
           todayLabel={t("allocation.todayLabel")}
-          todayAmount={formatSignedMoney(Number(summary.totalDayChange), summary.displayCurrency, locale)}
+          todayAmount={formatSignedMoney(
+            Number(summary.totalDayChange),
+            summary.displayCurrency,
+            locale,
+          )}
           todayPct={(() => {
             // Day-change %: the day's move over the prior close's book value. Securities
             // that lack a previous close contribute nothing to either totalDayChange or
             // (via a null/0 market value) totalMarketValue, so `market − change` is the
             // priced book's opening base. Guard a non-positive base.
             const base = Number(summary.totalMarketValue) - Number(summary.totalDayChange);
-            return base > 0
-              ? formatPercent(Number(summary.totalDayChange) / base, locale)
-              : null;
+            return base > 0 ? formatPercent(Number(summary.totalDayChange) / base, locale) : null;
           })()}
           todayTone={toneOf(Number(summary.totalDayChange))}
         />

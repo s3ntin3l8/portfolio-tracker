@@ -11,11 +11,7 @@ import type { UserPreferences } from "@portfolio/api-client";
  * write the exact same preference (`PreferenceChips`), so flipping either one updates
  * both — see the Tax page's "Tax regime · applies everywhere, also in Settings" label.
  */
-export async function InvestingSection({
-  prefs,
-}: {
-  prefs: UserPreferences | null;
-}) {
+export async function InvestingSection({ prefs }: { prefs: UserPreferences | null }) {
   const t = await getTranslations("Settings");
   const taxRegime = prefs?.taxRegime ?? "DE";
   const costBasisMode = prefs?.costBasisMode ?? "purchase_price";

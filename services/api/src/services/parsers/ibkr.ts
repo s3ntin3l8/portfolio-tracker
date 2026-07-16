@@ -1,8 +1,4 @@
-import {
-  parsedTransactionSchema,
-  type AssetClass,
-  type ParsedAction,
-} from "@portfolio/schema";
+import { parsedTransactionSchema, type AssetClass, type ParsedAction } from "@portfolio/schema";
 import type { CsvParseResult } from "./csv.js";
 import { splitCsvLine } from "./csv-line.js";
 import { shortHash } from "./hash.js";
@@ -39,15 +35,11 @@ function num(raw: string): string {
 }
 
 export function parseIbkr(content: string): CsvParseResult {
-  const lines = content
-    .split(/\r?\n/)
-    .filter((l) => l.trim().length > 0);
+  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const drafts: CsvParseResult["drafts"] = [];
   const errors: CsvParseResult["errors"] = [];
 
-  const headerIdx = lines.findIndex(
-    (l) => /\bSymbol\b/i.test(l) && /TradePrice/i.test(l),
-  );
+  const headerIdx = lines.findIndex((l) => /\bSymbol\b/i.test(l) && /TradePrice/i.test(l));
   if (headerIdx < 0) return { drafts, errors };
 
   const header = splitCsvLine(lines[headerIdx]).map((h) => h.toLowerCase());

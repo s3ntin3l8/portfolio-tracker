@@ -43,7 +43,12 @@ export class ClaudeVisionParser implements ScreenshotParser {
     }
 
     log?.debug(
-      { provider: this.name, model: this.model, mimeType: image.mimeType, bytes: image.data.length },
+      {
+        provider: this.name,
+        model: this.model,
+        mimeType: image.mimeType,
+        bytes: image.data.length,
+      },
       "vision request",
     );
     const t0 = Date.now();
@@ -107,13 +112,16 @@ export class ClaudeVisionParser implements ScreenshotParser {
       drafts: validateDrafts(toolUse?.input?.transactions, parseErrors),
       contracts: validateContracts(toolUse?.input?.goldContracts),
       accountNumber:
-        typeof toolUse?.input?.accountNumber === "string"
-          ? toolUse.input.accountNumber
-          : null,
+        typeof toolUse?.input?.accountNumber === "string" ? toolUse.input.accountNumber : null,
       errors: parseErrors,
     };
     log?.info(
-      { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },
+      {
+        provider: this.name,
+        drafts: result.drafts.length,
+        contracts: result.contracts.length,
+        latencyMs: Date.now() - t0,
+      },
       "vision parse complete",
     );
     return result;

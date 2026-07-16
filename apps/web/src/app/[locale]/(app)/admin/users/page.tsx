@@ -5,11 +5,7 @@ import { AdminUsersTable } from "@/components/admin-users-table";
 import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminUsers } from "@/lib/server-api";
 
-export default async function AdminUsersPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function AdminUsersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Admin");

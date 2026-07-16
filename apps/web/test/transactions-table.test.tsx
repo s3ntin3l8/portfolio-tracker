@@ -60,11 +60,7 @@ const PORTFOLIOS = [
   { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
 ];
 
-import {
-  TransactionsTable,
-  txNetAmount,
-  type TxRow,
-} from "../src/components/transactions-table";
+import { TransactionsTable, txNetAmount, type TxRow } from "../src/components/transactions-table";
 
 const ROWS: TxRow[] = [
   {
@@ -268,12 +264,8 @@ describe("TransactionsTable", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: messages.Manage.reassign }));
 
     // The dialog shows; p1 is excluded so the only target is DKB (p2) — confirm the move.
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.Transactions.reassign.confirm }),
-    );
-    await waitFor(() =>
-      expect(reassignTransactions).toHaveBeenCalledWith("p1", ["t1"], "p2"),
-    );
+    fireEvent.click(screen.getByRole("button", { name: messages.Transactions.reassign.confirm }));
+    await waitFor(() => expect(reassignTransactions).toHaveBeenCalledWith("p1", ["t1"], "p2"));
   });
 
   // Scope to a row's own "select transaction" checkbox in the desktop table (both the
@@ -343,9 +335,7 @@ describe("TransactionsTable", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: messages.Manage.actions }), {
       key: "Enter",
     });
-    expect(
-      screen.queryByRole("menuitem", { name: messages.Manage.reassign }),
-    ).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: messages.Manage.reassign })).toBeNull();
   });
 
   it("shows the portfolio column only in the aggregate view", () => {
@@ -562,9 +552,9 @@ describe("TransactionsTable", () => {
       portfolioId: "p1",
       type: "dividend",
       quantity: "0",
-      price: "0.07",   // net cash credited (drives cashFlow)
+      price: "0.07", // net cash credited (drives cashFlow)
       fees: "0",
-      tax: "0.03",     // withheld (positive = deduction)
+      tax: "0.03", // withheld (positive = deduction)
       fxRate: null,
       currency: "EUR",
       executedAt: "2026-05-09T00:00:00.000Z",
@@ -584,9 +574,9 @@ describe("TransactionsTable", () => {
       portfolioId: "p1",
       type: "dividend",
       quantity: "0",
-      price: "-0.07",  // negative net (cash back to broker)
+      price: "-0.07", // negative net (cash back to broker)
       fees: "0",
-      tax: "-0.03",    // negative tax (refund, not a fresh withholding)
+      tax: "-0.03", // negative tax (refund, not a fresh withholding)
       fxRate: null,
       currency: "EUR",
       executedAt: "2026-11-15T00:00:00.000Z",
@@ -597,7 +587,9 @@ describe("TransactionsTable", () => {
     // net = -0.07 → Amount is negative
     const cells = screen.getAllByRole("cell");
     const texts = cells.map((c) => c.textContent ?? "");
-    expect(texts.some((t) => t.includes("-") && (t.includes("0.07") || t.includes("0,07")))).toBe(true);
+    expect(texts.some((t) => t.includes("-") && (t.includes("0.07") || t.includes("0,07")))).toBe(
+      true,
+    );
   });
 
   it("renders bonus_cash rows with the Bonus type badge", () => {
@@ -634,9 +626,9 @@ describe("TransactionsTable", () => {
     // `type` — the list must prefer `kind` so they don't all read as plain "Buy".
     it("shows 'Saveback', not 'Savings plan', for a savings_plan row with kind=saveback", () => {
       renderSingleRow({ ...ROWS[0], type: "savings_plan", kind: "saveback" });
-      expect(
-        screen.getAllByText(titleStartsWith(messages.TxType.saveback)).length,
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(titleStartsWith(messages.TxType.saveback)).length).toBeGreaterThan(
+        0,
+      );
       expect(
         screen.queryByText(titleStartsWith(messages.TxType.savings_plan)),
       ).not.toBeInTheDocument();
@@ -644,9 +636,9 @@ describe("TransactionsTable", () => {
 
     it("shows 'Round-up', not 'Buy', for a buy row with kind=roundup", () => {
       renderSingleRow({ ...ROWS[0], type: "buy", kind: "roundup" });
-      expect(
-        screen.getAllByText(titleStartsWith(messages.TxType.roundup)).length,
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText(titleStartsWith(messages.TxType.roundup)).length).toBeGreaterThan(
+        0,
+      );
       expect(screen.queryByText(titleStartsWith(messages.TxType.buy))).not.toBeInTheDocument();
     });
 
@@ -840,9 +832,7 @@ describe("TransactionsTable", () => {
       // Select all (one normal, one draft), then confirm — only the draft is resolved.
       enterSelectionMode();
       fireEvent.click(screen.getByLabelText(tb.selectAll));
-      fireEvent.click(
-        screen.getByRole("button", { name: new RegExp(tb.confirmDrafts) }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(tb.confirmDrafts) }));
       await waitFor(() =>
         expect(resolveDraftTransactions).toHaveBeenCalledWith("p2", ["t2"], "confirm"),
       );
@@ -985,7 +975,10 @@ describe("TransactionsTable", () => {
 
     it("fetches the next page from the aggregate endpoint (no portfolioId) on Load more", async () => {
       const spy = vi.fn(async () => ({
-        json: async () => ({ rows: manyRows(5).map((r) => ({ ...r, id: `next-${r.id}` })), total: 60 }),
+        json: async () => ({
+          rows: manyRows(5).map((r) => ({ ...r, id: `next-${r.id}` })),
+          total: 60,
+        }),
       })) as unknown as typeof fetch;
       vi.stubGlobal("fetch", spy);
       const fetchSpy = spy as unknown as ReturnType<typeof vi.fn>;
@@ -1016,7 +1009,11 @@ describe("TransactionsTable", () => {
     it("shows the year chip in the default view when the server provides multiple years", () => {
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
-          <TransactionsTable rows={FILTER_ROWS} years={["2026", "2025"]} total={FILTER_ROWS.length} />
+          <TransactionsTable
+            rows={FILTER_ROWS}
+            years={["2026", "2025"]}
+            total={FILTER_ROWS.length}
+          />
         </NextIntlClientProvider>,
       );
       expect(screen.getByLabelText(messages.Transactions.filterYear)).toBeInTheDocument();
@@ -1080,8 +1077,18 @@ describe("TransactionsTable", () => {
 
     // a1 has an error, a3 has a warning, a2 is clean.
     const MIXED_ANOMALIES = [
-      { code: "oversell" as const, severity: "error" as const, scope: "transaction" as const, transactionId: "a1" },
-      { code: "zero_price" as const, severity: "warning" as const, scope: "transaction" as const, transactionId: "a3" },
+      {
+        code: "oversell" as const,
+        severity: "error" as const,
+        scope: "transaction" as const,
+        transactionId: "a1",
+      },
+      {
+        code: "zero_price" as const,
+        severity: "warning" as const,
+        scope: "transaction" as const,
+        transactionId: "a3",
+      },
     ];
 
     it("renders the anomaly banner when transaction-scoped anomalies are present", () => {
@@ -1100,7 +1107,9 @@ describe("TransactionsTable", () => {
           <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
         </NextIntlClientProvider>,
       );
-      expect(screen.getByRole("button", { name: messages.Anomalies.showFlagged })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: messages.Anomalies.showFlagged }),
+      ).toBeInTheDocument();
     });
 
     it("clicking the toggle shows only flagged rows; clicking again restores all", () => {
@@ -1154,7 +1163,11 @@ describe("TransactionsTable", () => {
 
     it("does not show the headline banner or toggle when only portfolio-scoped anomalies are present", () => {
       const portfolioOnlyAnomalies = [
-        { code: "reconciliation_gap" as const, severity: "warning" as const, scope: "portfolio" as const },
+        {
+          code: "reconciliation_gap" as const,
+          severity: "warning" as const,
+          scope: "portfolio" as const,
+        },
       ];
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
@@ -1192,13 +1205,23 @@ describe("TransactionsTable", () => {
           code: "position_gap" as const,
           severity: "warning" as const,
           scope: "portfolio" as const,
-          meta: { isin: "XF000BTC0017", reported: "0.026504", derived: "0.000262", diff: "0.026242" },
+          meta: {
+            isin: "XF000BTC0017",
+            reported: "0.026504",
+            derived: "0.000262",
+            diff: "0.026242",
+          },
         },
         {
           code: "position_gap" as const,
           severity: "warning" as const,
           scope: "portfolio" as const,
-          meta: { isin: "XF000ETH0019", reported: "0.850477", derived: "0.008420", diff: "0.842057" },
+          meta: {
+            isin: "XF000ETH0019",
+            reported: "0.850477",
+            derived: "0.008420",
+            diff: "0.842057",
+          },
         },
       ];
       render(
@@ -1257,8 +1280,18 @@ describe("TransactionsTable", () => {
 
     it("collapses two anomalies on the same transaction to one worst-severity row instead of double-counting", () => {
       const sameTxAnomalies = [
-        { code: "oversell" as const, severity: "error" as const, scope: "transaction" as const, transactionId: "a1" },
-        { code: "zero_price" as const, severity: "warning" as const, scope: "transaction" as const, transactionId: "a1" },
+        {
+          code: "oversell" as const,
+          severity: "error" as const,
+          scope: "transaction" as const,
+          transactionId: "a1",
+        },
+        {
+          code: "zero_price" as const,
+          severity: "warning" as const,
+          scope: "transaction" as const,
+          transactionId: "a1",
+        },
       ];
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
@@ -1348,7 +1381,9 @@ describe("TransactionsTable", () => {
     it("clearing the search via the X button restores all rows", () => {
       renderFilterTable({ searchQuery: "BBCA" });
       // The clear button should be visible when a search query is active.
-      expect(screen.getByRole("button", { name: messages.Transactions.searchClear })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: messages.Transactions.searchClear }),
+      ).toBeInTheDocument();
     });
 
     it("composes text search with the Buys chip filter", () => {

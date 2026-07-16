@@ -91,7 +91,10 @@ export async function backfillPortfolioHistory(
   const instrById = new Map(instrRows.map((i) => [i.id, i]));
 
   const caRows = instrIds.length
-    ? await db.select().from(corporateActions).where(inArray(corporateActions.instrumentId, instrIds))
+    ? await db
+        .select()
+        .from(corporateActions)
+        .where(inArray(corporateActions.instrumentId, instrIds))
     : [];
   const coreCas = caRows.map((r) => ({
     instrumentId: r.instrumentId,
@@ -110,9 +113,7 @@ export async function backfillPortfolioHistory(
   const buybackRows = await db
     .select()
     .from(scrapedQuotes)
-    .where(
-      inArray(scrapedQuotes.key, ["gold:antam-buyback", "gold:galeri24-buyback"]),
-    );
+    .where(inArray(scrapedQuotes.key, ["gold:antam-buyback", "gold:galeri24-buyback"]));
   for (const r of buybackRows) {
     const market = r.key.replace("gold:", "").replace("-buyback", "").toUpperCase();
     goldBuybackByMarket.set(market, r.value);
@@ -144,10 +145,7 @@ export async function backfillPortfolioHistory(
   for (const instr of instrRows) {
     const firstHeld = txRows
       .filter((r) => r.instrumentId === instr.id)
-      .reduce(
-        (min, r) => (r.executedAt < min ? r.executedAt : min),
-        txRows[0]!.executedAt,
-      );
+      .reduce((min, r) => (r.executedAt < min ? r.executedAt : min), txRows[0]!.executedAt);
     const firstHeldDate = firstHeld.toISOString().slice(0, 10);
     const fetchFrom = firstHeldDate < startDate ? startDate : firstHeldDate;
 
@@ -260,15 +258,27 @@ export async function backfillPortfolioHistory(
     ? await db.select().from(dividendEvents).where(inArray(dividendEvents.instrumentId, instrIds))
     : [];
   // Map: instrumentId → list of { exDate, payDate, amountPerShare }
-  const divEventsByInstr = new Map<string, { exDate: string; payDate: string | null; amountPerShare: string }[]>();
+  const divEventsByInstr = new Map<
+    string,
+    { exDate: string; payDate: string | null; amountPerShare: string }[]
+  >();
   for (const row of divEventRows) {
     const list = divEventsByInstr.get(row.instrumentId) ?? [];
-    list.push({ exDate: row.exDate, payDate: row.payDate ?? null, amountPerShare: row.amountPerShare });
+    list.push({
+      exDate: row.exDate,
+      payDate: row.payDate ?? null,
+      amountPerShare: row.amountPerShare,
+    });
     divEventsByInstr.set(row.instrumentId, list);
   }
 
   // flowDateOf: maps dividend/coupon txns to their ex-date for accurate netting
-  function flowDateOf(tx: { instrumentId: string | null; type: string; price: string; executedAt: Date }): string {
+  function flowDateOf(tx: {
+    instrumentId: string | null;
+    type: string;
+    price: string;
+    executedAt: Date;
+  }): string {
     const payDate = tx.executedAt.toISOString().slice(0, 10);
     if ((tx.type === "dividend" || tx.type === "coupon") && tx.instrumentId) {
       const events = divEventsByInstr.get(tx.instrumentId) ?? [];
@@ -407,9 +417,7 @@ export async function backfillPortfolioHistory(
       const p = priceAt(h.instrumentId, flow.date);
       if (p) pricesForDate[h.instrumentId] = { price: p.close, currency: p.currency };
     }
-    const cash = cashCounted
-      ? cashBalances(coreTxns.filter((t) => t.executedAt <= asOf))
-      : {};
+    const cash = cashCounted ? cashBalances(coreTxns.filter((t) => t.executedAt <= asOf)) : {};
     const fx = fxAt(flow.date);
     const nw = netWorth({
       holdings: holdingsAtDate,
@@ -497,10 +505,7 @@ export async function backfillStalePortfolios(
       earliestSnapshot: min(portfolioSnapshots.date),
     })
     .from(transactions)
-    .leftJoin(
-      portfolioSnapshots,
-      eq(transactions.portfolioId, portfolioSnapshots.portfolioId),
-    )
+    .leftJoin(portfolioSnapshots, eq(transactions.portfolioId, portfolioSnapshots.portfolioId))
     .where(isNotNull(transactions.portfolioId))
     .groupBy(transactions.portfolioId);
 

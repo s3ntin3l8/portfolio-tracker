@@ -40,7 +40,9 @@ export function SettingsInstallItem({ variant }: { variant: "rail" | "landing" }
     <span
       className={cn(
         "flex shrink-0 items-center justify-center",
-        variant === "rail" ? "size-[30px] rounded-[9px] [&>svg]:size-4" : "size-9 rounded-xl [&>svg]:size-[18px]",
+        variant === "rail"
+          ? "size-[30px] rounded-[9px] [&>svg]:size-4"
+          : "size-9 rounded-xl [&>svg]:size-[18px]",
       )}
       style={{ background: ICON_BG, color: ICON_COLOR }}
     >

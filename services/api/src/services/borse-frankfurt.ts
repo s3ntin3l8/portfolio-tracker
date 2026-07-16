@@ -68,7 +68,10 @@ export class BorseFrankfurtProvider {
     try {
       const html = await this.doFetch(BorseFrankfurtProvider.HOMEPAGE).then((r) => r.text());
       const jsMatch = html.match(/src="(\/[^"]*main\.[^"]*\.js)"/);
-      if (!jsMatch) { this.cachedSalt = ""; return ""; }
+      if (!jsMatch) {
+        this.cachedSalt = "";
+        return "";
+      }
       const jsUrl = `${BorseFrankfurtProvider.HOMEPAGE}${jsMatch[1].replace(/^\//, "")}`;
       const js = await this.doFetch(jsUrl).then((r) => r.text());
       const saltMatch = js.match(/salt:"(\w+)"/);

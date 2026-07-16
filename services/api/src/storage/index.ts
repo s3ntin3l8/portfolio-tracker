@@ -49,9 +49,7 @@ let cachedProvider: StorageProvider | null = null;
  * The Fastify app instance is required to read `app.config` for env defaults and
  * `app.db` / `app.encryption` for the DB-backed credential layer.
  */
-export async function getStorageProvider(
-  app: FastifyInstance,
-): Promise<StorageProvider> {
+export async function getStorageProvider(app: FastifyInstance): Promise<StorageProvider> {
   if (cachedProvider) return cachedProvider;
 
   const db = getDb();

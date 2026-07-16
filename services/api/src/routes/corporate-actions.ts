@@ -7,25 +7,21 @@ export async function corporateActionsRoute(app: FastifyInstance) {
   // Record a corporate action (split/bonus/rights) for an instrument. Shared
   // reference data — applied to every holder's derived holdings. Admin-gated (a bogus
   // split/ratio corrupts every holder's quantities and cost basis).
-  app.post(
-    "/corporate-actions",
-    { preHandler: app.requireAdmin },
-    async (request, reply) => {
-      const input = corporateActionInputSchema.parse(request.body);
-      const [created] = await app.db
-        .insert(corporateActions)
-        .values({
-          instrumentId: input.instrumentId,
-          type: input.type,
-          ratio: input.ratio,
-          exDate: input.exDate.toISOString().slice(0, 10),
-          terms: input.terms ?? null,
-        })
-        .returning();
-      reply.code(201);
-      return created;
-    },
-  );
+  app.post("/corporate-actions", { preHandler: app.requireAdmin }, async (request, reply) => {
+    const input = corporateActionInputSchema.parse(request.body);
+    const [created] = await app.db
+      .insert(corporateActions)
+      .values({
+        instrumentId: input.instrumentId,
+        type: input.type,
+        ratio: input.ratio,
+        exDate: input.exDate.toISOString().slice(0, 10),
+        terms: input.terms ?? null,
+      })
+      .returning();
+    reply.code(201);
+    return created;
+  });
 
   // Update a corporate action (type / ratio / ex-date / terms). Reference data —
   // edits flow through to every holder's derived holdings. Admin-gated (same reasoning
@@ -38,8 +34,7 @@ export async function corporateActionsRoute(app: FastifyInstance) {
       const values: Partial<typeof corporateActions.$inferInsert> = {};
       if (input.type !== undefined) values.type = input.type;
       if (input.ratio !== undefined) values.ratio = input.ratio;
-      if (input.exDate !== undefined)
-        values.exDate = input.exDate.toISOString().slice(0, 10);
+      if (input.exDate !== undefined) values.exDate = input.exDate.toISOString().slice(0, 10);
       if (input.terms !== undefined) values.terms = input.terms ?? null;
       if (Object.keys(values).length === 0) {
         reply.code(400);

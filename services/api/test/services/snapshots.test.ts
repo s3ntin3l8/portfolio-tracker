@@ -125,8 +125,24 @@ describe("recordDailySnapshots", () => {
 
     // Both held, same quantity × price.
     await db.insert(transactions).values([
-      { portfolioId: p.id, instrumentId: instA.id, type: "buy", quantity: "10", price: "1000", currency: "IDR", executedAt: new Date("2026-01-10") },
-      { portfolioId: p.id, instrumentId: instB.id, type: "buy", quantity: "10", price: "2000", currency: "IDR", executedAt: new Date("2026-01-10") },
+      {
+        portfolioId: p.id,
+        instrumentId: instA.id,
+        type: "buy",
+        quantity: "10",
+        price: "1000",
+        currency: "IDR",
+        executedAt: new Date("2026-01-10"),
+      },
+      {
+        portfolioId: p.id,
+        instrumentId: instB.id,
+        type: "buy",
+        quantity: "10",
+        price: "2000",
+        currency: "IDR",
+        executedAt: new Date("2026-01-10"),
+      },
     ]);
 
     // Seed historical price for B (2 days ago = ≤7d cap).
@@ -189,8 +205,24 @@ describe("recordDailySnapshots", () => {
       .returning();
 
     await db.insert(transactions).values([
-      { portfolioId: p.id, instrumentId: instA.id, type: "buy", quantity: "10", price: "1000", currency: "IDR", executedAt: new Date("2026-01-10") },
-      { portfolioId: p.id, instrumentId: instB.id, type: "buy", quantity: "10", price: "2000", currency: "IDR", executedAt: new Date("2026-01-10") },
+      {
+        portfolioId: p.id,
+        instrumentId: instA.id,
+        type: "buy",
+        quantity: "10",
+        price: "1000",
+        currency: "IDR",
+        executedAt: new Date("2026-01-10"),
+      },
+      {
+        portfolioId: p.id,
+        instrumentId: instB.id,
+        type: "buy",
+        quantity: "10",
+        price: "2000",
+        currency: "IDR",
+        executedAt: new Date("2026-01-10"),
+      },
     ]);
 
     // Seed historical price for B — 30 days ago (beyond 7-day cap).
@@ -332,9 +364,7 @@ describe("recordIntradaySnapshots", () => {
       .select()
       .from(portfolioIntradaySnapshots)
       .where(eq(portfolioIntradaySnapshots.portfolioId, portfolioId));
-    expect(rows.every((r) => r.capturedAt.getTime() > new Date("2026-01-10").getTime())).toBe(
-      true,
-    );
+    expect(rows.every((r) => r.capturedAt.getTime() > new Date("2026-01-10").getTime())).toBe(true);
   });
 });
 

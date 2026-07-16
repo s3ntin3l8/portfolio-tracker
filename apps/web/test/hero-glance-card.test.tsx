@@ -56,12 +56,7 @@ describe("HeroGlanceCard", () => {
   it("hides the delta pill when fewer than 2 series points are available", () => {
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <HeroGlanceCard
-          netWorth="0"
-          currency="IDR"
-          initialHistory={[]}
-          initialRange="7d"
-        />
+        <HeroGlanceCard netWorth="0" currency="IDR" initialHistory={[]} initialRange="7d" />
       </NextIntlClientProvider>,
     );
     expect(screen.queryByText(/▲/)).not.toBeInTheDocument();

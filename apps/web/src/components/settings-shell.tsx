@@ -116,7 +116,10 @@ export function SettingsShell({
             {landingGroups.map((group, i) => (
               <div
                 key={`group-${i}`}
-                className={cn("divide-y divide-line overflow-hidden rounded-[20px] bg-card", CARD_SHADOW)}
+                className={cn(
+                  "divide-y divide-line overflow-hidden rounded-[20px] bg-card",
+                  CARD_SHADOW,
+                )}
               >
                 {group.map((item) => (
                   <Link
@@ -140,7 +143,9 @@ export function SettingsShell({
                         )}
                       </div>
                       {item.subtitle && (
-                        <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {item.subtitle}
+                        </div>
                       )}
                     </div>
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -149,7 +154,12 @@ export function SettingsShell({
               </div>
             ))}
             {landingExtra && (
-              <div className={cn("divide-y divide-line overflow-hidden rounded-[20px] bg-card", CARD_SHADOW)}>
+              <div
+                className={cn(
+                  "divide-y divide-line overflow-hidden rounded-[20px] bg-card",
+                  CARD_SHADOW,
+                )}
+              >
                 {landingExtra}
               </div>
             )}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { dailyReturns, annualizedVolatility, sharpeRatio, sortinoRatio } from "../src/volatility.js";
+import {
+  dailyReturns,
+  annualizedVolatility,
+  sharpeRatio,
+  sortinoRatio,
+} from "../src/volatility.js";
 
 describe("dailyReturns", () => {
   it("returns empty array for single point", () => {

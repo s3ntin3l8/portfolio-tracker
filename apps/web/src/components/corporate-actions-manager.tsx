@@ -9,19 +9,8 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
@@ -41,11 +30,7 @@ const TYPES = ["split", "bonus", "rights"] as const;
  * (type / ratio / ex-date) and a two-step delete per row. Derived holdings
  * recompute on the next server render (`router.refresh()`).
  */
-export function CorporateActionsManager({
-  items: initial,
-}: {
-  items: CorporateAction[];
-}) {
+export function CorporateActionsManager({ items: initial }: { items: CorporateAction[] }) {
   const t = useTranslations("Instrument");
   const tc = useTranslations("CorpAction");
   const tt = useTranslations("TxType");
@@ -105,9 +90,7 @@ export function CorporateActionsManager({
   }
 
   if (items.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">{t("noCorporateActions")}</p>
-    );
+    return <p className="text-sm text-muted-foreground">{t("noCorporateActions")}</p>;
   }
 
   const sorted = sort(items);
@@ -118,9 +101,30 @@ export function CorporateActionsManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("type")}</SortableTableHead>
-              <SortableTableHead colKey="ratio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("ratio")}</SortableTableHead>
-              <SortableTableHead colKey="exDate" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{tc("exDate")}</SortableTableHead>
+              <SortableTableHead
+                colKey="type"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {tc("type")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="ratio"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {tc("ratio")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="exDate"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {tc("exDate")}
+              </SortableTableHead>
               <TableCell className="h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground">
                 <span className="sr-only">{tc("edit")}</span>
               </TableCell>
@@ -133,15 +137,11 @@ export function CorporateActionsManager({
                   <TableCell colSpan={4}>
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">
-                          {tc("type")}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tc("type")}</span>
                         <Select
                           aria-label={tc("type")}
                           value={type}
-                          onChange={(e) =>
-                            setType(e.target.value as (typeof TYPES)[number])
-                          }
+                          onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}
                         >
                           {TYPES.map((ty) => (
                             <option key={ty} value={ty}>
@@ -151,9 +151,7 @@ export function CorporateActionsManager({
                         </Select>
                       </div>
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">
-                          {tc("ratio")}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tc("ratio")}</span>
                         <Input
                           aria-label={tc("ratio")}
                           inputMode="decimal"
@@ -163,9 +161,7 @@ export function CorporateActionsManager({
                         />
                       </div>
                       <div className="space-y-1">
-                        <span className="text-xs text-muted-foreground">
-                          {tc("exDate")}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{tc("exDate")}</span>
                         <DatePicker
                           label={tc("exDate")}
                           className="w-40"
@@ -205,9 +201,7 @@ export function CorporateActionsManager({
                   <TableCell>
                     <Badge variant="outline">{tt(ca.type)}</Badge>
                   </TableCell>
-                  <TableCell className="tabular text-muted-foreground">
-                    {ca.ratio}
-                  </TableCell>
+                  <TableCell className="tabular text-muted-foreground">{ca.ratio}</TableCell>
                   <TableCell className="tabular text-muted-foreground">
                     {df.format(new Date(ca.exDate))}
                   </TableCell>
@@ -303,7 +297,15 @@ export function CorporateActionsManager({
         ))}
       </div>
 
-      <Sheet open={sheetCa !== null} onOpenChange={(o) => { if (!o) { setSheetCa(null); setConfirmDelete(false); } }}>
+      <Sheet
+        open={sheetCa !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSheetCa(null);
+            setConfirmDelete(false);
+          }
+        }}
+      >
         <SheetContent side="bottom" className="px-4 pb-8">
           <SheetHeader>
             <SheetTitle>{tc("edit")}</SheetTitle>
@@ -318,7 +320,9 @@ export function CorporateActionsManager({
                   onChange={(e) => setType(e.target.value as (typeof TYPES)[number])}
                 >
                   {TYPES.map((ty) => (
-                    <option key={ty} value={ty}>{tt(ty)}</option>
+                    <option key={ty} value={ty}>
+                      {tt(ty)}
+                    </option>
                   ))}
                 </Select>
               </div>
@@ -341,10 +345,21 @@ export function CorporateActionsManager({
               </div>
               <div className="flex gap-2 pt-2">
                 <Button disabled={busy} onClick={() => save(sheetCa.id)}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                  {busy ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Check className="size-4" />
+                  )}
                   {tc("save")}
                 </Button>
-                <Button variant="ghost" disabled={busy} onClick={() => { setSheetCa(null); setConfirmDelete(false); }}>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    setSheetCa(null);
+                    setConfirmDelete(false);
+                  }}
+                >
                   <X className="size-4" />
                   {tc("cancel")}
                 </Button>
@@ -352,7 +367,12 @@ export function CorporateActionsManager({
               <div className="border-t border-border pt-4">
                 {confirmDelete ? (
                   <div className="flex gap-2">
-                    <Button variant="destructive" onClick={async () => { await remove(sheetCa.id); }}>
+                    <Button
+                      variant="destructive"
+                      onClick={async () => {
+                        await remove(sheetCa.id);
+                      }}
+                    >
                       {busy && <Loader2 className="size-3.5 animate-spin" />}
                       {tc("delete")}
                     </Button>
@@ -361,7 +381,11 @@ export function CorporateActionsManager({
                     </Button>
                   </div>
                 ) : (
-                  <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setConfirmDelete(true)}
+                  >
                     <Trash2 className="size-4" />
                     {tc("delete")}
                   </Button>

@@ -143,7 +143,10 @@ export function AppShell({
 
         {/* overscroll-contain: stop rubber-band/scroll-chaining to the page behind it —
             matters most in the installed PWA, which has no browser chrome to absorb it. */}
-        <div ref={scrollContainerRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <div
+          ref={scrollContainerRef}
+          className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+        >
           {/* Reference top bar: 62px, card surface, 24px side padding, 12px gaps.
             Padding lives on the INNER wrapper (not the outer bar) so its cap/center
             matches <main>'s content edges exactly — see the widescreen note on <main>.

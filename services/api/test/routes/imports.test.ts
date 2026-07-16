@@ -175,7 +175,11 @@ describe("CSV import → confirm flow", () => {
         method: "POST",
         url: "/portfolios",
         headers: auth(t),
-        payload: { name: "DKB matched", baseCurrency: "EUR", accountNumber: "DE78120300001066505387" },
+        payload: {
+          name: "DKB matched",
+          baseCurrency: "EUR",
+          accountNumber: "DE78120300001066505387",
+        },
       })
     ).json().id;
 
@@ -205,14 +209,22 @@ describe("CSV import → confirm flow", () => {
     expect(mat.json().materializedCount).toBe(4);
 
     // The rows live in the transactions table as status='draft'.
-    const list = await app.inject({ method: "GET", url: `/portfolios/${pid}/transactions`, headers: auth(t) });
+    const list = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pid}/transactions`,
+      headers: auth(t),
+    });
     const rows = list.json() as Array<{ status: string; source: string }>;
     expect(rows).toHaveLength(4);
     expect(rows.every((r) => r.status === "draft")).toBe(true);
     expect(rows.every((r) => r.source === "csv")).toBe(true);
 
     // Excluded from derivations until confirmed — the savings-plan buy is not yet a holding.
-    const holdings = await app.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pid}/holdings`,
+      headers: auth(t),
+    });
     expect(holdings.json().holdings).toHaveLength(0);
 
     // Confirming them (bulk) flips to normal and they start counting.
@@ -224,7 +236,11 @@ describe("CSV import → confirm flow", () => {
       payload: { ids, action: "confirm" },
     });
     expect(resolve.json().updated).toBe(4);
-    const holdings2 = await app.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    const holdings2 = await app.inject({
+      method: "GET",
+      url: `/portfolios/${pid}/holdings`,
+      headers: auth(t),
+    });
     expect(holdings2.json().holdings.length).toBeGreaterThan(0);
   });
 
@@ -476,7 +492,13 @@ describe("CSV import → confirm flow", () => {
     expect(generic.statusCode).toBe(201);
     expect(generic.json().drafts).toHaveLength(1);
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${generic.json().importId}`, headers: auth(t) })).json().parser,
+      (
+        await app.inject({
+          method: "GET",
+          url: `/imports/${generic.json().importId}`,
+          headers: auth(t),
+        })
+      ).json().parser,
     ).toBe("csv");
   });
 
@@ -528,12 +550,22 @@ describe("CSV import → confirm flow", () => {
 
     // Discard the draft (confirmed imports can't be discarded — 409).
     expect(
-      (await app.inject({ method: "POST", url: `/imports/${draftImp.importId}/discard`, headers: auth(t) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "POST",
+          url: `/imports/${draftImp.importId}/discard`,
+          headers: auth(t),
+        })
+      ).statusCode,
     ).toBe(204);
     expect(
-      (await app.inject({ method: "POST", url: `/imports/${confirmImp.importId}/discard`, headers: auth(t) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "POST",
+          url: `/imports/${confirmImp.importId}/discard`,
+          headers: auth(t),
+        })
+      ).statusCode,
     ).toBe(409);
 
     // Undo the confirmed import: its transaction is removed and it's marked discarded.
@@ -551,15 +583,25 @@ describe("CSV import → confirm flow", () => {
     });
     expect(holdings.json().holdings).toHaveLength(0);
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${confirmImp.importId}`, headers: auth(t) }))
-        .json().status,
+      (
+        await app.inject({
+          method: "GET",
+          url: `/imports/${confirmImp.importId}`,
+          headers: auth(t),
+        })
+      ).json().status,
     ).toBe("discarded");
 
     // Another user can't touch these imports.
     const other = await token("hist-other");
     expect(
-      (await app.inject({ method: "DELETE", url: `/imports/${draftImp.importId}`, headers: auth(other) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/imports/${draftImp.importId}`,
+          headers: auth(other),
+        })
+      ).statusCode,
     ).toBe(404);
   });
 
@@ -754,17 +796,22 @@ describe("CSV import → confirm flow", () => {
     expect(res.json().cleared).toBe(2);
 
     // The discarded rows are gone; the draft survives.
-    const remaining = (
-      await app.inject({ method: "GET", url: "/imports", headers: auth(t) })
-    ).json().map((r: { id: string }) => r.id);
+    const remaining = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) }))
+      .json()
+      .map((r: { id: string }) => r.id);
     expect(remaining).not.toContain(discardedA);
     expect(remaining).not.toContain(discardedB);
     expect(remaining).toContain(draftId);
 
     // The other user's discarded row is untouched.
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${otherImp.importId}`, headers: auth(other) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "GET",
+          url: `/imports/${otherImp.importId}`,
+          headers: auth(other),
+        })
+      ).statusCode,
     ).toBe(200);
   });
 
@@ -810,7 +857,11 @@ describe("CSV import → confirm flow", () => {
       headers: auth(t),
       payload: { portfolioId, transactions: confirmed.drafts },
     });
-    await app.inject({ method: "POST", url: `/imports/${discarded.importId}/discard`, headers: auth(t) });
+    await app.inject({
+      method: "POST",
+      url: `/imports/${discarded.importId}/discard`,
+      headers: auth(t),
+    });
 
     // Another user's draft — must be skipped (IDOR).
     const other = await token("bulk-delete-other");
@@ -821,7 +872,12 @@ describe("CSV import → confirm flow", () => {
       payload: { name: "OtherBD", baseCurrency: "IDR" },
     });
     const otherImp = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(other), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(other),
+        payload: { content: CSV },
+      })
     ).json();
 
     const res = await app.inject({
@@ -833,7 +889,12 @@ describe("CSV import → confirm flow", () => {
       },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ discarded: 1, undone: 1, cleared: 1, removedTransactions: 1 });
+    expect(res.json()).toMatchObject({
+      discarded: 1,
+      undone: 1,
+      cleared: 1,
+      removedTransactions: 1,
+    });
 
     // Confirmed import's transaction was removed.
     const holdings = await app.inject({
@@ -846,18 +907,29 @@ describe("CSV import → confirm flow", () => {
     // Draft + confirmed are now discarded (kept for the audit trail); the already-discarded
     // row was hard-cleared (404).
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${draft.importId}`, headers: auth(t) })).json().status,
+      (
+        await app.inject({ method: "GET", url: `/imports/${draft.importId}`, headers: auth(t) })
+      ).json().status,
     ).toBe("discarded");
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${confirmed.importId}`, headers: auth(t) })).json().status,
+      (
+        await app.inject({ method: "GET", url: `/imports/${confirmed.importId}`, headers: auth(t) })
+      ).json().status,
     ).toBe("discarded");
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${discarded.importId}`, headers: auth(t) })).statusCode,
+      (await app.inject({ method: "GET", url: `/imports/${discarded.importId}`, headers: auth(t) }))
+        .statusCode,
     ).toBe(404);
 
     // The other user's draft is untouched.
     expect(
-      (await app.inject({ method: "GET", url: `/imports/${otherImp.importId}`, headers: auth(other) })).json().status,
+      (
+        await app.inject({
+          method: "GET",
+          url: `/imports/${otherImp.importId}`,
+          headers: auth(other),
+        })
+      ).json().status,
     ).toBe("draft");
   });
 
@@ -872,7 +944,9 @@ describe("CSV import → confirm flow", () => {
         payload: { content: `${CSV}\n# batch tag` },
       })
     ).json();
-    const rows = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) })).json() as Array<{
+    const rows = (
+      await app.inject({ method: "GET", url: "/imports", headers: auth(t) })
+    ).json() as Array<{
       id: string;
       batchId: string | null;
     }>;
@@ -939,7 +1013,9 @@ describe("CSV import → confirm flow", () => {
         externalId: "anchor-tx-2",
       },
     ]);
-    const rows = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) })).json() as Array<{
+    const rows = (
+      await app.inject({ method: "GET", url: "/imports", headers: auth(t) })
+    ).json() as Array<{
       id: string;
       parser: string;
       count: number;
@@ -1040,7 +1116,12 @@ describe("CSV import → confirm flow", () => {
     ).json().id;
 
     const imp = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     const confirm = await app.inject({
       method: "POST",
@@ -1054,7 +1135,12 @@ describe("CSV import → confirm flow", () => {
 
     // While the transactions still exist the file-level guard blocks the re-upload (as before).
     const blocked = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(blocked.alreadyConfirmed).toBe(true);
     expect(blocked.drafts).toHaveLength(0);
@@ -1070,14 +1156,21 @@ describe("CSV import → confirm flow", () => {
 
     // Re-upload now: the confirmed import is stale (no live rows) → a fresh draft, no block.
     const reImp = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(reImp.alreadyConfirmed).toBeFalsy();
     expect(reImp.drafts.length).toBeGreaterThan(0);
     expect(reImp.importId).not.toBe(imp.importId);
 
     // The stale confirmed import was superseded (marked discarded) so it won't re-block.
-    const list = (await app.inject({ method: "GET", url: "/imports", headers: auth(t) })).json() as Array<{
+    const list = (
+      await app.inject({ method: "GET", url: "/imports", headers: auth(t) })
+    ).json() as Array<{
       id: string;
       status: string;
     }>;
@@ -1097,7 +1190,12 @@ describe("CSV import → confirm flow", () => {
     ).json().id;
 
     const imp = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     await app.inject({
       method: "POST",
@@ -1108,7 +1206,12 @@ describe("CSV import → confirm flow", () => {
 
     // No force → blocked even though it's the same file.
     const blocked = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(blocked.alreadyConfirmed).toBe(true);
 
@@ -1479,21 +1582,41 @@ describe("CSV import → confirm flow", () => {
   it("same CSV uploaded to two different portfolios is deduped per-user (blocked)", async () => {
     const t = await token("cross-portfolio-dedup-user");
     const p1 = (
-      await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P1" } })
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P1" },
+      })
     ).json().id;
     const p2 = (
-      await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P2" } })
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P2" },
+      })
     ).json().id;
 
     // First upload — creates a draft.
     const first = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(first.importId).toBeDefined();
 
     // Second upload of the same content — blocked, returns same importId.
     const second = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(second.importId).toBe(first.importId);
     expect(second.alreadyExists).toBe(true);
@@ -1508,7 +1631,12 @@ describe("CSV import → confirm flow", () => {
 
     // Third upload of the same content — now blocked as already confirmed.
     const third = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(t), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(t),
+        payload: { content: CSV },
+      })
     ).json();
     expect(third.alreadyConfirmed).toBe(true);
     expect(third.importId).toBe(first.importId);
@@ -1516,7 +1644,12 @@ describe("CSV import → confirm flow", () => {
     // Different user — same content is NOT deduped against user 1.
     const other = await token("cross-portfolio-other");
     const otherImp = (
-      await app.inject({ method: "POST", url: `/imports/csv`, headers: auth(other), payload: { content: CSV } })
+      await app.inject({
+        method: "POST",
+        url: `/imports/csv`,
+        headers: auth(other),
+        payload: { content: CSV },
+      })
     ).json();
     expect(otherImp.importId).not.toBe(first.importId);
     expect(otherImp.alreadyExists).toBeFalsy();
@@ -1862,7 +1995,11 @@ describe("screenshot import → confirm flow", () => {
     expect(mat.json().materialized).toBe(true);
 
     const list = (
-      await detectApp.inject({ method: "GET", url: `/portfolios/${pid1}/transactions`, headers: auth(t) })
+      await detectApp.inject({
+        method: "GET",
+        url: `/portfolios/${pid1}/transactions`,
+        headers: auth(t),
+      })
     ).json() as Array<{ status: string }>;
     expect(list.length).toBeGreaterThan(0);
     expect(list.every((r) => r.status === "draft")).toBe(true);
@@ -2152,7 +2289,9 @@ describe("import dedup + account mismatch (#196, #197)", () => {
   // closes at the end, keeping the cases isolated.
   async function freshApp(parser?: ScreenshotParser) {
     const kp = await generateKeyPair("ES256");
-    const a = await buildApp(parser ? { authKey: kp.publicKey, screenshotParser: parser } : { authKey: kp.publicKey });
+    const a = await buildApp(
+      parser ? { authKey: kp.publicKey, screenshotParser: parser } : { authKey: kp.publicKey },
+    );
     const mkTok = (sub: string) =>
       new SignJWT({})
         .setProtectedHeader({ alg: "ES256" })
@@ -2509,7 +2648,10 @@ describe("import dedup + account mismatch (#196, #197)", () => {
     });
     expect(conf.json().confirmed).toBe(1);
     // Now import the screenshot draft.
-    const up = screenshotPart(Buffer.from(`shot-${draft.action}-${String(draft.executedAt)}`), "image/png");
+    const up = screenshotPart(
+      Buffer.from(`shot-${draft.action}-${String(draft.executedAt)}`),
+      "image/png",
+    );
     const shot = await a.inject({
       method: "POST",
       url: "/imports/screenshot",
@@ -2520,7 +2662,10 @@ describe("import dedup + account mismatch (#196, #197)", () => {
   }
 
   it("blocks a PDF/screenshot confirm of a trade already imported from CSV, until acknowledged", async () => {
-    const { a, t, pid, importId, drafts } = await committedCsvThenScreenshot(SAME_TRADE, "dup217-csv");
+    const { a, t, pid, importId, drafts } = await committedCsvThenScreenshot(
+      SAME_TRADE,
+      "dup217-csv",
+    );
 
     // Selecting the duplicated draft (i.e. the upload-time flag was missed or overridden)
     // must hit the backstop: a 409 listing the duplicate, NOT a silent double-write.
@@ -2650,14 +2795,21 @@ import type { StorageProvider } from "../../src/storage/types.js";
 function makeMemoryStorage(): StorageProvider {
   const data = new Map<string, Buffer>();
   return {
-    put: async (key, body) => { data.set(key, body instanceof Buffer ? body : Buffer.from("bytes")); },
+    put: async (key, body) => {
+      data.set(key, body instanceof Buffer ? body : Buffer.from("bytes"));
+    },
     getSignedUrl: async (key) => `https://fake/${key}`,
-    delete: async (key) => { data.delete(key); },
+    delete: async (key) => {
+      data.delete(key);
+    },
     exists: async (key) => data.has(key),
     get: async (key) => data.get(key) ?? null,
     move: async (src, dest) => {
       const buf = data.get(src);
-      if (buf) { data.set(dest, buf); data.delete(src); }
+      if (buf) {
+        data.set(dest, buf);
+        data.delete(src);
+      }
     },
     stats: async () => ({ objectCount: data.size, totalBytes: 0 }),
   };
@@ -2720,21 +2872,50 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
     const { a, mkTok } = await freshApp259();
     const t = await mkTok("dup-preview-user");
 
-    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
     // Confirm the first CSV import.
-    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
-    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
 
     // Import the same trade via a different CSV file (different hash).
-    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV_DUP },
+    });
     expect(r2.statusCode).toBe(201);
     const importId2 = r2.json().importId;
 
     // Preview: same csv source → duplicate.
-    const preview = await a.inject({ method: "POST", url: `/imports/${importId2}/duplicates`, headers: auth(t), payload: { portfolioId: pid } });
+    const preview = await a.inject({
+      method: "POST",
+      url: `/imports/${importId2}/duplicates`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
     expect(preview.statusCode).toBe(200);
-    const { annotations } = preview.json() as { annotations: Array<{ draftIndex: number; kind: string }> };
+    const { annotations } = preview.json() as {
+      annotations: Array<{ draftIndex: number; kind: string }>;
+    };
     expect(annotations).toHaveLength(1);
     expect(annotations[0].kind).toBe("duplicate");
 
@@ -2744,27 +2925,60 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
   it("preview endpoint returns kind=enrichment for cross-source screenshot vs CSV tx", async () => {
     const storage = makeMemoryStorage();
     const { a, mkTok } = await freshApp259({
-      parser: { name: "mock", isConfigured: () => true, parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }) },
+      parser: {
+        name: "mock",
+        isConfigured: () => true,
+        parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }),
+      },
       storage,
     });
     const t = await mkTok("enrich-preview-user");
 
-    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
     // Confirm CSV import (source="csv").
-    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
-    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
 
     // Upload a screenshot with the same trade.
     const form = screenshotPart(Buffer.from("fake-bca-screenshot"), "image/png", "bca.png");
-    const r2 = await a.inject({ method: "POST", url: "/imports/screenshot", headers: { ...auth(t), ...form.headers }, payload: form.payload });
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
     expect(r2.statusCode).toBe(201);
     const importId2 = r2.json().importId;
 
     // Preview: screenshot vs csv → enrichment.
-    const preview = await a.inject({ method: "POST", url: `/imports/${importId2}/duplicates`, headers: auth(t), payload: { portfolioId: pid } });
+    const preview = await a.inject({
+      method: "POST",
+      url: `/imports/${importId2}/duplicates`,
+      headers: auth(t),
+      payload: { portfolioId: pid },
+    });
     expect(preview.statusCode).toBe(200);
-    const { annotations } = preview.json() as { annotations: Array<{ draftIndex: number; kind: string; matchedTransactionId: string }> };
+    const { annotations } = preview.json() as {
+      annotations: Array<{ draftIndex: number; kind: string; matchedTransactionId: string }>;
+    };
     expect(annotations).toHaveLength(1);
     expect(annotations[0].kind).toBe("enrichment");
     expect(annotations[0].matchedTransactionId).toBeTruthy();
@@ -2775,34 +2989,69 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
   it("auto-enrich: confirming a screenshot that matches a CSV tx returns enriched=1 and no 409", async () => {
     const storage = makeMemoryStorage();
     const { a, mkTok } = await freshApp259({
-      parser: { name: "mock", isConfigured: () => true, parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }) },
+      parser: {
+        name: "mock",
+        isConfigured: () => true,
+        parse: async () => ({ drafts: [BCA_SCREENSHOT_DRAFT], contracts: [] }),
+      },
       storage,
     });
     const t = await mkTok("auto-enrich-user");
 
-    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
     // Confirm CSV import first.
-    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
-    const conf1 = await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    const conf1 = await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
     expect(conf1.statusCode).toBe(201);
     expect(conf1.json().confirmed).toBe(1);
 
     // Upload screenshot (same trade).
     const form = screenshotPart(Buffer.from("bca-screenshot-bytes"), "image/png", "bca2.png");
-    const r2 = await a.inject({ method: "POST", url: "/imports/screenshot", headers: { ...auth(t), ...form.headers }, payload: form.payload });
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/screenshot",
+      headers: { ...auth(t), ...form.headers },
+      payload: form.payload,
+    });
     expect(r2.statusCode).toBe(201);
     const { importId: impId2, drafts: drafts2 } = r2.json();
 
     // Confirm screenshot — should auto-enrich, not 409.
-    const conf2 = await a.inject({ method: "POST", url: `/imports/${impId2}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: drafts2 } });
+    const conf2 = await a.inject({
+      method: "POST",
+      url: `/imports/${impId2}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: drafts2 },
+    });
     expect(conf2.statusCode).toBe(201);
     const body = conf2.json() as { confirmed: number; enriched: number };
     expect(body.confirmed).toBe(0); // not a new tx
-    expect(body.enriched).toBe(1);  // enriched the existing one
+    expect(body.enriched).toBe(1); // enriched the existing one
 
     // Holdings count is still 1 (no duplicate tx created).
-    const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    const holdings = await a.inject({
+      method: "GET",
+      url: `/portfolios/${pid}/holdings`,
+      headers: auth(t),
+    });
     expect(holdings.json().holdings).toHaveLength(1);
 
     await a.close();
@@ -2815,22 +3064,53 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
     const { a, mkTok } = await freshApp259();
     const t = await mkTok("plain-dup-user");
 
-    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
-    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
-    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
 
     // Second import with same trade, different file content → different hash, new import record.
-    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV_DUP },
+    });
     expect(r2.statusCode).toBe(201);
 
-    const conf2 = await a.inject({ method: "POST", url: `/imports/${r2.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r2.json().drafts } });
+    const conf2 = await a.inject({
+      method: "POST",
+      url: `/imports/${r2.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r2.json().drafts },
+    });
     // 201 not 409: same-source + same content → onConflictDoNothing, skipped=1.
     expect(conf2.statusCode).toBe(201);
     expect(conf2.json().skipped).toBe(1);
 
     // Holdings still has exactly 1 row (no duplicate tx created).
-    const holdings = await a.inject({ method: "GET", url: `/portfolios/${pid}/holdings`, headers: auth(t) });
+    const holdings = await a.inject({
+      method: "GET",
+      url: `/portfolios/${pid}/holdings`,
+      headers: auth(t),
+    });
     expect(holdings.json().holdings).toHaveLength(1);
 
     await a.close();
@@ -2840,12 +3120,34 @@ describe("enrichment vs duplicate preview and auto-enrich (#259)", () => {
     const { a, mkTok } = await freshApp259();
     const t = await mkTok("ack-dup-user");
 
-    const pid = (await a.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "P", baseCurrency: "IDR" } })).json().id;
+    const pid = (
+      await a.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "P", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
-    const r1 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV } });
-    await a.inject({ method: "POST", url: `/imports/${r1.json().importId}/confirm`, headers: auth(t), payload: { portfolioId: pid, transactions: r1.json().drafts } });
+    const r1 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/imports/${r1.json().importId}/confirm`,
+      headers: auth(t),
+      payload: { portfolioId: pid, transactions: r1.json().drafts },
+    });
 
-    const r2 = await a.inject({ method: "POST", url: "/imports/csv", headers: auth(t), payload: { content: CSV_DUP } });
+    const r2 = await a.inject({
+      method: "POST",
+      url: "/imports/csv",
+      headers: auth(t),
+      payload: { content: CSV_DUP },
+    });
     const conf2 = await a.inject({
       method: "POST",
       url: `/imports/${r2.json().importId}/confirm`,

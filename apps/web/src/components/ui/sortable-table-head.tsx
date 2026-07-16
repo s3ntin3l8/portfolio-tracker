@@ -24,20 +24,12 @@ export function SortableTableHead({
   align = "left",
 }: SortableTableHeadProps) {
   const isActive = colKey === sortKey;
-  const ariaSortValue = isActive
-    ? sortDir === "asc"
-      ? "ascending"
-      : "descending"
-    : "none";
+  const ariaSortValue = isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none";
 
   return (
     <TableHead
       aria-sort={ariaSortValue}
-      className={cn(
-        "cursor-pointer select-none",
-        align === "right" && "text-right",
-        className,
-      )}
+      className={cn("cursor-pointer select-none", align === "right" && "text-right", className)}
     >
       <button
         type="button"

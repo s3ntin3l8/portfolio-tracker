@@ -31,7 +31,16 @@ const PLANS: DetectedPlan[] = [
     lastExecution: "2026-05-05",
     executionCount: 5,
     source: "tagged",
-    levels: [{ amount: "70", amountDisplay: "70", currency: "EUR", since: "2026-01-05", until: null, executionCount: 5 }],
+    levels: [
+      {
+        amount: "70",
+        amountDisplay: "70",
+        currency: "EUR",
+        since: "2026-01-05",
+        until: null,
+        executionCount: 5,
+      },
+    ],
     name: "Vanguard FTSE All-World",
     symbol: "VWCE",
   } as DetectedPlan & { name: string; symbol: string },
@@ -46,7 +55,16 @@ const PLANS: DetectedPlan[] = [
     lastExecution: "2026-05-05",
     executionCount: 5,
     source: "tagged",
-    levels: [{ amount: "30", amountDisplay: "30", currency: "EUR", since: "2026-01-05", until: null, executionCount: 5 }],
+    levels: [
+      {
+        amount: "30",
+        amountDisplay: "30",
+        currency: "EUR",
+        since: "2026-01-05",
+        until: null,
+        executionCount: 5,
+      },
+    ],
     name: "iShares EM IMI",
     symbol: "EIMI",
   } as DetectedPlan & { name: string; symbol: string },
@@ -208,8 +226,22 @@ describe("RebalanceDialog", () => {
           activeMonthlyTotalDisplay="100"
           currency="EUR"
           drift={[
-            { key: "inst-world", targetPct: 70, actualPct: 70, driftPct: 0, actualValue: "700", status: "on_target" },
-            { key: "inst-em", targetPct: 30, actualPct: 30, driftPct: 0, actualValue: "300", status: "on_target" },
+            {
+              key: "inst-world",
+              targetPct: 70,
+              actualPct: 70,
+              driftPct: 0,
+              actualValue: "700",
+              status: "on_target",
+            },
+            {
+              key: "inst-em",
+              targetPct: 30,
+              actualPct: 30,
+              driftPct: 0,
+              actualValue: "300",
+              status: "on_target",
+            },
           ]}
           contributionSplit={[
             { key: "inst-world", amount: "70", sharePct: 70 },

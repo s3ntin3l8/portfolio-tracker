@@ -8,11 +8,7 @@ import { loadMe } from "@/lib/server-api";
  * design's `activeSection = section || "account"`) — identical content to
  * `/settings/account`, the mobile drill-in route for the same section.
  */
-export default async function SettingsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function SettingsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const me = await loadMe();

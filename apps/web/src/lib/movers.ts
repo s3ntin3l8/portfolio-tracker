@@ -40,14 +40,10 @@ export function periodToMover(p: PeriodMover): Mover {
 }
 
 export function bestAndWorst(holdings: HoldingValuation[]): { best: Mover; worst: Mover } | null {
-  const withMove = holdings.filter(
-    (h) => h.dayChangePct !== null && Number(h.quantity) !== 0,
-  );
+  const withMove = holdings.filter((h) => h.dayChangePct !== null && Number(h.quantity) !== 0);
   if (withMove.length < 2) return null;
 
-  const sorted = [...withMove].sort(
-    (a, b) => Number(b.dayChangePct) - Number(a.dayChangePct),
-  );
+  const sorted = [...withMove].sort((a, b) => Number(b.dayChangePct) - Number(a.dayChangePct));
   return {
     best: toMover(sorted[0]),
     worst: toMover(sorted[sorted.length - 1]),

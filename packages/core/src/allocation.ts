@@ -354,7 +354,12 @@ export function allocationBreakdown(
     }
 
     holdingsTotal = holdingsTotal.add(mv);
-    pricedHoldings.push({ instrumentId: h.instrumentId, name: m?.name, assetClass: m?.assetClass, mv });
+    pricedHoldings.push({
+      instrumentId: h.instrumentId,
+      name: m?.name,
+      assetClass: m?.assetClass,
+      mv,
+    });
   }
 
   // --- Cash pass -------------------------------------------------------

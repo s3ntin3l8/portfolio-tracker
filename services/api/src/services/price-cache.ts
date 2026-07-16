@@ -17,10 +17,7 @@ export type PriceMap = Record<
 /** Write fetched quotes into the last_prices cache (one upsert per instrument). */
 export async function upsertLastPrices(
   db: DB,
-  quotes: Record<
-    string,
-    { price: string; currency: string; previousClose?: string | null }
-  >,
+  quotes: Record<string, { price: string; currency: string; previousClose?: string | null }>,
   now: Date,
 ): Promise<void> {
   for (const [instrumentId, q] of Object.entries(quotes)) {
@@ -74,9 +71,7 @@ export async function getCachedQuotes(
       prices[row.instrumentId] = {
         price: row.price,
         currency: row.currency,
-        ...(row.previousClose != null
-          ? { previousClose: row.previousClose }
-          : {}),
+        ...(row.previousClose != null ? { previousClose: row.previousClose } : {}),
       };
       fresh.add(row.instrumentId);
     }
@@ -85,9 +80,7 @@ export async function getCachedQuotes(
   const stale = refs.filter((r) => !fresh.has(r.id));
   if (stale.length === 0) return prices;
 
-  const quotes = await service.getQuotes(
-    stale.map((r) => ({ id: r.id, ref: r.ref })),
-  );
+  const quotes = await service.getQuotes(stale.map((r) => ({ id: r.id, ref: r.ref })));
   for (const [instrumentId, q] of Object.entries(quotes)) {
     prices[instrumentId] = {
       price: q.price,

@@ -113,7 +113,10 @@ describe("admin provider config", () => {
       headers: auth(await token("admin-1", [ADMIN_GROUP])),
     });
     expect(ok.statusCode).toBe(200);
-    const res = ok.json() as { providers: { id: string; configured: boolean }[]; encryptionEnabled: boolean };
+    const res = ok.json() as {
+      providers: { id: string; configured: boolean }[];
+      encryptionEnabled: boolean;
+    };
     // Every registry provider is listed; the keyless Yahoo fallback is always configured.
     expect(res.providers.map((p) => p.id)).toContain("yahoo");
     expect(res.providers.find((p) => p.id === "yahoo")?.configured).toBe(true);
@@ -138,7 +141,9 @@ describe("admin provider config", () => {
       ],
     });
     expect(patch.statusCode).toBe(200);
-    const after = patch.json() as { providers: { id: string; enabled: boolean; priority: number }[] };
+    const after = patch.json() as {
+      providers: { id: string; enabled: boolean; priority: number }[];
+    };
     expect(after.providers.find((p) => p.id === "yahoo")?.enabled).toBe(false);
     // priority 0 sorts strictly ahead of the unchanged defaults (which start at 1).
     expect(after.providers[0].id).toBe("yahoo");
@@ -149,7 +154,9 @@ describe("admin provider config", () => {
       headers: auth(t),
     });
     expect(
-      (get.json() as { providers: { id: string; enabled: boolean }[] }).providers.find((p) => p.id === "yahoo")?.enabled,
+      (get.json() as { providers: { id: string; enabled: boolean }[] }).providers.find(
+        (p) => p.id === "yahoo",
+      )?.enabled,
     ).toBe(false);
   });
 
@@ -287,7 +294,9 @@ describe("admin provider config", () => {
       headers: auth(t),
     });
     const log = auditRes.json() as { action: string; target: string }[];
-    const entry = log.find((e) => e.action === "update_providers" && e.target.includes("coingecko"));
+    const entry = log.find(
+      (e) => e.action === "update_providers" && e.target.includes("coingecko"),
+    );
     expect(entry).toBeDefined();
   });
 
@@ -624,12 +633,20 @@ describe("admin provider config", () => {
       .setIssuedAt()
       .setExpirationTime("1h")
       .sign(privateKey);
-    const res = await app.inject({ method: "GET", url: "/me", headers: { authorization: `Bearer ${t}` } });
+    const res = await app.inject({
+      method: "GET",
+      url: "/me",
+      headers: { authorization: `Bearer ${t}` },
+    });
     return (res.json() as { id: string }).id;
   }
 
   it("rejects unauthenticated requests with 401 on all user endpoints", async () => {
-    for (const url of ["/admin/users", "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens", "/admin/users/00000000-0000-0000-0000-000000000000/delete"]) {
+    for (const url of [
+      "/admin/users",
+      "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens",
+      "/admin/users/00000000-0000-0000-0000-000000000000/delete",
+    ]) {
       const res = await app.inject({ method: url === "/admin/users" ? "GET" : "POST", url });
       expect(res.statusCode).toBe(401);
     }
@@ -638,8 +655,16 @@ describe("admin provider config", () => {
   it("rejects non-admin requests with 403", async () => {
     const id = await ensureUser("plain-user-admin-test", false);
     const t = await token("plain-user-admin-test");
-    for (const url of ["/admin/users", "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens", "/admin/users/00000000-0000-0000-0000-000000000000/delete"]) {
-      const res = await app.inject({ method: url === "/admin/users" ? "GET" : "POST", url, headers: auth(t) });
+    for (const url of [
+      "/admin/users",
+      "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens",
+      "/admin/users/00000000-0000-0000-0000-000000000000/delete",
+    ]) {
+      const res = await app.inject({
+        method: url === "/admin/users" ? "GET" : "POST",
+        url,
+        headers: auth(t),
+      });
       expect(res.statusCode).toBe(403);
     }
     await app.db.delete(users).where(eq(users.id, id));
@@ -649,15 +674,40 @@ describe("admin provider config", () => {
     const idA = await ensureUser("user-list-a");
     const idB = await ensureUser("user-list-b");
 
-    const [portA] = await app.db.insert(portfolios).values({ userId: idA, name: "List Test" }).returning({ id: portfolios.id });
+    const [portA] = await app.db
+      .insert(portfolios)
+      .values({ userId: idA, name: "List Test" })
+      .returning({ id: portfolios.id });
     await app.db.insert(transactions).values({
-      portfolioId: portA.id, type: "buy", quantity: "10", price: "100", currency: "USD", executedAt: new Date(),
+      portfolioId: portA.id,
+      type: "buy",
+      quantity: "10",
+      price: "100",
+      currency: "USD",
+      executedAt: new Date(),
     });
-    await app.db.insert(documents).values({ userId: idA, storageKey: "test/a.pdf", mimeType: "application/pdf", sizeBytes: 2048 });
+    await app.db.insert(documents).values({
+      userId: idA,
+      storageKey: "test/a.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2048,
+    });
 
-    const res = await app.inject({ method: "GET", url: "/admin/users", headers: auth(await token("admin-list-check", [ADMIN_GROUP])) });
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/users",
+      headers: auth(await token("admin-list-check", [ADMIN_GROUP])),
+    });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { id: string; email: string; portfolioCount: number; transactionCount: number; documentCount: number; storageBytes: number; tokenCount: number }[];
+    const body = res.json() as {
+      id: string;
+      email: string;
+      portfolioCount: number;
+      transactionCount: number;
+      documentCount: number;
+      storageBytes: number;
+      tokenCount: number;
+    }[];
     const userA = body.find((u) => u.id === idA);
     const userB = body.find((u) => u.id === idB);
     expect(userA).toBeDefined();
@@ -685,23 +735,62 @@ describe("admin provider config", () => {
     const id = await ensureUser("user-fanout-check");
 
     const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
-    const [port] = await app.db.insert(portfolios).values({ userId: id, name: "Fanout Test" }).returning({ id: portfolios.id });
+    const [port] = await app.db
+      .insert(portfolios)
+      .values({ userId: id, name: "Fanout Test" })
+      .returning({ id: portfolios.id });
     await app.db.insert(transactions).values([
-      { portfolioId: port.id, type: "buy", quantity: "10", price: "100", currency: "USD", executedAt: new Date() },
-      { portfolioId: port.id, type: "sell", quantity: "5", price: "110", currency: "USD", executedAt: new Date() },
+      {
+        portfolioId: port.id,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        currency: "USD",
+        executedAt: new Date(),
+      },
+      {
+        portfolioId: port.id,
+        type: "sell",
+        quantity: "5",
+        price: "110",
+        currency: "USD",
+        executedAt: new Date(),
+      },
     ]);
     await app.db.insert(apiTokens).values([
-      { userId: id, name: "t1", tokenHash: hash("fanout-t1"), tokenPrefix: "pt_ft1_", scope: "read" },
-      { userId: id, name: "t2", tokenHash: hash("fanout-t2"), tokenPrefix: "pt_ft2_", scope: "read" },
+      {
+        userId: id,
+        name: "t1",
+        tokenHash: hash("fanout-t1"),
+        tokenPrefix: "pt_ft1_",
+        scope: "read",
+      },
+      {
+        userId: id,
+        name: "t2",
+        tokenHash: hash("fanout-t2"),
+        tokenPrefix: "pt_ft2_",
+        scope: "read",
+      },
     ]);
     await app.db.insert(documents).values([
       { userId: id, storageKey: "test/fanout-a.pdf", mimeType: "application/pdf", sizeBytes: 1000 },
       { userId: id, storageKey: "test/fanout-b.pdf", mimeType: "application/pdf", sizeBytes: 500 },
     ]);
 
-    const res = await app.inject({ method: "GET", url: "/admin/users", headers: auth(await token("admin-fanout-check", [ADMIN_GROUP])) });
+    const res = await app.inject({
+      method: "GET",
+      url: "/admin/users",
+      headers: auth(await token("admin-fanout-check", [ADMIN_GROUP])),
+    });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { id: string; documentCount: number; storageBytes: number; transactionCount: number; tokenCount: number }[];
+    const body = res.json() as {
+      id: string;
+      documentCount: number;
+      storageBytes: number;
+      transactionCount: number;
+      tokenCount: number;
+    }[];
     const user = body.find((u) => u.id === id);
     expect(user).toBeDefined();
     expect(user!.transactionCount).toBe(2);
@@ -716,14 +805,33 @@ describe("admin provider config", () => {
     const id = await ensureUser("revoke-test");
 
     const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
-    await app.db.insert(apiTokens).values({ userId: id, name: "t1", tokenHash: hash("t1"), tokenPrefix: "pt_t1_", scope: "read" });
-    await app.db.insert(apiTokens).values({ userId: id, name: "t2", tokenHash: hash("t2"), tokenPrefix: "pt_t2_", scope: "write" });
+    await app.db.insert(apiTokens).values({
+      userId: id,
+      name: "t1",
+      tokenHash: hash("t1"),
+      tokenPrefix: "pt_t1_",
+      scope: "read",
+    });
+    await app.db.insert(apiTokens).values({
+      userId: id,
+      name: "t2",
+      tokenHash: hash("t2"),
+      tokenPrefix: "pt_t2_",
+      scope: "write",
+    });
 
-    const res = await app.inject({ method: "POST", url: `/admin/users/${id}/revoke-tokens`, headers: auth(await token("admin-revoke", [ADMIN_GROUP])) });
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/users/${id}/revoke-tokens`,
+      headers: auth(await token("admin-revoke", [ADMIN_GROUP])),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ revoked: 2 });
 
-    const remaining = await app.db.select({ id: apiTokens.id }).from(apiTokens).where(eq(apiTokens.userId, id));
+    const remaining = await app.db
+      .select({ id: apiTokens.id })
+      .from(apiTokens)
+      .where(eq(apiTokens.userId, id));
     expect(remaining).toHaveLength(0);
 
     await app.db.delete(users).where(eq(users.id, id));
@@ -732,20 +840,42 @@ describe("admin provider config", () => {
   it("deletes a user, cascades data, and removes S3 docs", async () => {
     const id = await ensureUser("delete-cascade-test");
 
-    const [port] = await app.db.insert(portfolios).values({ userId: id, name: "Delete Test" }).returning({ id: portfolios.id });
+    const [port] = await app.db
+      .insert(portfolios)
+      .values({ userId: id, name: "Delete Test" })
+      .returning({ id: portfolios.id });
     await app.db.insert(transactions).values({
-      portfolioId: port.id, type: "buy", quantity: "5", price: "50", currency: "EUR", executedAt: new Date(),
+      portfolioId: port.id,
+      type: "buy",
+      quantity: "5",
+      price: "50",
+      currency: "EUR",
+      executedAt: new Date(),
     });
-    await app.db.insert(documents).values({ userId: id, storageKey: "test/delete-me.pdf", mimeType: "application/pdf", sizeBytes: 4096 });
+    await app.db.insert(documents).values({
+      userId: id,
+      storageKey: "test/delete-me.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4096,
+    });
 
-    const res = await app.inject({ method: "POST", url: `/admin/users/${id}/delete`, headers: auth(await token("admin-delete-run", [ADMIN_GROUP])) });
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/users/${id}/delete`,
+      headers: auth(await token("admin-delete-run", [ADMIN_GROUP])),
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ deleted: true });
 
     const userRows = await app.db.select({ id: users.id }).from(users).where(eq(users.id, id));
     expect(userRows).toHaveLength(0);
 
-    const log = await app.db.select().from(adminAuditLog).where(eq(adminAuditLog.action, "delete_user")).orderBy(sql`${adminAuditLog.at} desc`).limit(1);
+    const log = await app.db
+      .select()
+      .from(adminAuditLog)
+      .where(eq(adminAuditLog.action, "delete_user"))
+      .orderBy(sql`${adminAuditLog.at} desc`)
+      .limit(1);
     expect(log[0]?.target).toBe(id);
     expect((log[0]?.meta as { docCount: number }).docCount).toBe(1);
   });
@@ -755,7 +885,11 @@ describe("admin provider config", () => {
     const me = await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     const myId = (me.json() as { id: string }).id;
 
-    const res = await app.inject({ method: "POST", url: `/admin/users/${myId}/delete`, headers: auth(t) });
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/users/${myId}/delete`,
+      headers: auth(t),
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({ error: "cannot_delete_self" });
 

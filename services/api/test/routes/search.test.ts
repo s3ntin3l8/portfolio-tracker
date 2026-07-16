@@ -43,11 +43,7 @@ async function createPortfolio(t: string, name = "Main") {
   return res.json().id as string;
 }
 
-async function createTransaction(
-  t: string,
-  portfolioId: string,
-  payload: Record<string, unknown>,
-) {
+async function createTransaction(t: string, portfolioId: string, payload: Record<string, unknown>) {
   const res = await app.inject({
     method: "POST",
     url: `/portfolios/${portfolioId}/transactions`,
@@ -147,12 +143,24 @@ describe("GET /search", () => {
     // Insert two instruments: one the user owns, one they don't.
     const [owned] = await app.db
       .insert(instruments)
-      .values({ symbol: "SRCH_OWN", market: "IDX", assetClass: "equity", currency: "IDR", name: "Owned Corp" })
+      .values({
+        symbol: "SRCH_OWN",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Owned Corp",
+      })
       .onConflictDoNothing()
       .returning();
     await app.db
       .insert(instruments)
-      .values({ symbol: "SRCH_CAT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Catalog Only Corp" })
+      .values({
+        symbol: "SRCH_CAT",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Catalog Only Corp",
+      })
       .onConflictDoNothing();
 
     // Buy the owned instrument.
@@ -221,7 +229,13 @@ describe("GET /search", () => {
     // Insert an instrument matching the search.
     const [instr] = await app.db
       .insert(instruments)
-      .values({ symbol: "LMT_SRCH", market: "IDX", assetClass: "equity", currency: "IDR", name: "Limit Test Corp" })
+      .values({
+        symbol: "LMT_SRCH",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Limit Test Corp",
+      })
       .onConflictDoNothing()
       .returning();
 

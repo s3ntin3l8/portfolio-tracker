@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  AddTransactionForm,
-  type AddTransactionInitial,
-} from "@/components/add-transaction-form";
+import { AddTransactionForm, type AddTransactionInitial } from "@/components/add-transaction-form";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 

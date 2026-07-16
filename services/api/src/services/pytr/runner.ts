@@ -6,12 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyBaseLogger } from "fastify";
 import { runProcess, readLines, safeRm, type SpawnFn } from "./process.js";
-import {
-  PytrApprovalError,
-  PytrAuthError,
-  PytrError,
-  PytrUnavailableError,
-} from "./errors.js";
+import { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError } from "./errors.js";
 
 // Re-exported so existing `from "./runner.js"` imports keep working after the split.
 export { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError };
@@ -151,12 +146,14 @@ export class PytrRunner {
     } catch (err) {
       this.log?.error({ err }, "pytr spawn failed");
       await safeRm(tmpDir, this.log);
-      throw new PytrUnavailableError(
-        err instanceof Error ? err.message : "failed to spawn python",
-      );
+      throw new PytrUnavailableError(err instanceof Error ? err.message : "failed to spawn python");
     }
     this.log?.info(
-      { userId, pythonBin: this.opts.pythonBin, wafStrategy: input.wafToken ? "token" : this.opts.wafStrategy },
+      {
+        userId,
+        pythonBin: this.opts.pythonBin,
+        wafStrategy: input.wafToken ? "token" : this.opts.wafStrategy,
+      },
       "pytr pairing spawned",
     );
 
@@ -220,7 +217,10 @@ export class PytrRunner {
             entry.settled = { sessionData };
           }
         } else {
-          this.log?.warn({ userId, code, stderr: entry.stderr.trim() }, "pytr pairing exited nonzero");
+          this.log?.warn(
+            { userId, code, stderr: entry.stderr.trim() },
+            "pytr pairing exited nonzero",
+          );
           const msg = entry.stderr.trim() || `pytr login exited with code ${code}`;
           const err = code === 3 ? new PytrApprovalError(msg) : new PytrError(msg);
           // A failure before the init line means startPairing() is still pending.
@@ -357,9 +357,7 @@ export class PytrRunner {
       }
       // The export refreshes the session cookie; persist the rolling jar to extend the
       // session's life. Fall back to the original if it wasn't rewritten.
-      const sessionData = await readFile(cookiesFile, "utf8").catch(
-        () => input.sessionData,
-      );
+      const sessionData = await readFile(cookiesFile, "utf8").catch(() => input.sessionData);
       return { events, sessionData, summary };
     } finally {
       await safeRm(tmpDir, this.log);
@@ -421,7 +419,13 @@ export class PytrRunner {
         .filter(Boolean);
 
       for (const line of lines) {
-        let parsed: { docId?: string; file?: string; mimeType?: string; ok?: boolean; error?: string };
+        let parsed: {
+          docId?: string;
+          file?: string;
+          mimeType?: string;
+          ok?: boolean;
+          error?: string;
+        };
         try {
           parsed = JSON.parse(line);
         } catch {
@@ -431,10 +435,7 @@ export class PytrRunner {
         }
         if (!parsed.ok || !parsed.docId || !parsed.file) {
           const reason = parsed.error ?? (parsed.docId ? "missing file field" : "missing docId");
-          this.log?.warn(
-            { docId: parsed.docId, error: reason },
-            "tr_documents: per-doc failure",
-          );
+          this.log?.warn({ docId: parsed.docId, error: reason }, "tr_documents: per-doc failure");
           failures.push({ docId: parsed.docId ?? null, error: reason });
           continue;
         }
@@ -448,7 +449,10 @@ export class PytrRunner {
         }
       }
 
-      this.log?.debug({ requested: pairs.length, downloaded: docs.size, failed: failures.length }, "pytr documents fetched");
+      this.log?.debug(
+        { requested: pairs.length, downloaded: docs.size, failed: failures.length },
+        "pytr documents fetched",
+      );
       return { docs, failures };
     } finally {
       await safeRm(tmpDir, this.log);

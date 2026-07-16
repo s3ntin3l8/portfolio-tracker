@@ -9,7 +9,9 @@ import {
 import messages from "../messages/en.json";
 
 /** Minimal AdminProvider fixture (no DB credential set). */
-function provider(overrides: Partial<AdminProvider> & Pick<AdminProvider, "id" | "label">): AdminProvider {
+function provider(
+  overrides: Partial<AdminProvider> & Pick<AdminProvider, "id" | "label">,
+): AdminProvider {
   return {
     configured: true,
     enabled: true,
@@ -60,9 +62,7 @@ function renderForm(
 describe("AdminProvidersForm", () => {
   it("disables save until something changes", () => {
     renderForm(STUB_CLIENT);
-    expect(
-      screen.getByRole("button", { name: messages.Admin.save }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: messages.Admin.save })).toBeDisabled();
   });
 
   it("renders a drag handle for each provider row (replacing up/down arrows)", () => {
@@ -171,9 +171,7 @@ describe("AdminProvidersForm", () => {
     // Live: "120 / 800 today"
     expect(screen.getByText("120 / 800 today")).toBeInTheDocument();
     // Local: "5 this month (local count)"
-    expect(
-      screen.getByText(`5 this month (${messages.Admin.usageLocalHint})`),
-    ).toBeInTheDocument();
+    expect(screen.getByText(`5 this month (${messages.Admin.usageLocalHint})`)).toBeInTheDocument();
   });
 
   it("shows 'encryption disabled' hint when encryptionEnabled=false", () => {
@@ -194,7 +192,13 @@ describe("AdminProvidersForm", () => {
 
   it("shows 'Not needed' for a keyless provider (configured with no key required)", () => {
     const providers: AdminProvider[] = [
-      provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
+      provider({
+        id: "yahoo",
+        label: "Yahoo Finance",
+        priority: 1,
+        keySource: null,
+        hasKey: false,
+      }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
     // Both desktop + mobile branches render the same credential cells.
@@ -205,7 +209,14 @@ describe("AdminProvidersForm", () => {
 
   it("shows 'none' for a key-requiring provider with no key set", () => {
     const providers: AdminProvider[] = [
-      provider({ id: "eodhd", label: "EODHD", priority: 1, keySource: null, hasKey: false, configured: false }),
+      provider({
+        id: "eodhd",
+        label: "EODHD",
+        priority: 1,
+        keySource: null,
+        hasKey: false,
+        configured: false,
+      }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
     // Both desktop + mobile branches render the same credential cells.
@@ -214,7 +225,13 @@ describe("AdminProvidersForm", () => {
 
   it("shows 'Not needed' even when encryption is disabled (no key to encrypt)", () => {
     const providers: AdminProvider[] = [
-      provider({ id: "yahoo", label: "Yahoo Finance", priority: 1, keySource: null, hasKey: false }),
+      provider({
+        id: "yahoo",
+        label: "Yahoo Finance",
+        priority: 1,
+        keySource: null,
+        hasKey: false,
+      }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: false });
     // Both desktop + mobile branches render the same credential cells.
@@ -224,7 +241,14 @@ describe("AdminProvidersForm", () => {
 
   it("shows masked key hint for a provider with a DB key when encryption is enabled", () => {
     const providers: AdminProvider[] = [
-      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, hasKey: true, keyHint: "••••abcd", keySource: "db" }),
+      provider({
+        id: "twelvedata",
+        label: "Twelve Data",
+        priority: 1,
+        hasKey: true,
+        keyHint: "••••abcd",
+        keySource: "db",
+      }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
     // Both desktop + mobile branches render the same credential cells.
@@ -233,7 +257,13 @@ describe("AdminProvidersForm", () => {
 
   it("shows 'from .env' for an env-keyed provider when encryption is enabled", () => {
     const providers: AdminProvider[] = [
-      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: "env", hasKey: false }),
+      provider({
+        id: "twelvedata",
+        label: "Twelve Data",
+        priority: 1,
+        keySource: "env",
+        hasKey: false,
+      }),
     ];
     renderForm(STUB_CLIENT, vi.fn(), { providers, encryptionEnabled: true });
     // Both desktop + mobile branches render the same credential cells.
@@ -241,13 +271,20 @@ describe("AdminProvidersForm", () => {
   });
 
   it("opens the edit dialog and saves a new key via setAdminProviderCredential", async () => {
-    const setAdminProviderCredential = vi.fn(async () =>
-      ({ providers: PROVIDERS, encryptionEnabled: true }),
-    );
+    const setAdminProviderCredential = vi.fn(async () => ({
+      providers: PROVIDERS,
+      encryptionEnabled: true,
+    }));
     const client: AdminProvidersClient = { ...STUB_CLIENT, setAdminProviderCredential };
     // A key-requiring provider with no key yet (configured:false) → shows the key editor.
     const providers: AdminProvider[] = [
-      provider({ id: "twelvedata", label: "Twelve Data", priority: 1, keySource: null, configured: false }),
+      provider({
+        id: "twelvedata",
+        label: "Twelve Data",
+        priority: 1,
+        keySource: null,
+        configured: false,
+      }),
     ];
     renderForm(client, vi.fn(), { providers, encryptionEnabled: true });
 
@@ -265,7 +302,9 @@ describe("AdminProvidersForm", () => {
     fireEvent.click(screen.getByRole("button", { name: messages.Admin.credentialSave }));
 
     await waitFor(() =>
-      expect(setAdminProviderCredential).toHaveBeenCalledWith("twelvedata", { apiKey: "sk-test-1234" }),
+      expect(setAdminProviderCredential).toHaveBeenCalledWith("twelvedata", {
+        apiKey: "sk-test-1234",
+      }),
     );
   });
 });

@@ -42,8 +42,7 @@ export async function mintSessionCookie({ patSecret, authSub, secret, secure = f
 
 // Allow running directly for a quick manual check:
 //   AUTH_SECRET=... PAT=pt_... node apps/web/scripts/mint-session.mjs
-const invokedDirectly =
-  process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (invokedDirectly) {
   const cookie = await mintSessionCookie({
     patSecret: process.env.PAT,

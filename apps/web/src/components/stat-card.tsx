@@ -39,9 +39,7 @@ export function StatCard({
             {delta}
           </p>
         )}
-        {caption && (
-          <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{caption}</p>
-        )}
+        {caption && <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{caption}</p>}
       </CardContent>
     </Card>
   );

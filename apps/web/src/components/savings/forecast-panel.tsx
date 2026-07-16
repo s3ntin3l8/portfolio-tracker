@@ -53,9 +53,7 @@ export function ForecastPanel({
       : null;
 
   const [monthly, setMonthly] = useState(Math.round(Number(monthlyAverage)));
-  const [returnPct, setReturnPct] = useState(
-    Math.round(Number(seedAnnualReturn) * 1000) / 10,
-  );
+  const [returnPct, setReturnPct] = useState(Math.round(Number(seedAnnualReturn) * 1000) / 10);
   const [years, setYears] = useState(yearsToEighteen ?? 10);
 
   const series = useMemo(
@@ -74,11 +72,13 @@ export function ForecastPanel({
   // not 3 with a duplicate). Each re-runs the same client-side projection at that
   // rate for the current monthly top-up + horizon.
   const scenarios = useMemo(() => {
-    const rates = [...new Set([
-      Math.max(0, Math.round((returnPct - 3) * 2) / 2),
-      returnPct,
-      Math.min(15, Math.round((returnPct + 3) * 2) / 2),
-    ])];
+    const rates = [
+      ...new Set([
+        Math.max(0, Math.round((returnPct - 3) * 2) / 2),
+        returnPct,
+        Math.min(15, Math.round((returnPct + 3) * 2) / 2),
+      ]),
+    ];
     return rates.map((rate) => {
       const scenarioSeries = forecastSeries({
         presentValue: currentValue,
@@ -171,7 +171,9 @@ export function ForecastPanel({
                 </Button>
               )}
             </div>
-            <span className="tabular text-[13px] font-extrabold">{t("years", { count: years })}</span>
+            <span className="tabular text-[13px] font-extrabold">
+              {t("years", { count: years })}
+            </span>
           </div>
           <input
             id="forecast-years"
@@ -191,7 +193,10 @@ export function ForecastPanel({
         <p className="text-xs font-semibold text-white/80">
           {t("projectedInYears", { count: years })}
         </p>
-        <p className="tabular mt-0.5 text-[34px] font-extrabold leading-tight" data-testid="projected-value">
+        <p
+          className="tabular mt-0.5 text-[34px] font-extrabold leading-tight"
+          data-testid="projected-value"
+        >
           {m(value)}
         </p>
         <p className="mt-1 text-xs font-medium text-white/82">

@@ -5,7 +5,13 @@ import { useTranslations } from "next-intl";
 import { Search, X, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { benchmarkLabel } from "@/lib/benchmark-labels";
@@ -13,7 +19,17 @@ import type { InstrumentSearchResult } from "@portfolio/api-client";
 
 // Quick-pick indices — `currency` below is a UI-only placeholder; the backend infers the
 // real currency from stored benchmark_prices via getUserBenchmarkConfig.
-const SUGGESTED = ["^GSPC", "^DJI", "^IXIC", "^GDAXI", "^N225", "^HSI", "^JKSE", "^STOXX50E", "^FTSE"] as const;
+const SUGGESTED = [
+  "^GSPC",
+  "^DJI",
+  "^IXIC",
+  "^GDAXI",
+  "^N225",
+  "^HSI",
+  "^JKSE",
+  "^STOXX50E",
+  "^FTSE",
+] as const;
 
 export function EditBenchmarkDialog({
   open,
@@ -36,25 +52,28 @@ export function EditBenchmarkDialog({
 
   const selectedSymbol = selected?.symbol ?? currentSymbol;
 
-  const runSearch = useCallback((q: string) => {
-    const trimmed = q.trim();
-    if (!trimmed) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      try {
-        const res = await api.lookupInstruments(trimmed);
-        setResults(res);
-      } catch {
+  const runSearch = useCallback(
+    (q: string) => {
+      const trimmed = q.trim();
+      if (!trimmed) {
         setResults([]);
-      } finally {
-        setLoading(false);
+        return;
       }
-    }, 300);
-  }, [api]);
+      setLoading(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(async () => {
+        try {
+          const res = await api.lookupInstruments(trimmed);
+          setResults(res);
+        } catch {
+          setResults([]);
+        } finally {
+          setLoading(false);
+        }
+      }, 300);
+    },
+    [api],
+  );
 
   const handleSave = async (symbol: string | null) => {
     setSaving(true);
@@ -97,7 +116,10 @@ export function EditBenchmarkDialog({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
             <Input
               value={query}
-              onChange={(e) => { setQuery(e.target.value); runSearch(e.target.value); }}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                runSearch(e.target.value);
+              }}
               placeholder={t("searchBenchmark")}
               className="h-10 pl-9 pr-9 text-sm"
             />
@@ -118,7 +140,14 @@ export function EditBenchmarkDialog({
                     key={sym}
                     type="button"
                     onClick={() => {
-                      setSelected({ symbol: sym, name: benchmarkLabel(sym), market: "", assetClass: "", currency: "USD", source: "" });
+                      setSelected({
+                        symbol: sym,
+                        name: benchmarkLabel(sym),
+                        market: "",
+                        assetClass: "",
+                        currency: "USD",
+                        source: "",
+                      });
                       setQuery("");
                     }}
                     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
@@ -182,7 +211,12 @@ export function EditBenchmarkDialog({
               </Button>
             )}
             <div className="ml-auto flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)} disabled={saving}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleOpenChange(false)}
+                disabled={saving}
+              >
                 {t("cancel")}
               </Button>
               <Button

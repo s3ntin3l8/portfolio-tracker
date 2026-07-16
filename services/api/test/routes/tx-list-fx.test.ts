@@ -43,7 +43,13 @@ describe("GET /portfolios/:portfolioId/transactions ?convertTo=", () => {
     app = await buildApp({ authKey: kp.publicKey });
     const [ins] = await app.db
       .insert(instruments)
-      .values({ symbol: "IWDA", market: "XETRA", assetClass: "equity", currency: "EUR", name: "iShares World" })
+      .values({
+        symbol: "IWDA",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "iShares World",
+      })
       .returning();
     eurInstrumentId = ins.id;
   });
@@ -69,12 +75,7 @@ describe("GET /portfolios/:portfolioId/transactions ?convertTo=", () => {
     return { t, portfolioId };
   }
 
-  async function addBuy(
-    t: string,
-    portfolioId: string,
-    currency: string,
-    executedAt: string,
-  ) {
+  async function addBuy(t: string, portfolioId: string, currency: string, executedAt: string) {
     const res = await app.inject({
       method: "POST",
       url: `/portfolios/${portfolioId}/transactions`,

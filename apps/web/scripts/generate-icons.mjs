@@ -43,10 +43,7 @@ const squareSvg = Buffer.from(
 await mkdir(iconsDir, { recursive: true });
 
 const render = (input, size, out) =>
-  sharp(input, { density: 512 })
-    .resize(size, size)
-    .png()
-    .toFile(join(iconsDir, out));
+  sharp(input, { density: 512 }).resize(size, size).png().toFile(join(iconsDir, out));
 
 await Promise.all([
   render(roundedSvg, 192, "icon-192.png"),

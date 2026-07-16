@@ -32,15 +32,11 @@ const HOLDINGS_COLS: ColDef<HoldingValuation>[] = [
   { key: "pnl", get: (h) => h.unrealizedPnLDisplay ?? "0", type: "numeric" },
 ];
 
-
 function computeRowValues(h: HoldingValuation, currency: string, locale: string) {
-  const pnl =
-    h.unrealizedPnLDisplay !== null ? Number(h.unrealizedPnLDisplay) : null;
+  const pnl = h.unrealizedPnLDisplay !== null ? Number(h.unrealizedPnLDisplay) : null;
   const costBasis = Number(h.costBasisDisplay);
-  const pct =
-    pnl !== null && costBasis !== 0 ? (pnl / costBasis) * 100 : null;
-  const native = (n: number) =>
-    formatMoney(n, h.currency ?? currency, locale);
+  const pct = pnl !== null && costBasis !== 0 ? (pnl / costBasis) * 100 : null;
+  const native = (n: number) => formatMoney(n, h.currency ?? currency, locale);
   const display = (n: number) => formatMoney(n, currency, locale);
   return { pnl, pct, native, display };
 }
@@ -86,8 +82,7 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
     },
   );
   const totalPct = totals.cost !== 0 ? (totals.pnl / totals.cost) * 100 : null;
-  const totalPnlColor =
-    totals.pnl > 0 ? "text-success" : totals.pnl < 0 ? "text-destructive" : "";
+  const totalPnlColor = totals.pnl > 0 ? "text-success" : totals.pnl < 0 ? "text-destructive" : "";
   const money = (n: number) => formatMoney(n, currency, locale);
 
   return (
@@ -97,12 +92,59 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("instrument")}</SortableTableHead>
-              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("quantity")}</SortableTableHead>
-              <SortableTableHead colKey="avgCost" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("avgCost")}</SortableTableHead>
-              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("price")}</SortableTableHead>
-              <SortableTableHead colKey="value" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("value")}</SortableTableHead>
-              <SortableTableHead colKey="pnl" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("pnl")}</SortableTableHead>
+              <SortableTableHead
+                colKey="instrument"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("instrument")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="quantity"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("quantity")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="avgCost"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("avgCost")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="price"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("price")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="value"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("value")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="pnl"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+                align="right"
+              >
+                {t("pnl")}
+              </SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -150,16 +192,12 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
                     {h.price !== null ? native(Number(h.price)) : "—"}
                   </TableCell>
                   <TableCell className={TABLE_VALUE_STRONG}>
-                    {h.marketValueDisplay !== null
-                      ? display(Number(h.marketValueDisplay))
-                      : "—"}
+                    {h.marketValueDisplay !== null ? display(Number(h.marketValueDisplay)) : "—"}
                   </TableCell>
                   <TableCell className={cn(TABLE_VALUE_STRONG, pnlColor)}>
                     {pnl === null ? "—" : formatSignedMoney(pnl, currency, locale)}
                     {pct !== null && (
-                      <div className={TABLE_SUBVALUE}>
-                        {formatPercent(pct / 100, locale)}
-                      </div>
+                      <div className={TABLE_SUBVALUE}>{formatPercent(pct / 100, locale)}</div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -209,11 +247,7 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
         {sorted.map((h, i) => {
           const { pnl, pct, display } = computeRowValues(h, currency, locale);
           const pnlColor =
-            pnl === null
-              ? "text-muted-foreground"
-              : pnl >= 0
-                ? "text-success"
-                : "text-destructive";
+            pnl === null ? "text-muted-foreground" : pnl >= 0 ? "text-success" : "text-destructive";
           const qty = formatQuantity(Number(h.quantity), h.instrument?.unit, locale);
           const name = h.instrument?.displayName ?? h.instrument?.name ?? h.instrumentId;
           const subtitle = qty ? `${name} · ${qty}` : name;
@@ -245,9 +279,7 @@ export function HoldingsTable({ rows, currency, cash }: HoldingsTableProps) {
               {hasSpark && <HoldingSparkline values={h.sparkline!} />}
               <div className="shrink-0 text-right tabular">
                 <div className="text-sm font-bold">
-                  {h.marketValueDisplay !== null
-                    ? display(Number(h.marketValueDisplay))
-                    : "—"}
+                  {h.marketValueDisplay !== null ? display(Number(h.marketValueDisplay)) : "—"}
                 </div>
                 <div className={cn("text-xs font-bold", pnlColor)}>
                   {pct !== null ? formatPercent(pct / 100, locale) : "—"}

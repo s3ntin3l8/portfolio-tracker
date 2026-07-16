@@ -65,14 +65,41 @@ describe("per-lot FIFO cost-basis lots on the summary endpoint", () => {
     [bbca] = (
       await app.db
         .insert(instruments)
-        .values({ symbol: "BBCA", market: "XETRA", assetClass: "equity", currency: "EUR", name: "BCA" })
+        .values({
+          symbol: "BBCA",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "BCA",
+        })
         .returning()
     ).map((i) => i.id);
 
     // Two buys create two lots, then a partial sell consumes the oldest lot first.
-    await postTx(t, pf, { type: "buy", instrumentId: bbca, quantity: "10", price: "9000", currency: "EUR", executedAt: "2021-01-01T00:00:00.000Z" });
-    await postTx(t, pf, { type: "buy", instrumentId: bbca, quantity: "5", price: "9200", currency: "EUR", executedAt: "2021-03-01T00:00:00.000Z" });
-    await postTx(t, pf, { type: "sell", instrumentId: bbca, quantity: "6", price: "9500", currency: "EUR", executedAt: "2021-06-01T00:00:00.000Z" });
+    await postTx(t, pf, {
+      type: "buy",
+      instrumentId: bbca,
+      quantity: "10",
+      price: "9000",
+      currency: "EUR",
+      executedAt: "2021-01-01T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "buy",
+      instrumentId: bbca,
+      quantity: "5",
+      price: "9200",
+      currency: "EUR",
+      executedAt: "2021-03-01T00:00:00.000Z",
+    });
+    await postTx(t, pf, {
+      type: "sell",
+      instrumentId: bbca,
+      quantity: "6",
+      price: "9500",
+      currency: "EUR",
+      executedAt: "2021-06-01T00:00:00.000Z",
+    });
   });
 
   afterAll(async () => {
@@ -93,9 +120,7 @@ describe("per-lot FIFO cost-basis lots on the summary endpoint", () => {
     });
     expect(res.statusCode).toBe(200);
     const summary = res.json();
-    const holding = summary.holdings.find(
-      (h: { instrumentId: string }) => h.instrumentId === bbca,
-    );
+    const holding = summary.holdings.find((h: { instrumentId: string }) => h.instrumentId === bbca);
     expect(holding).toBeTruthy();
     expect(holding.lots).toHaveLength(2);
     // First lot had 10 @ 9000; 6 consumed by the sell → 4 remain at the same unit cost.

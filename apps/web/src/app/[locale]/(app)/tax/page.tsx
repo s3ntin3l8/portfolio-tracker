@@ -58,7 +58,9 @@ export default async function TaxPage({
     <ReportHeader
       title={t("title")}
       subtitle={
-        regime === "ID" ? t("id.subtitle", { year: year ?? new Date().getUTCFullYear() }) : t("subtitle")
+        regime === "ID"
+          ? t("id.subtitle", { year: year ?? new Date().getUTCFullYear() })
+          : t("subtitle")
       }
       action={
         <div className="flex flex-col items-end gap-1">
@@ -161,9 +163,7 @@ function TaxHolderOverviewDe({
         />
       </div>
 
-      {distribution && (
-        <DistributionCard distribution={distribution} money={money} t={t} />
-      )}
+      {distribution && <DistributionCard distribution={distribution} money={money} t={t} />}
 
       {hasForecast && (
         <Card>

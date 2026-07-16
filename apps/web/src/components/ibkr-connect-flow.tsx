@@ -72,12 +72,15 @@ export function IbkrConnectFlow({
   };
 
   const doSync = () => {
-    void client.syncIbkr().then(() => {
-      toast.success(t("syncQueued"));
-      onChanged?.();
-    }).catch((err: unknown) => {
-      toast.error(messageForError(err));
-    });
+    void client
+      .syncIbkr()
+      .then(() => {
+        toast.success(t("syncQueued"));
+        onChanged?.();
+      })
+      .catch((err: unknown) => {
+        toast.error(messageForError(err));
+      });
   };
 
   const disconnect = () =>
@@ -108,9 +111,7 @@ export function IbkrConnectFlow({
 
       {phase === "form" && (
         <form onSubmit={connect} className="space-y-4">
-          {expired && (
-            <p className="text-sm text-muted-foreground">{t("expiredHint")}</p>
-          )}
+          {expired && <p className="text-sm text-muted-foreground">{t("expiredHint")}</p>}
           <p className="text-xs text-muted-foreground">{t("setupHint")}</p>
           <div className="space-y-1.5">
             <Label htmlFor="ibkr-token">{t("flexToken")}</Label>
@@ -171,7 +172,11 @@ export function IbkrConnectFlow({
                   return (
                     <div key={c.currency} className="flex justify-between gap-2">
                       <span className="text-muted-foreground">
-                        {t("reconcile.row", { currency: c.currency, reported: c.reported, derived: c.derived })}
+                        {t("reconcile.row", {
+                          currency: c.currency,
+                          reported: c.reported,
+                          derived: c.derived,
+                        })}
                       </span>
                       <span className={off ? "text-destructive" : "text-muted-foreground"}>
                         {off ? t("reconcile.off", { diff: c.diff }) : t("reconcile.match")}

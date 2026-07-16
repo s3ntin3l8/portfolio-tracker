@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
-import { accountHolders, allocationTargets, portfolios, userPreferences, users } from "@portfolio/db";
+import {
+  accountHolders,
+  allocationTargets,
+  portfolios,
+  userPreferences,
+  users,
+} from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { getFxRates, makeFxRateFn } from "../../services/fx.js";
 import {
@@ -15,8 +21,7 @@ import {
   type DriftRow,
   type TradeAction,
 } from "@portfolio/core";
-import type {
-  PortfolioParams} from "./shared.js";
+import type { PortfolioParams } from "./shared.js";
 import {
   ownedPortfolio,
   loadValuation,
@@ -25,7 +30,7 @@ import {
   instrumentMeta,
   sparplanCache,
   networthSparplanCache,
-  PORTFOLIO_VALUATION_CONCURRENCY
+  PORTFOLIO_VALUATION_CONCURRENCY,
 } from "./shared.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
@@ -211,7 +216,13 @@ export function registerSparplanRoutes(app: FastifyInstance) {
       const allowanceAnnual = portfolio.taxAllowanceAnnual;
       const taxRate = holderTaxRate ?? "0.25";
       const usage = allowanceUsageYTD({ tradeLog, tfRates, allowanceAnnual, taxRate });
-      const suggestions = harvestSuggestions({ tradeLog, tfRates, allowanceAnnual, taxRate, usage });
+      const suggestions = harvestSuggestions({
+        tradeLog,
+        tfRates,
+        allowanceAnnual,
+        taxRate,
+        usage,
+      });
 
       // Build maxSellByKey: instrumentId → harvestableGross (max tax-free sell value).
       const maxSellByKey: Record<string, string> = {};
@@ -289,7 +300,11 @@ export function registerSparplanRoutes(app: FastifyInstance) {
       }
 
       const pfs = await app.db
-        .select({ id: portfolios.id, cashCounted: portfolios.cashCounted, baseCurrency: portfolios.baseCurrency })
+        .select({
+          id: portfolios.id,
+          cashCounted: portfolios.cashCounted,
+          baseCurrency: portfolios.baseCurrency,
+        })
         .from(portfolios)
         .where(
           holderId != null
@@ -304,13 +319,23 @@ export function registerSparplanRoutes(app: FastifyInstance) {
           // Detect per portfolio in the display currency, then merge (not concatenate).
           // Independent per portfolio — bounded-concurrency instead of a serial `for` await
           // (see PORTFOLIO_VALUATION_CONCURRENCY). mapPool preserves input order.
-          const portfolioResults = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-            const { coreTxns } = await loadValuation(app, p.id, display, undefined, p.cashCounted);
-            const ccys = [...new Set(coreTxns.map((t) => t.currency))];
-            const rates = await getFxRates(app.db, ccys, display);
-            const fx = makeFxRateFn(rates, display);
-            return detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
-          });
+          const portfolioResults = await mapPool(
+            pfs,
+            PORTFOLIO_VALUATION_CONCURRENCY,
+            async (p) => {
+              const { coreTxns } = await loadValuation(
+                app,
+                p.id,
+                display,
+                undefined,
+                p.cashCounted,
+              );
+              const ccys = [...new Set(coreTxns.map((t) => t.currency))];
+              const rates = await getFxRates(app.db, ccys, display);
+              const fx = makeFxRateFn(rates, display);
+              return detectSparplans({ txns: coreTxns, displayCurrency: display, fx });
+            },
+          );
           const perPortfolio: SparplanStats[] = portfolioResults;
           const allInstrumentIds = new Set<string>();
           for (const stats of perPortfolio) {

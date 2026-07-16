@@ -73,9 +73,7 @@ export function cashFlow(tx: CoreTransaction): Decimal {
 }
 
 /** Uninvested cash balance per currency, derived from all transactions. */
-export function cashBalances(
-  transactions: CoreTransaction[],
-): Record<string, string> {
+export function cashBalances(transactions: CoreTransaction[]): Record<string, string> {
   const totals = new Map<string, Decimal>();
   for (const tx of transactions) {
     const cur = tx.currency;

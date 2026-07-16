@@ -40,12 +40,9 @@ vi.mock("next-intl/server", () => ({
   }),
 }));
 
-const { InvestingSection } = await import(
-  "../src/components/settings-sections/investing-section"
-);
-const { DataConnectionsSection } = await import(
-  "../src/components/settings-sections/data-connections-section"
-);
+const { InvestingSection } = await import("../src/components/settings-sections/investing-section");
+const { DataConnectionsSection } =
+  await import("../src/components/settings-sections/data-connections-section");
 
 describe("InvestingSection", () => {
   it("defaults to German / purchase_price chips active when no prefs row exists", async () => {
@@ -55,16 +52,24 @@ describe("InvestingSection", () => {
       "aria-pressed",
       "true",
     );
-    expect(
-      screen.getByRole("button", { name: "Settings.costBasisPurchasePrice" }),
-    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Settings.costBasisPurchasePrice" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByText("Settings.investingTaxNoteDe")).toBeInTheDocument();
     expect(screen.getByText("Settings.investingCostBasisNote")).toBeInTheDocument();
   });
 
   it("reflects a stored ID/total_paid preference and persists a chip change", async () => {
     const element = await InvestingSection({
-      prefs: { dashboardPeriod: "max", dashboardKpis: null, taxRegime: "ID", costBasisMode: "total_paid", benchmarkSymbol: null, riskFreeRate: null },
+      prefs: {
+        dashboardPeriod: "max",
+        dashboardKpis: null,
+        taxRegime: "ID",
+        costBasisMode: "total_paid",
+        benchmarkSymbol: null,
+        riskFreeRate: null,
+      },
     });
     renderWithIntl(element as React.ReactElement);
     expect(screen.getByRole("button", { name: "Settings.taxCodeIndonesia" })).toHaveAttribute(

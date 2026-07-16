@@ -19,15 +19,10 @@ export async function refreshHeldPrices(
     .selectDistinct({ instrumentId: transactions.instrumentId })
     .from(transactions)
     .where(isNotNull(transactions.instrumentId));
-  const heldIds = held
-    .map((r) => r.instrumentId)
-    .filter((x): x is string => x !== null);
+  const heldIds = held.map((r) => r.instrumentId).filter((x): x is string => x !== null);
   if (heldIds.length === 0) return 0;
 
-  const rows = await db
-    .select()
-    .from(instruments)
-    .where(inArray(instruments.id, heldIds));
+  const rows = await db.select().from(instruments).where(inArray(instruments.id, heldIds));
   const open = rows.filter((i) => isMarketOpen(i.market, now));
   if (open.length === 0) return 0;
 

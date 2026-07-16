@@ -43,7 +43,13 @@ describe("dividend perShare/shares (#508)", () => {
     app = await buildApp({ authKey: kp.publicKey });
     const [ins] = await app.db
       .insert(instruments)
-      .values({ symbol: "MO", market: "NYSE", assetClass: "equity", currency: "EUR", name: "Altria" })
+      .values({
+        symbol: "MO",
+        market: "NYSE",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Altria",
+      })
       .returning();
     instrumentId = ins.id;
   });
@@ -210,7 +216,13 @@ describe("dividend perShare/shares (#508)", () => {
     const { t, portfolioId } = await setup("no-holding");
     const [otherIns] = await app.db
       .insert(instruments)
-      .values({ symbol: "PEP", market: "NYSE", assetClass: "equity", currency: "EUR", name: "PepsiCo" })
+      .values({
+        symbol: "PEP",
+        market: "NYSE",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "PepsiCo",
+      })
       .returning();
 
     const div = await app.inject({
@@ -233,9 +245,9 @@ describe("dividend perShare/shares (#508)", () => {
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
     });
-    const row = (list.json() as { id: string; perShare: string | null; shares: string | null }[]).find(
-      (r) => r.id === div.json().id,
-    );
+    const row = (
+      list.json() as { id: string; perShare: string | null; shares: string | null }[]
+    ).find((r) => r.id === div.json().id);
     expect(row?.shares).toBeNull();
     expect(row?.perShare).toBeNull();
   });

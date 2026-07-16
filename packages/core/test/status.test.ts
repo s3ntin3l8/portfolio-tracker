@@ -35,9 +35,15 @@ describe("transaction status — cashFlow", () => {
   });
 
   it("archived row has zero cash effect regardless of type", () => {
-    expect(cashFlow(tx({ type: "buy", quantity: "2", price: "10", status: "archived" })).toString()).toBe("0");
-    expect(cashFlow(tx({ type: "dividend", price: "50", status: "archived" })).toString()).toBe("0");
-    expect(cashFlow(tx({ type: "deposit", price: "100", status: "archived" })).toString()).toBe("0");
+    expect(
+      cashFlow(tx({ type: "buy", quantity: "2", price: "10", status: "archived" })).toString(),
+    ).toBe("0");
+    expect(cashFlow(tx({ type: "dividend", price: "50", status: "archived" })).toString()).toBe(
+      "0",
+    );
+    expect(cashFlow(tx({ type: "deposit", price: "100", status: "archived" })).toString()).toBe(
+      "0",
+    );
   });
 
   it("normal buy is unchanged (-notional - fees)", () => {
@@ -80,7 +86,13 @@ describe("transaction status — contributions (outside boundary)", () => {
   it("cash_neutral acquisition is not a contribution but still builds the cost pool", () => {
     const stats = contributionStats({
       txns: [
-        tx({ type: "buy", quantity: "10", price: "10", status: "cash_neutral", executedAt: new Date("2026-01-10") }),
+        tx({
+          type: "buy",
+          quantity: "10",
+          price: "10",
+          status: "cash_neutral",
+          executedAt: new Date("2026-01-10"),
+        }),
       ],
       displayCurrency: "EUR",
       boundary: "outside",
@@ -90,7 +102,13 @@ describe("transaction status — contributions (outside boundary)", () => {
     // The pool it built is drawn down by a later sell (no phantom gain).
     const withSell = contributionStats({
       txns: [
-        tx({ type: "buy", quantity: "10", price: "10", status: "cash_neutral", executedAt: new Date("2026-01-10") }),
+        tx({
+          type: "buy",
+          quantity: "10",
+          price: "10",
+          status: "cash_neutral",
+          executedAt: new Date("2026-01-10"),
+        }),
         tx({ type: "sell", quantity: "10", price: "12", executedAt: new Date("2026-02-10") }),
       ],
       displayCurrency: "EUR",
@@ -103,7 +121,13 @@ describe("transaction status — contributions (outside boundary)", () => {
   it("archived acquisition is excluded from contributions", () => {
     const stats = contributionStats({
       txns: [
-        tx({ type: "buy", quantity: "10", price: "10", status: "archived", executedAt: new Date("2026-01-10") }),
+        tx({
+          type: "buy",
+          quantity: "10",
+          price: "10",
+          status: "archived",
+          executedAt: new Date("2026-01-10"),
+        }),
       ],
       displayCurrency: "EUR",
       boundary: "outside",
@@ -117,8 +141,20 @@ describe("transaction status — computeTrades", () => {
   it("archived trades are excluded from the trade log", () => {
     const log = computeTrades({
       transactions: [
-        tx({ type: "buy", quantity: "5", price: "10", executedAt: new Date("2026-01-01"), status: "archived" }),
-        tx({ type: "sell", quantity: "5", price: "20", executedAt: new Date("2026-02-01"), status: "archived" }),
+        tx({
+          type: "buy",
+          quantity: "5",
+          price: "10",
+          executedAt: new Date("2026-01-01"),
+          status: "archived",
+        }),
+        tx({
+          type: "sell",
+          quantity: "5",
+          price: "20",
+          executedAt: new Date("2026-02-01"),
+          status: "archived",
+        }),
       ],
       displayCurrency: "EUR",
     });

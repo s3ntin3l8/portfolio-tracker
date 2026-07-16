@@ -85,13 +85,20 @@ async function ensureUser(sub: string): Promise<string> {
     .setIssuedAt()
     .setExpirationTime("1h")
     .sign(privateKey);
-  const res = await app.inject({ method: "GET", url: "/me", headers: { authorization: `Bearer ${token}` } });
+  const res = await app.inject({
+    method: "GET",
+    url: "/me",
+    headers: { authorization: `Bearer ${token}` },
+  });
   return (res.json() as { id: string }).id;
 }
 
 /** Insert a bare portfolio for a user — portfolioId is required on fetchReportDocuments. */
 async function ensurePortfolio(userId: string): Promise<string> {
-  const [row] = await app.db.insert(portfolios).values({ userId, name: "Test" }).returning({ id: portfolios.id });
+  const [row] = await app.db
+    .insert(portfolios)
+    .values({ userId, name: "Test" })
+    .returning({ id: portfolios.id });
   return row.id;
 }
 
@@ -141,7 +148,9 @@ describe("fetchReportDocuments", () => {
     const runner = runnerWith(async (_session, pairs) => {
       calledWith = pairs;
       return {
-        docs: new Map([["doc-1", { buf: Buffer.from("steuerreport bytes"), mimeType: "application/pdf" }]]),
+        docs: new Map([
+          ["doc-1", { buf: Buffer.from("steuerreport bytes"), mimeType: "application/pdf" }],
+        ]),
         failures: [],
       };
     });
@@ -176,7 +185,9 @@ describe("fetchReportDocuments", () => {
       docs: new Map([["doc-2", { buf: Buffer.from("bytes"), mimeType: "application/pdf" }]]),
       failures: [],
     }));
-    const refs: ReportDocumentRef[] = [{ eventId: "evt-report-2", docId: "doc-2", taxYear: 2024, title: null }];
+    const refs: ReportDocumentRef[] = [
+      { eventId: "evt-report-2", docId: "doc-2", taxYear: 2024, title: null },
+    ];
     const opts = {
       db: app.db,
       runner,
@@ -203,7 +214,9 @@ describe("fetchReportDocuments", () => {
       docs: new Map(),
       failures: [{ docId: "doc-3", error: "404 from TR" }],
     }));
-    const refs: ReportDocumentRef[] = [{ eventId: "evt-report-3", docId: "doc-3", taxYear: 2025, title: null }];
+    const refs: ReportDocumentRef[] = [
+      { eventId: "evt-report-3", docId: "doc-3", taxYear: 2025, title: null },
+    ];
 
     const result = await fetchReportDocuments({
       db: app.db,

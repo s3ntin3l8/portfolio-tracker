@@ -7,9 +7,7 @@ import { transactionTypeSchema } from "@portfolio/schema";
 // guards the two runtime mirrors from drifting.
 describe("transaction-type enum mirrors", () => {
   it("db pgEnum and schema zod enum hold the same set", () => {
-    expect([...txTypeEnum.enumValues].sort()).toEqual(
-      [...transactionTypeSchema.options].sort(),
-    );
+    expect([...txTypeEnum.enumValues].sort()).toEqual([...transactionTypeSchema.options].sort());
   });
 
   it("includes the financing legs", () => {

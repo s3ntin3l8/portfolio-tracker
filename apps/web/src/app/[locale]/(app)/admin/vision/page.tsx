@@ -5,11 +5,7 @@ import { AdminVisionProviders } from "@/components/admin-vision-providers";
 import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminVisionProviders } from "@/lib/server-api";
 
-export default async function AdminVisionPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function AdminVisionPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Admin");

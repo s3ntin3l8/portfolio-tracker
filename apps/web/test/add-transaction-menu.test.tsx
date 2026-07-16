@@ -16,7 +16,10 @@ vi.mock("@/i18n/navigation", () => ({
   usePathname: () => "/transactions",
 }));
 
-const listPortfolios = vi.fn(async () => [] as { id: string; name: string; brokerage: string | null; accountHolder: string | null }[]);
+const listPortfolios = vi.fn(
+  async () =>
+    [] as { id: string; name: string; brokerage: string | null; accountHolder: string | null }[],
+);
 const listAccountHolders = vi.fn(async () => [] as { id: string; name: string }[]);
 const getInstrument = vi.fn();
 const getSummary = vi.fn();
@@ -49,9 +52,7 @@ function renderMenu(props: { autoOpenFromParams?: boolean } = {}) {
 }
 
 function openMenu() {
-  fireEvent.click(
-    screen.getByRole("button", { name: messages.Manage.addTransaction }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: messages.Manage.addTransaction }));
 }
 
 describe("AddTransactionMenu", () => {
@@ -71,9 +72,7 @@ describe("AddTransactionMenu", () => {
     renderMenu();
     openMenu();
 
-    expect(
-      screen.getByRole("dialog", { name: messages.Manage.addMenu.title }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: messages.Manage.addMenu.title })).toBeInTheDocument();
     expect(screen.getByText(messages.Manage.addMenu.screenshot)).toBeInTheDocument();
     expect(screen.getByText(messages.Manage.addMenu.recommended)).toBeInTheDocument();
     expect(screen.getByText(messages.Manage.addMenu.csv)).toBeInTheDocument();
@@ -96,9 +95,7 @@ describe("AddTransactionMenu", () => {
     fireEvent.click(screen.getByText(messages.Manage.addMenu.screenshot));
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("dialog", { name: messages.Import.title }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("dialog", { name: messages.Import.title })).toBeInTheDocument(),
     );
     expect(
       screen.queryByRole("dialog", { name: messages.Manage.addMenu.title }),
@@ -115,9 +112,7 @@ describe("AddTransactionMenu", () => {
     fireEvent.click(screen.getByText(messages.Manage.addMenu.csv));
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("dialog", { name: messages.Import.title }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("dialog", { name: messages.Import.title })).toBeInTheDocument(),
     );
     expect(screen.getByTestId("import-flow")).toBeInTheDocument();
   });
@@ -127,33 +122,25 @@ describe("AddTransactionMenu", () => {
     openMenu();
     fireEvent.click(screen.getByText(messages.Manage.addMenu.screenshot));
     await waitFor(() =>
-      expect(
-        screen.getByRole("dialog", { name: messages.Import.title }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("dialog", { name: messages.Import.title })).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: messages.Manage.back }));
 
-    expect(
-      screen.getByRole("dialog", { name: messages.Manage.addMenu.title }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: messages.Manage.addMenu.title })).toBeInTheDocument();
     expect(screen.getByText(messages.Manage.addMenu.csv)).toBeInTheDocument();
   });
 
   it("keeps the import sheet closed without a share/import param", () => {
     renderMenu();
-    expect(
-      screen.queryByRole("dialog", { name: messages.Import.title }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: messages.Import.title })).not.toBeInTheDocument();
   });
 
   it("auto-opens the import sheet on ?import=1 and clears the flag", async () => {
     search.value = "import=1";
     renderMenu({ autoOpenFromParams: true });
     await waitFor(() =>
-      expect(
-        screen.getByRole("dialog", { name: messages.Import.title }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("dialog", { name: messages.Import.title })).toBeInTheDocument(),
     );
     expect(replace).toHaveBeenCalledWith("/transactions");
   });
@@ -162,9 +149,7 @@ describe("AddTransactionMenu", () => {
     search.value = "shared=1";
     renderMenu({ autoOpenFromParams: true });
     await waitFor(() =>
-      expect(
-        screen.getByRole("dialog", { name: messages.Import.title }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("dialog", { name: messages.Import.title })).toBeInTheDocument(),
     );
     expect(replace).not.toHaveBeenCalled();
   });
@@ -173,9 +158,7 @@ describe("AddTransactionMenu", () => {
     search.value = "import=1";
     renderMenu();
     await Promise.resolve();
-    expect(
-      screen.queryByRole("dialog", { name: messages.Import.title }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: messages.Import.title })).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
   });
 
@@ -183,9 +166,7 @@ describe("AddTransactionMenu", () => {
     it("shows the Add portfolio card (always visible)", () => {
       renderMenu();
       openMenu();
-      expect(
-        screen.getByText(messages.Manage.addMenu.createPortfolio),
-      ).toBeInTheDocument();
+      expect(screen.getByText(messages.Manage.addMenu.createPortfolio)).toBeInTheDocument();
     });
 
     it("shows the Add account holder card when no holders exist", async () => {
@@ -195,9 +176,7 @@ describe("AddTransactionMenu", () => {
 
       // Initially hidden (hasHolders starts true), then appears after fetch.
       await waitFor(() =>
-        expect(
-          screen.getByText(messages.Manage.addMenu.createAccountHolder),
-        ).toBeInTheDocument(),
+        expect(screen.getByText(messages.Manage.addMenu.createAccountHolder)).toBeInTheDocument(),
       );
     });
 

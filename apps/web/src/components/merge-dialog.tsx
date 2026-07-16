@@ -61,7 +61,11 @@ export function MergeDialog({
     (async () => {
       setLoadingPreview(true);
       try {
-        const res = await api.previewMergeTransactions(survivorRow.portfolioId, survivorId, absorbedId);
+        const res = await api.previewMergeTransactions(
+          survivorRow.portfolioId,
+          survivorId,
+          absorbedId,
+        );
         if (!cancelled) setPreview(res);
       } finally {
         if (!cancelled) setLoadingPreview(false);

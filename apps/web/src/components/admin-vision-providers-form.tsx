@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  AlertCircle,
-  Check,
-  Eye,
-  EyeOff,
-  Loader2,
-  Pencil,
-  ShieldOff,
-  Trash2,
-} from "lucide-react";
+import { AlertCircle, Check, Eye, EyeOff, Loader2, Pencil, ShieldOff, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -148,9 +139,7 @@ function VisionCredentialCell({
       </span>
     );
   } else {
-    display = (
-      <span className="text-xs text-muted-foreground">{t("keyNone")}</span>
-    );
+    display = <span className="text-xs text-muted-foreground">{t("keyNone")}</span>;
   }
 
   return (
@@ -178,7 +167,9 @@ function VisionCredentialCell({
               <div className="relative">
                 <Input
                   type={isUrlProvider ? "url" : showKey ? "text" : "password"}
-                  placeholder={isUrlProvider ? t("visionUrlPlaceholder") : t("credentialPlaceholder")}
+                  placeholder={
+                    isUrlProvider ? t("visionUrlPlaceholder") : t("credentialPlaceholder")
+                  }
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="pr-8 font-mono"
@@ -423,10 +414,14 @@ export function AdminVisionProvidersForm({
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-bold">{p.label}</div>
                             {!p.configured && (
-                              <div className="text-xs text-muted-foreground">{t("notConfigured")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("notConfigured")}
+                              </div>
                             )}
                           </div>
-                          <span className="tabular-nums text-xs text-muted-foreground">#{i + 1}</span>
+                          <span className="tabular-nums text-xs text-muted-foreground">
+                            #{i + 1}
+                          </span>
                         </div>
                       )}
                     </SortableCard>

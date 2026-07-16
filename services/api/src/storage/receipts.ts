@@ -37,7 +37,10 @@ import {
 
 /** Sanitise a filename: strip directory traversal, collapse spaces, limit length. */
 export function sanitiseFilename(name: string): string {
-  const base = path.basename(name).replace(/[^\w.-]/g, "_").slice(0, 200);
+  const base = path
+    .basename(name)
+    .replace(/[^\w.-]/g, "_")
+    .slice(0, 200);
   return base || "document";
 }
 
@@ -115,9 +118,7 @@ function db(app: AppLikeDb): PostgresJsDatabase<typeof schema> {
 }
 
 /** Result type for `storeReceipt` — callers that don't need it can ignore the return value. */
-export type StoreReceiptResult =
-  | { ok: true; documentId: string }
-  | { ok: false; error: string };
+export type StoreReceiptResult = { ok: true; documentId: string } | { ok: false; error: string };
 
 /**
  * Stage a document at upload time. Best-effort: errors are logged and swallowed
@@ -131,7 +132,10 @@ export type StoreReceiptResult =
  * failure. Upload callers may ignore the return; sync and backfill callers use it
  * to count stored vs. failed documents.
  */
-export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Promise<StoreReceiptResult> {
+export async function storeReceipt(
+  app: AppLike,
+  opts: StoreReceiptOptions,
+): Promise<StoreReceiptResult> {
   const {
     userId,
     importId,
@@ -160,17 +164,20 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
   // Phase 2: DB insert. A put-success + insert-failure is a consistency bug —
   // log at `error` and return failure so the caller can surface it.
   try {
-    const [row] = await db(app).insert(documents).values({
-      userId,
-      importId,
-      storageKey: key,
-      mimeType,
-      originalFilename: originalFilename ?? null,
-      sizeBytes: buf.byteLength,
-      status,
-      source: source ?? null,
-      sourceEventId: sourceEventId ?? null,
-    }).returning({ id: documents.id });
+    const [row] = await db(app)
+      .insert(documents)
+      .values({
+        userId,
+        importId,
+        storageKey: key,
+        mimeType,
+        originalFilename: originalFilename ?? null,
+        sizeBytes: buf.byteLength,
+        status,
+        source: source ?? null,
+        sourceEventId: sourceEventId ?? null,
+      })
+      .returning({ id: documents.id });
     app.log.debug({ importId, key, bytes: buf.byteLength, status }, "receipt staged");
     return { ok: true, documentId: row.id };
   } catch (err) {
@@ -185,10 +192,7 @@ export async function storeReceipt(app: AppLike, opts: StoreReceiptOptions): Pro
  * When retaining, also re-keys each object to a structured, human-readable path
  * (via naming.ts). Best-effort storage deletion — a missing object is not an error.
  */
-export async function finalizeReceipts(
-  app: AppLike,
-  opts: FinalizeReceiptsOptions,
-): Promise<void> {
+export async function finalizeReceipts(app: AppLike, opts: FinalizeReceiptsOptions): Promise<void> {
   const { importId, portfolioId, retain } = opts;
 
   const rows = await db(app)
@@ -232,10 +236,7 @@ export async function finalizeReceipts(
           mimeType: row.mimeType,
           originalFilename: row.originalFilename ?? undefined,
         });
-        await db(app)
-          .update(documents)
-          .set({ storageKey: newKey })
-          .where(eq(documents.id, row.id));
+        await db(app).update(documents).set({ storageKey: newKey }).where(eq(documents.id, row.id));
 
         app.log.debug(
           { docId: row.id, oldKey: row.storageKey, newKey },
@@ -311,10 +312,7 @@ export async function retainDocumentForTransaction(
         mimeType: row.mimeType,
         originalFilename: row.originalFilename ?? undefined,
       });
-      await db(app)
-        .update(documents)
-        .set({ storageKey: newKey })
-        .where(eq(documents.id, row.id));
+      await db(app).update(documents).set({ storageKey: newKey }).where(eq(documents.id, row.id));
     }
   } catch (err) {
     app.log.warn(
@@ -361,10 +359,7 @@ export async function deleteReceiptsForImport(app: AppLike, importId: string): P
  * Delete all retained documents for a portfolio (pre-query before portfolio delete,
  * since DB cascade removes rows but not storage objects).
  */
-export async function deleteReceiptsForPortfolio(
-  app: AppLike,
-  portfolioId: string,
-): Promise<void> {
+export async function deleteReceiptsForPortfolio(app: AppLike, portfolioId: string): Promise<void> {
   const rows = await db(app)
     .select({ id: documents.id, storageKey: documents.storageKey })
     .from(documents)
@@ -423,7 +418,12 @@ export async function gcStagedReceipts(app: AppLike, maxAgeDays = 7): Promise<nu
   await _deleteStorageObjects(app, expired, "gc-staged");
   await db(app)
     .delete(documents)
-    .where(inArray(documents.id, expired.map((r) => r.id)));
+    .where(
+      inArray(
+        documents.id,
+        expired.map((r) => r.id),
+      ),
+    );
   app.log.info({ count: expired.length }, "gc: deleted expired staged receipts");
   return expired.length;
 }
@@ -514,7 +514,10 @@ export async function getOriginalFilenamesForImports(
     .select({ importId: documents.importId, originalFilename: documents.originalFilename })
     .from(documents)
     .where(
-      and(inArray(documents.importId, importIds), inArray(documents.status, ["staged", "retained"])),
+      and(
+        inArray(documents.importId, importIds),
+        inArray(documents.status, ["staged", "retained"]),
+      ),
     );
   const out = new Map<string, string>();
   for (const r of rows) {
@@ -590,9 +593,7 @@ export async function transactionIdsWithDocuments(
     .select({ transactionId: documents.transactionId })
     .from(documents)
     .where(and(inArray(documents.transactionId, txIds), eq(documents.status, "retained")));
-  return new Set(
-    rows.map((r) => r.transactionId).filter((id): id is string => id !== null),
-  );
+  return new Set(rows.map((r) => r.transactionId).filter((id): id is string => id !== null));
 }
 
 /**
@@ -610,7 +611,9 @@ export async function documentIdsWithRetained(
 
   const conditions: ReturnType<typeof and>[] = [eq(documents.status, "retained")];
   if (hasImportIds && hasTxIds) {
-    conditions.push(or(inArray(documents.importId, importIds), inArray(documents.transactionId, txIds)));
+    conditions.push(
+      or(inArray(documents.importId, importIds), inArray(documents.transactionId, txIds)),
+    );
   } else if (hasImportIds) {
     conditions.push(inArray(documents.importId, importIds));
   } else {
@@ -622,8 +625,12 @@ export async function documentIdsWithRetained(
     .from(documents)
     .where(and(...conditions));
 
-  const importIdsWithDocs = new Set(rows.map((r) => r.importId).filter((id): id is string => id !== null));
-  const txIdsWithDocs = new Set(rows.map((r) => r.transactionId).filter((id): id is string => id !== null));
+  const importIdsWithDocs = new Set(
+    rows.map((r) => r.importId).filter((id): id is string => id !== null),
+  );
+  const txIdsWithDocs = new Set(
+    rows.map((r) => r.transactionId).filter((id): id is string => id !== null),
+  );
   return { importIdsWithDocs, txIdsWithDocs };
 }
 
@@ -658,10 +665,7 @@ export async function linkTrReceiptsToTransactions(
           ),
         );
     }
-    app.log.debug(
-      { importId, linked: links.length },
-      "tr receipts linked to transactions",
-    );
+    app.log.debug({ importId, linked: links.length }, "tr receipts linked to transactions");
   } catch (err) {
     app.log.warn({ err, importId }, "linkTrReceiptsToTransactions failed (non-fatal)");
   }
@@ -694,10 +698,7 @@ async function _deleteStorageObjects(
       try {
         await app.storage.delete(row.storageKey);
       } catch (err) {
-        app.log.warn(
-          { err, key: row.storageKey, context },
-          "storage.delete failed (non-fatal)",
-        );
+        app.log.warn({ err, key: row.storageKey, context }, "storage.delete failed (non-fatal)");
       }
     }),
   );

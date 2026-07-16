@@ -8,7 +8,9 @@ function makeInertStorage(): StorageProvider & { puts: string[] } {
   const puts: string[] = [];
   return {
     puts,
-    put: async (key) => { puts.push(key); },
+    put: async (key) => {
+      puts.push(key);
+    },
     getSignedUrl: async (key) => `https://fake.storage/${key}?signed=1`,
     delete: async () => {},
     exists: async () => false,

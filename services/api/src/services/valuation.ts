@@ -88,15 +88,10 @@ export async function valuePortfolio(
   const tSql = performance.now();
 
   const instrumentIds = [
-    ...new Set(
-      rows.map((r) => r.instrumentId).filter((x): x is string => x !== null),
-    ),
+    ...new Set(rows.map((r) => r.instrumentId).filter((x): x is string => x !== null)),
   ];
   const instrumentRows = instrumentIds.length
-    ? await db
-        .select()
-        .from(instruments)
-        .where(inArray(instruments.id, instrumentIds))
+    ? await db.select().from(instruments).where(inArray(instruments.id, instrumentIds))
     : [];
 
   const metaById = new Map<string, InstrumentMeta>(
@@ -250,7 +245,8 @@ export function derivationCacheKey(
   costBasisMode: CostBasisMode | undefined,
   cashCounted: boolean,
 ): string {
-  const mode = costBasisMode === undefined || costBasisMode === "purchase_price" ? "" : costBasisMode;
+  const mode =
+    costBasisMode === undefined || costBasisMode === "purchase_price" ? "" : costBasisMode;
   return `${portfolioId}|${displayCurrency}|${mode}|${cashCounted}`;
 }
 
@@ -358,7 +354,10 @@ export function clearValuationCache(_log?: FastifyBaseLogger): void {
   derivationCache.clear();
   const tCount = fifoTradeLogCache.size;
   fifoTradeLogCache.clear();
-  logTiming(undefined, "clearValuationCache", 0, { entriesCleared: vCount, tradeLogsCleared: tCount });
+  logTiming(undefined, "clearValuationCache", 0, {
+    entriesCleared: vCount,
+    tradeLogsCleared: tCount,
+  });
 }
 
 /** Corporate actions for the given instruments, shaped for @portfolio/core. */

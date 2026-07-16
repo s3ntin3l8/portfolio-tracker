@@ -44,13 +44,9 @@ export default async function SettingsPortfoliosPage({
   ]);
 
   const trPortfolioId =
-    connection !== null && connection.status !== "disconnected"
-      ? connection.portfolioId
-      : null;
+    connection !== null && connection.status !== "disconnected" ? connection.portfolioId : null;
   const ibkrPortfolioId =
-    ibkrConn !== null && ibkrConn.status !== "disconnected"
-      ? ibkrConn.portfolioId
-      : null;
+    ibkrConn !== null && ibkrConn.status !== "disconnected" ? ibkrConn.portfolioId : null;
 
   return (
     <>
@@ -110,8 +106,16 @@ export default async function SettingsPortfoliosPage({
                       <div className="relative z-20 flex shrink-0 items-center gap-1">
                         <PortfolioCardMenu
                           portfolio={portfolio}
-                          trSync={isTrConnected ? { initialSyncing: connection?.syncing ?? false } : undefined}
-                          ibkrSync={isIbkrConnected ? { initialSyncing: ibkrConn?.syncing ?? false } : undefined}
+                          trSync={
+                            isTrConnected
+                              ? { initialSyncing: connection?.syncing ?? false }
+                              : undefined
+                          }
+                          ibkrSync={
+                            isIbkrConnected
+                              ? { initialSyncing: ibkrConn?.syncing ?? false }
+                              : undefined
+                          }
                         />
                       </div>
                     </div>
@@ -120,7 +124,9 @@ export default async function SettingsPortfoliosPage({
                         <span
                           className={
                             "inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[10px] font-bold " +
-                            (isSyncing ? "bg-warning/15 text-warning" : "bg-success/15 text-success")
+                            (isSyncing
+                              ? "bg-warning/15 text-warning"
+                              : "bg-success/15 text-success")
                           }
                         >
                           <span
@@ -146,7 +152,10 @@ export default async function SettingsPortfoliosPage({
                         <div className="min-h-2.5 flex-1" />
                         <div className="flex flex-wrap gap-x-2.5 gap-y-1.5 border-t border-border pt-2.5">
                           {flags.map((flag) => (
-                            <span key={flag} className="text-[11px] font-medium text-muted-foreground">
+                            <span
+                              key={flag}
+                              className="text-[11px] font-medium text-muted-foreground"
+                            >
                               {flag}
                             </span>
                           ))}

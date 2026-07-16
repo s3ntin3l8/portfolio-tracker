@@ -22,15 +22,9 @@ describe("Landing (Pocket split-hero sign-in)", () => {
   it("renders the sign-in hero, SSO CTA and connected brokerages", () => {
     renderLanding();
 
-    expect(
-      screen.getByRole("heading", { name: messages.Landing.signInTitle }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: messages.Landing.sso }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Trade Republic · IBKR · DKB"),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: messages.Landing.signInTitle })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: messages.Landing.sso })).toBeInTheDocument();
+    expect(screen.getByText("Trade Republic · IBKR · DKB")).toBeInTheDocument();
   });
 
   it("starts Authentik sign-in to /holdings from the SSO button", () => {

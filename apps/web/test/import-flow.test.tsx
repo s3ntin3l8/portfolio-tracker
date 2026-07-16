@@ -57,7 +57,11 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importScreenshot: vi.fn(),
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-    materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 })),
+    materializeImport: vi.fn(async () => ({
+      materializedCount: 1,
+      excludedCashMovements: 0,
+      enrichedCount: 0,
+    })),
     checkAccounts: vi.fn(async () => ({ mismatches: [] })),
     uploadDocument: vi.fn(async () => ({ id: "doc1", duplicate: false })),
     ...overrides,
@@ -140,9 +144,7 @@ describe("ImportFlow", () => {
         }),
       ),
     );
-    expect(client.checkAccounts).toHaveBeenCalledWith([
-      { importId: "imp1", portfolioId: "p1" },
-    ]);
+    expect(client.checkAccounts).toHaveBeenCalledWith([{ importId: "imp1", portfolioId: "p1" }]);
     expect(onClose).toHaveBeenCalledTimes(1);
     // The write itself is the provider's job — ImportFlow no longer calls the client.
     expect(client.materializeImport).not.toHaveBeenCalled();
@@ -279,10 +281,9 @@ describe("ImportFlow", () => {
     await waitFor(() => expect(confirmBtn()).toBeInTheDocument());
 
     // Pick a different portfolio (rich Radix dropdown: Enter opens, click selects).
-    fireEvent.keyDown(
-      screen.getByRole("button", { name: messages.Import.targetPortfolio }),
-      { key: "Enter" },
-    );
+    fireEvent.keyDown(screen.getByRole("button", { name: messages.Import.targetPortfolio }), {
+      key: "Enter",
+    });
     fireEvent.click(screen.getByRole("menuitem", { name: /DKB/ }));
 
     fireEvent.click(confirmBtn());
@@ -347,9 +348,7 @@ describe("ImportFlow", () => {
         // No accountMismatch at parse — clean.
       })),
       checkAccounts: vi.fn(async () => ({
-        mismatches: [
-          { importId: "imp-late", kind: "no_match" as const, detected: "999888777" },
-        ],
+        mismatches: [{ importId: "imp-late", kind: "no_match" as const, detected: "999888777" }],
       })),
     });
     const { onSubmit, onClose } = renderFlow(client, [
@@ -451,9 +450,7 @@ describe("ImportFlow", () => {
     await waitFor(() =>
       expect(screen.getByText(messages.Import.contract.title)).toBeInTheDocument(),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.Import.contract.confirm }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: messages.Import.contract.confirm }));
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
@@ -580,9 +577,7 @@ describe("ImportFlow", () => {
     expect(screen.getAllByText("good-c.csv").length).toBeGreaterThan(0);
     // Skip notice for the confirmed file (inside the collapsible banner).
     expect(
-      screen.getByText(
-        messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.csv"),
-      ),
+      screen.getByText(messages.Import.skipped.alreadyConfirmed.replace("{file}", "dup.csv")),
     ).toBeInTheDocument();
   });
 
@@ -645,9 +640,7 @@ describe("ImportFlow", () => {
     fireEvent.change(fileInput(container), { target: { files: [pngFile()] } });
 
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        messages.Import.errors.notConfigured,
-      ),
+      expect(screen.getByRole("alert")).toHaveTextContent(messages.Import.errors.notConfigured),
     );
   });
 });

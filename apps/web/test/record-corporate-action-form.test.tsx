@@ -48,9 +48,7 @@ describe("RecordCorporateActionForm", () => {
     fireEvent.change(screen.getByLabelText(m.search), {
       target: { value: "bbca" },
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /BBCA/ })).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /BBCA/ })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /BBCA/ }));
 
     fireEvent.change(screen.getByLabelText(m.ratio), { target: { value: "2" } });
@@ -75,9 +73,7 @@ describe("RecordCorporateActionForm", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.needInstrument),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.needInstrument));
     expect(client.createCorporateAction).not.toHaveBeenCalled();
   });
 

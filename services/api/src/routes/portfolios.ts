@@ -133,7 +133,11 @@ export async function portfoliosRoute(app: FastifyInstance) {
     const t0 = performance.now();
     const { id } = requireUser(request);
     const pfs = await app.db
-      .select({ id: portfolios.id, baseCurrency: portfolios.baseCurrency, cashCounted: portfolios.cashCounted })
+      .select({
+        id: portfolios.id,
+        baseCurrency: portfolios.baseCurrency,
+        cashCounted: portfolios.cashCounted,
+      })
       .from(portfolios)
       .where(eq(portfolios.userId, id));
 

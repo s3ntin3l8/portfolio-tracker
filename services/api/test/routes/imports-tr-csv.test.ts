@@ -72,7 +72,13 @@ describe("Trade Republic CSV import path", () => {
     const { importId, drafts } = imp.json();
     expect(drafts).toHaveLength(4);
     const dividend = drafts.find((d: { action: string }) => d.action === "dividend");
-    expect(dividend).toMatchObject({ price: "3.35", total: "3.94", tax: "0.59", fxRate: "1.103400", shares: "11" });
+    expect(dividend).toMatchObject({
+      price: "3.35",
+      total: "3.94",
+      tax: "0.59",
+      fxRate: "1.103400",
+      shares: "11",
+    });
     // Saveback is a reward-funded buy, not a contribution → bonus_cash (it would collapse into
     // its funding buy, but this fixture has no Core S&P 500 buy, so it stays a standalone row).
     const saveback = drafts.find((d: { kind?: string }) => d.kind === "bonus");

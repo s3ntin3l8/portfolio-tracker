@@ -56,12 +56,14 @@ export function TransactionStatusButton({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("label")} disabled={busy} className={className}>
-          {busy ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <MoreVertical className="size-4" />
-          )}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("label")}
+          disabled={busy}
+          className={className}
+        >
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreVertical className="size-4" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -75,10 +77,7 @@ export function TransactionStatusButton({
           <Archive className="size-4" />
           {t("archived")}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => set("cash_neutral")}
-          disabled={status === "cash_neutral"}
-        >
+        <DropdownMenuItem onClick={() => set("cash_neutral")} disabled={status === "cash_neutral"}>
           <CircleSlash className="size-4" />
           {t("cashNeutral")}
         </DropdownMenuItem>

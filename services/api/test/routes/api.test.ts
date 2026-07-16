@@ -456,7 +456,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBYF", market: "IDX", assetClass: "equity", currency: "IDR", name: "Year Filter Test Co" })
+      .values({
+        symbol: "BBYF",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Year Filter Test Co",
+      })
       .returning();
 
     const buy = (executedAt: string) =>
@@ -513,7 +519,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBPT", market: "IDX", assetClass: "equity", currency: "IDR", name: "Pagination Test Co" })
+      .values({
+        symbol: "BBPT",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Pagination Test Co",
+      })
       .returning();
 
     for (const [type, price] of [
@@ -581,7 +593,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBNP", market: "IDX", assetClass: "equity", currency: "IDR", name: "Networth Pagination Test Co" })
+      .values({
+        symbol: "BBNP",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Networth Pagination Test Co",
+      })
       .returning();
 
     for (let i = 0; i < 3; i++) {
@@ -635,7 +653,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [inst] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBNY", market: "IDX", assetClass: "equity", currency: "IDR", name: "Networth Years Test Co" })
+      .values({
+        symbol: "BBNY",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Networth Years Test Co",
+      })
       .returning();
 
     for (const executedAt of ["2022-06-01T00:00:00.000Z", "2024-06-01T00:00:00.000Z"]) {
@@ -722,10 +746,7 @@ describe("auth + portfolios + transactions", () => {
       await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) })
     ).json()[0].id;
 
-    const [bbca] = await app.db
-      .select()
-      .from(instruments)
-      .where(eq(instruments.symbol, "BBCA"));
+    const [bbca] = await app.db.select().from(instruments).where(eq(instruments.symbol, "BBCA"));
     // Seed three stored daily closes (ascending).
     await app.db.insert(prices).values([
       { instrumentId: bbca.id, date: "2026-01-13", close: "9000", currency: "IDR" },
@@ -864,7 +885,13 @@ describe("auth + portfolios + transactions", () => {
       method: "POST",
       url: "/instruments",
       headers: auth(t),
-      payload: { symbol: "SIE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Siemens AG" },
+      payload: {
+        symbol: "SIE",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Siemens AG",
+      },
     });
     const inst = create.json();
 
@@ -894,7 +921,13 @@ describe("auth + portfolios + transactions", () => {
       method: "POST",
       url: "/instruments",
       headers: auth(t),
-      payload: { symbol: "AMZN", market: "PE", assetClass: "equity", currency: "USD", name: "Amazon" },
+      payload: {
+        symbol: "AMZN",
+        market: "PE",
+        assetClass: "equity",
+        currency: "USD",
+        name: "Amazon",
+      },
     });
     const inst = create.json();
 
@@ -916,13 +949,26 @@ describe("auth + portfolios + transactions", () => {
       method: "POST",
       url: "/instruments",
       headers: auth(t),
-      payload: { symbol: "SAP", market: "XETRA", assetClass: "equity", currency: "EUR", name: "SAP SE", isin },
+      payload: {
+        symbol: "SAP",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "SAP SE",
+        isin,
+      },
     });
     const row2 = await app.inject({
       method: "POST",
       url: "/instruments",
       headers: auth(t),
-      payload: { symbol: "SAP2", market: "XETRA", assetClass: "equity", currency: "EUR", name: "SAP Clone" },
+      payload: {
+        symbol: "SAP2",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "SAP Clone",
+      },
     });
     const conflict = await app.inject({
       method: "PATCH",
@@ -1079,7 +1125,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [eq] = await app.db
       .insert(instruments)
-      .values({ symbol: "XETRA", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Test ETF" })
+      .values({
+        symbol: "XETRA",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Test ETF",
+      })
       .returning();
 
     const res = await app.inject({
@@ -1113,7 +1165,13 @@ describe("auth + portfolios + transactions", () => {
     ).json().id;
     const [eq] = await app.db
       .insert(instruments)
-      .values({ symbol: "PROV", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Prov Inst" })
+      .values({
+        symbol: "PROV",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Prov Inst",
+      })
       .returning();
 
     // Create with kind + externalId to simulate an import.
@@ -1551,7 +1609,9 @@ describe("auth + portfolios + transactions", () => {
       url: `/portfolios/${portfolioId}/holdings`,
       headers: auth(t),
     });
-    const held = holdings.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id);
+    const held = holdings
+      .json()
+      .holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id);
     expect(held.quantity).toBe("200"); // 100 shares → 200 after the split
     expect(held.costBasis).toBe("100000"); // basis unchanged
 
@@ -1638,7 +1698,8 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(
-      afterEdit.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+      afterEdit.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id)
+        .quantity,
     ).toBe("300");
 
     // DELETE removes it; holdings fall back to the raw 100 shares.
@@ -1654,7 +1715,8 @@ describe("auth + portfolios + transactions", () => {
       headers: auth(t),
     });
     expect(
-      afterDelete.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id).quantity,
+      afterDelete.json().holdings.find((h: { instrumentId: string }) => h.instrumentId === inst.id)
+        .quantity,
     ).toBe("100");
 
     // Unknown ids 404 (for an admin — a non-admin would 403 before reaching that check).
@@ -1669,8 +1731,13 @@ describe("auth + portfolios + transactions", () => {
       ).statusCode,
     ).toBe(404);
     expect(
-      (await app.inject({ method: "DELETE", url: `/corporate-actions/${ca.id}`, headers: auth(admin) }))
-        .statusCode,
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/corporate-actions/${ca.id}`,
+          headers: auth(admin),
+        })
+      ).statusCode,
     ).toBe(404);
   });
 
@@ -2032,7 +2099,12 @@ describe("auth + portfolios + transactions", () => {
     // its currency (USD) never appears among the dividend transactions.
     await app.db
       .insert(fxRates)
-      .values({ base: "USD", quote: "EUR", rate: "0.9", date: new Date().toISOString().slice(0, 10) })
+      .values({
+        base: "USD",
+        quote: "EUR",
+        rate: "0.9",
+        date: new Date().toISOString().slice(0, 10),
+      })
       .onConflictDoNothing();
     await post({
       type: "interest",
@@ -2048,7 +2120,12 @@ describe("auth + portfolios + transactions", () => {
 
       // Interest subtotal: 20.00 + 13.04 + (10.00 × 0.9) = 42.04, all in the display
       // currency — FX-converted even though USD never fed the dividend set.
-      expect(body.interest).toMatchObject({ ytd: "42.04", ttm: "42.04", lifetime: "42.04", currency: "EUR" });
+      expect(body.interest).toMatchObject({
+        ytd: "42.04",
+        ttm: "42.04",
+        lifetime: "42.04",
+        currency: "EUR",
+      });
 
       // The dividend headline is untouched by interest.
       expect(body.thisYear).toBe("246.72");
@@ -2216,13 +2293,61 @@ describe("auth + portfolios + transactions", () => {
 
     // Simulate refreshDividends with TwelveData/EODHD (returns future announced dividends)
     await app.db.insert(dividendEvents).values([
-      { instrumentId: msft.id, exDate: "2025-03-12", amountPerShare: "0.75", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
-      { instrumentId: msft.id, exDate: "2025-06-12", amountPerShare: "0.75", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
-      { instrumentId: msft.id, exDate: "2025-09-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
-      { instrumentId: msft.id, exDate: "2025-12-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "test", fetchedAt: new Date() },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-03-12",
+        amountPerShare: "0.75",
+        currency: "USD",
+        status: "paid",
+        source: "test",
+        fetchedAt: new Date(),
+      },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-06-12",
+        amountPerShare: "0.75",
+        currency: "USD",
+        status: "paid",
+        source: "test",
+        fetchedAt: new Date(),
+      },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-09-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "paid",
+        source: "test",
+        fetchedAt: new Date(),
+      },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-12-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "paid",
+        source: "test",
+        fetchedAt: new Date(),
+      },
       // Future announced — trigger instrumentsWithAnnounced path
-      { instrumentId: msft.id, exDate: "2026-09-12", amountPerShare: "0.80", currency: "USD", status: "announced", source: "test", fetchedAt: new Date() },
-      { instrumentId: msft.id, exDate: "2026-12-12", amountPerShare: "0.80", currency: "USD", status: "announced", source: "test", fetchedAt: new Date() },
+      {
+        instrumentId: msft.id,
+        exDate: "2026-09-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "announced",
+        source: "test",
+        fetchedAt: new Date(),
+      },
+      {
+        instrumentId: msft.id,
+        exDate: "2026-12-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "announced",
+        source: "test",
+        fetchedAt: new Date(),
+      },
     ]);
 
     const body = (
@@ -2242,7 +2367,8 @@ describe("auth + portfolios + transactions", () => {
     // The upcoming stream now also includes next-year cadence projections, so we filter
     // to the announced entries to verify the 2026 rest-of-year total.
     const upcomingDividends = body.upcoming.filter(
-      (u: { kind: string; instrumentId: string }) => u.kind === "dividend" && u.instrumentId === msft.id,
+      (u: { kind: string; instrumentId: string }) =>
+        u.kind === "dividend" && u.instrumentId === msft.id,
     );
     const announcedEntries = upcomingDividends.filter(
       (u: { status: string }) => u.status === "announced",
@@ -2268,8 +2394,8 @@ describe("auth + portfolios + transactions", () => {
     for (const entry of announcedEntries) {
       expect(entry.perShare).toBeDefined();
       expect(entry.quantity).toBeDefined();
-      expect(Number(entry.perShare)).toBeCloseTo(0.80, 2); // amountPerShare
-      expect(Number(entry.quantity)).toBeCloseTo(10, 2);   // held qty
+      expect(Number(entry.perShare)).toBeCloseTo(0.8, 2); // amountPerShare
+      expect(Number(entry.quantity)).toBeCloseTo(10, 2); // held qty
     }
 
     // Projected entries should carry perShare and quantity; perShare × quantity ≈ amount.
@@ -2340,7 +2466,10 @@ describe("auth + portfolios + transactions", () => {
       },
     });
 
-    for (const [date, amt] of [["2025-09-12", "0.80"], ["2025-12-12", "0.80"]]) {
+    for (const [date, amt] of [
+      ["2025-09-12", "0.80"],
+      ["2025-12-12", "0.80"],
+    ]) {
       await app.inject({
         method: "POST",
         url: `/portfolios/${portfolioId}/transactions`,
@@ -2358,8 +2487,24 @@ describe("auth + portfolios + transactions", () => {
 
     // Only past paid rows (Yahoo Finance — no future announced dividends)
     await app.db.insert(dividendEvents).values([
-      { instrumentId: msft.id, exDate: "2025-09-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "yahoo", fetchedAt: new Date() },
-      { instrumentId: msft.id, exDate: "2025-12-12", amountPerShare: "0.80", currency: "USD", status: "paid", source: "yahoo", fetchedAt: new Date() },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-09-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "paid",
+        source: "yahoo",
+        fetchedAt: new Date(),
+      },
+      {
+        instrumentId: msft.id,
+        exDate: "2025-12-12",
+        amountPerShare: "0.80",
+        currency: "USD",
+        status: "paid",
+        source: "yahoo",
+        fetchedAt: new Date(),
+      },
     ]);
 
     const body = (
@@ -2376,7 +2521,8 @@ describe("auth + portfolios + transactions", () => {
     expect(Number(body.forecastRestOfYear)).toBeGreaterThan(0);
 
     const upcomingMsft = body.upcoming.filter(
-      (u: { kind: string; instrumentId: string }) => u.kind === "dividend" && u.instrumentId === msft.id,
+      (u: { kind: string; instrumentId: string }) =>
+        u.kind === "dividend" && u.instrumentId === msft.id,
     );
     // upcoming now spans two windows: rest-of-year (2 projected entries from projectDividends)
     // and next-year (cadence engine projects quarterly payments for Jan–Dec next year).
@@ -2385,13 +2531,11 @@ describe("auth + portfolios + transactions", () => {
     // Rest-of-year entries (current calendar year) should be "projected" since there are
     // no future announced rows in dividend_events for this instrument.
     const currentYear = new Date().getUTCFullYear().toString();
-    const restOfYearEntries = upcomingMsft.filter(
-      (u: { date: string }) => u.date.startsWith(currentYear),
+    const restOfYearEntries = upcomingMsft.filter((u: { date: string }) =>
+      u.date.startsWith(currentYear),
     );
     expect(restOfYearEntries.length).toBeGreaterThanOrEqual(0);
-    expect(
-      restOfYearEntries.every((u: { status: string }) => u.status === "projected"),
-    ).toBe(true);
+    expect(restOfYearEntries.every((u: { status: string }) => u.status === "projected")).toBe(true);
 
     // All entries (both windows) should be projection-based, not announced.
     expect(
@@ -2440,7 +2584,12 @@ describe("auth + portfolios + transactions", () => {
 
     await app.db
       .insert(fxRates)
-      .values({ base: "USD", quote: "IDR", rate: "16000", date: new Date().toISOString().slice(0, 10) })
+      .values({
+        base: "USD",
+        quote: "IDR",
+        rate: "16000",
+        date: new Date().toISOString().slice(0, 10),
+      })
       .onConflictDoNothing();
 
     // Dividend-only transactions — no buy; mirrors the DKB CSV gap.
@@ -2662,9 +2811,27 @@ describe("auth + portfolios + transactions", () => {
 
     await app.db.insert(portfolioIntradaySnapshots).values([
       { portfolioId: p1, capturedAt: stale, netWorth: "1", marketValue: "1", currency: "IDR" },
-      { portfolioId: p1, capturedAt: midWeek, netWorth: "900000", marketValue: "900000", currency: "IDR" },
-      { portfolioId: p1, capturedAt: recent, netWorth: "1000000", marketValue: "1000000", currency: "IDR" },
-      { portfolioId: p2, capturedAt: recent, netWorth: "500000", marketValue: "500000", currency: "IDR" },
+      {
+        portfolioId: p1,
+        capturedAt: midWeek,
+        netWorth: "900000",
+        marketValue: "900000",
+        currency: "IDR",
+      },
+      {
+        portfolioId: p1,
+        capturedAt: recent,
+        netWorth: "1000000",
+        marketValue: "1000000",
+        currency: "IDR",
+      },
+      {
+        portfolioId: p2,
+        capturedAt: recent,
+        netWorth: "500000",
+        marketValue: "500000",
+        currency: "IDR",
+      },
     ]);
 
     // 1D: only the "recent" point (2h ago) is in-window.
@@ -2688,10 +2855,7 @@ describe("auth + portfolios + transactions", () => {
     expect(h7d.statusCode).toBe(200);
     const points7d = h7d.json();
     expect(points7d).toHaveLength(2);
-    expect(points7d.map((p: { netWorth: string }) => p.netWorth)).toEqual([
-      "900000",
-      "1000000",
-    ]);
+    expect(points7d.map((p: { netWorth: string }) => p.netWorth)).toEqual(["900000", "1000000"]);
 
     // Aggregate 1D sums same-timestamp points across the user's portfolios.
     const agg1d = await app.inject({
@@ -2796,7 +2960,13 @@ describe("auth + portfolios + transactions", () => {
 
     const [div] = await app.db
       .insert(instruments)
-      .values({ symbol: "BBCA2", market: "IDX", assetClass: "equity", currency: "IDR", name: "BCA2" })
+      .values({
+        symbol: "BBCA2",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "BCA2",
+      })
       .returning();
 
     // Child portfolio: a buy + a dividend.
@@ -2804,13 +2974,27 @@ describe("auth + portfolios + transactions", () => {
       method: "POST",
       url: `/portfolios/${childPf}/transactions`,
       headers: auth(t),
-      payload: { type: "buy", instrumentId: div.id, quantity: "100", price: "9000", currency: "IDR", executedAt: "2025-01-01T00:00:00.000Z" },
+      payload: {
+        type: "buy",
+        instrumentId: div.id,
+        quantity: "100",
+        price: "9000",
+        currency: "IDR",
+        executedAt: "2025-01-01T00:00:00.000Z",
+      },
     });
     await app.inject({
       method: "POST",
       url: `/portfolios/${childPf}/transactions`,
       headers: auth(t),
-      payload: { type: "dividend", instrumentId: div.id, quantity: "0", price: "500", currency: "IDR", executedAt: "2025-06-01T00:00:00.000Z" },
+      payload: {
+        type: "dividend",
+        instrumentId: div.id,
+        quantity: "0",
+        price: "500",
+        currency: "IDR",
+        executedAt: "2025-06-01T00:00:00.000Z",
+      },
     });
 
     // Self portfolio: a different dividend amount.
@@ -2818,13 +3002,27 @@ describe("auth + portfolios + transactions", () => {
       method: "POST",
       url: `/portfolios/${selfPf}/transactions`,
       headers: auth(t),
-      payload: { type: "buy", instrumentId: div.id, quantity: "50", price: "9000", currency: "IDR", executedAt: "2025-01-01T00:00:00.000Z" },
+      payload: {
+        type: "buy",
+        instrumentId: div.id,
+        quantity: "50",
+        price: "9000",
+        currency: "IDR",
+        executedAt: "2025-01-01T00:00:00.000Z",
+      },
     });
     await app.inject({
       method: "POST",
       url: `/portfolios/${selfPf}/transactions`,
       headers: auth(t),
-      payload: { type: "dividend", instrumentId: div.id, quantity: "0", price: "200", currency: "IDR", executedAt: "2025-06-01T00:00:00.000Z" },
+      payload: {
+        type: "dividend",
+        instrumentId: div.id,
+        quantity: "0",
+        price: "200",
+        currency: "IDR",
+        executedAt: "2025-06-01T00:00:00.000Z",
+      },
     });
 
     // Unfiltered aggregate = 500 + 200 = 700.
@@ -2835,13 +3033,21 @@ describe("auth + portfolios + transactions", () => {
 
     // Filtered by child holder = 500 only.
     const childRes = (
-      await app.inject({ method: "GET", url: `/networth/income?holderId=${childHolder.id}`, headers: auth(t) })
+      await app.inject({
+        method: "GET",
+        url: `/networth/income?holderId=${childHolder.id}`,
+        headers: auth(t),
+      })
     ).json();
     expect(childRes.lifetimeTotal).toBe("500");
 
     // Filtered by self holder = 200 only.
     const selfRes = (
-      await app.inject({ method: "GET", url: `/networth/income?holderId=${selfHolder.id}`, headers: auth(t) })
+      await app.inject({
+        method: "GET",
+        url: `/networth/income?holderId=${selfHolder.id}`,
+        headers: auth(t),
+      })
     ).json();
     expect(selfRes.lifetimeTotal).toBe("200");
 
@@ -2876,14 +3082,75 @@ describe("auth + portfolios + transactions", () => {
     ).json();
 
     // Two portfolios for holderA, one for holderB — all cash-inside so deposits appear.
-    const pfA1 = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "A1", baseCurrency: "IDR", accountHolderId: holderA.id, cashCounted: true } })).json().id;
-    const pfA2 = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "A2", baseCurrency: "IDR", accountHolderId: holderA.id, cashCounted: true } })).json().id;
-    const pfB  = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "B",  baseCurrency: "IDR", accountHolderId: holderB.id, cashCounted: true } })).json().id;
+    const pfA1 = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: {
+          name: "A1",
+          baseCurrency: "IDR",
+          accountHolderId: holderA.id,
+          cashCounted: true,
+        },
+      })
+    ).json().id;
+    const pfA2 = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: {
+          name: "A2",
+          baseCurrency: "IDR",
+          accountHolderId: holderA.id,
+          cashCounted: true,
+        },
+      })
+    ).json().id;
+    const pfB = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "B", baseCurrency: "IDR", accountHolderId: holderB.id, cashCounted: true },
+      })
+    ).json().id;
 
     // Deposit a known amount into each portfolio so net worth differs by holder.
-    await app.inject({ method: "POST", url: `/portfolios/${pfA1}/transactions`, headers: auth(t), payload: { type: "deposit", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
-    await app.inject({ method: "POST", url: `/portfolios/${pfA2}/transactions`, headers: auth(t), payload: { type: "deposit", price: "2000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
-    await app.inject({ method: "POST", url: `/portfolios/${pfB}/transactions`,  headers: auth(t), payload: { type: "deposit", price: "500",  currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pfA1}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "deposit",
+        price: "1000",
+        currency: "IDR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pfA2}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "deposit",
+        price: "2000",
+        currency: "IDR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pfB}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "deposit",
+        price: "500",
+        currency: "IDR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
 
     // Aggregate without filter = 1000 + 2000 + 500 = 3500 net worth.
     const allRes = (await app.inject({ method: "GET", url: "/networth", headers: auth(t) })).json();
@@ -2891,17 +3158,25 @@ describe("auth + portfolios + transactions", () => {
     expect(allRes.portfolioCount).toBe(3);
 
     // Filtered by holderA = 1000 + 2000 = 3000.
-    const aRes = (await app.inject({ method: "GET", url: `/networth?holderId=${holderA.id}`, headers: auth(t) })).json();
+    const aRes = (
+      await app.inject({ method: "GET", url: `/networth?holderId=${holderA.id}`, headers: auth(t) })
+    ).json();
     expect(Number(aRes.netWorth)).toBe(3000);
     expect(aRes.portfolioCount).toBe(2);
 
     // Filtered by holderB = 500.
-    const bRes = (await app.inject({ method: "GET", url: `/networth?holderId=${holderB.id}`, headers: auth(t) })).json();
+    const bRes = (
+      await app.inject({ method: "GET", url: `/networth?holderId=${holderB.id}`, headers: auth(t) })
+    ).json();
     expect(Number(bRes.netWorth)).toBe(500);
     expect(bRes.portfolioCount).toBe(1);
 
     // Unknown / other-user holder → 404.
-    const bad = await app.inject({ method: "GET", url: "/networth?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    const bad = await app.inject({
+      method: "GET",
+      url: "/networth?holderId=00000000-0000-0000-0000-000000000000",
+      headers: auth(t),
+    });
     expect(bad.statusCode).toBe(404);
     expect(bad.json().code).toBe("holder_not_found");
   });
@@ -2921,31 +3196,97 @@ describe("auth + portfolios + transactions", () => {
 
     const [stock] = await app.db
       .insert(instruments)
-      .values({ symbol: "TLKM3", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom3" })
+      .values({
+        symbol: "TLKM3",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Telkom3",
+      })
       .returning();
 
-    const pfT = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Trade pf", baseCurrency: "IDR", accountHolderId: holderT.id } })).json().id;
-    const pfOther = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Other pf", baseCurrency: "IDR" } })).json().id;
+    const pfT = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Trade pf", baseCurrency: "IDR", accountHolderId: holderT.id },
+      })
+    ).json().id;
+    const pfOther = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Other pf", baseCurrency: "IDR" },
+      })
+    ).json().id;
 
     // Buy in holderT's portfolio.
-    await app.inject({ method: "POST", url: `/portfolios/${pfT}/transactions`, headers: auth(t), payload: { type: "buy", instrumentId: stock.id, quantity: "10", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pfT}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "10",
+        price: "1000",
+        currency: "IDR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
     // Buy in unrelated portfolio.
-    await app.inject({ method: "POST", url: `/portfolios/${pfOther}/transactions`, headers: auth(t), payload: { type: "buy", instrumentId: stock.id, quantity: "5",  price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" } });
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pfOther}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "5",
+        price: "1000",
+        currency: "IDR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
 
     // Unfiltered = 2 separate trade episodes (one per portfolio), total 15 shares.
-    const allTrades = (await app.inject({ method: "GET", url: "/networth/trades", headers: auth(t) })).json();
-    const allPositions = allTrades.trades.filter((tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3");
-    const allQuantity = allPositions.reduce((s: number, tr: { quantity: string }) => s + Number(tr.quantity), 0);
+    const allTrades = (
+      await app.inject({ method: "GET", url: "/networth/trades", headers: auth(t) })
+    ).json();
+    const allPositions = allTrades.trades.filter(
+      (tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3",
+    );
+    const allQuantity = allPositions.reduce(
+      (s: number, tr: { quantity: string }) => s + Number(tr.quantity),
+      0,
+    );
     expect(allQuantity).toBe(15);
 
     // Filtered by holderT = only pfT's episode, 10 shares.
-    const filteredTrades = (await app.inject({ method: "GET", url: `/networth/trades?holderId=${holderT.id}`, headers: auth(t) })).json();
-    const filteredPositions = filteredTrades.trades.filter((tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3");
-    const filteredQuantity = filteredPositions.reduce((s: number, tr: { quantity: string }) => s + Number(tr.quantity), 0);
+    const filteredTrades = (
+      await app.inject({
+        method: "GET",
+        url: `/networth/trades?holderId=${holderT.id}`,
+        headers: auth(t),
+      })
+    ).json();
+    const filteredPositions = filteredTrades.trades.filter(
+      (tr: { instrument: { symbol: string } }) => tr.instrument?.symbol === "TLKM3",
+    );
+    const filteredQuantity = filteredPositions.reduce(
+      (s: number, tr: { quantity: string }) => s + Number(tr.quantity),
+      0,
+    );
     expect(filteredQuantity).toBe(10);
 
     // Unknown holder → 404.
-    const bad = await app.inject({ method: "GET", url: "/networth/trades?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    const bad = await app.inject({
+      method: "GET",
+      url: "/networth/trades?holderId=00000000-0000-0000-0000-000000000000",
+      headers: auth(t),
+    });
     expect(bad.statusCode).toBe(404);
     expect(bad.json().code).toBe("holder_not_found");
   });
@@ -2965,16 +3306,31 @@ describe("auth + portfolios + transactions", () => {
 
     // Without snapshots the endpoint just returns []; assert it doesn't 500 and that
     // an unknown holder returns 404 (the filter composes correctly).
-    const pfH = (await app.inject({ method: "POST", url: "/portfolios", headers: auth(t), payload: { name: "Hist pf", baseCurrency: "IDR", accountHolderId: holderH.id } })).json().id;
+    const pfH = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Hist pf", baseCurrency: "IDR", accountHolderId: holderH.id },
+      })
+    ).json().id;
     expect(pfH).toBeTruthy();
 
-    const res = await app.inject({ method: "GET", url: `/networth/history?holderId=${holderH.id}`, headers: auth(t) });
+    const res = await app.inject({
+      method: "GET",
+      url: `/networth/history?holderId=${holderH.id}`,
+      headers: auth(t),
+    });
     expect(res.statusCode).toBe(200);
     // No snapshots yet → empty array, not an error.
     expect(res.json()).toEqual([]);
 
     // Unknown holder → 404.
-    const bad = await app.inject({ method: "GET", url: "/networth/history?holderId=00000000-0000-0000-0000-000000000000", headers: auth(t) });
+    const bad = await app.inject({
+      method: "GET",
+      url: "/networth/history?holderId=00000000-0000-0000-0000-000000000000",
+      headers: auth(t),
+    });
     expect(bad.statusCode).toBe(404);
     expect(bad.json().code).toBe("holder_not_found");
   });

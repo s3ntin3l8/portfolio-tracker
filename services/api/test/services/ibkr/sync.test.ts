@@ -120,7 +120,10 @@ describe("syncIbkrConnection", () => {
 
   it("returns error when connection has no portfolioId", async () => {
     const { conn } = await makeConnection("t5");
-    const result = await syncIbkrConnection(getDb(), enc, mockFlex(), { ...conn, portfolioId: null });
+    const result = await syncIbkrConnection(getDb(), enc, mockFlex(), {
+      ...conn,
+      portfolioId: null,
+    });
     expect(result.status).toBe("error");
   });
 
@@ -151,7 +154,9 @@ describe("syncIbkrConnection", () => {
     const draftRows = await getDb()
       .select({ externalId: transactions.externalId, type: transactions.type })
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")));
+      .where(
+        and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")),
+      );
     expect(draftRows).toHaveLength(1);
     expect(draftRows[0]!.externalId).toBe("ibkr:opening:U6794520:EUR");
     expect(draftRows[0]!.type).toBe("deposit");
@@ -170,7 +175,9 @@ describe("syncIbkrConnection", () => {
     const [draftTx] = await getDb()
       .select({ id: transactions.id })
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")));
+      .where(
+        and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.status, "draft")),
+      );
     expect(draftTx).toBeDefined();
 
     const sourceRows = await getDb()
@@ -217,22 +224,22 @@ describe("syncIbkrConnection", () => {
       .where(eq(screenshotImports.id, r1.importId!));
     const parsed = imp!.parsedJson as { drafts: { externalId?: string | null }[] };
     const firstId = parsed.drafts[0]?.externalId ?? "";
-    await getDb().insert(trResolvedEvents).values({
-      portfolioId: portfolio.id,
-      source: "ibkr",
-      eventId: firstId,
-      resolution: "confirmed",
-    }).onConflictDoNothing();
+    await getDb()
+      .insert(trResolvedEvents)
+      .values({
+        portfolioId: portfolio.id,
+        source: "ibkr",
+        eventId: firstId,
+        resolution: "confirmed",
+      })
+      .onConflictDoNothing();
 
     // Verify source='ibkr' row exists.
     const rows = await getDb()
       .select()
       .from(trResolvedEvents)
       .where(
-        and(
-          eq(trResolvedEvents.portfolioId, portfolio.id),
-          eq(trResolvedEvents.source, "ibkr"),
-        ),
+        and(eq(trResolvedEvents.portfolioId, portfolio.id), eq(trResolvedEvents.source, "ibkr")),
       );
     expect(rows.length).toBeGreaterThan(0);
 
@@ -241,10 +248,7 @@ describe("syncIbkrConnection", () => {
       .select()
       .from(trResolvedEvents)
       .where(
-        and(
-          eq(trResolvedEvents.portfolioId, portfolio.id),
-          eq(trResolvedEvents.source, "pytr"),
-        ),
+        and(eq(trResolvedEvents.portfolioId, portfolio.id), eq(trResolvedEvents.source, "pytr")),
       );
     expect(pytrRows.length).toBe(0);
   });

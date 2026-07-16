@@ -129,7 +129,13 @@ describe("computeAllBanner", () => {
 
   it("treats a row with no displayRate as unconverted (rate 1), not dropped", () => {
     const rows: TxRow[] = [
-      row({ type: "buy", quantity: "1", price: "50", executedAt: "2026-01-01T00:00:00Z", currency: "SGD" }),
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "50",
+        executedAt: "2026-01-01T00:00:00Z",
+        currency: "SGD",
+      }),
     ];
     const data = computeAllBanner(rows, "SGD", "en", allLabels, NOW)!;
     expect(data.tiles[0].sub).toBe("1 buys");
@@ -139,7 +145,9 @@ describe("computeAllBanner", () => {
 
 describe("computeIncomeBanner", () => {
   it("returns null when there is no income at all", () => {
-    const rows: TxRow[] = [row({ type: "buy", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" })];
+    const rows: TxRow[] = [
+      row({ type: "buy", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" }),
+    ];
     expect(computeIncomeBanner(rows, "IDR", "en", incomeLabels, NOW)).toBeNull();
   });
 
@@ -172,7 +180,13 @@ describe("computeIncomeBanner", () => {
 
   it("#465: includes minority-currency income rows via displayRate", () => {
     const rows: TxRow[] = [
-      row({ type: "dividend", price: "700", executedAt: "2026-02-01T00:00:00Z", currency: "EUR", displayRate: "1" }),
+      row({
+        type: "dividend",
+        price: "700",
+        executedAt: "2026-02-01T00:00:00Z",
+        currency: "EUR",
+        displayRate: "1",
+      }),
       row({
         type: "dividend",
         price: "100",
@@ -189,7 +203,9 @@ describe("computeIncomeBanner", () => {
 
 describe("computeTradeBanner", () => {
   it("returns null when there are no rows of that type", () => {
-    const rows: TxRow[] = [row({ type: "sell", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" })];
+    const rows: TxRow[] = [
+      row({ type: "sell", quantity: "1", price: "1", executedAt: "2026-01-01T00:00:00Z" }),
+    ];
     expect(computeTradeBanner(rows, "buy", "IDR", "en")).toBeNull();
   });
 
@@ -222,8 +238,22 @@ describe("computeTradeBanner", () => {
 
   it("#465: counts and converts a minority-currency buy instead of dropping it", () => {
     const rows: TxRow[] = [
-      row({ type: "buy", quantity: "1", price: "100", executedAt: "2026-01-01T00:00:00Z", currency: "EUR", displayRate: "1" }),
-      row({ type: "buy", quantity: "1", price: "10", executedAt: "2026-01-02T00:00:00Z", currency: "USD", displayRate: "0.9" }),
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        executedAt: "2026-01-01T00:00:00Z",
+        currency: "EUR",
+        displayRate: "1",
+      }),
+      row({
+        type: "buy",
+        quantity: "1",
+        price: "10",
+        executedAt: "2026-01-02T00:00:00Z",
+        currency: "USD",
+        displayRate: "0.9",
+      }),
     ];
     const data = computeTradeBanner(rows, "buy", "EUR", "en")!;
     expect(data.count).toBe(2);

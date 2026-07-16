@@ -57,8 +57,16 @@ export async function resetStaleSyncFlags(
 ): Promise<{ trConnections: number; ibkrConnections: number }> {
   const staleReset = { syncing: false, updatedAt: new Date() };
   const [staleTr, staleIbkr] = await Promise.all([
-    db.update(trConnections).set(staleReset).where(eq(trConnections.syncing, true)).returning({ id: trConnections.id }),
-    db.update(ibkrConnections).set(staleReset).where(eq(ibkrConnections.syncing, true)).returning({ id: ibkrConnections.id }),
+    db
+      .update(trConnections)
+      .set(staleReset)
+      .where(eq(trConnections.syncing, true))
+      .returning({ id: trConnections.id }),
+    db
+      .update(ibkrConnections)
+      .set(staleReset)
+      .where(eq(ibkrConnections.syncing, true))
+      .returning({ id: ibkrConnections.id }),
   ]);
   return { trConnections: staleTr.length, ibkrConnections: staleIbkr.length };
 }
@@ -161,14 +169,16 @@ export const JOB_DESCRIPTORS = [
   {
     name: INSTRUMENT_META_QUEUE,
     label: "Instrument metadata refresh",
-    description: "Fetch sector/industry/country from market-data providers for held instruments missing a sector.",
+    description:
+      "Fetch sector/industry/country from market-data providers for held instruments missing a sector.",
     cron: INSTRUMENT_META_CRON,
     supportsForce: true,
   },
   {
     name: GC_RECEIPTS_QUEUE,
     label: "Receipt GC",
-    description: "Delete staged receipt documents from abandoned draft imports (older than 7 days).",
+    description:
+      "Delete staged receipt documents from abandoned draft imports (older than 7 days).",
     cron: GC_RECEIPTS_CRON,
   },
   {
@@ -379,7 +389,14 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
               and(eq(trConnections.status, "connected"), eq(trConnections.syncing, false)),
         );
       for (const conn of conns) {
-        const result = await syncTrConnection(getDb(), app.encryption, app.pytr, conn, app.log, app.storage);
+        const result = await syncTrConnection(
+          getDb(),
+          app.encryption,
+          app.pytr,
+          conn,
+          app.log,
+          app.storage,
+        );
         if (result.status === "connected") {
           app.log.info({ connectionId: conn.id, result }, "tr sync complete");
         } else {
@@ -426,7 +443,11 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
         );
       for (const conn of conns) {
         const result = await syncIbkrConnection(
-          getDb(), app.encryption, app.ibkrFlex, conn, app.log,
+          getDb(),
+          app.encryption,
+          app.ibkrFlex,
+          conn,
+          app.log,
         );
         if (result.status === "connected") {
           app.log.info({ connectionId: conn.id, result }, "ibkr sync complete");
@@ -532,9 +553,10 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   await boss.work(BACKFILL_STALE_QUEUE, async (jobs) => {
     // jobs[0].data may carry { force: true } when triggered from the admin panel
     // to rebuild all portfolios from inception (one-shot heal after a bug fix).
-    const force = Array.isArray(jobs) && jobs.length > 0
-      ? Boolean((jobs[0]?.data as Record<string, unknown> | null)?.force)
-      : false;
+    const force =
+      Array.isArray(jobs) && jobs.length > 0
+        ? Boolean((jobs[0]?.data as Record<string, unknown> | null)?.force)
+        : false;
     try {
       const result = await backfillStalePortfolios(
         getDb(),
@@ -556,26 +578,23 @@ export async function startScheduler(app: FastifyInstance): Promise<void> {
   // On-demand recompute after transaction mutations. Debounced per portfolio so bulk
   // imports collapse to one job; fromDate bounds the work to the affected window.
   await boss.createQueue(RECOMPUTE_QUEUE);
-  await boss.work(
-    RECOMPUTE_QUEUE,
-    async (jobs) => {
-      for (const job of jobs) {
-        try {
-          const { portfolioId, fromDate } = job.data as { portfolioId: string; fromDate: string };
-          const result = await backfillPortfolioHistory(
-            getDb(),
-            await getMarketData(),
-            app.config.MARKET_DATA_TTL_MS,
-            portfolioId,
-            { fromDate },
-          );
-          app.log.info({ portfolioId, fromDate, ...result }, "history recompute complete");
-        } catch (err) {
-          app.log.error({ err }, "history recompute failed");
-        }
+  await boss.work(RECOMPUTE_QUEUE, async (jobs) => {
+    for (const job of jobs) {
+      try {
+        const { portfolioId, fromDate } = job.data as { portfolioId: string; fromDate: string };
+        const result = await backfillPortfolioHistory(
+          getDb(),
+          await getMarketData(),
+          app.config.MARKET_DATA_TTL_MS,
+          portfolioId,
+          { fromDate },
+        );
+        app.log.info({ portfolioId, fromDate, ...result }, "history recompute complete");
+      } catch (err) {
+        app.log.error({ err }, "history recompute failed");
       }
-    },
-  );
+    }
+  });
 
   app.log.info(
     {

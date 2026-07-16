@@ -73,13 +73,19 @@ describe("mapTrEventToDraft", () => {
       ...base,
       eventType: "ORDER_EXECUTED",
       amount: 497, // net: 500 gross − 1 fee − 2 tax
-      fees: -1,    // pytr signs are negative for costs
+      fees: -1, // pytr signs are negative for costs
       tax: -2,
-      shares: -5,  // negative shares for a sell
+      shares: -5, // negative shares for a sell
       isin: "DE0007236101",
     });
     // gross price = (497 + 1 + 2) / 5 = 100
-    expect(sellWithTax).toMatchObject({ action: "sell", quantity: "5", price: "100", fees: "1", tax: "2" });
+    expect(sellWithTax).toMatchObject({
+      action: "sell",
+      quantity: "5",
+      price: "100",
+      fees: "1",
+      tax: "2",
+    });
 
     const sellWithFeesOnly = draftOf({
       ...base,
@@ -162,22 +168,37 @@ describe("mapTrEventToDraft", () => {
 
   it("maps the aggregate purchases: saveback/savings-plan → savings_plan, round-up → buy", () => {
     expect(
-      draftOf({ ...base, eventType: "SAVEBACK_AGGREGATE", amount: -1, shares: 0.02, isin: "X" }).action,
+      draftOf({ ...base, eventType: "SAVEBACK_AGGREGATE", amount: -1, shares: 0.02, isin: "X" })
+        .action,
     ).toBe("savings_plan");
     expect(
-      draftOf({ ...base, eventType: "TRADING_SAVINGSPLAN_EXECUTED", amount: -50, shares: 0.07, isin: "X" }).action,
+      draftOf({
+        ...base,
+        eventType: "TRADING_SAVINGSPLAN_EXECUTED",
+        amount: -50,
+        shares: 0.07,
+        isin: "X",
+      }).action,
     ).toBe("savings_plan");
     expect(
-      draftOf({ ...base, eventType: "SPARE_CHANGE_AGGREGATE", amount: -0.5, shares: 0.01, isin: "X" }).action,
+      draftOf({
+        ...base,
+        eventType: "SPARE_CHANGE_AGGREGATE",
+        amount: -0.5,
+        shares: 0.01,
+        isin: "X",
+      }).action,
     ).toBe("buy");
   });
 
   it("maps TRADING_TRADE_EXECUTED to buy/sell by sign", () => {
     expect(
-      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: -100, shares: 1, isin: "X" }).action,
+      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: -100, shares: 1, isin: "X" })
+        .action,
     ).toBe("buy");
     expect(
-      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: 100, shares: 1, isin: "X" }).action,
+      draftOf({ ...base, eventType: "TRADING_TRADE_EXECUTED", amount: 100, shares: 1, isin: "X" })
+        .action,
     ).toBe("sell");
   });
 
@@ -213,9 +234,7 @@ describe("mapTrEventToDraft", () => {
       quantity: "0",
       price: "1.69",
     });
-    expect(draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 1000 }).action).toBe(
-      "deposit",
-    );
+    expect(draftOf({ ...base, eventType: "PAYMENT_INBOUND", amount: 1000 }).action).toBe("deposit");
     // Vorabpauschale (EARNINGS): a standalone tax debit. Gross amount 0 with the figure in
     // the tax field → the magnitude must come from `tax` so it doesn't emit a 0 (which would
     // never reduce cash). The tax FIELD is left null (magnitude lives in price).
@@ -237,12 +256,11 @@ describe("mapTrEventToDraft", () => {
     expect(draftOf({ ...base, eventType: "BANK_TRANSACTION_INCOMING", amount: 50 }).action).toBe(
       "deposit",
     );
-    expect(draftOf({ ...base, eventType: "CARD_REFUND", amount: 9.99 }).action).toBe(
-      "deposit",
-    );
-    expect(
-      draftOf({ ...base, eventType: "PAYMENT_OUTBOUND", amount: -200 }),
-    ).toMatchObject({ action: "withdrawal", price: "200" });
+    expect(draftOf({ ...base, eventType: "CARD_REFUND", amount: 9.99 }).action).toBe("deposit");
+    expect(draftOf({ ...base, eventType: "PAYMENT_OUTBOUND", amount: -200 })).toMatchObject({
+      action: "withdrawal",
+      price: "200",
+    });
   });
 
   it("carries detail enrichment, kind, and source asset-class onto the draft", () => {
@@ -266,26 +284,76 @@ describe("mapTrEventToDraft", () => {
       venue: "LS Exchange",
       description: "ACME Bank · DE12…",
     });
-    expect(div.documentRefs).toEqual([{ id: "doc-1", type: "CA_INCOME_INVOICE", date: "16.06.2026" }]);
+    expect(div.documentRefs).toEqual([
+      { id: "doc-1", type: "CA_INCOME_INVOICE", date: "16.06.2026" },
+    ]);
 
     // kind from event type; tax stored as a magnitude even when TR signs it negative.
-    expect(draftOf({ ...base, eventType: "SAVEBACK_AGGREGATE", amount: -9.62, shares: 0.0137, isin: "IE00B5BMR087" }).kind).toBe("saveback");
-    expect(draftOf({ ...base, eventType: "SPARE_CHANGE_AGGREGATE", amount: -0.7, shares: 0.001, isin: "IE00B5BMR087" }).kind).toBe("roundup");
-    expect(draftOf({ ...base, eventType: "CREDIT", amount: 5, isin: "US1", tax: -0.98 }).tax).toBe("0.98");
+    expect(
+      draftOf({
+        ...base,
+        eventType: "SAVEBACK_AGGREGATE",
+        amount: -9.62,
+        shares: 0.0137,
+        isin: "IE00B5BMR087",
+      }).kind,
+    ).toBe("saveback");
+    expect(
+      draftOf({
+        ...base,
+        eventType: "SPARE_CHANGE_AGGREGATE",
+        amount: -0.7,
+        shares: 0.001,
+        isin: "IE00B5BMR087",
+      }).kind,
+    ).toBe("roundup");
+    expect(draftOf({ ...base, eventType: "CREDIT", amount: 5, isin: "US1", tax: -0.98 }).tax).toBe(
+      "0.98",
+    );
 
     // Crypto recognised at the source from TR's synthetic XF000… ISIN.
-    expect(draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 0.001, isin: "XF000BTC0017" }).assetClass).toBe("crypto");
-    expect(draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101" }).assetClass).toBe("equity");
+    expect(
+      draftOf({
+        ...base,
+        eventType: "ORDER_EXECUTED",
+        amount: -100,
+        shares: 0.001,
+        isin: "XF000BTC0017",
+      }).assetClass,
+    ).toBe("crypto");
+    expect(
+      draftOf({
+        ...base,
+        eventType: "ORDER_EXECUTED",
+        amount: -100,
+        shares: 1,
+        isin: "DE0007236101",
+      }).assetClass,
+    ).toBe("equity");
   });
 
   it("flags a trade for review when executed price × shares doesn't reconcile", () => {
     // shares 10 × price 100 = 1000 ≈ total 1000 → trusted.
     expect(
-      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "X", executedPrice: 100 }).confidence,
+      draftOf({
+        ...base,
+        eventType: "ORDER_EXECUTED",
+        amount: -1000,
+        shares: 10,
+        isin: "X",
+        executedPrice: 100,
+      }).confidence,
     ).toBe(1);
     // shares mis-parsed (1 instead of 10) → 1 × 100 = 100, far from total 1000 → flagged.
     expect(
-      draftOf({ ...base, eventType: "ORDER_EXECUTED", amount: -1000, shares: 1, isin: "X", executedPrice: 100 }).confidence,
+      draftOf({
+        ...base,
+        eventType: "ORDER_EXECUTED",
+        amount: -1000,
+        shares: 1,
+        isin: "X",
+        executedPrice: 100,
+      }).confidence,
     ).toBeLessThan(0.9);
   });
 
@@ -307,9 +375,10 @@ describe("mapTrEventToDraft", () => {
   });
 
   it("records card spending as a withdrawal so the cash balance stays correct", () => {
-    expect(
-      draftOf({ ...base, eventType: "CARD_TRANSACTION", amount: -1.5 }),
-    ).toMatchObject({ action: "withdrawal", price: "1.5" });
+    expect(draftOf({ ...base, eventType: "CARD_TRANSACTION", amount: -1.5 })).toMatchObject({
+      action: "withdrawal",
+      price: "1.5",
+    });
     expect(draftOf({ ...base, eventType: "CARD_ATM_WITHDRAWAL", amount: -50 }).action).toBe(
       "withdrawal",
     );
@@ -317,11 +386,16 @@ describe("mapTrEventToDraft", () => {
 
   it("maps a cash corporate action to a dividend (or a plain deposit without an ISIN)", () => {
     expect(
-      draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 1.93, isin: "US02079K3059" }),
+      draftOf({
+        ...base,
+        eventType: "SSP_CORPORATE_ACTION_CASH",
+        amount: 1.93,
+        isin: "US02079K3059",
+      }),
     ).toMatchObject({ action: "dividend", quantity: "0", price: "1.93" });
-    expect(
-      draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 2 }).action,
-    ).toBe("deposit");
+    expect(draftOf({ ...base, eventType: "SSP_CORPORATE_ACTION_CASH", amount: 2 }).action).toBe(
+      "deposit",
+    );
   });
 
   it("maps a 'Dividend correction' event to a single ordinary dividend when called directly (the split only happens at the mapTrEvents batch level — see the describe block below)", () => {
@@ -391,16 +465,11 @@ describe("mapTrEventToDraft", () => {
     expect(draftOf({ ...base, eventType: "JUNIOR_P2P_TRANSFER", amount: -10 }).action).toBe(
       "withdrawal",
     );
-    expect(draftOf({ ...base, eventType: "SSP_TAX_CORRECTION", amount: 5 }).action).toBe(
-      "deposit",
-    );
+    expect(draftOf({ ...base, eventType: "SSP_TAX_CORRECTION", amount: 5 }).action).toBe("deposit");
   });
 
   it("skips known no-ops with a reason (card verification, failed execution events)", () => {
-    for (const eventType of [
-      "CARD_VERIFICATION",
-      "TRADING_SAVINGSPLAN_EXECUTION_FAILED",
-    ]) {
+    for (const eventType of ["CARD_VERIFICATION", "TRADING_SAVINGSPLAN_EXECUTION_FAILED"]) {
       expect(mapTrEventToDraft({ ...base, eventType, amount: 0 })).toMatchObject({
         skip: true,
       });
@@ -514,11 +583,23 @@ describe("mapTrEventToDraft", () => {
       price: "0", // carried cost unknown at import → surfaces missing_transfer_basis anomaly
       isin: "GB0002875804",
     });
-    const tout = draftOf({ ...base, eventType: "TRANSFER_OUT", amount: 0, isin: "GB0002875804", shares: 14 });
+    const tout = draftOf({
+      ...base,
+      eventType: "TRANSFER_OUT",
+      amount: 0,
+      isin: "GB0002875804",
+      shares: 14,
+    });
     expect(tout).toMatchObject({ action: "transfer_out", quantity: "14", price: "0" });
     // #359's incoming-transfer event type normalises to transfer_in.
     expect(
-      draftOf({ ...base, eventType: "SSP_SECURITIES_TRANSFER_INCOMING", amount: 0, isin: "X", shares: 2 }).action,
+      draftOf({
+        ...base,
+        eventType: "SSP_SECURITIES_TRANSFER_INCOMING",
+        amount: 0,
+        isin: "X",
+        shares: 2,
+      }).action,
     ).toBe("transfer_in");
   });
 
@@ -627,13 +708,27 @@ describe("mapTrEventToDraft", () => {
   it("surfaces SSP_CORPORATE_ACTION_INSTRUMENT as attention when share count is missing", () => {
     // No shares extracted by Python yet — fall back to manual mapping.
     expect(
-      mapTrEventToDraft({ ...base, eventType: "SSP_CORPORATE_ACTION_INSTRUMENT", isin: "US123", amount: 0 }),
-    ).toMatchObject({ skip: true, severity: "attention", reason: expect.stringContaining("share count") });
+      mapTrEventToDraft({
+        ...base,
+        eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
+        isin: "US123",
+        amount: 0,
+      }),
+    ).toMatchObject({
+      skip: true,
+      severity: "attention",
+      reason: expect.stringContaining("share count"),
+    });
   });
 
   it("surfaces SSP_CORPORATE_ACTION_INSTRUMENT as attention when ISIN is missing", () => {
     expect(
-      mapTrEventToDraft({ ...base, eventType: "SSP_CORPORATE_ACTION_INSTRUMENT", shares: 2, amount: 0 }),
+      mapTrEventToDraft({
+        ...base,
+        eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
+        shares: 2,
+        amount: 0,
+      }),
     ).toMatchObject({ skip: true, severity: "attention", reason: expect.stringContaining("ISIN") });
   });
 
@@ -653,9 +748,10 @@ describe("mapTrEventToDraft", () => {
   });
 
   it("skips (never drops) unknown types and securities missing key data", () => {
-    expect(mapTrEventToDraft({ ...base, eventType: "MYSTERY_EVENT", amount: 1 })).toMatchObject(
-      { skip: true, reason: expect.stringContaining("unmapped event type") },
-    );
+    expect(mapTrEventToDraft({ ...base, eventType: "MYSTERY_EVENT", amount: 1 })).toMatchObject({
+      skip: true,
+      reason: expect.stringContaining("unmapped event type"),
+    });
     expect(
       mapTrEventToDraft({ ...base, eventType: "ORDER_EXECUTED", amount: -100, shares: 1 }),
     ).toMatchObject({ skip: true, reason: expect.stringContaining("ISIN") });
@@ -779,7 +875,13 @@ describe("mapTrEvents", () => {
 
     it("leaves an ordinary dividend (no originalAmount/correctionAmount) untouched", () => {
       const { drafts } = mapTrEvents([
-        { ...base, id: "plain-div", eventType: "SSP_CORPORATE_ACTION_CASH", amount: 5, isin: "US7561091049" },
+        {
+          ...base,
+          id: "plain-div",
+          eventType: "SSP_CORPORATE_ACTION_CASH",
+          amount: 5,
+          isin: "US7561091049",
+        },
       ]);
       expect(drafts).toHaveLength(1);
       expect(drafts[0]).toMatchObject({ externalId: "plain-div", kind: null });
@@ -812,7 +914,12 @@ describe("extractReportDocuments", () => {
       },
     ]);
     expect(refs).toEqual([
-      { eventId: "evt-report-1", docId: "doc-1", taxYear: 2025, title: "Jährlicher Steuerreport 2025" },
+      {
+        eventId: "evt-report-1",
+        docId: "doc-1",
+        taxYear: 2025,
+        title: "Jährlicher Steuerreport 2025",
+      },
     ]);
   });
 
@@ -848,7 +955,12 @@ describe("extractReportDocuments", () => {
       },
     ]);
     expect(refs).toEqual([
-      { eventId: "evt-report-legacy-2021", docId: "doc-legacy", taxYear: 2021, title: "Jährlicher Steuerbericht 2021" },
+      {
+        eventId: "evt-report-legacy-2021",
+        docId: "doc-legacy",
+        taxYear: 2021,
+        title: "Jährlicher Steuerbericht 2021",
+      },
     ]);
   });
 

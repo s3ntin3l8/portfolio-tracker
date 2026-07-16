@@ -254,7 +254,13 @@ describe("contribution analytics", () => {
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     const [tlkm] = await app.db
       .insert(instruments)
-      .values({ symbol: "TLKM", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom" })
+      .values({
+        symbol: "TLKM",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Telkom",
+      })
       .returning();
 
     // A cash-outside portfolio (the default) — the buys are the invested capital. The flag
@@ -268,9 +274,7 @@ describe("contribution analytics", () => {
     expect(created.json().cashCounted).toBe(false);
     const outsidePf = created.json().id as string;
     const list = await app.inject({ method: "GET", url: "/portfolios", headers: auth(t) });
-    expect(
-      list.json().find((p: { id: string }) => p.id === outsidePf).cashCounted,
-    ).toBe(false);
+    expect(list.json().find((p: { id: string }) => p.id === outsidePf).cashCounted).toBe(false);
 
     // A cash-inside portfolio with the SAME buy-only data — buys are internal there.
     const insidePf = await createPortfolio(t, "Cash inside", true);
@@ -309,7 +313,13 @@ describe("contribution analytics", () => {
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     const [tlkm] = await app.db
       .insert(instruments)
-      .values({ symbol: "TLKM2", market: "IDX", assetClass: "equity", currency: "IDR", name: "Telkom2" })
+      .values({
+        symbol: "TLKM2",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Telkom2",
+      })
       .returning();
 
     // Cash-inside portfolio funded by a deposit; cash-outside portfolio funded by a one-off buy.
@@ -348,12 +358,16 @@ describe("contribution analytics", () => {
     const t = await token("totalreturn");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
     // Price the held instrument above cost so there's an unrealized gain too.
-    overrideMarketData(
-      new MarketDataService([new FixtureProvider({ BBCA: "9500", DIVI: "120" })]),
-    );
+    overrideMarketData(new MarketDataService([new FixtureProvider({ BBCA: "9500", DIVI: "120" })]));
     const [divi] = await app.db
       .insert(instruments)
-      .values({ symbol: "DIVI", market: "IDX", assetClass: "equity", currency: "IDR", name: "Dividend Co" })
+      .values({
+        symbol: "DIVI",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Dividend Co",
+      })
       .returning();
 
     const pf = await createPortfolio(t, "Income"); // cash-outside (default)
@@ -404,12 +418,16 @@ describe("contribution analytics", () => {
   it("total return excludes cash interest (flow-derived, not totalIncome); null for cash-inside", async () => {
     const t = await token("interest");
     await app.inject({ method: "GET", url: "/me", headers: auth(t) });
-    overrideMarketData(
-      new MarketDataService([new FixtureProvider({ BBCA: "9500", INTR: "100" })]),
-    );
+    overrideMarketData(new MarketDataService([new FixtureProvider({ BBCA: "9500", INTR: "100" })]));
     const [intr] = await app.db
       .insert(instruments)
-      .values({ symbol: "INTR", market: "IDX", assetClass: "equity", currency: "IDR", name: "Interest Co" })
+      .values({
+        symbol: "INTR",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Interest Co",
+      })
       .returning();
 
     // Cash-outside: buy 10 @ 100 (value stays 1000 at fixture 100) + a 50 interest payout.
@@ -511,9 +529,24 @@ describe("contribution analytics", () => {
     const selfPf = await createPortfolioWithHolder(t, "Self depot", selfHolder.id, true);
 
     // Deposit 1000 into child portfolio 1, 2000 into child portfolio 2, 500 into self.
-    await postTx(t, childPf1, { type: "deposit", price: "1000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
-    await postTx(t, childPf2, { type: "deposit", price: "2000", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
-    await postTx(t, selfPf, { type: "deposit", price: "500", currency: "IDR", executedAt: "2026-01-01T00:00:00.000Z" });
+    await postTx(t, childPf1, {
+      type: "deposit",
+      price: "1000",
+      currency: "IDR",
+      executedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await postTx(t, childPf2, {
+      type: "deposit",
+      price: "2000",
+      currency: "IDR",
+      executedAt: "2026-01-01T00:00:00.000Z",
+    });
+    await postTx(t, selfPf, {
+      type: "deposit",
+      price: "500",
+      currency: "IDR",
+      executedAt: "2026-01-01T00:00:00.000Z",
+    });
 
     // Filtered by child holder: should include only the 1000 + 2000 = 3000 child contribution.
     const childRes = (

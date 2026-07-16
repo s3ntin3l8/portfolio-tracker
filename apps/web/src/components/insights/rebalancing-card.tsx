@@ -92,7 +92,9 @@ export function RebalancingCard({
   }
 
   function resetToDefault() {
-    setRows(slices.map((s) => ({ key: s.key, label: s.label, targetPct: Math.round(s.actualPct) })));
+    setRows(
+      slices.map((s) => ({ key: s.key, label: s.label, targetPct: Math.round(s.actualPct) })),
+    );
   }
 
   function updateRow(key: string, value: string) {

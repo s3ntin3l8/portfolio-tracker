@@ -24,9 +24,7 @@ describe("buildReceiptKey", () => {
   });
 
   it("falls back to 'document.pdf' when filename is null and mimeType is application/pdf", () => {
-    expect(buildReceiptKey("u", "i", null, "application/pdf")).toBe(
-      "receipts/u/i/document.pdf",
-    );
+    expect(buildReceiptKey("u", "i", null, "application/pdf")).toBe("receipts/u/i/document.pdf");
   });
 
   it("falls back to 'document.csv' for text/csv", () => {
@@ -49,7 +47,9 @@ describe("buildReceiptKey", () => {
 
 function makeFailingStorage(): StorageProvider {
   return {
-    put: async () => { throw new Error("storage is offline"); },
+    put: async () => {
+      throw new Error("storage is offline");
+    },
     getSignedUrl: async (k) => k,
     delete: async () => {},
     exists: async () => false,

@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import { isIdxOpen, isGoldOpen, isMarketOpen } from "../../src/services/market-hours.js";
 
 // 2026-02-09 is a Monday; 2026-02-14 a Saturday; 2026-02-15 a Sunday.
-const monday = (h: number, m = 0) =>
-  new Date(Date.UTC(2026, 1, 9, h, m, 0));
+const monday = (h: number, m = 0) => new Date(Date.UTC(2026, 1, 9, h, m, 0));
 
 describe("isIdxOpen", () => {
   it("is open inside the 02:00–09:00 UTC weekday window", () => {

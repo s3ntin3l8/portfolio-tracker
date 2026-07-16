@@ -182,8 +182,7 @@ function makeEpisode(at: Date): Episode {
 }
 
 type Event =
-  | { kind: "tx"; at: Date; tx: CoreTransaction }
-  | { kind: "ca"; at: Date; ca: CorporateAction };
+  { kind: "tx"; at: Date; tx: CoreTransaction } | { kind: "ca"; at: Date; ca: CorporateAction };
 
 /**
  * Compute the trade log for a set of transactions. Pure — the caller injects current
@@ -213,9 +212,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
 
   // Financing capitalized into the open episode's cost basis under "total_paid".
   const financing =
-    input.costBasisMode === "total_paid"
-      ? financingByInstrument(input.transactions)
-      : {};
+    input.costBasisMode === "total_paid" ? financingByInstrument(input.transactions) : {};
 
   // Group price-bearing transactions + corporate actions per instrument.
   const byInstrument = new Map<string, Event[]>();
@@ -252,9 +249,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
 
     // Income (dividend/coupon) events for this instrument, for window-folding.
     const incomeEvents = events
-      .filter(
-        (e) => e.kind === "tx" && (e.tx.type === "dividend" || e.tx.type === "coupon"),
-      )
+      .filter((e) => e.kind === "tx" && (e.tx.type === "dividend" || e.tx.type === "coupon"))
       .map((e) => (e as { tx: CoreTransaction }).tx);
 
     // --- per-episode accumulators ---
@@ -268,11 +263,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
     // ~0, since a full-close sell's ratio is 1); reset defensively at the dust-close snap.
     let vorabPool = ZERO;
 
-    const finalizeTrade = (
-      ep: Episode,
-      status: "open" | "closed",
-      exitAt: Date | null,
-    ) => {
+    const finalizeTrade = (ep: Episode, status: "open" | "closed", exitAt: Date | null) => {
       const currentQty = avgQty; // remaining units (0 when closed)
       const entryDate = ep.entryDate;
       const exitDate = status === "closed" ? exitAt : null;
@@ -293,9 +284,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       // Remaining cost basis of the OPEN portion (method-aware), + financing.
       const fin = status === "open" ? D(financing[instrumentId] ?? "0") : ZERO;
       const remainingCost =
-        method === "fifo"
-          ? lots.reduce((s, l) => s.add(l.qty.mul(l.unitCost)), ZERO)
-          : avgCost;
+        method === "fifo" ? lots.reduce((s, l) => s.add(l.qty.mul(l.unitCost)), ZERO) : avgCost;
       const remainingCostFin = remainingCost.add(fin);
 
       // Open-position unrealized + terminal XIRR flow.
@@ -341,8 +330,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
           if (totalAmt === 0) return 0;
           return (
             side.reduce(
-              (s, f) =>
-                s + Math.abs(Number(f.amount)) * ((f.date.getTime() - t0) / MS_PER_YEAR),
+              (s, f) => s + Math.abs(Number(f.amount)) * ((f.date.getTime() - t0) / MS_PER_YEAR),
               0,
             ) / totalAmt
           );
@@ -354,12 +342,8 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       }
 
       const qtyShown = status === "open" ? currentQty : ep.acqQty;
-      const avgEntryPrice = ep.acqQty.gt(0)
-        ? ep.acqQtyPrice.div(ep.acqQty).toString()
-        : "0";
-      const avgExitPrice = ep.soldQty.gt(0)
-        ? ep.sellQtyPrice.div(ep.soldQty).toString()
-        : null;
+      const avgEntryPrice = ep.acqQty.gt(0) ? ep.acqQtyPrice.div(ep.acqQty).toString() : "0";
+      const avgExitPrice = ep.soldQty.gt(0) ? ep.sellQtyPrice.div(ep.soldQty).toString() : null;
 
       trades.push({
         instrumentId,
@@ -401,11 +385,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         // Lot-level corporate actions: keep total cost fixed, scale quantities.
         const ratio = D(ev.ca.ratio);
         const factor =
-          ev.ca.type === "split"
-            ? ratio
-            : ev.ca.type === "bonus"
-              ? D(1).add(ratio)
-              : null; // rights: no-op
+          ev.ca.type === "split" ? ratio : ev.ca.type === "bonus" ? D(1).add(ratio) : null; // rights: no-op
         if (factor && avgQty.gt(0)) {
           avgQty = avgQty.mul(factor);
           for (const l of lots) {
@@ -426,8 +406,12 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const p = D(tx.price);
       const f = D(tx.fees);
 
-      if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "transfer_in" ||
-          tx.type === "bonus") {
+      if (
+        tx.type === "buy" ||
+        tx.type === "savings_plan" ||
+        tx.type === "transfer_in" ||
+        tx.type === "bonus"
+      ) {
         // `bonus` = free-share receipt (TR perk / FREE_RECEIPT grant): opens/extends an
         // episode at its recorded basis (price 0 → zero-cost lot, full gain on exit).
         if (q.lte(0)) continue;
@@ -494,9 +478,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
           for (const s of fifoSlices) {
             const sliceProceeds = s.qty.mul(proceedsPerUnit);
             const days = daysBetween(s.acqDate, sellDate);
-            const sliceVorabCredit = sellQty.gt(0)
-              ? vorabCreditThis.mul(s.qty).div(sellQty)
-              : ZERO;
+            const sliceVorabCredit = sellQty.gt(0) ? vorabCreditThis.mul(s.qty).div(sellQty) : ZERO;
             episode.legs.push({
               acqDate: toDateStr(s.acqDate),
               sellDate: toDateStr(sellDate),
@@ -546,8 +528,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
           avgCost = ZERO;
           vorabPool = ZERO;
         }
-      }
-      else if (tx.type === "transfer_out") {
+      } else if (tx.type === "transfer_out") {
         // Outbound depot transfer: shares leave at average cost, no realized P&L.
         // Drain the lot ledger (same shared lotIdx as the sell branch — never `.shift()`,
         // which would invalidate the index other transactions rely on) so future sells
@@ -567,8 +548,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
         avgCost = avgCost.sub(avg.mul(transferQty));
         avgQty = avgQty.sub(transferQty);
         // Don't close the episode — remaining shares may still be held.
-      }
-      else if (tx.type === "tax" && tx.kind === "vorabpauschale") {
+      } else if (tx.type === "tax" && tx.kind === "vorabpauschale") {
         // Vorabpauschale accrual (§18(3) InvStG): a non-cash advance lump-sum fund tax
         // base, gross (Teilfreistellung is applied by tax.ts, not here — see the file
         // header's ownership split). Requires an open episode (shares held) and a parsed
@@ -621,14 +601,8 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
     let bonusAmount: Decimal | null = null;
     if (tx.type === "bonus_cash") {
       bonusAmount = conv(cashFlow(tx), tx.currency);
-    } else if (
-      (tx.type === "buy" || tx.type === "savings_plan") &&
-      tx.kind === "saveback"
-    ) {
-      bonusAmount = conv(
-        D(tx.quantity).mul(D(tx.price)).add(D(tx.fees)),
-        tx.currency,
-      );
+    } else if ((tx.type === "buy" || tx.type === "savings_plan") && tx.kind === "saveback") {
+      bonusAmount = conv(D(tx.quantity).mul(D(tx.price)).add(D(tx.fees)), tx.currency);
     } else if (tx.type === "bonus" && tx.kind === "transfer_in") {
       // Legacy: pre-PR#309 rows tagged bonus+kind:transfer_in. Still handle until
       // the data migration converts them to type:transfer_in.

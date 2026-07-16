@@ -44,12 +44,14 @@ import {
 } from "@/components/transaction-sources-section";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
-import { cn, formatMoney, formatSignedMoney, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
 import {
-  txAmount,
-  txNetAmount,
-  SOURCE_ICON,
-} from "@/components/transactions-table";
+  cn,
+  formatMoney,
+  formatSignedMoney,
+  anomalyLabel,
+  type AnomalyTranslator,
+} from "@/lib/utils";
+import { txAmount, txNetAmount, SOURCE_ICON } from "@/components/transactions-table";
 import type { TxRow } from "@/components/transactions-table";
 import type { PickablePortfolio } from "@/components/portfolio-picker";
 import type { Anomaly, TransactionStatus } from "@portfolio/api-client";
@@ -201,10 +203,7 @@ export function TransactionDetailSheet({
   const [clientRate, setClientRate] = useState<string | null>(null);
 
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
-  const df = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
-    [locale],
-  );
+  const df = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }), [locale]);
   const numFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
 
   // Client-side FX rate lookup: when the row wasn't converted server-side (displayRate is
@@ -218,9 +217,15 @@ export function TransactionDetailSheet({
       `/api/backend/fx-rate?from=${encodeURIComponent(tx.currency)}&to=${encodeURIComponent(scopeCurrency)}&date=${tx.executedAt.slice(0, 10)}`,
     )
       .then((r) => r.json())
-      .then((data) => { if (!cancelled) setClientRate(data.rate ?? null); })
-      .catch(() => { if (!cancelled) setClientRate(null); });
-    return () => { cancelled = true; };
+      .then((data) => {
+        if (!cancelled) setClientRate(data.rate ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setClientRate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [tx, scopeCurrency]);
 
   if (!tx) return null;
@@ -228,15 +233,15 @@ export function TransactionDetailSheet({
   const amount = txAmount(tx);
   const netAmount = txNetAmount(tx);
 
-  const effectiveDisplayRate = tx.displayRate != null && tx.displayRate !== "1" ? tx.displayRate : clientRate;
+  const effectiveDisplayRate =
+    tx.displayRate != null && tx.displayRate !== "1" ? tx.displayRate : clientRate;
   const effectiveDisplayCurrency = tx.displayCurrency ?? scopeCurrency;
   const showApproxDisplay =
     effectiveDisplayRate != null &&
     effectiveDisplayCurrency != null &&
     effectiveDisplayCurrency !== tx.currency;
-  const netAmountDisplay = showApproxDisplay && netAmount != null
-    ? netAmount * Number(effectiveDisplayRate)
-    : null;
+  const netAmountDisplay =
+    showApproxDisplay && netAmount != null ? netAmount * Number(effectiveDisplayRate) : null;
   const qty = Number(tx.quantity);
   const badge = TYPE_BADGE[tx.type] ?? DEFAULT_BADGE;
   const BadgeIcon = badge.icon;
@@ -266,9 +271,7 @@ export function TransactionDetailSheet({
   const iconBtn =
     "flex size-[34px] shrink-0 items-center justify-center rounded-[11px] bg-card text-foreground shadow-[0_1px_2px_rgba(15,27,20,.08)] transition-colors hover:bg-secondary";
 
-  const title = tx.instrument?.symbol
-    ? `${tt(tx.type)} · ${tx.instrument.symbol}`
-    : tt(tx.type);
+  const title = tx.instrument?.symbol ? `${tt(tx.type)} · ${tx.instrument.symbol}` : tt(tx.type);
 
   const dismissAnomaly = async () => {
     if (!anomaly) return;
@@ -498,7 +501,10 @@ export function TransactionDetailSheet({
               <Row label={t("portfolio")}>
                 <span className="flex items-center justify-end gap-2.5">
                   {account?.brokerage && (
-                    <BrokerageIcon brokerage={account.brokerage} className="size-9 rounded-[10px]" />
+                    <BrokerageIcon
+                      brokerage={account.brokerage}
+                      className="size-9 rounded-[10px]"
+                    />
                   )}
                   <span className="min-w-0 leading-tight">
                     <span className="block truncate">{accountName}</span>
@@ -544,9 +550,7 @@ export function TransactionDetailSheet({
 
           {/* Retention hint — shown when source rows exist but no document was retained */}
           {hasSources && !tx.hasDocument && !tx.sources?.some((s) => s.hasDocument) && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("sourcesSection.notRetained")}
-            </p>
+            <p className="mt-2 text-xs text-muted-foreground">{t("sourcesSection.notRetained")}</p>
           )}
 
           {/* ── Data-integrity warning + dismiss ── */}

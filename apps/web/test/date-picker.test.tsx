@@ -21,56 +21,37 @@ function getInput(container: HTMLElement) {
 describe("DatePicker", () => {
   it("falls back to the placeholder accessible name when no label is provided", () => {
     renderPicker(<DatePicker value="" onChange={() => {}} />);
-    expect(
-      screen.getByRole("button", { name: /pick a date/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /pick a date/i })).toBeInTheDocument();
   });
 
   it("uses just the field label as the button name when value is empty and label is provided", () => {
     renderPicker(<DatePicker value="" onChange={() => {}} label="Date" />);
     // The button's accessible name is the field label; the "Pick a date"
     // placeholder remains as visible text but is NOT the accessible name.
-    expect(
-      screen.getByRole("button", { name: "Date" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Date" })).toBeInTheDocument();
     expect(screen.getByText("Pick a date")).toBeInTheDocument();
   });
 
   it("renders the formatted value when set", () => {
-    renderPicker(
-      <DatePicker value="2026-02-03" onChange={() => {}} label="Date" />,
-    );
+    renderPicker(<DatePicker value="2026-02-03" onChange={() => {}} label="Date" />);
     // en-US medium → "Feb 3, 2026"
-    expect(
-      screen.getByRole("button", { name: /feb 3, 2026/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /feb 3, 2026/i })).toBeInTheDocument();
   });
 
   it("includes the field label in the button's accessible name", () => {
-    renderPicker(
-      <DatePicker value="2026-02-03" onChange={() => {}} label="Ex-date" />,
-    );
+    renderPicker(<DatePicker value="2026-02-03" onChange={() => {}} label="Ex-date" />);
     // label + ", " + formatted value
-    expect(
-      screen.getByRole("button", { name: /^Ex-date, Feb 3, 2026$/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Ex-date, Feb 3, 2026$/i })).toBeInTheDocument();
   });
 
   it("uses just the label as the button name when no value is set", () => {
     renderPicker(<DatePicker value="" onChange={() => {}} label="Ex-date" />);
-    expect(
-      screen.getByRole("button", { name: "Ex-date" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ex-date" })).toBeInTheDocument();
   });
 
   it("keeps the hidden input in the DOM with the same id, out of the tab order, and NOT aria-hidden", () => {
     const { container } = renderPicker(
-      <DatePicker
-        id="d"
-        value="2026-02-03"
-        onChange={() => {}}
-        label="Date"
-      />,
+      <DatePicker id="d" value="2026-02-03" onChange={() => {}} label="Date" />,
     );
     const input = getInput(container);
     expect(input).toHaveAttribute("type", "date");
@@ -84,9 +65,7 @@ describe("DatePicker", () => {
 
   it("calls onChange when the hidden input changes", () => {
     const onChange = vi.fn();
-    const { container } = renderPicker(
-      <DatePicker value="" onChange={onChange} label="Date" />,
-    );
+    const { container } = renderPicker(<DatePicker value="" onChange={onChange} label="Date" />);
     const input = getInput(container);
     fireEvent.change(input, { target: { value: "2026-03-15" } });
     expect(onChange).toHaveBeenCalled();
@@ -134,12 +113,7 @@ describe("DatePicker", () => {
 
   it("merges caller className into the trigger", () => {
     const { container } = renderPicker(
-      <DatePicker
-        value=""
-        onChange={() => {}}
-        label="Date"
-        className="w-40"
-      />,
+      <DatePicker value="" onChange={() => {}} label="Date" className="w-40" />,
     );
     expect(container.querySelector("button")).toHaveClass("w-40");
   });

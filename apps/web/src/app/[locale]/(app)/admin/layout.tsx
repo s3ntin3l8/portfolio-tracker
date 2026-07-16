@@ -1,6 +1,15 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { LineChart, Eye, ArrowDownUp, HardDrive, Database, Clock, Users, ChevronLeft } from "lucide-react";
+import {
+  LineChart,
+  Eye,
+  ArrowDownUp,
+  HardDrive,
+  Database,
+  Clock,
+  Users,
+  ChevronLeft,
+} from "lucide-react";
 import { SettingsShell, type ShellNavItem } from "@/components/settings-shell";
 import { Link } from "@/i18n/navigation";
 import { loadMe } from "@/lib/server-api";

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  parseDkb,
-  parseDkbDate,
-  parseEuroDecimal,
-  splitDkbLine,
-} from "./dkb.js";
+import { parseDkb, parseDkbDate, parseEuroDecimal, splitDkbLine } from "./dkb.js";
 
 // Real DKB export layouts, with personal names anonymised. Securities data (ISINs,
 // amounts, free-text Verwendungszweck) is preserved verbatim.
@@ -13,8 +8,8 @@ const DEPOT_CSV = [
   "Datum der Erstellung;Depotnummer;Wertpapierbezeichnung;WKN;ISIN;Einstiegskurs;Bewertungskurs;Stückzahl;Absoluter Gewinn;Relativer Gewinn;Assetklasse",
   '15.06.2026;506740786;"AMAZON.COM INC.    DL-,01";906866;US0231351067;"81,37 €";"210,10 €";5;"643,65 €";158.2%;Aktien',
   '15.06.2026;506740786;"TESLA INC. DL -,001";A1CX3T;US88160R1014;"180,20 €";"353,25 €";2;"346,10 €";96.03%;Aktien',
-  "15.06.2026;506740786;AIS-A.CO.MSCI E.M.UETFDRD;A2H9Q0;LU1737652583;\"50,46 €\";\"76,89 €\";\"63,3685\";\"1.674,43 €\";52.36%;ETFs",
-  "15.06.2026;506740786;AMUNDI CORE MSCI WLD UE D;A3DH0A;IE000CNSFAR2;\"11,54 €\";\"15,56 €\";\"663,0698\";\"2.663,12 €\";34.8%;ETFs",
+  '15.06.2026;506740786;AIS-A.CO.MSCI E.M.UETFDRD;A2H9Q0;LU1737652583;"50,46 €";"76,89 €";"63,3685";"1.674,43 €";52.36%;ETFs',
+  '15.06.2026;506740786;AMUNDI CORE MSCI WLD UE D;A3DH0A;IE000CNSFAR2;"11,54 €";"15,56 €";"663,0698";"2.663,12 €";34.8%;ETFs',
   '15.06.2026;506740786;"MICROSOFT    DL-,00000625";870747;US5949181045;"280,55 €";"341,65 €";1;"61,10 €";21.78%;Aktien',
 ].join("\n");
 
@@ -69,11 +64,7 @@ describe("parseDkbDate", () => {
 describe("splitDkbLine", () => {
   it("keeps commas and space runs inside quoted fields", () => {
     const cols = splitDkbLine('15.06.2026;"AMAZON.COM INC.    DL-,01";US0231351067');
-    expect(cols).toEqual([
-      "15.06.2026",
-      "AMAZON.COM INC.    DL-,01",
-      "US0231351067",
-    ]);
+    expect(cols).toEqual(["15.06.2026", "AMAZON.COM INC.    DL-,01", "US0231351067"]);
   });
 });
 

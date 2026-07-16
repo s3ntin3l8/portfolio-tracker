@@ -80,7 +80,9 @@ export async function DataConnectionsSection({
                   <FileInput className="size-[18px]" />
                 </span>
               ) : (
-                <BrokerageIcon brokerage={s.key === "tr" ? "Trade Republic" : "Interactive Brokers"} />
+                <BrokerageIcon
+                  brokerage={s.key === "tr" ? "Trade Republic" : "Interactive Brokers"}
+                />
               )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold">{s.label}</p>

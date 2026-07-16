@@ -249,7 +249,8 @@ function sumDecimalExact(values: string[]): string {
     const unsigned = neg ? v.slice(1) : v;
     const [intPart, fracPart = ""] = unsigned.split(".");
     const fracScaled = (fracPart + "0".repeat(maxScale)).slice(0, maxScale);
-    const scaled = BigInt(intPart || "0") * factor + (maxScale > 0 ? BigInt(fracScaled || "0") : 0n);
+    const scaled =
+      BigInt(intPart || "0") * factor + (maxScale > 0 ? BigInt(fracScaled || "0") : 0n);
     total += neg ? -scaled : scaled;
   }
   const sign = total < 0n ? "-" : "";
@@ -333,7 +334,10 @@ export function recomputeRollup(rows: SourceRow[]): {
     for (const r of rows) {
       if ((SOURCE_RANK[r.sourceType] ?? 0) === rank && r[field] != null) {
         const n = parseFloat(r[field]!);
-        if (Number.isFinite(n)) { cents += Math.round(n * 100); found = true; }
+        if (Number.isFinite(n)) {
+          cents += Math.round(n * 100);
+          found = true;
+        }
       }
     }
     return found ? (cents / 100).toFixed(2) : null;

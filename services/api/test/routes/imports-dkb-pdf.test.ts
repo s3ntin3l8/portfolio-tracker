@@ -151,7 +151,11 @@ describe("DKB PDF deterministic import path", () => {
 
     // The dividend row is in the table as status='draft', source='pdf' — excluded until confirmed.
     const list = (
-      await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) })
+      await app.inject({
+        method: "GET",
+        url: `/portfolios/${portfolioId}/transactions`,
+        headers: auth(t),
+      })
     ).json() as Array<{ id: string; status: string; source: string; type: string }>;
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ status: "draft", source: "pdf", type: "dividend" });
@@ -192,11 +196,21 @@ describe("DKB PDF deterministic import path", () => {
     });
     const list = txns.json();
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ type: "dividend", tax: "0.12", fxRate: "1.1777", source: "pdf" });
+    expect(list[0]).toMatchObject({
+      type: "dividend",
+      tax: "0.12",
+      fxRate: "1.1777",
+      source: "pdf",
+    });
     // #508: carried through the fresh-insert confirm path (materialize-drafts.ts) — a
     // standalone DKB dividend PDF has no separate settlement PDF to enrich against later,
     // so this is the only path these fields ever take.
-    expect(list[0]).toMatchObject({ shares: "1", perShare: "0.91", nativeCurrency: "USD", grossNative: "0.91" });
+    expect(list[0]).toMatchObject({
+      shares: "1",
+      perShare: "0.91",
+      nativeCurrency: "USD",
+      grossNative: "0.91",
+    });
   });
 
   it("stores parser='dkb-pdf' on the import row and writes a pdf source row", async () => {

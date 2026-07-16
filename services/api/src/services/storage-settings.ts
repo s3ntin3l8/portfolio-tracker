@@ -48,10 +48,7 @@ export async function resolveStorageSettings(
   env: StorageEnvFallback,
   encryption: EncryptionService,
 ): Promise<ResolvedStorageSettings> {
-  const [row] = await db
-    .select()
-    .from(storageSettings)
-    .limit(1);
+  const [row] = await db.select().from(storageSettings).limit(1);
 
   const activeProvider = (row?.activeProvider ?? "s3") as StorageProvider;
 
@@ -122,10 +119,7 @@ export async function getStorageSettingsResponse(
   env: StorageEnvFallback,
   encryption: EncryptionService,
 ): Promise<StorageSettingsResponse> {
-  const [row] = await db
-    .select()
-    .from(storageSettings)
-    .limit(1);
+  const [row] = await db.select().from(storageSettings).limit(1);
 
   const activeProvider = (row?.activeProvider ?? "s3") as StorageProvider;
 
@@ -150,7 +144,7 @@ export async function getStorageSettingsResponse(
   return {
     activeProvider,
     s3: {
-      endpoint: (row?.s3Endpoint ?? env.STORAGE_ENDPOINT) ?? "",
+      endpoint: row?.s3Endpoint ?? env.STORAGE_ENDPOINT ?? "",
       endpointSource: row?.s3Endpoint != null ? "db" : "env",
       region: row?.s3Region ?? env.STORAGE_REGION,
       regionSource: row?.s3Region != null ? "db" : "env",
@@ -191,10 +185,7 @@ export interface StorageSettingsPatch {
 }
 
 /** Upsert the storage_settings singleton with the given patch. */
-export async function updateStorageSettings(
-  db: DB,
-  patch: StorageSettingsPatch,
-): Promise<void> {
+export async function updateStorageSettings(db: DB, patch: StorageSettingsPatch): Promise<void> {
   await db
     .insert(storageSettings)
     .values({
@@ -216,7 +207,9 @@ export async function updateStorageSettings(
         ...(patch.s3Region !== undefined ? { s3Region: patch.s3Region } : {}),
         ...(patch.s3Bucket !== undefined ? { s3Bucket: patch.s3Bucket } : {}),
         ...(patch.s3AccessKeyId !== undefined ? { s3AccessKeyId: patch.s3AccessKeyId } : {}),
-        ...(patch.s3ForcePathStyle !== undefined ? { s3ForcePathStyle: patch.s3ForcePathStyle } : {}),
+        ...(patch.s3ForcePathStyle !== undefined
+          ? { s3ForcePathStyle: patch.s3ForcePathStyle }
+          : {}),
         ...(patch.s3SignedUrlTtl !== undefined ? { s3SignedUrlTtl: patch.s3SignedUrlTtl } : {}),
         ...(patch.folderPath !== undefined ? { folderPath: patch.folderPath } : {}),
         updatedAt: new Date(),

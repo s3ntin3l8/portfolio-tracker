@@ -135,11 +135,7 @@ export function IncomeHeatmap({
       <div className="flex items-center justify-end gap-1.5 pt-1 text-muted-foreground">
         <span>{t("heatmapLess")}</span>
         {[0.14, 0.4, 0.66, 1].map((opacity) => (
-          <span
-            key={opacity}
-            className="size-2.5 rounded-[3px] bg-primary"
-            style={{ opacity }}
-          />
+          <span key={opacity} className="size-2.5 rounded-[3px] bg-primary" style={{ opacity }} />
         ))}
         <span>{t("heatmapMore")}</span>
       </div>

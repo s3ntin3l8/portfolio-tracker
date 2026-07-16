@@ -22,11 +22,7 @@ import { isIntradayPoint } from "@portfolio/api-client";
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
 
-export default async function InsightsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function InsightsPage({ params }: { params: Promise<{ locale: string }> }) {
   // eslint-disable-next-line react-hooks/purity
   const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
@@ -85,7 +81,9 @@ export default async function InsightsPage({
   const allocation = summary.allocation;
 
   const firstPoint = history.find((p) => !isIntradayPoint(p));
-  const sinceYear = firstPoint ? Number((firstPoint as { date: string }).date.slice(0, 4)) : new Date().getUTCFullYear();
+  const sinceYear = firstPoint
+    ? Number((firstPoint as { date: string }).date.slice(0, 4))
+    : new Date().getUTCFullYear();
 
   const filteredClasses = allocation?.byAssetClass.filter((s) => Number(s.value) > 0) ?? [];
   const assetClassSlices = filteredClasses.map((s) => ({
@@ -93,12 +91,15 @@ export default async function InsightsPage({
     label: s.key === "cash" ? tc("cash") : tc(s.key),
     actualPct: s.pct,
   }));
-  const topClass = filteredClasses.length > 0 ? [...filteredClasses].sort((a, b) => b.pct - a.pct)[0] : null;
+  const topClass =
+    filteredClasses.length > 0 ? [...filteredClasses].sort((a, b) => b.pct - a.pct)[0] : null;
   const marketCount = allocation?.byRegion.filter((s) => Number(s.value) > 0).length ?? 0;
   const currencyCount = allocation?.byCurrency.filter((s) => Number(s.value) > 0).length ?? 0;
 
   const movers = bestAndWorst(
-    holdingsView.status === "ok" ? holdingsView.holdings.filter((h) => Number(h.quantity) !== 0) : [],
+    holdingsView.status === "ok"
+      ? holdingsView.holdings.filter((h) => Number(h.quantity) !== 0)
+      : [],
   );
 
   const insightsData = insights.status === "ok" ? insights.data : null;
@@ -162,7 +163,10 @@ export default async function InsightsPage({
                   {t("diversification.value", { count: assetClassSlices.length })}
                 </p>
                 <p className="mt-1 text-xs font-medium text-text-2">
-                  {t("diversification.caption", { markets: marketCount, currencies: currencyCount })}
+                  {t("diversification.caption", {
+                    markets: marketCount,
+                    currencies: currencyCount,
+                  })}
                 </p>
               </div>
             </div>

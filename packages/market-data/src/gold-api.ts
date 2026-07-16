@@ -45,8 +45,7 @@ export class GoldApiProvider implements MarketDataProvider {
       price?: number;
     };
     const perGram =
-      data.price_gram_24k ??
-      (data.price !== undefined ? data.price / TROY_OUNCE_GRAMS : undefined);
+      data.price_gram_24k ?? (data.price !== undefined ? data.price / TROY_OUNCE_GRAMS : undefined);
     if (perGram === undefined) return null;
     return {
       price: String(perGram),

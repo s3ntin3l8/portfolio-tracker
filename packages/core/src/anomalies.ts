@@ -45,9 +45,7 @@ export interface ReconciliationGap {
 
 type TxWithId = CoreTransaction & { id?: string };
 
-type Event =
-  | { kind: "tx"; at: Date; tx: TxWithId }
-  | { kind: "ca"; at: Date; ca: CorporateAction };
+type Event = { kind: "tx"; at: Date; tx: TxWithId } | { kind: "ca"; at: Date; ca: CorporateAction };
 
 // Absolute cash-reconciliation tolerance. We derive cash by reconstructing each event
 // (qty×price ± fees ± tax) and compare to the broker's reported balance. A standing gap can
@@ -184,8 +182,12 @@ export function detectAnomalies(
         }
         // Mirror the Decimal.min clamp so the running qty stays consistent.
         qty = qty.sub(Decimal.min(q, qty));
-      } else if (type === "buy" || type === "savings_plan" || type === "transfer_in" ||
-                 type === "bonus") {
+      } else if (
+        type === "buy" ||
+        type === "savings_plan" ||
+        type === "transfer_in" ||
+        type === "bonus"
+      ) {
         // `bonus` free shares are real holdings (mirror holdings.ts) — counting them keeps
         // the running qty correct so a later sell of granted shares isn't false-flagged as
         // an oversell. A zero-price bonus is expected, so it's left out of the zero_price
@@ -251,7 +253,8 @@ export function detectAnomalies(
 
   // ── 3. Reconciliation gaps ─────────────────────────────────────────────────
   if (opts?.reconciliationGap) {
-    for (const { currency, reported, derived, diff, driftSincePrev } of opts.reconciliationGap.cash) {
+    for (const { currency, reported, derived, diff, driftSincePrev } of opts.reconciliationGap
+      .cash) {
       if (new Decimal(diff).abs().gte(GAP_THRESHOLD)) {
         anomalies.push({
           code: "reconciliation_gap",

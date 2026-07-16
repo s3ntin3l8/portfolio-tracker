@@ -3,10 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  PortfolioPicker,
-  type PickablePortfolio,
-} from "@/components/portfolio-picker";
+import { PortfolioPicker, type PickablePortfolio } from "@/components/portfolio-picker";
 import { AddTransaction } from "@/components/add-transaction";
 import type { AddTransactionInitial } from "@/components/add-transaction-form";
 import { RecordCorporateAction } from "@/components/record-corporate-action";

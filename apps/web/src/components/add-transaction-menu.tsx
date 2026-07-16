@@ -2,7 +2,15 @@
 
 import { useEffect, useState, forwardRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, PenLine, FileSpreadsheet, Camera, ChevronLeft, Briefcase, UserPlus } from "lucide-react";
+import {
+  Plus,
+  PenLine,
+  FileSpreadsheet,
+  Camera,
+  ChevronLeft,
+  Briefcase,
+  UserPlus,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { LucideIcon } from "lucide-react";
 import type { ApiClient } from "@portfolio/api-client";
@@ -49,9 +57,9 @@ export function AddTransactionMenu({
   const [portfolios, setPortfolios] = useState<ImportTargetPortfolio[] | null>(null);
   const [defaultPortfolioId, setDefaultPortfolioId] = useState("");
   const [manualDefaultTab, setManualDefaultTab] = useState<NewEntryTab>("transaction");
-  const [initialTransaction, setInitialTransaction] = useState<
-    AddTransactionInitial | undefined
-  >(undefined);
+  const [initialTransaction, setInitialTransaction] = useState<AddTransactionInitial | undefined>(
+    undefined,
+  );
   // Forces a fresh `NewEntryTabs` mount whenever a deep link sets a new default tab /
   // prefill: `Tabs`' `defaultValue` and the form's `initial` prop are both lazy
   // (uncontrolled) initializers, so changing them on an already-mounted instance
@@ -121,10 +129,7 @@ export function AddTransactionMenu({
 
   async function loadPortfolios() {
     if (portfolios !== null) return portfolios;
-    const [fetched, holders] = await Promise.all([
-      api.listPortfolios(),
-      api.listAccountHolders(),
-    ]);
+    const [fetched, holders] = await Promise.all([api.listPortfolios(), api.listAccountHolders()]);
     const mapped = fetched.map((p) => ({
       id: p.id,
       name: p.name,
@@ -371,21 +376,17 @@ const TONES = {
  *  `onClick` is optional — when omitted, the card is intended as the trigger of
  *  a nested dialog (e.g. PortfolioFormDialog) which supplies its own click handler
  *  via asChild. */
-const MethodCard = forwardRef<HTMLButtonElement, {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-  tone: keyof typeof TONES;
-  tag?: string;
-  onClick?: () => void;
-}>(function MethodCard({
-  icon: Icon,
-  title,
-  description,
-  tone,
-  tag,
-  onClick,
-}, ref) {
+const MethodCard = forwardRef<
+  HTMLButtonElement,
+  {
+    icon: LucideIcon;
+    title: string;
+    description: string;
+    tone: keyof typeof TONES;
+    tag?: string;
+    onClick?: () => void;
+  }
+>(function MethodCard({ icon: Icon, title, description, tone, tag, onClick }, ref) {
   return (
     <button
       ref={ref}

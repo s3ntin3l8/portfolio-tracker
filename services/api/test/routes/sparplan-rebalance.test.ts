@@ -79,20 +79,22 @@ describe("sparplan rebalancing (Phase B)", () => {
     app = await buildApp({ authKey: kp.publicKey });
     // Fixture prices for the ETFs used in tests (unique symbols to avoid collision with sparplan.test.ts).
     overrideMarketData(
-      new MarketDataService([new FixtureProvider({
-        "RB-VWCE": "100.00",
-        "RB-VWCE2": "100.00",
-        "RB-VWCE3": "100.00",
-        "RB-EIMI2": "100.00",
-        "RB-EIMI3": "100.00",
-        // Phase D symbols.
-        "RB-PHD-VWCE1": "100.00",
-        "RB-PHD-VWCE2": "100.00",
-        "RB-PHD-EIMI2": "100.00",
-        // Phase D — Indonesian regime symbols.
-        "RB-PHD-ID-VWCE1": "100.00",
-        "RB-PHD-ID-EIMI1": "100.00",
-      })]),
+      new MarketDataService([
+        new FixtureProvider({
+          "RB-VWCE": "100.00",
+          "RB-VWCE2": "100.00",
+          "RB-VWCE3": "100.00",
+          "RB-EIMI2": "100.00",
+          "RB-EIMI3": "100.00",
+          // Phase D symbols.
+          "RB-PHD-VWCE1": "100.00",
+          "RB-PHD-VWCE2": "100.00",
+          "RB-PHD-EIMI2": "100.00",
+          // Phase D — Indonesian regime symbols.
+          "RB-PHD-ID-VWCE1": "100.00",
+          "RB-PHD-ID-EIMI1": "100.00",
+        }),
+      ]),
     );
   });
 
@@ -112,7 +114,13 @@ describe("sparplan rebalancing (Phase B)", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-VWCE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal FTSE All-World" })
+      .values({
+        symbol: "RB-VWCE",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Rebal FTSE All-World",
+      })
       .returning();
 
     const months = recentMonths(5);
@@ -145,11 +153,23 @@ describe("sparplan rebalancing (Phase B)", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-VWCE2", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal FTSE All-World" })
+      .values({
+        symbol: "RB-VWCE2",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Rebal FTSE All-World",
+      })
       .returning();
     const [eimi] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-EIMI2", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal EM IMI" })
+      .values({
+        symbol: "RB-EIMI2",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Rebal EM IMI",
+      })
       .returning();
 
     // Post 5× €70/mo into VWCE (7 units × €100) → ~€700 market value
@@ -239,11 +259,23 @@ describe("sparplan rebalancing (Phase B)", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-VWCE3", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal FTSE All-World" })
+      .values({
+        symbol: "RB-VWCE3",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Rebal FTSE All-World",
+      })
       .returning();
     const [eimi] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-EIMI3", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Rebal EM IMI" })
+      .values({
+        symbol: "RB-EIMI3",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Rebal EM IMI",
+      })
       .returning();
 
     // VWCE: 9 × €100 = €900 (90% of total)
@@ -335,7 +367,13 @@ describe("sparplan rebalancing (Phase B)", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-PHD-VWCE1", market: "XETRA", assetClass: "etf", currency: "EUR", name: "Rebal FTSE All-World PD1" })
+      .values({
+        symbol: "RB-PHD-VWCE1",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        name: "Rebal FTSE All-World PD1",
+      })
       .returning();
 
     // Add savings plan transactions and targets.
@@ -345,7 +383,14 @@ describe("sparplan rebalancing (Phase B)", () => {
         method: "POST",
         url: `/portfolios/${pf}/transactions`,
         headers: auth(t),
-        payload: { type: "savings_plan", instrumentId: vwce.id, quantity: "1.0", price: "100.00", currency: "EUR", executedAt: d },
+        payload: {
+          type: "savings_plan",
+          instrumentId: vwce.id,
+          quantity: "1.0",
+          price: "100.00",
+          currency: "EUR",
+          executedAt: d,
+        },
       });
     }
 
@@ -379,7 +424,12 @@ describe("sparplan rebalancing (Phase B)", () => {
       method: "POST",
       url: "/account-holders",
       headers: auth(t),
-      payload: { name: "DE Holder PD", type: "self", taxAllowanceAnnual: "1000", capitalGainsTaxRate: "0.25" },
+      payload: {
+        name: "DE Holder PD",
+        type: "self",
+        taxAllowanceAnnual: "1000",
+        capitalGainsTaxRate: "0.25",
+      },
     });
     const holderId = holderRes.json().id as string;
 
@@ -395,11 +445,23 @@ describe("sparplan rebalancing (Phase B)", () => {
     // Insert two instruments with unique symbols for this test.
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-PHD-VWCE2", market: "XETRA", assetClass: "etf", currency: "EUR", name: "Rebal FTSE All-World PD2" })
+      .values({
+        symbol: "RB-PHD-VWCE2",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        name: "Rebal FTSE All-World PD2",
+      })
       .returning();
     const [eimi] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-PHD-EIMI2", market: "XETRA", assetClass: "etf", currency: "EUR", name: "Rebal EM IMI PD2" })
+      .values({
+        symbol: "RB-PHD-EIMI2",
+        market: "XETRA",
+        assetClass: "etf",
+        currency: "EUR",
+        name: "Rebal EM IMI PD2",
+      })
       .returning();
 
     // VWCE: 9 units at €100 = €900 (90% of targeted total); target 70% → overweight.
@@ -411,7 +473,14 @@ describe("sparplan rebalancing (Phase B)", () => {
         method: "POST",
         url: `/portfolios/${pf}/transactions`,
         headers: auth(t),
-        payload: { type: "buy", instrumentId: vwce.id, quantity: "4.5", price: "80.00", currency: "EUR", executedAt: d },
+        payload: {
+          type: "buy",
+          instrumentId: vwce.id,
+          quantity: "4.5",
+          price: "80.00",
+          currency: "EUR",
+          executedAt: d,
+        },
       });
     }
     for (const d of months) {
@@ -419,7 +488,14 @@ describe("sparplan rebalancing (Phase B)", () => {
         method: "POST",
         url: `/portfolios/${pf}/transactions`,
         headers: auth(t),
-        payload: { type: "buy", instrumentId: eimi.id, quantity: "0.5", price: "80.00", currency: "EUR", executedAt: d },
+        payload: {
+          type: "buy",
+          instrumentId: eimi.id,
+          quantity: "0.5",
+          price: "80.00",
+          currency: "EUR",
+          executedAt: d,
+        },
       });
     }
 
@@ -498,11 +574,23 @@ describe("sparplan rebalancing (Phase B)", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-PHD-ID-VWCE1", market: "IDX", assetClass: "etf", currency: "IDR", name: "Rebal FTSE All-World ID1" })
+      .values({
+        symbol: "RB-PHD-ID-VWCE1",
+        market: "IDX",
+        assetClass: "etf",
+        currency: "IDR",
+        name: "Rebal FTSE All-World ID1",
+      })
       .returning();
     const [eimi] = await app.db
       .insert(instruments)
-      .values({ symbol: "RB-PHD-ID-EIMI1", market: "IDX", assetClass: "etf", currency: "IDR", name: "Rebal EM IMI ID1" })
+      .values({
+        symbol: "RB-PHD-ID-EIMI1",
+        market: "IDX",
+        assetClass: "etf",
+        currency: "IDR",
+        name: "Rebal EM IMI ID1",
+      })
       .returning();
 
     // Same imbalance as the German test above: VWCE 90% actual vs 70% target (over),
@@ -513,7 +601,14 @@ describe("sparplan rebalancing (Phase B)", () => {
         method: "POST",
         url: `/portfolios/${pf}/transactions`,
         headers: auth(t),
-        payload: { type: "buy", instrumentId: vwce.id, quantity: "4.5", price: "80.00", currency: "IDR", executedAt: d },
+        payload: {
+          type: "buy",
+          instrumentId: vwce.id,
+          quantity: "4.5",
+          price: "80.00",
+          currency: "IDR",
+          executedAt: d,
+        },
       });
     }
     for (const d of months) {
@@ -521,7 +616,14 @@ describe("sparplan rebalancing (Phase B)", () => {
         method: "POST",
         url: `/portfolios/${pf}/transactions`,
         headers: auth(t),
-        payload: { type: "buy", instrumentId: eimi.id, quantity: "0.5", price: "80.00", currency: "IDR", executedAt: d },
+        payload: {
+          type: "buy",
+          instrumentId: eimi.id,
+          quantity: "0.5",
+          price: "80.00",
+          currency: "IDR",
+          executedAt: d,
+        },
       });
     }
 

@@ -88,7 +88,12 @@ export function registerNetworthRoutes(app: FastifyInstance) {
           costBasisMode,
           p.cashCounted,
         );
-        const flows = await boundaryFlows(app, coreTxns, p.cashCounted ? "inside" : "outside", display);
+        const flows = await boundaryFlows(
+          app,
+          coreTxns,
+          p.cashCounted ? "inside" : "outside",
+          display,
+        );
         return { summary, flows };
       });
       const summaries = perPortfolio.map((r) => r.summary);
@@ -109,10 +114,7 @@ export function registerNetworthRoutes(app: FastifyInstance) {
 
       // Self-heal: enqueue a sector sweep if any held instrument hasn't been
       // enriched yet (or has a stale attempt). Debounced to once per 6h.
-      if (
-        needsSectorEnrichment([...meta.values()]) ||
-        needsNameEnrichment([...meta.values()])
-      ) {
+      if (needsSectorEnrichment([...meta.values()]) || needsNameEnrichment([...meta.values()])) {
         void enqueueInstrumentMetadata();
       }
 
@@ -142,14 +144,21 @@ export function registerNetworthRoutes(app: FastifyInstance) {
           const [snap] = await app.db
             .select()
             .from(portfolioSnapshots)
-            .where(and(eq(portfolioSnapshots.portfolioId, pf.id), gte(portfolioSnapshots.date, periodStartStr)))
+            .where(
+              and(
+                eq(portfolioSnapshots.portfolioId, pf.id),
+                gte(portfolioSnapshots.date, periodStartStr),
+              ),
+            )
             .orderBy(asc(portfolioSnapshots.date))
             .limit(1);
           if (!snap) {
             // Portfolio has no snapshot at or after periodStart (brand-new or no history).
             return null;
           }
-          const ratesByDate = await getFxRatesForDates(app.db, [snap.currency], display, [snap.date]);
+          const ratesByDate = await getFxRatesForDates(app.db, [snap.currency], display, [
+            snap.date,
+          ]);
           const fx = makeFxRateFn(ratesByDate.get(snap.date) ?? {}, display);
           return {
             nav: Number(convert(snap.netWorth, snap.currency, display, fx)),
@@ -188,9 +197,7 @@ export function registerNetworthRoutes(app: FastifyInstance) {
           ? periodXirr(boundaryOnlyFlows, currentNetWorth, startNav, anchorDate, asOf)
           : null;
       const periodPnL =
-        anchorDate !== null && startNav !== null
-          ? String(currentNetWorth - startNav)
-          : null;
+        anchorDate !== null && startNav !== null ? String(currentNetWorth - startNav) : null;
       const periodPnLPct =
         anchorDate !== null && startNav !== null && startNav > 0
           ? String((currentNetWorth - startNav) / startNav)

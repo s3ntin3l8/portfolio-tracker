@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  rebalancingDrift,
-  rebalancingTrades,
-  contributionSplit,
-} from "../src/rebalancing.js";
+import { rebalancingDrift, rebalancingTrades, contributionSplit } from "../src/rebalancing.js";
 import type { AllocationSlice } from "../src/allocation.js";
 
 // ---------------------------------------------------------------------------
@@ -77,7 +73,10 @@ describe("rebalancingDrift", () => {
 
   it("includes correct actualValue from slices", () => {
     const slices = [slice("etf", 5000, 50), slice("cash", 5000, 50)];
-    const targets = [{ key: "etf", targetPct: 70 }, { key: "cash", targetPct: 30 }];
+    const targets = [
+      { key: "etf", targetPct: 70 },
+      { key: "cash", targetPct: 30 },
+    ];
     const drift = rebalancingDrift(slices, targets);
     expect(drift.find((r) => r.key === "etf")!.actualValue).toBe("5000");
     expect(drift.find((r) => r.key === "cash")!.actualValue).toBe("5000");
@@ -94,22 +93,59 @@ describe("rebalancingTrades (trade mode)", () => {
   });
 
   it("returns empty array when total is zero", () => {
-    const drift = [{ key: "equity", targetPct: 70, actualPct: 80, driftPct: 10, actualValue: "0", status: "over" as const }];
+    const drift = [
+      {
+        key: "equity",
+        targetPct: 70,
+        actualPct: 80,
+        driftPct: 10,
+        actualValue: "0",
+        status: "over" as const,
+      },
+    ];
     expect(rebalancingTrades(drift, "0", { mode: "trade" })).toEqual([]);
   });
 
   it("skips on_target rows", () => {
     const drift = [
-      { key: "equity", targetPct: 70, actualPct: 72, driftPct: 2, actualValue: "720", status: "on_target" as const },
-      { key: "bond", targetPct: 30, actualPct: 28, driftPct: -2, actualValue: "280", status: "on_target" as const },
+      {
+        key: "equity",
+        targetPct: 70,
+        actualPct: 72,
+        driftPct: 2,
+        actualValue: "720",
+        status: "on_target" as const,
+      },
+      {
+        key: "bond",
+        targetPct: 30,
+        actualPct: 28,
+        driftPct: -2,
+        actualValue: "280",
+        status: "on_target" as const,
+      },
     ];
     expect(rebalancingTrades(drift, "1000", { mode: "trade" })).toEqual([]);
   });
 
   it("produces buy for under-target and sell for over-target", () => {
     const drift = [
-      { key: "equity", targetPct: 70, actualPct: 80, driftPct: 10, actualValue: "8000", status: "over" as const },
-      { key: "bond", targetPct: 30, actualPct: 20, driftPct: -10, actualValue: "2000", status: "under" as const },
+      {
+        key: "equity",
+        targetPct: 70,
+        actualPct: 80,
+        driftPct: 10,
+        actualValue: "8000",
+        status: "over" as const,
+      },
+      {
+        key: "bond",
+        targetPct: 30,
+        actualPct: 20,
+        driftPct: -10,
+        actualValue: "2000",
+        status: "under" as const,
+      },
     ];
     const actions = rebalancingTrades(drift, "10000", { mode: "trade" });
     const equityAction = actions.find((a) => a.key === "equity")!;
@@ -129,8 +165,22 @@ describe("rebalancingTrades (trade mode)", () => {
 
 describe("rebalancingTrades (trade mode) with maxSellByKey", () => {
   const baseDrift = [
-    { key: "equity", targetPct: 70, actualPct: 80, driftPct: 10, actualValue: "8000", status: "over" as const },
-    { key: "bond", targetPct: 30, actualPct: 20, driftPct: -10, actualValue: "2000", status: "under" as const },
+    {
+      key: "equity",
+      targetPct: 70,
+      actualPct: 80,
+      driftPct: 10,
+      actualValue: "8000",
+      status: "over" as const,
+    },
+    {
+      key: "bond",
+      targetPct: 30,
+      actualPct: 20,
+      driftPct: -10,
+      actualValue: "2000",
+      status: "under" as const,
+    },
   ];
 
   it("caps sell to maxSellByKey when cap is smaller than computed delta", () => {
@@ -194,16 +244,44 @@ describe("rebalancingTrades (trade mode) with maxSellByKey", () => {
 describe("rebalancingTrades (newCash mode)", () => {
   it("returns empty when newCash is zero or missing", () => {
     const drift = [
-      { key: "equity", targetPct: 70, actualPct: 60, driftPct: -10, actualValue: "6000", status: "under" as const },
+      {
+        key: "equity",
+        targetPct: 70,
+        actualPct: 60,
+        driftPct: -10,
+        actualValue: "6000",
+        status: "under" as const,
+      },
     ];
     expect(rebalancingTrades(drift, "6000", { mode: "newCash", newCash: "0" })).toEqual([]);
   });
 
   it("distributes newCash only among under-target sleeves proportionally", () => {
     const drift = [
-      { key: "equity", targetPct: 70, actualPct: 80, driftPct: 10, actualValue: "8000", status: "over" as const },
-      { key: "bond", targetPct: 20, actualPct: 10, driftPct: -10, actualValue: "1000", status: "under" as const },
-      { key: "cash", targetPct: 10, actualPct: 10, driftPct: 0, actualValue: "1000", status: "on_target" as const },
+      {
+        key: "equity",
+        targetPct: 70,
+        actualPct: 80,
+        driftPct: 10,
+        actualValue: "8000",
+        status: "over" as const,
+      },
+      {
+        key: "bond",
+        targetPct: 20,
+        actualPct: 10,
+        driftPct: -10,
+        actualValue: "1000",
+        status: "under" as const,
+      },
+      {
+        key: "cash",
+        targetPct: 10,
+        actualPct: 10,
+        driftPct: 0,
+        actualValue: "1000",
+        status: "on_target" as const,
+      },
     ];
     const actions = rebalancingTrades(drift, "10000", { mode: "newCash", newCash: "1000" });
     // Only bond should get a buy action (equity is over, cash is on_target).
@@ -215,8 +293,22 @@ describe("rebalancingTrades (newCash mode)", () => {
 
   it("splits proportionally across multiple under-target sleeves", () => {
     const drift = [
-      { key: "world", targetPct: 70, actualPct: 50, driftPct: -20, actualValue: "5000", status: "under" as const },
-      { key: "em", targetPct: 30, actualPct: 50, driftPct: 20, actualValue: "5000", status: "over" as const },
+      {
+        key: "world",
+        targetPct: 70,
+        actualPct: 50,
+        driftPct: -20,
+        actualValue: "5000",
+        status: "under" as const,
+      },
+      {
+        key: "em",
+        targetPct: 30,
+        actualPct: 50,
+        driftPct: 20,
+        actualValue: "5000",
+        status: "over" as const,
+      },
     ];
     // Only "world" is under, gets all 1000.
     const actions = rebalancingTrades(drift, "10000", { mode: "newCash", newCash: "1000" });
@@ -226,9 +318,30 @@ describe("rebalancingTrades (newCash mode)", () => {
 
   it("splits correctly when two sleeves are under-target", () => {
     const drift = [
-      { key: "world", targetPct: 70, actualPct: 60, driftPct: -10, actualValue: "6000", status: "under" as const },
-      { key: "em", targetPct: 30, actualPct: 40, driftPct: 10, actualValue: "4000", status: "over" as const },
-      { key: "bond", targetPct: 0, actualPct: 0, driftPct: 0, actualValue: "0", status: "on_target" as const },
+      {
+        key: "world",
+        targetPct: 70,
+        actualPct: 60,
+        driftPct: -10,
+        actualValue: "6000",
+        status: "under" as const,
+      },
+      {
+        key: "em",
+        targetPct: 30,
+        actualPct: 40,
+        driftPct: 10,
+        actualValue: "4000",
+        status: "over" as const,
+      },
+      {
+        key: "bond",
+        targetPct: 0,
+        actualPct: 0,
+        driftPct: 0,
+        actualValue: "0",
+        status: "on_target" as const,
+      },
     ];
     // Only "world" is under → gets all.
     const actions = rebalancingTrades(drift, "10000", { mode: "newCash", newCash: "700" });

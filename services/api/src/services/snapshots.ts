@@ -190,7 +190,9 @@ export async function recordIntradaySnapshots(
 
   await db
     .delete(portfolioIntradaySnapshots)
-    .where(lt(portfolioIntradaySnapshots.capturedAt, new Date(now.getTime() - INTRADAY_RETENTION_MS)));
+    .where(
+      lt(portfolioIntradaySnapshots.capturedAt, new Date(now.getTime() - INTRADAY_RETENTION_MS)),
+    );
 
   return count;
 }
@@ -230,9 +232,7 @@ export function aggregateByDate(
 ): NetWorthPoint[] {
   const byDate = new Map<string, number>();
   for (const r of rows) {
-    const converted = Number(
-      convert(r.netWorth, r.currency, displayCurrency, fxFor(r.date)),
-    );
+    const converted = Number(convert(r.netWorth, r.currency, displayCurrency, fxFor(r.date)));
     byDate.set(r.date, (byDate.get(r.date) ?? 0) + converted);
   }
   return [...byDate.entries()]

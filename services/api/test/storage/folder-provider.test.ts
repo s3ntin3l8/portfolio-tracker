@@ -52,9 +52,7 @@ describe("FolderProvider", () => {
 
     it("omits originalFilename from sidecar when not provided", async () => {
       await provider.put("file.txt", Buffer.from("x"), { mimeType: "text/plain" });
-      const meta = JSON.parse(
-        await fs.readFile(path.join(tmpDir, "file.txt.meta.json"), "utf8"),
-      );
+      const meta = JSON.parse(await fs.readFile(path.join(tmpDir, "file.txt.meta.json"), "utf8"));
       expect(meta.originalFilename).toBeUndefined();
     });
   });
@@ -186,9 +184,9 @@ describe("FolderProvider", () => {
     });
 
     it("rejects a deeply nested traversal", async () => {
-      await expect(
-        provider.exists("subdir/../../etc/shadow"),
-      ).rejects.toThrow(/escapes base directory/);
+      await expect(provider.exists("subdir/../../etc/shadow")).rejects.toThrow(
+        /escapes base directory/,
+      );
     });
   });
 

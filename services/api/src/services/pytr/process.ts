@@ -42,9 +42,7 @@ export function runProcess(
       });
     } catch (err) {
       reject(
-        new PytrUnavailableError(
-          err instanceof Error ? err.message : "failed to spawn python",
-        ),
+        new PytrUnavailableError(err instanceof Error ? err.message : "failed to spawn python"),
       );
       return;
     }

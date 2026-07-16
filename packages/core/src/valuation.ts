@@ -84,10 +84,7 @@ export interface SummarizeInput {
   transactions: CoreTransaction[];
   corporateActions?: CorporateAction[];
   /** Latest price + currency (+ prior close) keyed by instrument id. */
-  prices: Record<
-    string,
-    { price: string; currency: string; previousClose?: string | null }
-  >;
+  prices: Record<string, { price: string; currency: string; previousClose?: string | null }>;
   displayCurrency: string;
   fx?: FxRateFn;
   /** Cost-basis presentation for financed holdings. Defaults to "purchase_price". */
@@ -113,9 +110,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   // Total-paid cost basis adds financing incurred to date onto the purchase
   // price; purchase-price mode leaves cost basis untouched.
   const financing =
-    input.costBasisMode === "total_paid"
-      ? financingByInstrument(input.transactions)
-      : {};
+    input.costBasisMode === "total_paid" ? financingByInstrument(input.transactions) : {};
   const effectiveCost = (h: Holding): Decimal => {
     const fin = financing[h.instrumentId];
     return fin ? new Decimal(h.costBasis).add(fin) : new Decimal(h.costBasis);
@@ -181,9 +176,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
     // leave it as the raw difference for same-currency positions (unchanged), and
     // use the display-currency figure for cross-currency ones (best approximation).
     const unrealized =
-      costCcy === quoteCcy
-        ? new Decimal(mv).sub(cb).toString()
-        : unrealizedPnLDisplay;
+      costCcy === quoteCcy ? new Decimal(mv).sub(cb).toString() : unrealizedPnLDisplay;
     totalCost = totalCost.add(new Decimal(costBasisDisplay));
     totalMarketValue = totalMarketValue.add(new Decimal(marketValueDisplay));
     addExposure(quoteCcy, marketValueDisplay);
@@ -244,11 +237,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   for (const [ccy, amount] of Object.entries(cash)) {
     addExposure(ccy, convert(amount, ccy, input.displayCurrency, fx));
   }
-  const liabilities = totalLiabilities(
-    input.transactions,
-    input.displayCurrency,
-    fx,
-  );
+  const liabilities = totalLiabilities(input.transactions, input.displayCurrency, fx);
   const nw = netWorth({
     holdings,
     prices: input.prices,
@@ -262,12 +251,7 @@ export function summarizePortfolio(input: SummarizeInput): PortfolioSummary {
   for (const tx of input.transactions) {
     if (tx.type === "dividend" || tx.type === "coupon" || tx.type === "interest") {
       totalIncome = totalIncome.add(
-        convert(
-          cashFlow(tx).toString(),
-          tx.currency,
-          input.displayCurrency,
-          fx,
-        ),
+        convert(cashFlow(tx).toString(), tx.currency, input.displayCurrency, fx),
       );
     }
   }
@@ -331,9 +315,7 @@ export function aggregatePortfolios(
     }
 
     for (const [currency, amount] of Object.entries(s.exposureByCurrency)) {
-      exposure[currency] = new Decimal(exposure[currency] ?? "0")
-        .add(amount)
-        .toString();
+      exposure[currency] = new Decimal(exposure[currency] ?? "0").add(amount).toString();
     }
 
     for (const h of s.holdings) {
@@ -358,13 +340,8 @@ export function aggregatePortfolios(
         // Display fields are all in `displayCurrency`, so summing is valid here
         // (unlike the native marketValue/costBasis above).
         marketValueDisplay: addNullable(ex.marketValueDisplay, h.marketValueDisplay),
-        costBasisDisplay: new Decimal(ex.costBasisDisplay)
-          .add(h.costBasisDisplay)
-          .toString(),
-        unrealizedPnLDisplay: addNullable(
-          ex.unrealizedPnLDisplay,
-          h.unrealizedPnLDisplay,
-        ),
+        costBasisDisplay: new Decimal(ex.costBasisDisplay).add(h.costBasisDisplay).toString(),
+        unrealizedPnLDisplay: addNullable(ex.unrealizedPnLDisplay, h.unrealizedPnLDisplay),
         // Same instrument → same per-share price/prev-close, so the percentage is
         // shared; quantities sum, so the absolute day change adds.
         previousClose: h.previousClose ?? ex.previousClose,

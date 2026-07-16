@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { generateKeyPair, SignJWT, exportJWK } from "jose";
-import { instruments, loans, screenshotImports, transactions, trResolvedEvents, users } from "@portfolio/db";
+import {
+  instruments,
+  loans,
+  screenshotImports,
+  transactions,
+  trResolvedEvents,
+  users,
+} from "@portfolio/db";
 import { FixtureProvider, MarketDataService } from "@portfolio/market-data";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
@@ -42,7 +49,13 @@ describe("transaction status (archived / cash_neutral)", () => {
     overrideMarketData(new MarketDataService([new FixtureProvider({ ACME: "10" })]));
     const [acme] = await app.db
       .insert(instruments)
-      .values({ symbol: "ACME", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Acme" })
+      .values({
+        symbol: "ACME",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Acme",
+      })
       .returning();
     acmeId = acme.id;
   });
@@ -90,7 +103,11 @@ describe("transaction status (archived / cash_neutral)", () => {
     const { t, portfolioId, addBuy } = await setup();
     const txId = await addBuy("10", "10");
 
-    const before = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const before = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(before.json().holdings).toHaveLength(1);
 
     const patched = await app.inject({
@@ -102,11 +119,19 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(patched.statusCode).toBe(200);
     expect(patched.json().status).toBe("archived");
 
-    const after = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const after = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(after.json().holdings).toHaveLength(0);
 
     // The list endpoint still shows the archived row (so the UI can restore it).
-    const list = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) });
+    const list = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
     expect(list.json()).toHaveLength(1);
     expect(list.json()[0].status).toBe("archived");
 
@@ -117,7 +142,11 @@ describe("transaction status (archived / cash_neutral)", () => {
       payload: { status: "normal" },
     });
     expect(restored.json().status).toBe("normal");
-    const back = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const back = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(back.json().holdings).toHaveLength(1);
   });
 
@@ -128,7 +157,13 @@ describe("transaction status (archived / cash_neutral)", () => {
       method: "POST",
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
-      payload: { type: "deposit", quantity: "0", price: "1000", currency: "EUR", executedAt: "2026-01-10T00:00:00.000Z" },
+      payload: {
+        type: "deposit",
+        quantity: "0",
+        price: "1000",
+        currency: "EUR",
+        executedAt: "2026-01-10T00:00:00.000Z",
+      },
     });
     const txId = await addBuy("5", "10"); // would normally cost 50
 
@@ -140,11 +175,17 @@ describe("transaction status (archived / cash_neutral)", () => {
     });
     expect(markNeutral.json().status).toBe("cash_neutral");
 
-    const summary = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/summary`, headers: auth(t) });
+    const summary = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/summary`,
+      headers: auth(t),
+    });
     expect(summary.statusCode).toBe(200);
     const s = summary.json();
     // Shares kept: 5 ACME priced at 10 → 50 market value.
-    const holding = s.holdings.find((h: { instrument: { symbol: string } }) => h.instrument.symbol === "ACME");
+    const holding = s.holdings.find(
+      (h: { instrument: { symbol: string } }) => h.instrument.symbol === "ACME",
+    );
     expect(holding.quantity).toBe("5");
     // Cash is the full deposit — the cash_neutral buy did not spend any cash.
     expect(s.cash.EUR).toBe("1000");
@@ -187,9 +228,17 @@ describe("transaction status (archived / cash_neutral)", () => {
     const draftId = await addDraftBuy(portfolioId, "ev-confirm-1", "7");
 
     // Draft is listed (so the table can show it) but excluded from derived holdings.
-    const list = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) });
+    const list = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
     expect(list.json().find((r: { id: string }) => r.id === draftId).status).toBe("draft");
-    const before = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const before = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(before.json().holdings).toHaveLength(0);
 
     // Confirm → normal; now it counts, and the durable ledger records it.
@@ -202,14 +251,23 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().updated).toBe(1);
 
-    const after = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const after = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(after.json().holdings).toHaveLength(1);
     expect(after.json().holdings[0].quantity).toBe("7");
 
     const ledger = await app.db
       .select()
       .from(trResolvedEvents)
-      .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.eventId, "ev-confirm-1")));
+      .where(
+        and(
+          eq(trResolvedEvents.portfolioId, portfolioId),
+          eq(trResolvedEvents.eventId, "ev-confirm-1"),
+        ),
+      );
     expect(ledger[0]?.resolution).toBe("confirmed");
   });
 
@@ -226,15 +284,28 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(res.json().updated).toBe(1);
 
     // Row is archived (kept + visible), still excluded from holdings.
-    const list = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/transactions`, headers: auth(t) });
+    const list = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/transactions`,
+      headers: auth(t),
+    });
     expect(list.json().find((r: { id: string }) => r.id === draftId).status).toBe("archived");
-    const holdings = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(holdings.json().holdings).toHaveLength(0);
 
     const ledger = await app.db
       .select()
       .from(trResolvedEvents)
-      .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.eventId, "ev-discard-1")));
+      .where(
+        and(
+          eq(trResolvedEvents.portfolioId, portfolioId),
+          eq(trResolvedEvents.eventId, "ev-discard-1"),
+        ),
+      );
     expect(ledger[0]?.resolution).toBe("discarded");
   });
 
@@ -279,9 +350,17 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ moved: 1, skippedConflicts: 0, skippedLoans: 0 });
 
-    const aH = await app.inject({ method: "GET", url: `/portfolios/${a}/holdings`, headers: auth(t) });
+    const aH = await app.inject({
+      method: "GET",
+      url: `/portfolios/${a}/holdings`,
+      headers: auth(t),
+    });
     expect(aH.json().holdings).toHaveLength(0);
-    const bH = await app.inject({ method: "GET", url: `/portfolios/${b}/holdings`, headers: auth(t) });
+    const bH = await app.inject({
+      method: "GET",
+      url: `/portfolios/${b}/holdings`,
+      headers: auth(t),
+    });
     expect(bH.json().holdings).toHaveLength(1);
     expect(bH.json().holdings[0].quantity).toBe("10");
   });
@@ -315,7 +394,11 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ moved: 0, skippedConflicts: 1 });
     // The row stays in A (not moved, not crashed on).
-    const aList = await app.inject({ method: "GET", url: `/portfolios/${a}/transactions`, headers: auth(t) });
+    const aList = await app.inject({
+      method: "GET",
+      url: `/portfolios/${a}/transactions`,
+      headers: auth(t),
+    });
     expect(aList.json().find((r: { id: string }) => r.id === aRow)).toBeTruthy();
   });
 
@@ -353,7 +436,11 @@ describe("transaction status (archived / cash_neutral)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().moved).toBe(2);
 
-    const bList = await app.inject({ method: "GET", url: `/portfolios/${b}/transactions`, headers: auth(t) });
+    const bList = await app.inject({
+      method: "GET",
+      url: `/portfolios/${b}/transactions`,
+      headers: auth(t),
+    });
     expect(bList.json().filter((r: { importId: string }) => r.importId === imp.id)).toHaveLength(2);
   });
 

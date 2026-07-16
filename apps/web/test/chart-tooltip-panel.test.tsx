@@ -11,7 +11,9 @@ import { ChartTooltipPanel } from "../src/components/ui/chart-tooltip-panel";
  * delay between the panel mounting and the hook knowing its real size).
  */
 describe("ChartTooltipPanel onSize", () => {
-  type ObserverCallback = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
+  type ObserverCallback = (
+    entries: Array<{ contentRect: { width: number; height: number } }>,
+  ) => void;
   let observerCallback: ObserverCallback | null = null;
   let observed: Element[] = [];
   let disconnected = false;
@@ -49,10 +51,7 @@ describe("ChartTooltipPanel onSize", () => {
     };
     render(
       <div ref={setWidth}>
-        <ChartTooltipPanel
-          rows={[{ label: "Range", value: "1 – 8" }]}
-          onSize={onSize}
-        />
+        <ChartTooltipPanel rows={[{ label: "Range", value: "1 – 8" }]} onSize={onSize} />
       </div>,
     );
     expect(observed).toHaveLength(1);

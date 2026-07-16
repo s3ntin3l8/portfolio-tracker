@@ -7,13 +7,7 @@ import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-export function AdminUserActions({
-  userId,
-  email,
-}: {
-  userId: string;
-  email: string;
-}) {
+export function AdminUserActions({ userId, email }: { userId: string; email: string }) {
   const t = useTranslations("Admin");
   const router = useRouter();
   const api = useApiClient();

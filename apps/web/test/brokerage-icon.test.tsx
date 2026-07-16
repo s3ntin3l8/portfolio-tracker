@@ -9,9 +9,7 @@ describe("BrokerageIcon", () => {
     expect(icon).toBeInTheDocument();
     const imgs = icon.querySelectorAll("img");
     expect(imgs.length).toBeGreaterThan(0);
-    expect([...imgs].some((i) => i.getAttribute("src")?.includes("trade-republic"))).toBe(
-      true,
-    );
+    expect([...imgs].some((i) => i.getAttribute("src")?.includes("trade-republic"))).toBe(true);
   });
 
   it("renders a monogram fallback for an unknown brokerage", () => {

@@ -9,10 +9,6 @@ export function UpdateProfile({ initialName }: { initialName: string }) {
   const api = useApiClient();
   const router = useRouter();
   return (
-    <UpdateProfileForm
-      client={api}
-      initialName={initialName}
-      onSuccess={() => router.refresh()}
-    />
+    <UpdateProfileForm client={api} initialName={initialName} onSuccess={() => router.refresh()} />
   );
 }

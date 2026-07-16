@@ -22,10 +22,7 @@ function tx(p: Partial<CoreTransaction>): CoreTransaction {
   };
 }
 
-function run(
-  txns: CoreTransaction[],
-  opts: Partial<ComputeTradesInput> = {},
-) {
+function run(txns: CoreTransaction[], opts: Partial<ComputeTradesInput> = {}) {
   return computeTrades({
     transactions: txns,
     prices: { [INST]: { price: "100", currency: "EUR" } },
@@ -178,7 +175,13 @@ describe("computeTrades — average vs FIFO", () => {
     const txns = [
       tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-01-01") }),
       tx({ type: "buy", quantity: "10", price: "200", executedAt: new Date("2021-06-01") }),
-      tx({ type: "transfer_out", quantity: "10", price: "0", fees: "0", executedAt: new Date("2021-09-01") }),
+      tx({
+        type: "transfer_out",
+        quantity: "10",
+        price: "0",
+        fees: "0",
+        executedAt: new Date("2021-09-01"),
+      }),
       tx({ type: "sell", quantity: "10", price: "250", executedAt: new Date("2022-01-01") }),
     ];
     const { trades } = run(txns, { method: "fifo" });
@@ -186,7 +189,11 @@ describe("computeTrades — average vs FIFO", () => {
     // transfer_out drains the first (cheaper) lot; the sell must consume the second
     // (100@200) lot, not re-consume the transferred one or fall through to zero cost.
     expect(trades[0].legs).toHaveLength(1);
-    expect(trades[0].legs[0]).toMatchObject({ acqDate: "2021-06-01", quantity: "10", cost: "2000" });
+    expect(trades[0].legs[0]).toMatchObject({
+      acqDate: "2021-06-01",
+      quantity: "10",
+      cost: "2000",
+    });
     expect(trades[0].realizedPnL).toBe("500"); // 2500 − 2000
   });
 });
@@ -221,8 +228,20 @@ describe("computeTrades — dividends folded into the holding window", () => {
   it("sums withholding tax into dividendsByYear", () => {
     const txns = [
       tx({ type: "buy", quantity: "10", price: "100", executedAt: new Date("2021-01-01") }),
-      tx({ type: "dividend", quantity: "0", price: "40", tax: "10", executedAt: new Date("2021-06-01") }),
-      tx({ type: "interest", instrumentId: null, quantity: "0", price: "5", executedAt: new Date("2021-07-01") }),
+      tx({
+        type: "dividend",
+        quantity: "0",
+        price: "40",
+        tax: "10",
+        executedAt: new Date("2021-06-01"),
+      }),
+      tx({
+        type: "interest",
+        instrumentId: null,
+        quantity: "0",
+        price: "5",
+        executedAt: new Date("2021-07-01"),
+      }),
     ];
     const { dividendsByYear } = run(txns);
     expect(dividendsByYear).toEqual([{ year: 2021, amount: "45", tax: "10" }]);
@@ -488,21 +507,59 @@ describe("computeTrades — holding period & tax flags", () => {
 describe("computeTrades — costBasisMode (financed gold cicilan)", () => {
   const gold = "inst-gold";
   const txns: CoreTransaction[] = [
-    { instrumentId: gold, type: "buy", quantity: "1", price: "1000", fees: "0", currency: "EUR", executedAt: new Date("2023-01-01"), loanId: "L1" },
-    { instrumentId: gold, type: "fee", quantity: "0", price: "50", fees: "0", currency: "EUR", executedAt: new Date("2023-01-01"), loanId: "L1" },
-    { instrumentId: gold, type: "loan_repayment", quantity: "0", price: "0", fees: "30", currency: "EUR", executedAt: new Date("2023-06-01"), loanId: "L1" },
+    {
+      instrumentId: gold,
+      type: "buy",
+      quantity: "1",
+      price: "1000",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date("2023-01-01"),
+      loanId: "L1",
+    },
+    {
+      instrumentId: gold,
+      type: "fee",
+      quantity: "0",
+      price: "50",
+      fees: "0",
+      currency: "EUR",
+      executedAt: new Date("2023-01-01"),
+      loanId: "L1",
+    },
+    {
+      instrumentId: gold,
+      type: "loan_repayment",
+      quantity: "0",
+      price: "0",
+      fees: "30",
+      currency: "EUR",
+      executedAt: new Date("2023-06-01"),
+      loanId: "L1",
+    },
   ];
   const prices = { [gold]: { price: "1000", currency: "EUR" } };
 
   it("capitalizes financing into the open invested under total_paid", () => {
-    const tp = computeTrades({ transactions: txns, prices, displayCurrency: "EUR", costBasisMode: "total_paid", now: new Date("2024-01-01") });
+    const tp = computeTrades({
+      transactions: txns,
+      prices,
+      displayCurrency: "EUR",
+      costBasisMode: "total_paid",
+      now: new Date("2024-01-01"),
+    });
     const t = tp.trades[0];
     expect(t.invested).toBe("1080"); // 1000 + 50 fee + 30 margin
     expect(t.unrealizedPnL).toBe("-80"); // mv 1000 − cost 1080
   });
 
   it("leaves invested at the purchase price under purchase_price (default)", () => {
-    const pp = computeTrades({ transactions: txns, prices, displayCurrency: "EUR", now: new Date("2024-01-01") });
+    const pp = computeTrades({
+      transactions: txns,
+      prices,
+      displayCurrency: "EUR",
+      now: new Date("2024-01-01"),
+    });
     expect(pp.trades[0].invested).toBe("1000");
     expect(pp.trades[0].unrealizedPnL).toBe("0");
   });
@@ -512,8 +569,24 @@ describe("computeTrades — multi-currency & dust", () => {
   it("converts realized P&L to the display currency", () => {
     const usd = "inst-usd";
     const txns: CoreTransaction[] = [
-      { instrumentId: usd, type: "buy", quantity: "10", price: "100", fees: "0", currency: "USD", executedAt: new Date("2021-01-01") },
-      { instrumentId: usd, type: "sell", quantity: "10", price: "130", fees: "0", currency: "USD", executedAt: new Date("2021-06-01") },
+      {
+        instrumentId: usd,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        fees: "0",
+        currency: "USD",
+        executedAt: new Date("2021-01-01"),
+      },
+      {
+        instrumentId: usd,
+        type: "sell",
+        quantity: "10",
+        price: "130",
+        fees: "0",
+        currency: "USD",
+        executedAt: new Date("2021-06-01"),
+      },
     ];
     const fx = (from: string, to: string) => (from === "USD" && to === "EUR" ? "0.9" : "1");
     const { trades } = computeTrades({
@@ -543,11 +616,43 @@ describe("computeTrades — summary", () => {
     const b = "inst-b";
     const txns: CoreTransaction[] = [
       // Winner: bought, sold higher.
-      { instrumentId: a, type: "buy", quantity: "10", price: "100", fees: "0", currency: "EUR", executedAt: new Date("2021-01-01") },
-      { instrumentId: a, type: "sell", quantity: "10", price: "120", fees: "0", currency: "EUR", executedAt: new Date("2021-06-01") },
+      {
+        instrumentId: a,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2021-01-01"),
+      },
+      {
+        instrumentId: a,
+        type: "sell",
+        quantity: "10",
+        price: "120",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2021-06-01"),
+      },
       // Loser: bought, sold lower.
-      { instrumentId: b, type: "buy", quantity: "10", price: "100", fees: "0", currency: "EUR", executedAt: new Date("2021-01-01") },
-      { instrumentId: b, type: "sell", quantity: "10", price: "80", fees: "0", currency: "EUR", executedAt: new Date("2021-06-01") },
+      {
+        instrumentId: b,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2021-01-01"),
+      },
+      {
+        instrumentId: b,
+        type: "sell",
+        quantity: "10",
+        price: "80",
+        fees: "0",
+        currency: "EUR",
+        executedAt: new Date("2021-06-01"),
+      },
     ];
     const log = computeTrades({
       transactions: txns,
@@ -585,7 +690,15 @@ describe("computeTrades — summary", () => {
   it("returns an empty log when there are no instrument transactions", () => {
     const log = computeTrades({
       transactions: [
-        { instrumentId: null, type: "deposit", quantity: "0", price: "500", fees: "0", currency: "EUR", executedAt: new Date("2021-01-01") },
+        {
+          instrumentId: null,
+          type: "deposit",
+          quantity: "0",
+          price: "500",
+          fees: "0",
+          currency: "EUR",
+          executedAt: new Date("2021-01-01"),
+        },
       ],
       prices: {},
       displayCurrency: "EUR",
@@ -724,9 +837,7 @@ describe("computeTrades — avgHoldingDays (issue #308)", () => {
     const impliedAnn = (t.totalReturnPct ?? 0) / (t.avgHoldingDays / 365);
     // Should be within 20 % of the actual XIRR (loose tolerance — both metrics
     // capture the same economic reality but use different mathematical approaches).
-    expect(Math.abs(impliedAnn - t.annualizedPct!)).toBeLessThan(
-      Math.abs(t.annualizedPct!) * 0.2,
-    );
+    expect(Math.abs(impliedAnn - t.annualizedPct!)).toBeLessThan(Math.abs(t.annualizedPct!) * 0.2);
   });
 
   it("open unpriced position falls back to holdingDays (no misleading 0d avg)", () => {
@@ -776,14 +887,22 @@ describe("cross-currency trade — USD-quoted, EUR-bought (PEP scenario)", () =>
   //   market value: 0.196633 × $142.02 = $27.93 USD; at 0.8708 → €24.32
   //   true EUR total return ≈ 24.32 + 0.54 − 26.00 = −1.14 (a real loss)
   const buyTx: CoreTransaction = {
-    instrumentId: PEP, type: "buy",
-    quantity: "0.196633", price: "127.14", fees: "1",
-    currency: "EUR", executedAt: new Date("2025-08-26"),
+    instrumentId: PEP,
+    type: "buy",
+    quantity: "0.196633",
+    price: "127.14",
+    fees: "1",
+    currency: "EUR",
+    executedAt: new Date("2025-08-26"),
   };
   const div = (date: string): CoreTransaction => ({
-    instrumentId: PEP, type: "dividend",
-    quantity: "0", price: "0.18", fees: "0",
-    currency: "EUR", executedAt: new Date(date),
+    instrumentId: PEP,
+    type: "dividend",
+    quantity: "0",
+    price: "0.18",
+    fees: "0",
+    currency: "EUR",
+    executedAt: new Date(date),
   });
   const prices = { [PEP]: { price: "142.02", currency: "USD" } };
   const fx = (from: string, to: string): string => {
@@ -803,7 +922,7 @@ describe("cross-currency trade — USD-quoted, EUR-bought (PEP scenario)", () =>
     expect(trades).toHaveLength(1);
     const t = trades[0];
     // Cost basis ≈ €26.00 (not €22.64 which was the bug)
-    expect(Number(t.invested)).toBeCloseTo(26.00, 1);
+    expect(Number(t.invested)).toBeCloseTo(26.0, 1);
     // currency label should be EUR (the trade currency), not USD
     expect(t.currency).toBe("EUR");
   });
@@ -828,11 +947,17 @@ describe("cross-currency trade — USD-quoted, EUR-bought (PEP scenario)", () =>
   it("same-currency position (EUR/EUR) is unaffected — no regression", () => {
     const I = "inst-eur";
     const { trades } = computeTrades({
-      transactions: [{
-        instrumentId: I, type: "buy",
-        quantity: "10", price: "100", fees: "0",
-        currency: "EUR", executedAt: new Date("2024-01-01"),
-      }],
+      transactions: [
+        {
+          instrumentId: I,
+          type: "buy",
+          quantity: "10",
+          price: "100",
+          fees: "0",
+          currency: "EUR",
+          executedAt: new Date("2024-01-01"),
+        },
+      ],
       prices: { [I]: { price: "120", currency: "EUR" } },
       displayCurrency: "EUR",
       now: NOW,

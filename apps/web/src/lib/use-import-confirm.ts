@@ -79,7 +79,11 @@ export interface UseImportConfirmResult {
   pendingSubset: React.MutableRefObject<ReviewDraft[]>;
   /** The acknowledge-mismatch flag from the last confirm call — used when re-confirming after enrich. */
   pendingAcknowledgeMismatch: React.MutableRefObject<boolean>;
-  confirm: (uids?: string[], acknowledgeMismatch?: boolean, acknowledgeDup?: boolean) => Promise<void>;
+  confirm: (
+    uids?: string[],
+    acknowledgeMismatch?: boolean,
+    acknowledgeDup?: boolean,
+  ) => Promise<void>;
   enrichOneDuplicate: (d: DuplicateMatch) => Promise<void>;
 }
 
@@ -104,11 +108,7 @@ export function useImportConfirm({
   const pendingSubset = useRef<ReviewDraft[]>([]);
   const pendingAcknowledgeMismatch = useRef(false);
 
-  async function confirm(
-    uids?: string[],
-    acknowledgeMismatch = false,
-    acknowledgeDup = false,
-  ) {
+  async function confirm(uids?: string[], acknowledgeMismatch = false, acknowledgeDup = false) {
     setError(null);
     pendingAcknowledgeMismatch.current = acknowledgeMismatch;
 
@@ -137,8 +137,7 @@ export function useImportConfirm({
 
       // Partial-confirm mode: when enabled and the subset < the full draft list,
       // stay on the review page, drop the confirmed rows, and show a success notice.
-      const isPartial =
-        onPartialSuccess != null && subset.length < drafts.length;
+      const isPartial = onPartialSuccess != null && subset.length < drafts.length;
       if (isPartial) {
         const confirmedUids = new Set(subset.map((d) => d.uid));
         setDrafts((ds) => ds.filter((d) => !confirmedUids.has(d.uid)));
@@ -168,7 +167,9 @@ export function useImportConfirm({
         importId,
         [
           {
-            draft: stripUid(draft) as unknown as Parameters<typeof client.enrichImport>[1][0]["draft"],
+            draft: stripUid(draft) as unknown as Parameters<
+              typeof client.enrichImport
+            >[1][0]["draft"],
             targetTransactionId: d.matchedTransactionId,
           },
         ],

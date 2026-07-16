@@ -245,7 +245,11 @@ const ATTENTION_SKIPS = new Set<string>();
 // so pulling these into the tax-reports inbox needs no separate pytr session/entrypoint.
 
 // Newer events carry an explicit eventType.
-const REPORT_EVENT_TYPES = new Set(["TAX_YEAR_END_REPORT", "TAX_YEAR_END_REPORT_CREATED", "YEAR_END_TAX_REPORT"]);
+const REPORT_EVENT_TYPES = new Set([
+  "TAX_YEAR_END_REPORT",
+  "TAX_YEAR_END_REPORT_CREATED",
+  "YEAR_END_TAX_REPORT",
+]);
 
 // Legacy events (pre-eventType migration) carry eventType=null and only a German title —
 // always suffixed with the covered year ("Jährlicher Steuerbericht 2021"), hence a prefix
@@ -309,7 +313,11 @@ export function extractReportDocuments(rawEvents: unknown[]): ReportDocumentRef[
 
     const titleYear = title ? REPORT_TITLE_YEAR_RE.exec(title)?.[1] : undefined;
     const postedYear = new Date(ev.timestamp).getFullYear();
-    const taxYear = titleYear ? Number(titleYear) : Number.isFinite(postedYear) ? postedYear - 1 : null;
+    const taxYear = titleYear
+      ? Number(titleYear)
+      : Number.isFinite(postedYear)
+        ? postedYear - 1
+        : null;
 
     for (const doc of ev.documentRefs) {
       if (!doc.id) continue;

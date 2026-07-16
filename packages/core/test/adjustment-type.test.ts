@@ -49,10 +49,7 @@ describe("cashFlow — adjustment", () => {
   });
 
   it("cashBalances nets an adjustment alongside a deposit in the same currency", () => {
-    const txns = [
-      tx({ type: "deposit", price: "1000" }),
-      tx({ price: "-26.70" }),
-    ];
+    const txns = [tx({ type: "deposit", price: "1000" }), tx({ price: "-26.70" })];
     expect(cashBalances(txns).EUR).toBe("973.3");
   });
 });
@@ -78,10 +75,7 @@ describe("summarizePortfolio — adjustment counts as a cash movement", () => {
 // ---------------------------------------------------------------------------
 describe("contributionStats — adjustment is excluded from contributions", () => {
   it("inside boundary: a deposit + adjustment only contributes the deposit", () => {
-    const txns = [
-      tx({ type: "deposit", price: "1000" }),
-      tx({ price: "-26.70" }),
-    ];
+    const txns = [tx({ type: "deposit", price: "1000" }), tx({ price: "-26.70" })];
     const s = contributionStats({ txns, displayCurrency: "EUR", boundary: "inside" });
     expect(s.totalContributed).toBe("1000");
     expect(s.totalWithdrawn).toBe("0");

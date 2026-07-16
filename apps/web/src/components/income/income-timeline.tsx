@@ -143,7 +143,7 @@ export function IncomeTimeline({
       const res = await fetch(`/api/backend/networth/income?eventsYear=${year}`);
       if (!res.ok) return;
       const data = await res.json();
-      setLoadedYears(prev => new Map(prev).set(year, data.events));
+      setLoadedYears((prev) => new Map(prev).set(year, data.events));
       setExpanded((prev) => new Set(prev).add(year));
     } catch {
       // Ignore — user can retry by clicking again
@@ -178,19 +178,33 @@ export function IncomeTimeline({
 
   // Add already-loaded lazy years
   const existingYears = new Set(timelineGroups.map((g) => g.year));
-  for (const y of olderYears.filter((y) => loadedYears.has(y) && !existingYears.has(y)).sort((a, b) => Number(b) - Number(a))) {
+  for (const y of olderYears
+    .filter((y) => loadedYears.has(y) && !existingYears.has(y))
+    .sort((a, b) => Number(b) - Number(a))) {
     const yr = loadedYears.get(y)!;
-    timelineGroups.push({ year: y, rows: yr, subtitle: yearSubtitle(yr), subtotal: subtotalOf(yr) });
+    timelineGroups.push({
+      year: y,
+      rows: yr,
+      subtitle: yearSubtitle(yr),
+      subtotal: subtotalOf(yr),
+    });
   }
 
   // If yearFilter targets a lazy year not yet loaded, add a placeholder so the
   // user can see it and expand to trigger the fetch.
-  if (yearFilter !== "all" && olderYears.includes(yearFilter) && !loadedYears.has(yearFilter) && !existingYears.has(yearFilter)) {
+  if (
+    yearFilter !== "all" &&
+    olderYears.includes(yearFilter) &&
+    !loadedYears.has(yearFilter) &&
+    !existingYears.has(yearFilter)
+  ) {
     timelineGroups.push({ year: yearFilter });
   }
 
   const hasActiveTextFilter = statusFilter !== "all" || query.trim() !== "";
-  const sortedOlder = olderYears.filter((y) => !loadedYears.has(y)).sort((a, b) => Number(b) - Number(a));
+  const sortedOlder = olderYears
+    .filter((y) => !loadedYears.has(y))
+    .sort((a, b) => Number(b) - Number(a));
   const nextOlder = yearFilter === "all" && !hasActiveTextFilter ? sortedOlder[0] : null;
 
   return (
@@ -326,11 +340,15 @@ export function IncomeTimeline({
                     )}
                     <span className="text-[15px] font-extrabold">{g.year}</span>
                     {g.subtitle && (
-                      <span className="truncate text-[11px] font-semibold text-text-3">{g.subtitle}</span>
+                      <span className="truncate text-[11px] font-semibold text-text-3">
+                        {g.subtitle}
+                      </span>
                     )}
                   </div>
                   {g.subtotal && (
-                    <span className="tabular shrink-0 text-[13px] font-bold text-text-mute">{g.subtotal}</span>
+                    <span className="tabular shrink-0 text-[13px] font-bold text-text-mute">
+                      {g.subtotal}
+                    </span>
                   )}
                 </button>
 
