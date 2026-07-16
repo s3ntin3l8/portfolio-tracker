@@ -122,7 +122,7 @@ export async function refreshInstrumentMetadata(
   // — crypto is included here, and it must run even when no sector work is due).
   const toName = rows.filter((i) => {
     if (NAME_SKIP_ASSET_CLASSES.has(i.assetClass)) return false;
-    if (i.displayName) return false; // never overwrite an existing name
+    if (!opts.force && i.displayName) return false; // never overwrite an existing name (unless force)
     if (opts.force) return true;
     if (i.displayNameCheckedAt == null) return true;
     return new Date(i.displayNameCheckedAt) < staleCutoff;
@@ -239,11 +239,16 @@ export async function refreshInstrumentMetadata(
       // to match before trusting the name.
       let clean: string | undefined;
       if (inst.isin) {
-        const results = await service.search(inst.isin);
-        const named = results.find(
-          (r) => (r.longName ?? r.name) && (r.longName ?? r.name) !== inst.symbol,
-        );
-        clean = named?.longName ?? named?.name;
+        // Prefer a nicely-cased name from Yahoo autocomplete (resolveName is ungated,
+        // no exchange filter), fall back to OpenFIGI's ALL-CAPS name via search.
+        clean = (await service.resolveName(inst.isin)) ?? undefined;
+        if (!clean) {
+          const results = await service.search(inst.isin);
+          const named = results.find(
+            (r) => (r.longName ?? r.name) && (r.longName ?? r.name) !== inst.symbol,
+          );
+          clean = named?.longName ?? named?.name;
+        }
       } else {
         const results = await service.search(inst.symbol);
         const match = results.find(

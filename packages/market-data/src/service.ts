@@ -207,6 +207,28 @@ export class MarketDataService {
     return out;
   }
 
+  /**
+   * Resolve a clean human-readable name for a query (ISIN, ticker, or free text).
+   * Fans out across all providers that implement resolveName, returning the first
+   * non-null result (registration order). Unlike search(), this is a lightweight
+   * cosmetic lookup — no market/currency gating.
+   */
+  async resolveName(query: string): Promise<string | null> {
+    const q = query.trim();
+    if (!q) return null;
+    for (const provider of this.providers) {
+      if (!provider.resolveName) continue;
+      try {
+        this.opts.onCall?.(provider.name);
+        const name = await provider.resolveName(q);
+        if (name) return name;
+      } catch {
+        // A failing provider shouldn't block the fan-out.
+      }
+    }
+    return null;
+  }
+
   /** Quote several instruments, keyed by an id you supply (e.g. instrument id). */
   async getQuotes(refs: Array<{ id: string; ref: InstrumentRef }>): Promise<Record<string, Quote>> {
     const out: Record<string, Quote> = {};

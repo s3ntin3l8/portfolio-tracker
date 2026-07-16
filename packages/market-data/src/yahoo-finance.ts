@@ -135,7 +135,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const period1 = Math.floor(new Date(fromDate).getTime() / 1000);
     const period2 = Math.floor(Date.now() / 1000);
     const res = await this.doFetch(
-      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`,
+      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(
+        symbol,
+      )}?period1=${period1}&period2=${period2}&interval=1d`,
       { headers: this.defaultHeaders },
     );
     if (!res.ok) return null;
@@ -186,7 +188,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
     if (cached !== undefined) return cached;
 
     const res = await this.doFetch(
-      `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(ref.isin)}&quotesCount=10&newsCount=0`,
+      `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(
+        ref.isin,
+      )}&quotesCount=10&newsCount=0`,
       { headers: this.defaultHeaders },
     );
     let symbol: string | null = null;
@@ -269,12 +273,34 @@ export class YahooFinanceProvider implements MarketDataProvider {
     return out;
   }
 
+  async resolveName(query: string): Promise<string | null> {
+    const res = await this.doFetch(
+      `${this.baseUrl}/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=5&newsCount=0`,
+      { headers: this.defaultHeaders },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      quotes?: { shortname?: string; longname?: string; symbol?: string; quoteType?: string }[];
+    };
+    const quotes = data.quotes ?? [];
+    // Prefer an equity/ETF/mutual-fund result — Yahoo autocomplete can return
+    // options, futures, or currency pairs ahead of the instrument we want.
+    const preferred = quotes.find(
+      (q) => q.symbol && ["EQUITY", "ETF", "MUTUALFUND"].includes(q.quoteType ?? ""),
+    );
+    const fallback = quotes.find((q) => q.symbol);
+    const pick = preferred ?? fallback;
+    return pick?.longname ?? pick?.shortname ?? null;
+  }
+
   async getDividends(ref: InstrumentRef, fromDate?: string): Promise<DividendEvent[]> {
     // Yahoo chart events=dividends is keyless and works for most equities/ETFs.
     if (ref.assetClass === "gold" || ref.assetClass === "crypto") return [];
     const symbol = this.yahooSymbol(ref);
     const res = await this.doFetch(
-      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1mo&events=dividends`,
+      `${this.baseUrl}/v8/finance/chart/${encodeURIComponent(
+        symbol,
+      )}?range=2y&interval=1mo&events=dividends`,
       { headers: this.defaultHeaders },
     );
     if (!res.ok) return [];
@@ -433,7 +459,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
       if (!auth) return null;
 
       const buildUrl = (c: string) =>
-        `${this.baseUrl}/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${module}&crumb=${encodeURIComponent(c)}`;
+        `${this.baseUrl}/v10/finance/quoteSummary/${encodeURIComponent(
+          symbol,
+        )}?modules=${module}&crumb=${encodeURIComponent(c)}`;
 
       let res = await this.doFetch(buildUrl(auth.crumb), {
         headers: { ...this.defaultHeaders, Cookie: auth.cookies },
