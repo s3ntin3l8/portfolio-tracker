@@ -491,6 +491,13 @@
       "when": 1784620800000,
       "tag": "0069_benchmark_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1784183655878,
+      "tag": "0070_outgoing_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

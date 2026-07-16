@@ -41,8 +41,9 @@ vi.mock("next-intl/server", () => ({
 }));
 
 const { InvestingSection } = await import("../src/components/settings-sections/investing-section");
-const { DataConnectionsSection } =
-  await import("../src/components/settings-sections/data-connections-section");
+const { DataConnectionsSection } = await import(
+  "../src/components/settings-sections/data-connections-section"
+);
 
 describe("InvestingSection", () => {
   it("defaults to German / purchase_price chips active when no prefs row exists", async () => {
@@ -69,6 +70,7 @@ describe("InvestingSection", () => {
         costBasisMode: "total_paid",
         benchmarkSymbol: null,
         riskFreeRate: null,
+        retirementAge: null,
       },
     });
     renderWithIntl(element as React.ReactElement);

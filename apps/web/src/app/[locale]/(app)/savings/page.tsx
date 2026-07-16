@@ -8,7 +8,7 @@ import { SparplanSection } from "@/components/savings/sparplan-section";
 import { ReportHeader } from "@/components/report-header";
 import { CashOnHandCard } from "@/components/savings/cash-on-hand-card";
 import { EmptyState } from "@/components/empty-state";
-import { loadContributions, loadSparplan, loadHoldings } from "@/lib/server-api";
+import { loadContributions, loadSparplan, loadHoldings, loadPreferences } from "@/lib/server-api";
 import { formatMoney, formatPercent } from "@/lib/utils";
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
@@ -23,10 +23,11 @@ export default async function SavingsPage({ params }: { params: Promise<{ locale
 
   // Holder scope is now global (cookie-based via the portfolio switcher).
   // All three loaders are independent — fire them in parallel.
-  const [result, sparplanResult, holdingsResult] = await Promise.all([
+  const [result, sparplanResult, holdingsResult, preferences] = await Promise.all([
     loadContributions(),
     loadSparplan(),
     loadHoldings(),
+    loadPreferences(),
   ]);
 
   if (TIMING) {
@@ -167,6 +168,7 @@ export default async function SavingsPage({ params }: { params: Promise<{ locale
           currency={currency}
           birthYear={c.birthYear}
           portfolioType={c.portfolioType}
+          retirementAge={c.retirementAge ?? preferences?.retirementAge ?? null}
         />
       </div>
 

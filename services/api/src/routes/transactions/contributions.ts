@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
-import { accountHolders, portfolios, users } from "@portfolio/db";
+import { accountHolders, portfolios, users, userPreferences } from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { getFxRates, makeFxRateFn } from "../../services/fx.js";
 import {
@@ -38,6 +38,11 @@ export function registerContributionsRoutes(app: FastifyInstance) {
       if (!portfolio) {
         return reply.code(404).send({ error: "portfolio_not_found" });
       }
+      const [pref] = await app.db
+        .select({ retirementAge: userPreferences.retirementAge })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, id))
+        .limit(1);
       const { coreTxns, summary } = await loadValuation(
         app,
         portfolioId,
@@ -53,6 +58,7 @@ export function registerContributionsRoutes(app: FastifyInstance) {
         portfolio.birthYear,
         portfolio.portfolioType === "child" ? "child" : "standard",
         portfolio.cashCounted ? "inside" : "outside",
+        pref?.retirementAge ?? null,
       );
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /portfolios/:id/contributions", durationMs, {
@@ -80,6 +86,13 @@ export function registerContributionsRoutes(app: FastifyInstance) {
         .limit(1);
       const display = u?.displayCurrency ?? "IDR";
 
+      const [prefs] = await app.db
+        .select({ retirementAge: userPreferences.retirementAge })
+        .from(userPreferences)
+        .where(eq(userPreferences.userId, id))
+        .limit(1);
+      const retirementAge = prefs?.retirementAge ?? null;
+
       let holderBirthYear: number | null = null;
       let holderPortfolioType: "standard" | "child" = "standard";
       if (holderId != null) {
@@ -91,6 +104,14 @@ export function registerContributionsRoutes(app: FastifyInstance) {
         if (!holder) return reply.code(404).send({ error: "holder_not_found" });
         holderBirthYear = holder.birthYear;
         holderPortfolioType = holder.type === "child" ? "child" : "standard";
+      } else {
+        // Default to the "self" holder's birth year for the all-portfolios view.
+        const [selfHolder] = await app.db
+          .select({ birthYear: accountHolders.birthYear })
+          .from(accountHolders)
+          .where(and(eq(accountHolders.userId, id), eq(accountHolders.type, "self")))
+          .limit(1);
+        holderBirthYear = selfHolder?.birthYear ?? null;
       }
 
       const pfs = await app.db
@@ -148,6 +169,7 @@ export function registerContributionsRoutes(app: FastifyInstance) {
             flows,
             holderBirthYear,
             holderPortfolioType,
+            { retirementAge },
           );
         },
       );

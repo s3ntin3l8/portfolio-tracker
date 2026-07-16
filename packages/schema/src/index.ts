@@ -649,6 +649,7 @@ export const userPreferencesSchema = z.object({
   taxRegime: taxRegimeSchema.optional(),
   benchmarkSymbol: z.string().nullable().optional(),
   riskFreeRate: z.number().min(0).max(1).nullable().optional(),
+  retirementAge: z.number().int().min(50).max(80).nullable().optional(),
 });
 
 // --- Document inbox (account-level documents not tied to a single transaction) ------

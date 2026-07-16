@@ -1084,6 +1084,9 @@ export const userPreferences = pgTable("user_preferences", {
   // Risk-free rate for Sharpe/Sortino (decimal fraction, e.g. 0.03 for 3%).
   // Null = auto-detect from display currency's central bank rate.
   riskFreeRate: numeric("risk_free_rate"),
+  // User's target retirement age for the "to retirement" forecast target.
+  // Null = no retirement target (forecast defaults to manual horizon slider).
+  retirementAge: integer("retirement_age"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
