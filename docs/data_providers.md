@@ -142,6 +142,26 @@ and external integrations.
 - CLI: `npm run scrape` (in `services/api`, loads `../../.env`), or in a container
   `node dist/db/scrape.js` with `DATABASE_URL` set.
 
+## Profile data (sector/country lookthrough)
+
+Separate from `getQuote()`, a provider can optionally implement `getProfile()`
+(`MarketDataProvider.getProfile?`, `packages/market-data/src/types.ts`) to supply
+allocation-lookthrough data — sector weights, country weights, industry — used by
+`packages/core/src/allocation.ts`'s ETF/equity sector and country decomposition. This is
+a side-channel from pricing: a provider can serve profiles without ever pricing anything,
+and the merge across providers (`packages/market-data/src/service.ts`) is independent of
+the quote priority chain above.
+
+- **EODHD** (`eodhd.ts`) — equities: `Sector` from the `fundamentals` `General` filter.
+  ETFs: proportional `Sector_Weights` from the full fundamentals payload.
+- **Yahoo Finance** (`yahoo-finance.ts`) — sector/industry fallback when EODHD has no
+  fundamentals coverage for a ticker.
+- **JustETF** (`justetf.ts`, registry id `"justetf"`) — country-allocation weights for
+  European UCITS ETFs, scraped from JustETF's AJAX endpoint keyed by ISIN. **Profile-only,
+  like OpenFIGI**: `supports()` is only used to gate the ISIN-lookup path, `getQuote()`
+  always returns `null`, and it never appears in the pricing chain above. Rate-limited to
+  1 request/second client-side.
+
 ## Admin overrides
 
 The `provider_settings` table (`packages/db/src/schema.ts`) overlays the registry defaults

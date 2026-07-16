@@ -2,10 +2,18 @@
 
 # Pocket - self-hosted portfolio tracker
 
-An Indonesian-first personal portfolio tracker. Import transactions from
-**screenshots** (LLM vision) and **CSV**, then track **equities, gold, bonds, mutual
-funds (reksa dana), and cash** with live IDX prices and a real-time gold ticker. Built to
-expand to **Trade Republic / international** holdings.
+A personal portfolio tracker (English/Indonesian UI) that imports transactions from
+**screenshots** (LLM vision), **CSV/PDF** (broker-specific parsers for DKB, Interactive
+Brokers, Trade Republic, Coinbase), and direct **broker sync** — Trade Republic
+(push-approval) and Interactive Brokers (Flex token-pull) — then tracks **equities,
+gold, bonds, mutual funds (reksa dana), and cash** with live IDX prices and a real-time
+gold ticker.
+
+Beyond holdings and P&L, it covers a full portfolio-management workflow: contribution
+vs. performance tracking (XIRR/TWR), a round-trip **trade log**, **allocation** breakdown
+with drift/rebalancing targets, German and Indonesian **tax** reporting (Freistellungsauftrag,
+Indonesian final-tax regime), corporate actions and fund mergers, savings/contribution
+overlays, and Cmd-K search across instruments and transactions.
 
 Transactions are the single source of truth — holdings, P&L, cash balance, XIRR and net
 worth are all derived, never stored.
@@ -40,15 +48,15 @@ bond, a mutual fund, cash) — regenerate anytime the UI changes with `npm run s
 
 A npm-workspaces + Turborepo monorepo (Node ≥26, ESM, TypeScript).
 
-| Workspace              | What it is                                                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `services/api`         | **Fastify 5 + Drizzle (Postgres)** — the only thing that touches the DB. Auth, market-data jobs, screenshot parsing, REST API. |
-| `apps/web`             | **Next.js (App Router) PWA** — Tailwind + shadcn/ui, next-intl (EN/ID). Talks to the API over HTTP.                            |
-| `packages/schema`      | Zod schemas + shared types.                                                                                                    |
-| `packages/core`        | Derivations: holdings, cost basis, XIRR, corporate actions, FX.                                                                |
-| `packages/db`          | Drizzle schema + migrations.                                                                                                   |
-| `packages/market-data` | Provider abstraction for live prices (see [docs/data_providers.md](docs/data_providers.md)).                                   |
-| `packages/api-client`  | Typed HTTP client for the PWA.                                                                                                 |
+| Workspace              | What it is                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `services/api`         | **Fastify 5 + Drizzle (Postgres)** — the only thing that touches the DB. Auth, market-data jobs, screenshot/CSV/PDF import parsing, Trade Republic/IBKR broker sync, REST API. |
+| `apps/web`             | **Next.js (App Router) PWA** — Tailwind + shadcn/ui, next-intl (EN/ID). Talks to the API over HTTP.                                                                            |
+| `packages/schema`      | Zod schemas + shared types.                                                                                                                                                    |
+| `packages/core`        | Derivations: holdings, cost basis, XIRR/TWR, contributions, tax (DE/ID), trade log, allocation/rebalancing, forecasting, corporate actions, FX.                                |
+| `packages/db`          | Drizzle schema + migrations.                                                                                                                                                   |
+| `packages/market-data` | Provider abstraction for live prices (see [docs/data_providers.md](docs/data_providers.md)).                                                                                   |
+| `packages/api-client`  | Typed HTTP client for the PWA.                                                                                                                                                 |
 
 **Auth** is Authentik OIDC: the API verifies Bearer JWTs and scopes every query to the
 authenticated user; the web app logs in via Auth.js v5. **Infra** is Supabase Cloud
@@ -115,6 +123,11 @@ All config is read from `app.config` (typed in `services/api/src/plugins/env.ts`
   OpenRouter / Ollama).
 - **Market data** — provider keys (`TWELVEDATA_API_KEY`, `GOLDAPI_KEY`, `EODHD_API_KEY`,
   …) and source URLs; see [docs/data_providers.md](docs/data_providers.md).
+- **Broker sync** — `DB_ENCRYPTION_KEY` (required — encrypts Trade Republic
+  phone/PIN/session at rest) and `PYTR_PYTHON_BIN` for Trade Republic (see
+  [docs/trade_republic.md](docs/trade_republic.md)); Interactive Brokers needs no server
+  config, just a Flex token pasted per-portfolio (see
+  [docs/interactive_brokers.md](docs/interactive_brokers.md)).
 
 ## Conventions
 

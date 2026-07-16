@@ -94,6 +94,18 @@ React component` from `ThemeProvider`. This is an upstream bug in `next-themes`
   at carried cost basis — no P&L on `transfer_out` (not a disposal). This replaces the legacy
   `bonus`+`kind:"transfer_in"` sub-type pattern (those rows should be migrated). Inside-
   boundary: `transfer_in` is an inflow at carried cost; outside-boundary: at avg cost.
+- **Freistellungsauftrag (FSA) has two levels, don't conflate them.** The legal
+  per-person cap lives on `accountHolders.taxAllowanceAnnual` (Sparerpauschbetrag, default
+  €1,000/€2,000 jointly assessed). The actual FSA is _allocated_ per depot via
+  `portfolios.taxAllowanceAnnual` — same-holder portfolios should sum to ≤ the holder's
+  cap, but this is only checked and surfaced as an over-allocation warning (`tax.ts`), not
+  a hard DB constraint. Feeds `trade-log.ts`'s `vorabByYear`/`vorabCredit` and `tax.ts`'s
+  Teilfreistellung netting.
+- **`userPreferences` holds two global tax switches**: `taxRegime` (default `"DE"`, the
+  other value routes to the Indonesian final-tax module) and `costBasisMode` (default
+  `"purchase_price"`). Changing either changes which `packages/core` tax module and
+  cost-basis convention every portfolio's numbers are computed with — check both before
+  assuming DE-style realization-based tax logic applies.
 - **Imports never auto-commit.** Screenshot/CSV parses become _draft_ records that the
   user confirms before a transaction is written. Dedup runs at three levels: **file-level**
   (same file re-upload → `contentHash`), **within-source transaction-level** (the
@@ -167,5 +179,12 @@ Caller jobs invoking reusable workflows with write scopes **must declare a
 `release-please`, `cleanup-ghcr` are also wired.
 
 `codeql` and `dependency-review` are gated on `github.event.repository.private == false`
-— they need GitHub Advanced Security on a private repo, so they **skip while private and
-auto-activate once the repo is made public** (both features are free on public repos).
+— they need GitHub Advanced Security, which is free on public repos but not private ones.
+The repo **is public** (confirmed 2026-07-16), so both are live on every PR, not
+conditionally skipped.
+
+Two more workflows are mention-triggered, not push/PR-triggered: **`claude.yml`** runs
+Claude Code itself against `@claude`-mentioned issues/PR comments/reviews; **`hermes.yml`**
+runs an on-demand PR review bot on `@s3ntin3l8-hermes` comment mentions (guarded against
+re-triggering itself via `github.actor`, since a submitted review's body also matches the
+mention substring — see the in-file comment on the Claude→Hermes cascade, `.github#527`).
