@@ -45,6 +45,7 @@ export function ImportFlow(props: UseImportFlowProps = {}) {
     submitting,
     reportMeta,
     setReportMeta,
+    setReportFile,
     reportPortfolioId,
     setReportPortfolioId,
     savingReport,
