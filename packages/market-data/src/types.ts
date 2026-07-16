@@ -141,6 +141,10 @@ export interface InstrumentFundamentals {
   exDividendDate?: string | null;
   /** Trailing annual revenue vs. earnings, oldest first. */
   financials?: Array<{ year: number; revenue: string; earnings: string }> | null;
+  /** Currency of `financials[]` figures — often the issuer's reporting currency, which can
+   *  differ from `currency` (e.g. a GBp-quoted line whose income statement is USD- or
+   *  EUR-denominated). Falls back to `currency` when the provider doesn't report one. */
+  financialCurrency?: string | null;
   /** Link to the instrument's page on the provider's site (e.g. Yahoo Finance), using
    *  the exact symbol the provider resolved — avoids the caller guessing exchange suffixes. */
   externalUrl?: string | null;

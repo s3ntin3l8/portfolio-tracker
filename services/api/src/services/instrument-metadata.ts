@@ -34,7 +34,7 @@ const FUNDAMENTALS_STALE_HOURS = 24;
 
 /**
  * Predicate: is a cached fundamentals snapshot stale (or missing) and due for a refetch?
- * True when the asset class doesn't support fundamentals is NOT checked here — callers
+ * Note: whether the asset class supports fundamentals at all is NOT checked here — callers
  * should gate on {@link FUNDAMENTALS_ASSET_CLASSES} first.
  */
 export function isFundamentalsStale(inst: {

@@ -198,7 +198,7 @@ export function InstrumentFundamentalsCard({ instrumentId }: { instrumentId: str
                 <div>
                   <p className="text-sm font-semibold">{t("nextEarningsLabel")}</p>
                   <p className="tabular text-xs text-muted-foreground">
-                    {new Date(data.earningsDate).toLocaleDateString(locale, {
+                    {new Date(`${data.earningsDate}T00:00:00`).toLocaleDateString(locale, {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
@@ -215,7 +215,7 @@ export function InstrumentFundamentalsCard({ instrumentId }: { instrumentId: str
                 <div>
                   <p className="text-sm font-semibold">{t("exDividendLabel")}</p>
                   <p className="tabular text-xs text-muted-foreground">
-                    {new Date(data.exDividendDate).toLocaleDateString(locale, {
+                    {new Date(`${data.exDividendDate}T00:00:00`).toLocaleDateString(locale, {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
@@ -280,7 +280,10 @@ export function InstrumentFundamentalsCard({ instrumentId }: { instrumentId: str
               <p className="text-sm font-semibold">{t("revenueVsEarningsLabel")}</p>
               <RevenueEarningsChartLegend />
             </div>
-            <RevenueEarningsChart data={financials} currency={data.currency} />
+            <RevenueEarningsChart
+              data={financials}
+              currency={data.financialCurrency ?? data.currency}
+            />
           </div>
         )}
 

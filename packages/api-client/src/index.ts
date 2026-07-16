@@ -650,6 +650,9 @@ export interface InstrumentFundamentals {
   earningsDate?: string | null; // YYYY-MM-DD
   exDividendDate?: string | null; // YYYY-MM-DD
   financials?: Array<{ year: number; revenue: string; earnings: string }> | null;
+  /** Currency of `financials[]` figures — can differ from `currency` (e.g. a GBp-quoted
+   *  line whose income statement is reported in USD or EUR). Falls back to `currency`. */
+  financialCurrency?: string | null;
   /** Link to the instrument's page on the provider's site (e.g. Yahoo Finance). */
   externalUrl?: string | null;
 }

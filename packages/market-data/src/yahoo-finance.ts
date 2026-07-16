@@ -24,8 +24,8 @@ const FUNDAMENTALS_MODULES =
   "price,summaryDetail,defaultKeyStatistics,financialData,calendarEvents,earnings,recommendationTrend,fundProfile";
 
 /**
- * Fetches hang the fundamentals card indefinitely without a timeout — Yahoo's
- * unofficial endpoints have no SLA and getFundamentals is called from a live request path.
+ * Without a timeout, a hung fetch could stall the fundamentals card indefinitely — Yahoo's
+ * unofficial endpoints have no SLA and getFundamentals runs on a live request path.
  */
 const FUNDAMENTALS_TIMEOUT_MS = 8000;
 
@@ -543,15 +543,24 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const result = typed?.quoteSummary?.result?.[0];
     if (!result) return null;
 
-    // Money fields come back in major-currency units; apply the same pence/agorot divisor
-    // used for quotes/history so a GBp-quoted line reports GBP, not pence (resolveCurrency).
+    // Yahoo's per-share/price-scale fields (previousClose, day/52-week range, target price)
+    // come back in the same minor unit as the live quote, so a GBp/agorot-quoted line needs
+    // the same divisor `getQuote`/`getHistory` apply (resolveCurrency) to report GBP, not
+    // pence. Aggregate/valuation fields (marketCap, trailingEps, dividendRate) and the
+    // income-statement figures (financials[].revenue/earnings) are already in major-currency
+    // units on Yahoo's side — dividing those a second time is wrong. Verified empirically
+    // against live GBp lines: price/eps ≈ trailingPE only when eps is left undivided.
     const { currency, divisor } = this.resolveCurrency(
       ref,
       typeof result.price?.currency === "string" ? result.price.currency : undefined,
     );
-    const money = (v: unknown): string | null => {
+    const price = (v: unknown): string | null => {
       const n = unwrapNumber(v);
       return n === null ? null : String(n / divisor);
+    };
+    const major = (v: unknown): string | null => {
+      const n = unwrapNumber(v);
+      return n === null ? null : String(n);
     };
 
     const trend = result.recommendationTrend?.trend?.[0];
@@ -566,8 +575,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
           }
         : null;
 
+    const financialCurrency =
+      typeof result.financialData?.financialCurrency === "string"
+        ? result.financialData.financialCurrency
+        : currency;
+
     const financials = (result.earnings?.financialsChart?.yearly ?? [])
-      .map((y) => ({ year: y.date, revenue: money(y.revenue), earnings: money(y.earnings) }))
+      .map((y) => ({ year: y.date, revenue: major(y.revenue), earnings: major(y.earnings) }))
       .filter(
         (f): f is { year: number; revenue: string; earnings: string } =>
           f.revenue !== null && f.earnings !== null,
@@ -576,25 +590,25 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const fundamentals: InstrumentFundamentals = {
       currency,
       asOf: new Date().toISOString(),
-      marketCap: money(result.price?.marketCap),
+      marketCap: major(result.price?.marketCap),
       trailingPE: unwrapNumber(result.summaryDetail?.trailingPE),
       forwardPE: unwrapNumber(result.summaryDetail?.forwardPE),
-      trailingEps: money(result.defaultKeyStatistics?.trailingEps),
+      trailingEps: major(result.defaultKeyStatistics?.trailingEps),
       dividendYield: unwrapNumber(result.summaryDetail?.dividendYield),
-      dividendRate: money(result.summaryDetail?.dividendRate),
+      dividendRate: major(result.summaryDetail?.dividendRate),
       beta:
         unwrapNumber(result.summaryDetail?.beta) ?? unwrapNumber(result.defaultKeyStatistics?.beta),
-      fiftyTwoWeekLow: money(result.summaryDetail?.fiftyTwoWeekLow),
-      fiftyTwoWeekHigh: money(result.summaryDetail?.fiftyTwoWeekHigh),
-      previousClose: money(result.summaryDetail?.previousClose),
-      dayLow: money(result.summaryDetail?.dayLow),
-      dayHigh: money(result.summaryDetail?.dayHigh),
+      fiftyTwoWeekLow: price(result.summaryDetail?.fiftyTwoWeekLow),
+      fiftyTwoWeekHigh: price(result.summaryDetail?.fiftyTwoWeekHigh),
+      previousClose: price(result.summaryDetail?.previousClose),
+      dayLow: price(result.summaryDetail?.dayLow),
+      dayHigh: price(result.summaryDetail?.dayHigh),
       volume: unwrapNumber(result.summaryDetail?.volume),
       averageVolume: unwrapNumber(result.summaryDetail?.averageVolume),
       expenseRatio: unwrapNumber(
         result.fundProfile?.feesExpensesInvestment?.annualReportExpenseRatio,
       ),
-      targetMeanPrice: money(result.financialData?.targetMeanPrice),
+      targetMeanPrice: price(result.financialData?.targetMeanPrice),
       recommendationKey:
         typeof result.financialData?.recommendationKey === "string"
           ? result.financialData.recommendationKey
@@ -604,13 +618,16 @@ export class YahooFinanceProvider implements MarketDataProvider {
       earningsDate: unixToIsoDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
       exDividendDate: unixToIsoDate(result.calendarEvents?.exDividendDate),
       financials: financials.length > 0 ? financials : null,
+      financialCurrency,
       externalUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`,
     };
 
     // Every field null/empty → treat as "no data" (mirrors getProfile's empty-guard).
-    // currency/asOf/externalUrl are always set given a result, so they don't count.
+    // currency/asOf/externalUrl/financialCurrency are always set given a result, so they
+    // don't count (financialCurrency falls back to currency when Yahoo omits it).
     const hasData = Object.entries(fundamentals).some(
-      ([k, v]) => !["currency", "asOf", "externalUrl"].includes(k) && v != null,
+      ([k, v]) =>
+        !["currency", "asOf", "externalUrl", "financialCurrency"].includes(k) && v != null,
     );
     return hasData ? fundamentals : null;
   }

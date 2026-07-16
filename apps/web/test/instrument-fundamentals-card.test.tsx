@@ -85,6 +85,28 @@ describe("InstrumentFundamentalsCard", () => {
     expect(link).toHaveAttribute("href", "https://finance.yahoo.com/quote/AAPL");
   });
 
+  it("renders earningsDate/exDividendDate as the API's calendar day regardless of local timezone", async () => {
+    // earningsDate/exDividendDate are YYYY-MM-DD strings; parsing them with a bare
+    // `new Date(str)` reads as UTC midnight, which rolls back to the previous calendar day
+    // once formatted in a timezone behind UTC (e.g. US Eastern) — verified this reproduces
+    // ("2026-07-30" → "Jul 29, 2026") before the `T00:00:00` local-parse fix.
+    const originalTz = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      getInstrumentFundamentals.mockResolvedValue(FULL_EQUITY);
+      renderCard();
+
+      await waitFor(() =>
+        expect(screen.getByText(messages.Instrument.fundamentalsTitle)).toBeInTheDocument(),
+      );
+
+      expect(screen.getByText("Jul 30, 2026")).toBeInTheDocument(); // earningsDate
+      expect(screen.getByText(/May 11, 2026/)).toBeInTheDocument(); // exDividendDate
+    } finally {
+      process.env.TZ = originalTz;
+    }
+  });
+
   it("renders only the fields present for a reduced ETF response (no PE/EPS/analyst)", async () => {
     getInstrumentFundamentals.mockResolvedValue({
       currency: "EUR",

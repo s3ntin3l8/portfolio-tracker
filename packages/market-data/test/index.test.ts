@@ -2766,6 +2766,72 @@ describe("YahooFinanceProvider getFundamentals", () => {
     ]);
   });
 
+  // Trimmed from a live probe against a real GBp-quoted equity (SHEL.L). GBp/agorot lines
+  // are the only case where price-scale and major-currency fields actually diverge (divisor
+  // 100) — verified against Yahoo's own ratio fields: price/eps ≈ trailingPE and
+  // dividendRate/price ≈ dividendYield only hold when eps/dividendRate are left undivided.
+  it("splits price-scale vs. major-currency fields for a GBp-quoted equity", async () => {
+    const shel: InstrumentRef = {
+      symbol: "SHEL.L",
+      market: "LSE",
+      assetClass: "equity",
+      currency: "GBP",
+    };
+    const body = {
+      quoteSummary: {
+        result: [
+          {
+            price: {
+              currency: "GBp",
+              marketCap: rawNum(173470334976),
+              regularMarketPrice: rawNum(3136.5),
+            },
+            summaryDetail: {
+              trailingPE: rawNum(12.907407),
+              dividendYield: rawNum(0.0371),
+              dividendRate: rawNum(1.17),
+              fiftyTwoWeekLow: rawNum(2400),
+              fiftyTwoWeekHigh: rawNum(3200),
+              previousClose: rawNum(3129.5),
+            },
+            defaultKeyStatistics: { trailingEps: rawNum(2.43) },
+            financialData: {
+              targetMeanPrice: rawNum(3696.139),
+              financialCurrency: "USD",
+            },
+            earnings: {
+              financialsChart: {
+                yearly: [
+                  { date: 2025, revenue: rawNum(266886000000), earnings: rawNum(18529000000) },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    };
+    const p = new YahooFinanceProvider({ fetch: yahooProfileFetch(body) });
+    const f = await p.getFundamentals(shel);
+    expect(f).toMatchObject({
+      currency: "GBP",
+      financialCurrency: "USD",
+      // Aggregate / per-share fields: already major-currency (GBP) on Yahoo's side — must
+      // NOT be divided by the pence divisor.
+      marketCap: "173470334976",
+      trailingEps: "2.43",
+      dividendRate: "1.17",
+      // Price-scale fields: genuinely pence-quoted — divisor still applies.
+      fiftyTwoWeekLow: "24",
+      fiftyTwoWeekHigh: "32",
+      previousClose: "31.295",
+      targetMeanPrice: "36.96139",
+    });
+    // Income-statement figures: major-currency (USD here, not GBP) — not divided.
+    expect(f?.financials).toEqual([
+      { year: 2025, revenue: "266886000000", earnings: "18529000000" },
+    ]);
+  });
+
   it("returns a reduced set for an ETF — no PE/EPS/analyst fields", async () => {
     const etf: InstrumentRef = {
       symbol: "EUNL",

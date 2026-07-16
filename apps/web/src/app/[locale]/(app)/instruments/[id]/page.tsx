@@ -291,11 +291,14 @@ export default async function InstrumentPage({
               ? {
                   label: t("bondTermsLabel"),
                   couponRate: formatPercent(Number(instrument.couponRate), locale),
-                  maturityDate: new Date(instrument.maturityDate).toLocaleDateString(locale, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  }),
+                  maturityDate: new Date(`${instrument.maturityDate}T00:00:00`).toLocaleDateString(
+                    locale,
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    },
+                  ),
                 }
               : null
           }
