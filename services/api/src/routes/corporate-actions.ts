@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { toDateKey } from "@portfolio/core";
 import { corporateActions } from "@portfolio/db";
+import { createAndReturn, deleteOwnedOr404 } from "./helpers.js";
 import { corporateActionInputSchema } from "@portfolio/schema";
 
 export async function corporateActionsRoute(app: FastifyInstance) {
@@ -10,18 +11,13 @@ export async function corporateActionsRoute(app: FastifyInstance) {
   // split/ratio corrupts every holder's quantities and cost basis).
   app.post("/corporate-actions", { preHandler: app.requireAdmin }, async (request, reply) => {
     const input = corporateActionInputSchema.parse(request.body);
-    const [created] = await app.db
-      .insert(corporateActions)
-      .values({
-        instrumentId: input.instrumentId,
-        type: input.type,
-        ratio: input.ratio,
-        exDate: toDateKey(input.exDate),
-        terms: input.terms ?? null,
-      })
-      .returning();
-    reply.code(201);
-    return created;
+    return createAndReturn(app.db, reply, corporateActions, {
+      instrumentId: input.instrumentId,
+      type: input.type,
+      ratio: input.ratio,
+      exDate: toDateKey(input.exDate),
+      terms: input.terms ?? null,
+    });
   });
 
   // Update a corporate action (type / ratio / ex-date / terms). Reference data —
@@ -59,16 +55,13 @@ export async function corporateActionsRoute(app: FastifyInstance) {
     "/corporate-actions/:id",
     { preHandler: app.requireAdmin },
     async (request, reply) => {
-      const [deleted] = await app.db
-        .delete(corporateActions)
-        .where(eq(corporateActions.id, request.params.id))
-        .returning();
-      if (!deleted) {
-        reply.code(404);
-        return { error: "not found" };
-      }
-      reply.code(204);
-      return null;
+      return deleteOwnedOr404(
+        reply,
+        app.db,
+        corporateActions,
+        eq(corporateActions.id, request.params.id),
+        "not found",
+      );
     },
   );
 
