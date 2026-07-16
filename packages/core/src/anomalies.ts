@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
 import { D, ZERO } from "./decimal.js";
+import { isTradeType, isAcquisitionType } from "./categorization.js";
 import type { CoreTransaction, CorporateAction } from "./types.js";
 import { cashFlow } from "./cash.js";
 import { toDateKey as dayKey } from "./date-utils.js";
@@ -134,7 +135,7 @@ export function detectAnomalies(
           transactionId: txId,
           instrumentId,
         });
-      } else if ((type === "buy" || type === "savings_plan" || type === "sell") && p.isZero()) {
+      } else if (isTradeType(type) && p.isZero()) {
         anomalies.push({
           code: "zero_price",
           severity: "warning",
@@ -178,12 +179,7 @@ export function detectAnomalies(
         }
         // Mirror the Decimal.min clamp so the running qty stays consistent.
         qty = qty.sub(Decimal.min(q, qty));
-      } else if (
-        type === "buy" ||
-        type === "savings_plan" ||
-        type === "transfer_in" ||
-        type === "bonus"
-      ) {
+      } else if (isAcquisitionType(type) || type === "transfer_in" || type === "bonus") {
         // `bonus` free shares are real holdings (mirror holdings.ts) — counting them keeps
         // the running qty correct so a later sell of granted shares isn't false-flagged as
         // an oversell. A zero-price bonus is expected, so it's left out of the zero_price

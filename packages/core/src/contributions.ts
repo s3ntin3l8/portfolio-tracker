@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
 import { D } from "./decimal.js";
+import { isAcquisitionType } from "./categorization.js";
 import { convert, type FxRateFn } from "./networth.js";
 import { toDateKey } from "./date-utils.js";
 import type { CoreTransaction } from "./types.js";
@@ -105,7 +106,7 @@ function isExternalAcquisition(tx: CoreTransaction): boolean {
   // not the user's own capital — never a contribution.
   if (tx.status === "cash_neutral") return false;
   if (tx.kind && EXCLUDED_ACQUISITION_KINDS.has(tx.kind)) return false;
-  if (tx.type === "buy" || tx.type === "savings_plan") return true;
+  if (isAcquisitionType(tx.type)) return true;
   // First-class transfer_in: shares owned elsewhere arrive at carried cost.
   // They represent capital the user already deployed — count as contributed.
   if (tx.type === "transfer_in") return true;

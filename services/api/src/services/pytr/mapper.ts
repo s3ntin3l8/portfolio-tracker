@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isTradeType } from "@portfolio/core";
 import type { ImportIssue, ParsedAction, ParsedTransaction } from "@portfolio/schema";
 import { formatDecimal } from "../parsers/numeric.js";
 import { collapsePerkFundedAcquisitions } from "../parsers/perk-pairing.js";
@@ -588,7 +589,7 @@ export function mapTrEventToDraft(raw: unknown): MapResult {
   // reported executedPrice (see the sell branch) — every other action keeps using ev.tax as-is.
   let sellTaxOverride: number | null = null;
 
-  if (action === "buy" || action === "sell" || action === "savings_plan") {
+  if (isTradeType(action)) {
     const shares = Math.abs(ev.shares ?? 0);
     if (shares === 0) {
       return skip(`${ev.eventType} without a share count`, "attention", ev);

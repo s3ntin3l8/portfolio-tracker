@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import {
   cashBalances,
   cashFlow,
+  isAcquisitionType,
   isIncomeType,
   type CoreTransaction,
   type ReconciliationGap,
@@ -185,7 +186,7 @@ export function reconcilePositions(
     const prev = derived.get(isin) ?? new Decimal(0);
     const qty = new Decimal(d.quantity);
     const action = d.action as string;
-    if (action === "buy" || action === "savings_plan" || action === "transfer_in") {
+    if (isAcquisitionType(action) || action === "transfer_in") {
       derived.set(isin, prev.add(qty));
     } else if (action === "sell" || action === "transfer_out") {
       derived.set(isin, prev.sub(qty));

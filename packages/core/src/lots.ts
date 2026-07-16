@@ -12,6 +12,7 @@
  */
 import { Decimal } from "decimal.js";
 import { D } from "./decimal.js";
+import { isAcquisitionType } from "./categorization.js";
 import { toDateKey } from "./date-utils.js";
 import type { CoreTransaction, CorporateAction } from "./types.js";
 
@@ -86,12 +87,7 @@ export function openLots(
       const p = D(tx.price);
       const f = D(tx.fees);
 
-      if (
-        tx.type === "buy" ||
-        tx.type === "savings_plan" ||
-        tx.type === "transfer_in" ||
-        tx.type === "bonus"
-      ) {
+      if (isAcquisitionType(tx.type) || tx.type === "transfer_in" || tx.type === "bonus") {
         if (q.lte(0)) continue;
         const cost = q.mul(p).add(f);
         lots.push({ acqDate: tx.executedAt, qty: q, unitCost: cost.div(q) });

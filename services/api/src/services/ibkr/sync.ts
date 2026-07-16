@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import type { FastifyBaseLogger } from "fastify";
+import { isAcquisitionType } from "@portfolio/core";
 import {
   ibkrConnections,
   portfolios,
@@ -55,7 +56,7 @@ function reconcileCash(
       derived.set(d.currency, prev.add(amt));
     } else if (action === "withdrawal") {
       derived.set(d.currency, prev.sub(amt));
-    } else if (action === "buy" || action === "savings_plan") {
+    } else if (isAcquisitionType(action)) {
       const total = amt.mul(new Decimal(d.quantity ?? "0")).add(new Decimal(d.fees ?? "0"));
       derived.set(d.currency, prev.sub(total));
     } else if (action === "sell") {

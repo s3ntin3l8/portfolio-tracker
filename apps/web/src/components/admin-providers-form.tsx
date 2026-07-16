@@ -97,11 +97,13 @@ function CredentialCell({
       },
       [apiKey, provider.id, onSet],
     ),
+    { fallbackMessage: t("credentialError") },
   );
   const [clearState, handleClear] = useApiCall(
     useCallback(async () => {
       await onClear(provider.id);
     }, [provider.id, onClear]),
+    { fallbackMessage: t("credentialError") },
   );
 
   const busy = setState.busy || clearState.busy;

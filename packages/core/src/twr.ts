@@ -15,6 +15,7 @@
  */
 import type { Decimal } from "decimal.js";
 import { D, ZERO } from "./decimal.js";
+import { isTradeType } from "./categorization.js";
 import { computeHoldings, marketValue } from "./holdings.js";
 import { cashFlow } from "./cash.js";
 import { convert, type FxRateFn } from "./networth.js";
@@ -152,7 +153,7 @@ export function buildDailyValueFlows(input: BuildDailyValueFlowsInput): DailyVal
     const dayTxns = flowsByDate.get(date) ?? [];
     for (const tx of dayTxns) {
       const { type } = tx;
-      if (type === "buy" || type === "savings_plan" || type === "sell") {
+      if (isTradeType(type)) {
         // effectiveFlow -= cashFlow(tx)
         // buy: cashFlow < 0 → -cashFlow > 0 (cost added to flow)
         // sell: cashFlow > 0 → -cashFlow < 0 (proceeds subtracted from flow)

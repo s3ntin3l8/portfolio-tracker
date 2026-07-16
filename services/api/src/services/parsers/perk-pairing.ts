@@ -1,3 +1,4 @@
+import { isAcquisitionType } from "@portfolio/core";
 import type { ParsedTransaction } from "@portfolio/schema";
 
 /**
@@ -31,7 +32,7 @@ function isPerkCredit(t: ParsedTransaction): boolean {
 
 /** A share acquisition a perk could fund. */
 function isFundableBuy(t: ParsedTransaction): boolean {
-  return (t.action === "buy" || t.action === "savings_plan") && Number(t.quantity) > 0;
+  return isAcquisitionType(t.action) && Number(t.quantity) > 0;
 }
 
 /**

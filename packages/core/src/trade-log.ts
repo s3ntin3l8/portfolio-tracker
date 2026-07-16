@@ -24,6 +24,7 @@
  */
 import { Decimal } from "decimal.js";
 import { D, ZERO } from "./decimal.js";
+import { isTradeType, isAcquisitionType } from "./categorization.js";
 import { cashFlow } from "./cash.js";
 import { financingByInstrument } from "./loans.js";
 import { convert, type FxRateFn } from "./networth.js";
@@ -234,9 +235,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
     //                realized P&L, and leg amounts. Often equal to instrumentCcy, but
     //                diverges for cross-currency holdings (e.g. US stock bought in EUR).
     const firstPriceTx = events.find(
-      (e): e is Extract<Event, { kind: "tx" }> =>
-        e.kind === "tx" &&
-        (e.tx.type === "buy" || e.tx.type === "savings_plan" || e.tx.type === "sell"),
+      (e): e is Extract<Event, { kind: "tx" }> => e.kind === "tx" && isTradeType(e.tx.type),
     );
     const instrumentCcy =
       input.prices[instrumentId]?.currency ?? firstPriceTx?.tx.currency ?? display;
@@ -401,12 +400,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       const p = D(tx.price);
       const f = D(tx.fees);
 
-      if (
-        tx.type === "buy" ||
-        tx.type === "savings_plan" ||
-        tx.type === "transfer_in" ||
-        tx.type === "bonus"
-      ) {
+      if (isAcquisitionType(tx.type) || tx.type === "transfer_in" || tx.type === "bonus") {
         // `bonus` = free-share receipt (TR perk / FREE_RECEIPT grant): opens/extends an
         // episode at its recorded basis (price 0 → zero-cost lot, full gain on exit).
         if (q.lte(0)) continue;
@@ -596,7 +590,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
     let bonusAmount: Decimal | null = null;
     if (tx.type === "bonus_cash") {
       bonusAmount = conv(cashFlow(tx), tx.currency);
-    } else if ((tx.type === "buy" || tx.type === "savings_plan") && tx.kind === "saveback") {
+    } else if (isAcquisitionType(tx.type) && tx.kind === "saveback") {
       bonusAmount = conv(D(tx.quantity).mul(D(tx.price)).add(D(tx.fees)), tx.currency);
     } else if (tx.type === "bonus" && tx.kind === "transfer_in") {
       // Legacy: pre-PR#309 rows tagged bonus+kind:transfer_in. Still handle until

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { allocationTargets, corporateActions, instruments } from "@portfolio/db";
 import {
+  isAcquisitionType,
+  isTransferType,
   type Anomaly,
   type CoreTransaction,
   type CostBasisMode,
@@ -269,8 +271,8 @@ export async function boundaryFlows(
   if (boundary === "inside") return externalFlows(app, txns, target);
   const isInvestmentFlow = (t: CoreTransaction): boolean => {
     if (t.type === "sell" || t.type === "dividend" || t.type === "coupon") return true;
-    if (t.type === "buy" || t.type === "savings_plan") return t.kind !== "saveback";
-    if (t.type === "transfer_in" || t.type === "transfer_out") return true;
+    if (isAcquisitionType(t.type)) return t.kind !== "saveback";
+    if (isTransferType(t.type)) return true;
     if (t.type === "bonus") return t.kind === "transfer_in";
     return false;
   };

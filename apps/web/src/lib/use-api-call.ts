@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 
 export function useApiCall<T extends (...args: never[]) => Promise<unknown>>(
   fn: T,
+  opts?: { fallbackMessage?: string },
 ): [
   { busy: boolean; error: string | null },
   (...args: Parameters<T>) => Promise<Awaited<ReturnType<T>> | undefined>,
@@ -16,13 +17,15 @@ export function useApiCall<T extends (...args: never[]) => Promise<unknown>>(
       try {
         return (await fn(...args)) as Awaited<ReturnType<T>>;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        setError(
+          opts?.fallbackMessage ?? (err instanceof Error ? err.message : "Something went wrong"),
+        );
         return undefined;
       } finally {
         setBusy(false);
       }
     },
-    [fn],
+    [fn, opts?.fallbackMessage],
   );
 
   return [{ busy, error }, call];

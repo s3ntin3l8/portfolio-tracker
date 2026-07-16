@@ -1,5 +1,12 @@
 import { inArray, isNotNull, lt } from "drizzle-orm";
-import { cashFlow, convert, toDateKey, type FxRateFn, type PriceSeriesKind } from "@portfolio/core";
+import {
+  cashFlow,
+  convert,
+  isTradeType,
+  toDateKey,
+  type FxRateFn,
+  type PriceSeriesKind,
+} from "@portfolio/core";
 import {
   instruments,
   portfolioIntradaySnapshots,
@@ -72,7 +79,7 @@ export async function recordDailySnapshots(
       const exMs = tx.executedAt.getTime();
       if (exMs < todayMs || exMs >= tomorrowMs) continue;
       const { type } = tx;
-      if (type === "buy" || type === "savings_plan" || type === "sell") {
+      if (isTradeType(type)) {
         const cf = cashFlow(tx);
         effectiveFlow = effectiveFlow.sub(cf);
       } else if ((type === "dividend" || type === "coupon") && tx.instrumentId) {

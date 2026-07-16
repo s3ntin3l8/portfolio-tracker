@@ -1,5 +1,6 @@
 import { Decimal } from "decimal.js";
 import { D, ZERO } from "./decimal.js";
+import { isAcquisitionType, isTradeType, isTransferType } from "./categorization.js";
 import type { CoreTransaction, CorporateAction, Holding } from "./types.js";
 
 type Event =
@@ -71,14 +72,7 @@ export function computeHoldings(
       const p = D(price);
       const f = D(fees);
 
-      if (
-        type === "buy" ||
-        type === "savings_plan" ||
-        type === "sell" ||
-        type === "transfer_in" ||
-        type === "transfer_out" ||
-        type === "bonus"
-      ) {
+      if (isTradeType(type) || isTransferType(type) || type === "bonus") {
         if (costCurrency === null) {
           costCurrency = ev.tx.currency;
         } else if (ev.tx.currency !== costCurrency) {
@@ -89,7 +83,7 @@ export function computeHoldings(
         }
       }
 
-      if (type === "buy" || type === "savings_plan" || type === "bonus") {
+      if (isAcquisitionType(type) || type === "bonus") {
         // `bonus` = a zero-cash share *receipt* (free shares — TR perks, FREE_RECEIPT
         // grants, reinvested rewards). The shares are real, so quantity rises; the
         // recorded price is the FMV-at-grant carried as cost basis (price 0 → free shares
@@ -225,7 +219,7 @@ export function buildShareTimelines(
       const { type, quantity } = ev.tx;
       const q = D(quantity);
 
-      if (type === "buy" || type === "savings_plan" || type === "bonus" || type === "transfer_in") {
+      if (isAcquisitionType(type) || type === "bonus" || type === "transfer_in") {
         qty = qty.add(q);
       } else if (type === "sell" || type === "transfer_out") {
         qty = qty.sub(Decimal.min(q, qty));

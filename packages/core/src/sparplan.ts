@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import { isAcquisitionType } from "./categorization.js";
 import { convert, type FxRateFn } from "./networth.js";
 import { inferIntervalMonths } from "./growth.js";
 import { toDateKey } from "./date-utils.js";
@@ -254,9 +255,7 @@ export function detectSparplans(input: SparplanInput): SparplanStats {
   // Candidate rows: instrument-buying rows, excluding broker-credited kinds.
   const candidates = txns.filter(
     (t) =>
-      t.instrumentId !== null &&
-      (t.type === "savings_plan" || t.type === "buy") &&
-      !EXCLUDED_KINDS.has(t.kind ?? ""),
+      t.instrumentId !== null && isAcquisitionType(t.type) && !EXCLUDED_KINDS.has(t.kind ?? ""),
   );
 
   // Group by instrumentId.

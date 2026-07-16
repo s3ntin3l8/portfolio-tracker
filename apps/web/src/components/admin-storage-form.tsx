@@ -89,11 +89,13 @@ function SecretCell({
       await onSet({ apiKey: apiKey.trim() });
       setDialogOpen(false);
     }, [apiKey, onSet]),
+    { fallbackMessage: t("credentialError") },
   );
   const [clearState, clear] = useApiCall(
     useCallback(async () => {
       await onClear();
     }, [onClear]),
+    { fallbackMessage: t("credentialError") },
   );
 
   const busy = saveState.busy || clearState.busy;
