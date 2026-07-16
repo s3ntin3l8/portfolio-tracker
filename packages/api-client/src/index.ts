@@ -755,11 +755,7 @@ export interface Transaction {
 export interface MergePreview {
   ok: boolean;
   blockedReason?:
-    | "not_found"
-    | "same_transaction"
-    | "different_instrument"
-    | "incompatible_type"
-    | "loan_linked";
+    "not_found" | "same_transaction" | "different_instrument" | "incompatible_type" | "loan_linked";
   merged?: {
     quantity: string;
     price: string;

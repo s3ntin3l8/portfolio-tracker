@@ -1422,7 +1422,7 @@ function yahooProfileFetch(
       const ok = opts.crumbStatus === undefined || opts.crumbStatus === 200;
       return {
         ok,
-        status: ok ? 200 : opts.crumbStatus ?? 500,
+        status: ok ? 200 : (opts.crumbStatus ?? 500),
         headers: { get: () => null },
         json: async () => ({}),
         text: async () => (ok ? "test-crumb-abc123" : ""),

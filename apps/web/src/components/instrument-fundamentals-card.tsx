@@ -141,7 +141,7 @@ export function InstrumentFundamentalsCard({ instrumentId }: { instrumentId: str
     })) ?? [];
 
   const recommendationTone = data.recommendationKey
-    ? RECOMMENDATION_TONE[data.recommendationKey] ?? "warning"
+    ? (RECOMMENDATION_TONE[data.recommendationKey] ?? "warning")
     : undefined;
   const analystTotal = data.analystTrend
     ? data.analystTrend.strongBuy +
