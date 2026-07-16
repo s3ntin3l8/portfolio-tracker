@@ -1078,6 +1078,10 @@ export interface InstrumentYield {
   /** Asset class for icon/tint (e.g. equity, etf, bond). Mirrors the
    *  `instrument.assetClass` shape used by holdings/trades tables. */
   assetClass: string | null;
+  /** Internal market/venue (e.g. IDX, XETRA, US) — needed alongside `symbol` for a
+   *  correct logo.dev lookup; the same bare ticker can be a different company on
+   *  different exchanges (e.g. `ANTM` US vs `ANTM.JK` IDX). */
+  market: string | null;
   trailingIncome: string;
   marketValue: string;
   costBasis: string;

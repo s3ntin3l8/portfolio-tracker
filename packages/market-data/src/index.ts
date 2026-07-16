@@ -16,6 +16,7 @@ export {
   isIdxEtfSymbol,
   normalizeQuoteCurrency,
   yahooSuffixForMarket,
+  MARKET_YAHOO_SUFFIX,
   eodhdExchangeForMarket,
   resolveCryptoIsin,
   PRICEABLE_FOREIGN_MARKETS,

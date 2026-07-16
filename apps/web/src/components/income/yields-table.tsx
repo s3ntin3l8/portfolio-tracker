@@ -95,6 +95,7 @@ export function YieldsTable({ rows }: { rows: InstrumentYield[] }) {
                     <InstrumentLogo
                       label={y.symbol ?? "—"}
                       symbol={y.symbol}
+                      market={y.market}
                       assetClass={y.assetClass}
                     />
                     <div className="min-w-0">

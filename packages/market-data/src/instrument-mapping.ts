@@ -125,9 +125,12 @@ export function resolveCryptoIsin(
 
 /**
  * Yahoo Finance ticker suffix per internal market (e.g. `BBCA` → `BBCA.JK` on IDX,
- * `AEMD` → `AEMD.DE` on Xetra). Markets absent here use the bare symbol.
+ * `AEMD` → `AEMD.DE` on Xetra). Markets absent here use the bare symbol. Exported (not just
+ * `yahooSuffixForMarket()`) so `apps/web`'s logo.dev suffix map — a separate, client-side
+ * copy of the same suffixes — can be tested for equality against this one; see
+ * `apps/web/test/instrument-logo.test.tsx`.
  */
-const MARKET_YAHOO_SUFFIX: Record<string, string> = {
+export const MARKET_YAHOO_SUFFIX: Record<string, string> = {
   IDX: ".JK",
   XETRA: ".DE",
 };

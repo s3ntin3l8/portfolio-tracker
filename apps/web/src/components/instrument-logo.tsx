@@ -11,8 +11,12 @@ import { MonogramBadge } from "@/components/monogram-badge";
  * the live API: a bare ticker and its suffixed form can resolve to *different* companies
  * (e.g. `ANTM` = US Anthem vs `ANTM.JK` = Aneka Tambang), so the suffix matters for
  * correctness, not just cosmetics. Markets absent here use the bare symbol (correct for US).
+ * Exported (rather than kept private) so `instrument-logo.test.tsx` can assert this stays
+ * equal to `MARKET_YAHOO_SUFFIX` — the two are only related by convention, not by import,
+ * so nothing else would catch them drifting apart if a market gets added to one but not
+ * the other.
  */
-const MARKET_LOGO_SUFFIX: Record<string, string> = {
+export const MARKET_LOGO_SUFFIX: Record<string, string> = {
   IDX: ".JK",
   XETRA: ".DE",
 };
@@ -48,6 +52,19 @@ export function InstrumentLogo({
   className?: string;
 }) {
   const [errored, setErrored] = useState(false);
+  // Call sites like the "selected instrument" chip in add-transaction-form.tsx render this
+  // component at a stable tree position without a `key`, so React reuses the instance when
+  // the instrument changes — without resetting `errored` here, a 404'd instrument would
+  // leave it stuck `true` for whatever's selected next, even if its logo would resolve
+  // fine. Reset via React's "adjust state during render" pattern (comparing against the
+  // previous lookup key) rather than an effect — this is the documented approach for
+  // resetting state when inputs change, and it avoids an extra effect-triggered render.
+  const lookupKey = `${symbol}:${market}:${assetClass}`;
+  const [prevLookupKey, setPrevLookupKey] = useState(lookupKey);
+  if (lookupKey !== prevLookupKey) {
+    setPrevLookupKey(lookupKey);
+    setErrored(false);
+  }
   const token = process.env.NEXT_PUBLIC_LOGODEV_TOKEN;
 
   const eligible =

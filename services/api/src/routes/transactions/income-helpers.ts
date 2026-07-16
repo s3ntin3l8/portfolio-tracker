@@ -95,6 +95,7 @@ export async function buildIncomeStats(
         name: im?.name ?? null,
         displayName: im?.displayName ?? null,
         assetClass: im?.assetClass ?? null,
+        market: im?.market ?? null,
         trailingIncome,
         marketValue,
         costBasis,
