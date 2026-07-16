@@ -67,9 +67,7 @@ describe("S3Provider", () => {
       });
 
       const calls = s3Mock.commandCalls(PutObjectCommand);
-      expect(calls[0].args[0].input.ContentDisposition).toBe(
-        'attachment; filename="original.pdf"',
-      );
+      expect(calls[0].args[0].input.ContentDisposition).toBe('attachment; filename="original.pdf"');
     });
 
     it("sanitises originalFilename to safe ASCII in ContentDisposition", async () => {
@@ -78,7 +76,8 @@ describe("S3Provider", () => {
       const provider = makeProvider();
       await provider.put("file.pdf", Buffer.from("x"), {
         mimeType: "application/pdf",
-        originalFilename: "2024-01-23_DKB_Umbuchungen_Kapitalmaßnahmen_zu_Depot_506740786_\"test\".pdf",
+        originalFilename:
+          '2024-01-23_DKB_Umbuchungen_Kapitalmaßnahmen_zu_Depot_506740786_"test".pdf',
       });
 
       const calls = s3Mock.commandCalls(PutObjectCommand);
@@ -97,9 +96,7 @@ describe("S3Provider", () => {
       });
 
       const calls = s3Mock.commandCalls(PutObjectCommand);
-      expect(calls[0].args[0].input.ContentDisposition).toBe(
-        'attachment; filename="passwd.pdf"',
-      );
+      expect(calls[0].args[0].input.ContentDisposition).toBe('attachment; filename="passwd.pdf"');
     });
 
     it("omits ContentDisposition when originalFilename is absent", async () => {
@@ -173,9 +170,7 @@ describe("S3Provider", () => {
       s3Mock.on(HeadObjectCommand).rejects(serverError);
 
       const provider = makeProvider();
-      await expect(provider.exists("receipts/file.pdf")).rejects.toThrow(
-        "Service Unavailable",
-      );
+      await expect(provider.exists("receipts/file.pdf")).rejects.toThrow("Service Unavailable");
     });
   });
 
@@ -210,7 +205,7 @@ describe("S3Provider", () => {
     it("sanitises downloadName to safe ASCII in ResponseContentDisposition", async () => {
       const provider = makeProvider();
       const url = await provider.getSignedUrl("nested/path/file.pdf", 300, {
-        downloadName: "2024-01-23_DKB_Umbuchungen_Kapitalmaßnahmen_zu_Depot_506740786_\"test\".pdf",
+        downloadName: '2024-01-23_DKB_Umbuchungen_Kapitalmaßnahmen_zu_Depot_506740786_"test".pdf',
       });
 
       const decodedUrl = decodeURIComponent(url);

@@ -313,22 +313,139 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
 
   // Stockbit — IDX Equities (IDR)
   txRows.push(
-    { portfolioId: idPortfolio.id, instrumentId: bbca.id, type: "buy", quantity: "500", price: "8500", fees: "8500", currency: "IDR", executedAt: daysAgo(700) },
-    { portfolioId: idPortfolio.id, instrumentId: bbca.id, type: "buy", quantity: "300", price: "9200", fees: "5520", currency: "IDR", executedAt: daysAgo(400) },
-    { portfolioId: idPortfolio.id, instrumentId: bbca.id, type: "sell", quantity: "200", price: "9800", fees: "3920", currency: "IDR", executedAt: daysAgo(60) },
-    { portfolioId: idPortfolio.id, instrumentId: bbca.id, type: "dividend", quantity: "0", price: "216000", perShare: "360", shares: "600", currency: "IDR", executedAt: daysAgo(160) },
-    { portfolioId: idPortfolio.id, instrumentId: bbca.id, type: "dividend", quantity: "0", price: "162000", perShare: "270", shares: "600", currency: "IDR", executedAt: daysAgo(45) },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbca.id,
+      type: "buy",
+      quantity: "500",
+      price: "8500",
+      fees: "8500",
+      currency: "IDR",
+      executedAt: daysAgo(700),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbca.id,
+      type: "buy",
+      quantity: "300",
+      price: "9200",
+      fees: "5520",
+      currency: "IDR",
+      executedAt: daysAgo(400),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbca.id,
+      type: "sell",
+      quantity: "200",
+      price: "9800",
+      fees: "3920",
+      currency: "IDR",
+      executedAt: daysAgo(60),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbca.id,
+      type: "dividend",
+      quantity: "0",
+      price: "216000",
+      perShare: "360",
+      shares: "600",
+      currency: "IDR",
+      executedAt: daysAgo(160),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbca.id,
+      type: "dividend",
+      quantity: "0",
+      price: "162000",
+      perShare: "270",
+      shares: "600",
+      currency: "IDR",
+      executedAt: daysAgo(45),
+    },
 
-    { portfolioId: idPortfolio.id, instrumentId: bbri.id, type: "transfer_in", quantity: "1000", price: "4200", fees: "0", currency: "IDR", executedAt: daysAgo(500) },
-    { portfolioId: idPortfolio.id, instrumentId: bbri.id, type: "dividend", quantity: "0", price: "185000", perShare: "185", shares: "1000", currency: "IDR", executedAt: daysAgo(70) },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbri.id,
+      type: "transfer_in",
+      quantity: "1000",
+      price: "4200",
+      fees: "0",
+      currency: "IDR",
+      executedAt: daysAgo(500),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: bbri.id,
+      type: "dividend",
+      quantity: "0",
+      price: "185000",
+      perShare: "185",
+      shares: "1000",
+      currency: "IDR",
+      executedAt: daysAgo(70),
+    },
 
-    { portfolioId: idPortfolio.id, instrumentId: tlkm.id, type: "buy", quantity: "400", price: "3400", fees: "5440", currency: "IDR", executedAt: daysAgo(600) },
-    { portfolioId: idPortfolio.id, instrumentId: tlkm.id, type: "sell", quantity: "400", price: "3900", fees: "6240", currency: "IDR", executedAt: daysAgo(30) },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: tlkm.id,
+      type: "buy",
+      quantity: "400",
+      price: "3400",
+      fees: "5440",
+      currency: "IDR",
+      executedAt: daysAgo(600),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: tlkm.id,
+      type: "sell",
+      quantity: "400",
+      price: "3900",
+      fees: "6240",
+      currency: "IDR",
+      executedAt: daysAgo(30),
+    },
 
-    { portfolioId: idPortfolio.id, instrumentId: ori023.id, type: "buy", quantity: "50", price: "1000000", fees: "0", currency: "IDR", executedAt: daysAgo(500) },
-    { portfolioId: idPortfolio.id, instrumentId: ori023.id, type: "coupon", quantity: "0", price: "239583", currency: "IDR", executedAt: daysAgo(80) },
-    { portfolioId: idPortfolio.id, instrumentId: ori023.id, type: "coupon", quantity: "0", price: "239583", currency: "IDR", executedAt: daysAgo(50) },
-    { portfolioId: idPortfolio.id, instrumentId: ori023.id, type: "coupon", quantity: "0", price: "239583", currency: "IDR", executedAt: daysAgo(20) },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: ori023.id,
+      type: "buy",
+      quantity: "50",
+      price: "1000000",
+      fees: "0",
+      currency: "IDR",
+      executedAt: daysAgo(500),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: ori023.id,
+      type: "coupon",
+      quantity: "0",
+      price: "239583",
+      currency: "IDR",
+      executedAt: daysAgo(80),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: ori023.id,
+      type: "coupon",
+      quantity: "0",
+      price: "239583",
+      currency: "IDR",
+      executedAt: daysAgo(50),
+    },
+    {
+      portfolioId: idPortfolio.id,
+      instrumentId: ori023.id,
+      type: "coupon",
+      quantity: "0",
+      price: "239583",
+      currency: "IDR",
+      executedAt: daysAgo(20),
+    },
   );
 
   // Trade Republic (EUR) — a VWCE Sparplan + manual ETF/US-equity buys.
@@ -347,24 +464,135 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
     });
   }
   txRows.push(
-    { portfolioId: trPortfolio.id, instrumentId: iwda.id, type: "buy", quantity: "12", price: "78.40", fees: "1.00", currency: "EUR", executedAt: daysAgo(450) },
-    { portfolioId: trPortfolio.id, instrumentId: iwda.id, type: "buy", quantity: "8", price: "84.10", fees: "1.00", currency: "EUR", executedAt: daysAgo(200) },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: iwda.id,
+      type: "buy",
+      quantity: "12",
+      price: "78.40",
+      fees: "1.00",
+      currency: "EUR",
+      executedAt: daysAgo(450),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: iwda.id,
+      type: "buy",
+      quantity: "8",
+      price: "84.10",
+      fees: "1.00",
+      currency: "EUR",
+      executedAt: daysAgo(200),
+    },
 
-    { portfolioId: trPortfolio.id, instrumentId: aapl.id, type: "buy", quantity: "10", price: "150.20", fees: "1.00", currency: "USD", executedAt: daysAgo(500) },
-    { portfolioId: trPortfolio.id, instrumentId: aapl.id, type: "buy", quantity: "5", price: "175.60", fees: "1.00", currency: "USD", executedAt: daysAgo(200) },
-    { portfolioId: trPortfolio.id, instrumentId: aapl.id, type: "sell", quantity: "8", price: "221.30", fees: "1.00", currency: "USD", executedAt: daysAgo(20) },
-    { portfolioId: trPortfolio.id, instrumentId: aapl.id, type: "dividend", quantity: "0", price: "3.92", perShare: "0.28", shares: "14", currency: "USD", executedAt: daysAgo(95) },
-    { portfolioId: trPortfolio.id, instrumentId: aapl.id, type: "dividend", quantity: "0", price: "1.96", perShare: "0.28", shares: "7", currency: "USD", executedAt: daysAgo(40) },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: aapl.id,
+      type: "buy",
+      quantity: "10",
+      price: "150.20",
+      fees: "1.00",
+      currency: "USD",
+      executedAt: daysAgo(500),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: aapl.id,
+      type: "buy",
+      quantity: "5",
+      price: "175.60",
+      fees: "1.00",
+      currency: "USD",
+      executedAt: daysAgo(200),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: aapl.id,
+      type: "sell",
+      quantity: "8",
+      price: "221.30",
+      fees: "1.00",
+      currency: "USD",
+      executedAt: daysAgo(20),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: aapl.id,
+      type: "dividend",
+      quantity: "0",
+      price: "3.92",
+      perShare: "0.28",
+      shares: "14",
+      currency: "USD",
+      executedAt: daysAgo(95),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: aapl.id,
+      type: "dividend",
+      quantity: "0",
+      price: "1.96",
+      perShare: "0.28",
+      shares: "7",
+      currency: "USD",
+      executedAt: daysAgo(40),
+    },
 
-    { portfolioId: trPortfolio.id, instrumentId: msft.id, type: "buy", quantity: "8", price: "280.50", fees: "1.00", currency: "USD", executedAt: daysAgo(350) },
-    { portfolioId: trPortfolio.id, instrumentId: msft.id, type: "dividend", quantity: "0", price: "5.52", perShare: "0.69", shares: "8", currency: "USD", executedAt: daysAgo(55) },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: msft.id,
+      type: "buy",
+      quantity: "8",
+      price: "280.50",
+      fees: "1.00",
+      currency: "USD",
+      executedAt: daysAgo(350),
+    },
+    {
+      portfolioId: trPortfolio.id,
+      instrumentId: msft.id,
+      type: "dividend",
+      quantity: "0",
+      price: "5.52",
+      perShare: "0.69",
+      shares: "8",
+      currency: "USD",
+      executedAt: daysAgo(55),
+    },
   );
 
   // Pegadaian Gold (IDR) — long-term accumulation, no sells.
   txRows.push(
-    { portfolioId: goldPortfolio.id, instrumentId: xau.id, type: "buy", quantity: "10", price: "950000", fees: "0", currency: "IDR", executedAt: daysAgo(600) },
-    { portfolioId: goldPortfolio.id, instrumentId: xau.id, type: "buy", quantity: "15", price: "1050000", fees: "0", currency: "IDR", executedAt: daysAgo(300) },
-    { portfolioId: goldPortfolio.id, instrumentId: xau.id, type: "buy", quantity: "5", price: "1150000", fees: "0", currency: "IDR", executedAt: daysAgo(60) },
+    {
+      portfolioId: goldPortfolio.id,
+      instrumentId: xau.id,
+      type: "buy",
+      quantity: "10",
+      price: "950000",
+      fees: "0",
+      currency: "IDR",
+      executedAt: daysAgo(600),
+    },
+    {
+      portfolioId: goldPortfolio.id,
+      instrumentId: xau.id,
+      type: "buy",
+      quantity: "15",
+      price: "1050000",
+      fees: "0",
+      currency: "IDR",
+      executedAt: daysAgo(300),
+    },
+    {
+      portfolioId: goldPortfolio.id,
+      instrumentId: xau.id,
+      type: "buy",
+      quantity: "5",
+      price: "1150000",
+      fees: "0",
+      currency: "IDR",
+      executedAt: daysAgo(60),
+    },
   );
 
   // Bibit Reksa Dana (IDR, child holder) — monthly Sparplan-style accumulation.
@@ -385,13 +613,69 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
 
   // DKB Tagesgeld (EUR, cash-inside boundary).
   txRows.push(
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "deposit", quantity: "0", price: "5000", currency: "EUR", executedAt: daysAgo(500) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "deposit", quantity: "0", price: "1000", currency: "EUR", executedAt: daysAgo(300) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "deposit", quantity: "0", price: "1200", currency: "EUR", executedAt: daysAgo(120) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "withdrawal", quantity: "0", price: "800", currency: "EUR", executedAt: daysAgo(90) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "interest", quantity: "0", price: "18.40", currency: "EUR", executedAt: daysAgo(150) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "interest", quantity: "0", price: "21.10", currency: "EUR", executedAt: daysAgo(60) },
-    { portfolioId: cashPortfolio.id, instrumentId: null, type: "interest", quantity: "0", price: "19.75", currency: "EUR", executedAt: daysAgo(10) },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "deposit",
+      quantity: "0",
+      price: "5000",
+      currency: "EUR",
+      executedAt: daysAgo(500),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "deposit",
+      quantity: "0",
+      price: "1000",
+      currency: "EUR",
+      executedAt: daysAgo(300),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "deposit",
+      quantity: "0",
+      price: "1200",
+      currency: "EUR",
+      executedAt: daysAgo(120),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "withdrawal",
+      quantity: "0",
+      price: "800",
+      currency: "EUR",
+      executedAt: daysAgo(90),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "interest",
+      quantity: "0",
+      price: "18.40",
+      currency: "EUR",
+      executedAt: daysAgo(150),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "interest",
+      quantity: "0",
+      price: "21.10",
+      currency: "EUR",
+      executedAt: daysAgo(60),
+    },
+    {
+      portfolioId: cashPortfolio.id,
+      instrumentId: null,
+      type: "interest",
+      quantity: "0",
+      price: "19.75",
+      currency: "EUR",
+      executedAt: daysAgo(10),
+    },
   );
 
   await db.insert(transactions).values(txRows);
@@ -431,7 +715,12 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
   // look alive without re-deriving exact historical valuations from the transactions
   // above (that's the real backend job's responsibility, not this seed's).
 
-  const portfolioEndValues: { portfolio: (typeof portfolios.$inferSelect); end: number; currency: string; days: number }[] = [
+  const portfolioEndValues: {
+    portfolio: typeof portfolios.$inferSelect;
+    end: number;
+    currency: string;
+    days: number;
+  }[] = [
     { portfolio: idPortfolio, end: 9_800_000, currency: "IDR", days: 700 },
     { portfolio: trPortfolio, end: 6_400, currency: "EUR", days: 500 },
     { portfolio: goldPortfolio, end: 33_000_000, currency: "IDR", days: 600 },
@@ -467,11 +756,41 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
   // --- Allocation targets (aggregate asset-class mix → dashboard drift hint). ---
 
   await db.insert(allocationTargets).values([
-    { userId: user.id, portfolioId: null, dimension: "asset_class", targetKey: "equity", targetPct: "45" },
-    { userId: user.id, portfolioId: null, dimension: "asset_class", targetKey: "etf", targetPct: "20" },
-    { userId: user.id, portfolioId: null, dimension: "asset_class", targetKey: "gold", targetPct: "10" },
-    { userId: user.id, portfolioId: null, dimension: "asset_class", targetKey: "bond", targetPct: "10" },
-    { userId: user.id, portfolioId: null, dimension: "asset_class", targetKey: "mutual_fund", targetPct: "15" },
+    {
+      userId: user.id,
+      portfolioId: null,
+      dimension: "asset_class",
+      targetKey: "equity",
+      targetPct: "45",
+    },
+    {
+      userId: user.id,
+      portfolioId: null,
+      dimension: "asset_class",
+      targetKey: "etf",
+      targetPct: "20",
+    },
+    {
+      userId: user.id,
+      portfolioId: null,
+      dimension: "asset_class",
+      targetKey: "gold",
+      targetPct: "10",
+    },
+    {
+      userId: user.id,
+      portfolioId: null,
+      dimension: "asset_class",
+      targetKey: "bond",
+      targetPct: "10",
+    },
+    {
+      userId: user.id,
+      portfolioId: null,
+      dimension: "asset_class",
+      targetKey: "mutual_fund",
+      targetPct: "15",
+    },
   ]);
 
   if (patOutPath) {
@@ -482,8 +801,7 @@ export async function seedDemo(patOutPath?: string): Promise<void> {
 }
 
 // Allow running directly: `tsx src/db/seed-demo.ts [patOutPath]`.
-const invokedDirectly =
-  process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (invokedDirectly) {
   await ensureDb();
   await seedDemo(process.argv[2]);

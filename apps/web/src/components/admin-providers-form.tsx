@@ -28,7 +28,13 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { AdminProvider, AdminProvidersResponse, AdminProviderUsage, ApiClient, ProviderCredentialInput } from "@portfolio/api-client";
+import type {
+  AdminProvider,
+  AdminProvidersResponse,
+  AdminProviderUsage,
+  ApiClient,
+  ProviderCredentialInput,
+} from "@portfolio/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -156,9 +162,7 @@ function CredentialCell({
   // Inline credential state display.
   let display: React.ReactNode;
   if (provider.hasKey) {
-    display = (
-      <span className="font-mono text-xs text-muted-foreground">{provider.keyHint}</span>
-    );
+    display = <span className="font-mono text-xs text-muted-foreground">{provider.keyHint}</span>;
   } else if (provider.keySource === "env") {
     display = (
       <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -166,9 +170,7 @@ function CredentialCell({
       </span>
     );
   } else {
-    display = (
-      <span className="text-xs text-muted-foreground">{t("keyNone")}</span>
-    );
+    display = <span className="text-xs text-muted-foreground">{t("keyNone")}</span>;
   }
 
   return (
@@ -277,9 +279,7 @@ export function AdminProvidersForm({
   }
 
   function toggle(id: string) {
-    setRows((rs) =>
-      rs.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)),
-    );
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
     setSaved(false);
   }
 
@@ -459,10 +459,14 @@ export function AdminProvidersForm({
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-bold">{p.label}</div>
                             {!p.configured && (
-                              <div className="text-xs text-muted-foreground">{t("notConfigured")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("notConfigured")}
+                              </div>
                             )}
                           </div>
-                          <span className="tabular-nums text-xs text-muted-foreground">#{i + 1}</span>
+                          <span className="tabular-nums text-xs text-muted-foreground">
+                            #{i + 1}
+                          </span>
                         </div>
                       )}
                     </SortableCard>

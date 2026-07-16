@@ -49,7 +49,12 @@ export async function fetchBenchmarkPrices(
   symbol: string,
   fromDate: string,
 ): Promise<void> {
-  const ref = { symbol, market: "US", assetClass: "equity" as const, currency: DEFAULT_BENCHMARK_CURRENCY };
+  const ref = {
+    symbol,
+    market: "US",
+    assetClass: "equity" as const,
+    currency: DEFAULT_BENCHMARK_CURRENCY,
+  };
   const candles = await marketData.getHistoryFrom(ref, fromDate);
   if (!candles || candles.length === 0) return;
 
@@ -64,14 +69,19 @@ export async function fetchBenchmarkPrices(
 
   for (const c of candles) {
     if (existing.has(c.date)) continue;
-    await db.insert(benchmarkPrices).values({
-      userId,
-      symbol,
-      date: c.date,
-      close: c.close,
-      currency: c.currency ?? DEFAULT_BENCHMARK_CURRENCY,
-      source: "yahoo",
-    }).onConflictDoNothing({ target: [benchmarkPrices.userId, benchmarkPrices.symbol, benchmarkPrices.date] });
+    await db
+      .insert(benchmarkPrices)
+      .values({
+        userId,
+        symbol,
+        date: c.date,
+        close: c.close,
+        currency: c.currency ?? DEFAULT_BENCHMARK_CURRENCY,
+        source: "yahoo",
+      })
+      .onConflictDoNothing({
+        target: [benchmarkPrices.userId, benchmarkPrices.symbol, benchmarkPrices.date],
+      });
   }
 }
 

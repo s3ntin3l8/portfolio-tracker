@@ -50,7 +50,10 @@ export async function withDerivationCache<T>(
   let evicted = 0;
   for (const [k, v] of cache) {
     if (evicted >= 5) break;
-    if (v.expiresAt <= now) { cache.delete(k); evicted++; }
+    if (v.expiresAt <= now) {
+      cache.delete(k);
+      evicted++;
+    }
   }
 
   const hit = cache.get(key);

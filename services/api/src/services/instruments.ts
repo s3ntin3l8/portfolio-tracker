@@ -16,7 +16,9 @@ function instrumentUpgrade(
   existing: Instrument,
   input: Omit<InstrumentInput, "isin" | "wkn"> & { isin?: string | null; wkn?: string | null },
 ): Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency" | "isin" | "wkn">> {
-  const set: Partial<Pick<Instrument, "symbol" | "assetClass" | "market" | "currency" | "isin" | "wkn">> = {};
+  const set: Partial<
+    Pick<Instrument, "symbol" | "assetClass" | "market" | "currency" | "isin" | "wkn">
+  > = {};
   // Replace an ISIN-as-symbol with a real ticker (but never the reverse).
   if (isIsin(existing.symbol) && !isIsin(input.symbol)) set.symbol = input.symbol;
   // Refine the generic defaults (`equity`, `mutual_fund`) to a more specific class —
@@ -150,9 +152,7 @@ export async function findOrCreateInstrument(
   const [existing] = await db
     .select()
     .from(instruments)
-    .where(
-      and(eq(instruments.symbol, input.symbol), eq(instruments.market, market)),
-    )
+    .where(and(eq(instruments.symbol, input.symbol), eq(instruments.market, market)))
     .limit(1);
   if (existing) return healInstrument(db, existing, input);
 
@@ -179,7 +179,14 @@ export async function findOrCreateInstrument(
 export async function updateInstrument(
   db: DB,
   id: string,
-  patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string; market?: string },
+  patch: {
+    isin?: string | null;
+    wkn?: string | null;
+    symbol?: string;
+    name?: string;
+    assetClass?: string;
+    market?: string;
+  },
 ): Promise<Instrument | "conflict" | "not_found"> {
   const [existing] = await db.select().from(instruments).where(eq(instruments.id, id)).limit(1);
   if (!existing) return "not_found";
@@ -212,10 +219,6 @@ export async function updateInstrument(
 
   if (Object.keys(set).length === 0) return existing;
 
-  const [updated] = await db
-    .update(instruments)
-    .set(set)
-    .where(eq(instruments.id, id))
-    .returning();
+  const [updated] = await db.update(instruments).set(set).where(eq(instruments.id, id)).returning();
   return updated ?? existing;
 }

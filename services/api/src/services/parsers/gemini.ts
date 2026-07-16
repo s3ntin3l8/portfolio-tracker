@@ -42,7 +42,12 @@ export class GeminiVisionParser implements ScreenshotParser {
     }
 
     log?.debug(
-      { provider: this.name, model: this.model, mimeType: image.mimeType, bytes: image.data.length },
+      {
+        provider: this.name,
+        model: this.model,
+        mimeType: image.mimeType,
+        bytes: image.data.length,
+      },
       "vision request",
     );
     const t0 = Date.now();
@@ -93,7 +98,12 @@ export class GeminiVisionParser implements ScreenshotParser {
       errors: parseErrors,
     };
     log?.info(
-      { provider: this.name, drafts: result.drafts.length, contracts: result.contracts.length, latencyMs: Date.now() - t0 },
+      {
+        provider: this.name,
+        drafts: result.drafts.length,
+        contracts: result.contracts.length,
+        latencyMs: Date.now() - t0,
+      },
       "vision parse complete",
     );
     return result;

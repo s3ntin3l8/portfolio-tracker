@@ -98,7 +98,12 @@ export default async function LocaleLayout({
           wouldn't count either. Applying the exact same cascade directly here
           sidesteps that entirely (#472). */}
       <body className="min-h-app-viewport bg-background font-sans text-foreground antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey={STORAGE_KEY}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          storageKey={STORAGE_KEY}
+        >
           <ThemeColorSync />
           <AuthSessionProvider>
             <NextIntlClientProvider>{children}</NextIntlClientProvider>

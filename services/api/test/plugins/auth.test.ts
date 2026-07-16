@@ -7,9 +7,7 @@ import { closeDb } from "../../src/db/client.js";
 const ISSUER = "https://auth.test/application/o/portfolio/";
 const WELL_KNOWN = `${ISSUER}.well-known/openid-configuration`;
 
-function mockFetch(
-  responder: (url: string) => { ok?: boolean; status?: number; body: unknown },
-) {
+function mockFetch(responder: (url: string) => { ok?: boolean; status?: number; body: unknown }) {
   return vi.fn(async (url: URL | string) => {
     const { ok = true, status = 200, body } = responder(String(url));
     return { ok, status, json: async () => body } as Response;

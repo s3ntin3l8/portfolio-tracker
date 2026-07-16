@@ -8,7 +8,10 @@ import { valuePortfolioCached, clearValuationCache } from "../../src/services/va
 // `getCachedQuotes` only calls the provider when pricing at least one instrument, this
 // doubles as a "did valuePortfolio actually recompute" probe: a cache hit never reaches
 // the provider at all.
-function countingService(counter: { n: number }, opts: { throwOnCall?: number } = {}): MarketDataService {
+function countingService(
+  counter: { n: number },
+  opts: { throwOnCall?: number } = {},
+): MarketDataService {
   return {
     getQuotes: async (refs: Array<{ id: string }>) => {
       counter.n++;
@@ -37,7 +40,10 @@ describe("valuePortfolioCached", () => {
     const db = await ensureDb();
     const [u] = await db
       .insert(users)
-      .values({ authSub: `valcache-${crypto.randomUUID()}`, email: `${crypto.randomUUID()}@example.com` })
+      .values({
+        authSub: `valcache-${crypto.randomUUID()}`,
+        email: `${crypto.randomUUID()}@example.com`,
+      })
       .returning();
     const [p] = await db
       .insert(portfolios)
@@ -83,7 +89,16 @@ describe("valuePortfolioCached", () => {
     // TTL. Passing 0 forces every genuine valuePortfolio run to reach the provider, so
     // `counter.n` cleanly reflects "did valuePortfolioCached recompute" rather than being
     // confounded by that separate cache layer serving an already-warm price.
-    const a = await valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0);
+    const a = await valuePortfolioCached(
+      db,
+      countingService(counter),
+      0,
+      portfolioId,
+      "IDR",
+      undefined,
+      true,
+      t0,
+    );
     expect(a.summary.holdings).toHaveLength(1);
     expect(counter.n).toBe(1);
 
@@ -108,7 +123,16 @@ describe("valuePortfolioCached", () => {
     const counter = { n: 0 };
     const t0 = Date.parse("2026-02-08T10:00:00.000Z");
 
-    await valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0);
+    await valuePortfolioCached(
+      db,
+      countingService(counter),
+      0,
+      portfolioId,
+      "IDR",
+      undefined,
+      true,
+      t0,
+    );
     expect(counter.n).toBe(1);
 
     // Past the 60s derivation-cache TTL — cache entry expired, provider called again.
@@ -134,7 +158,16 @@ describe("valuePortfolioCached", () => {
     const counter = { n: 0 };
     const t0 = Date.parse("2026-02-08T10:00:00.000Z");
 
-    await valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0);
+    await valuePortfolioCached(
+      db,
+      countingService(counter),
+      0,
+      portfolioId,
+      "IDR",
+      undefined,
+      true,
+      t0,
+    );
     expect(counter.n).toBe(1);
 
     // Different costBasisMode — distinct key, must recompute.
@@ -151,7 +184,16 @@ describe("valuePortfolioCached", () => {
     expect(counter.n).toBe(2);
 
     // Different cashCounted boundary — distinct key, must recompute.
-    await valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, false, t0);
+    await valuePortfolioCached(
+      db,
+      countingService(counter),
+      0,
+      portfolioId,
+      "IDR",
+      undefined,
+      false,
+      t0,
+    );
     expect(counter.n).toBe(3);
   });
 
@@ -162,8 +204,26 @@ describe("valuePortfolioCached", () => {
     const t0 = Date.parse("2026-02-08T10:00:00.000Z");
 
     const [a, b] = await Promise.all([
-      valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0),
-      valuePortfolioCached(db, countingService(counter), 0, portfolioId, "IDR", undefined, true, t0),
+      valuePortfolioCached(
+        db,
+        countingService(counter),
+        0,
+        portfolioId,
+        "IDR",
+        undefined,
+        true,
+        t0,
+      ),
+      valuePortfolioCached(
+        db,
+        countingService(counter),
+        0,
+        portfolioId,
+        "IDR",
+        undefined,
+        true,
+        t0,
+      ),
     ]);
     expect(a).toBe(b);
     expect(counter.n).toBe(1);

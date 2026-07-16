@@ -108,11 +108,7 @@ export default async function InstrumentPage({
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">{back}</div>
-        <EmptyState
-          icon={LineChart}
-          title={t("notFound")}
-          description={t("notFoundBody")}
-        />
+        <EmptyState icon={LineChart} title={t("notFound")} description={t("notFoundBody")} />
       </div>
     );
   }
@@ -123,14 +119,10 @@ export default async function InstrumentPage({
   const holding = scope.holding;
   const hasPosition = holding !== null && Number(holding.quantity) !== 0;
   const pnlDisplay =
-    holding?.unrealizedPnLDisplay != null
-      ? Number(holding.unrealizedPnLDisplay)
-      : null;
+    holding?.unrealizedPnLDisplay != null ? Number(holding.unrealizedPnLDisplay) : null;
   const costBasisDisplay = holding ? Number(holding.costBasisDisplay) : 0;
   const pnlPct =
-    pnlDisplay !== null && costBasisDisplay !== 0
-      ? pnlDisplay / costBasisDisplay
-      : undefined;
+    pnlDisplay !== null && costBasisDisplay !== 0 ? pnlDisplay / costBasisDisplay : undefined;
   const qtyFmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 8 });
   const lots = holding?.lots ?? [];
   const lotCurrency = holding?.currency ?? instrument.currency;
@@ -161,9 +153,7 @@ export default async function InstrumentPage({
         />
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">
-              {instrument.symbol}
-            </h1>
+            <h1 className="text-2xl font-bold">{instrument.symbol}</h1>
             <Badge variant="outline">{tc(instrument.assetClass)}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -216,18 +206,10 @@ export default async function InstrumentPage({
               <StatCard
                 label={t("unrealizedPnl")}
                 value={
-                  pnlDisplay !== null
-                    ? formatMoney(pnlDisplay, scope.displayCurrency, locale)
-                    : "—"
+                  pnlDisplay !== null ? formatMoney(pnlDisplay, scope.displayCurrency, locale) : "—"
                 }
                 delta={pnlPct !== undefined ? formatPercent(pnlPct, locale) : undefined}
-                deltaTone={
-                  pnlDisplay === null
-                    ? "neutral"
-                    : pnlDisplay >= 0
-                      ? "up"
-                      : "down"
-                }
+                deltaTone={pnlDisplay === null ? "neutral" : pnlDisplay >= 0 ? "up" : "down"}
               />
               <StatCard
                 label={t("portfolioWeightLabel")}
@@ -235,11 +217,7 @@ export default async function InstrumentPage({
               />
             </div>
           ) : (
-            <EmptyState
-              icon={Wallet}
-              title={t("noPosition")}
-              description={t("noPositionBody")}
-            />
+            <EmptyState icon={Wallet} title={t("noPosition")} description={t("noPositionBody")} />
           )}
         </CardContent>
       </Card>
@@ -259,7 +237,11 @@ export default async function InstrumentPage({
           title={t("incomeCardTitle")}
           dividendsReceived={
             instrumentIncome
-              ? formatMoney(Number(instrumentIncome.total), incomeStats?.displayCurrency ?? scope.displayCurrency, locale)
+              ? formatMoney(
+                  Number(instrumentIncome.total),
+                  incomeStats?.displayCurrency ?? scope.displayCurrency,
+                  locale,
+                )
               : null
           }
           receivedCaption={t("incomeReceivedCaption")}

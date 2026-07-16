@@ -64,9 +64,7 @@ const ROWS: HoldingValuation[] = [
   makeHolding("BBCA", "100", "800"),
 ];
 
-function renderTable(
-  opts: { cash?: Record<string, string>; rows?: typeof ROWS } = {},
-) {
+function renderTable(opts: { cash?: Record<string, string>; rows?: typeof ROWS } = {}) {
   const rows = opts.rows ?? ROWS;
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -183,7 +181,10 @@ describe("HoldingsTable", () => {
   it("prefers the clean displayName over the raw name in the mobile subtitle", () => {
     const named: HoldingValuation = {
       ...makeHolding("BBCA", "100", "800"),
-      instrument: { ...makeHolding("BBCA", "100", "800").instrument!, displayName: "Bank Central Asia Tbk" },
+      instrument: {
+        ...makeHolding("BBCA", "100", "800").instrument!,
+        displayName: "Bank Central Asia Tbk",
+      },
     };
     renderTable({ rows: [named] });
     expect(screen.getByText(/Bank Central Asia Tbk ·/)).toBeInTheDocument();

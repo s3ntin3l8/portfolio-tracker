@@ -60,12 +60,7 @@ export function InstallPrompt() {
           {t("cta")}
         </Button>
       )}
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={t("dismiss")}
-        onClick={dismiss}
-      >
+      <Button variant="ghost" size="icon" aria-label={t("dismiss")} onClick={dismiss}>
         <X className="size-4" />
       </Button>
     </div>

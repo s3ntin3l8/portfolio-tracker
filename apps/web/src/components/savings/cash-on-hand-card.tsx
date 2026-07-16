@@ -16,13 +16,7 @@ const ASSUMED_IDLE_RATE = 0.04;
  * for why. Each row reuses `BrokerageIcon`'s monogram/tint fallback (passing the
  * currency code through it) rather than inventing new badge-color logic.
  */
-export function CashOnHandCard({
-  cash,
-  locale,
-}: {
-  cash: Record<string, string>;
-  locale: string;
-}) {
+export function CashOnHandCard({ cash, locale }: { cash: Record<string, string>; locale: string }) {
   const t = useTranslations("Savings");
 
   const entries = Object.entries(cash).filter(([, v]) => Number(v) > 0);

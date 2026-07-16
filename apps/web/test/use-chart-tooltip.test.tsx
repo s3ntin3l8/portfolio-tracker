@@ -33,7 +33,17 @@ describe("useChartTooltip", () => {
     const { result } = renderHook(() => useChartTooltip<string>());
     const target = document.createElement("div");
     Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 100, right: 200, bottom: 120, left: 180, width: 20, height: 20, x: 180, y: 100, toJSON: () => "" }),
+      value: () => ({
+        top: 100,
+        right: 200,
+        bottom: 120,
+        left: 180,
+        width: 20,
+        height: 20,
+        x: 180,
+        y: 100,
+        toJSON: () => "",
+      }),
     });
     const listeners = result.current.bind("hello");
     // mouseenter receives a synthetic event with `currentTarget` set to the
@@ -59,7 +69,17 @@ describe("useChartTooltip", () => {
     const b = result.current.bind({ month: "Feb" });
     const target = document.createElement("div");
     Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 0, right: 200, bottom: 20, left: 180, width: 20, height: 20, x: 180, y: 0, toJSON: () => "" }),
+      value: () => ({
+        top: 0,
+        right: 200,
+        bottom: 20,
+        left: 180,
+        width: 20,
+        height: 20,
+        x: 180,
+        y: 0,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       a.onMouseEnter({ currentTarget: target } as unknown as React.MouseEvent<HTMLElement>);
@@ -77,7 +97,17 @@ describe("useChartTooltip", () => {
     Object.defineProperty(target, "getBoundingClientRect", {
       // Right edge at 980 — only 44px from the 1024 viewport edge.
       // TIP_W(200) + GAP(8) = 208 > 1024 - 980 - 12 = 32, so flip.
-      value: () => ({ top: 100, right: 980, bottom: 120, left: 960, width: 20, height: 20, x: 960, y: 100, toJSON: () => "" }),
+      value: () => ({
+        top: 100,
+        right: 980,
+        bottom: 120,
+        left: 960,
+        width: 20,
+        height: 20,
+        x: 960,
+        y: 100,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       result.current
@@ -94,7 +124,17 @@ describe("useChartTooltip", () => {
     Object.defineProperty(target, "getBoundingClientRect", {
       // Bottom edge at 740 — only 28px from the 768 viewport edge.
       // TIP_H(80) + GAP(8) = 88 > 768 - 740 - 12 = 16, so flip.
-      value: () => ({ top: 720, right: 200, bottom: 740, left: 180, width: 20, height: 20, x: 180, y: 720, toJSON: () => "" }),
+      value: () => ({
+        top: 720,
+        right: 200,
+        bottom: 740,
+        left: 180,
+        width: 20,
+        height: 20,
+        x: 180,
+        y: 720,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       result.current
@@ -109,7 +149,17 @@ describe("useChartTooltip", () => {
     const { result } = renderHook(() => useChartTooltip<string>());
     const target = document.createElement("div");
     Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 100, right: 200, bottom: 120, left: 180, width: 20, height: 20, x: 180, y: 100, toJSON: () => "" }),
+      value: () => ({
+        top: 100,
+        right: 200,
+        bottom: 120,
+        left: 180,
+        width: 20,
+        height: 20,
+        x: 180,
+        y: 100,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       result.current
@@ -171,7 +221,17 @@ describe("useChartTooltip", () => {
   it("repositions on scroll while open", () => {
     const { result } = renderHook(() => useChartTooltip<string>());
     const target = document.createElement("div");
-    let rect = { top: 100, right: 200, bottom: 120, left: 180, width: 20, height: 20, x: 180, y: 100, toJSON: () => "" };
+    let rect = {
+      top: 100,
+      right: 200,
+      bottom: 120,
+      left: 180,
+      width: 20,
+      height: 20,
+      x: 180,
+      y: 100,
+      toJSON: () => "",
+    };
     Object.defineProperty(target, "getBoundingClientRect", { value: () => rect });
     act(() => {
       result.current
@@ -191,7 +251,17 @@ describe("useChartTooltip", () => {
     const { result } = renderHook(() => useChartTooltip<string>());
     const target = document.createElement("div");
     Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 100, right: 200, bottom: 120, left: 180, width: 20, height: 20, x: 180, y: 100, toJSON: () => "" }),
+      value: () => ({
+        top: 100,
+        right: 200,
+        bottom: 120,
+        left: 180,
+        width: 20,
+        height: 20,
+        x: 180,
+        y: 100,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       result.current
@@ -224,7 +294,17 @@ describe("useChartTooltip", () => {
     // Real size 320: 750 + 320 + 8 = 1078 > 1012, flip → x = 730 - 320 - 8 = 402.
     // (The flipped formula reads r.left, not r.right, so it's left - tipW - gap.)
     Object.defineProperty(target, "getBoundingClientRect", {
-      value: () => ({ top: 100, right: 750, bottom: 120, left: 730, width: 20, height: 20, x: 730, y: 100, toJSON: () => "" }),
+      value: () => ({
+        top: 100,
+        right: 750,
+        bottom: 120,
+        left: 730,
+        width: 20,
+        height: 20,
+        x: 730,
+        y: 100,
+        toJSON: () => "",
+      }),
     });
     act(() => {
       result.current

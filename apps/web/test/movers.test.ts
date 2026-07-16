@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { bestAndWorst, periodToMover } from "../src/lib/movers";
 import type { HoldingValuation, PeriodMover } from "@portfolio/api-client";
 
-function holding(overrides: Partial<HoldingValuation> & { instrumentId: string }): HoldingValuation {
+function holding(
+  overrides: Partial<HoldingValuation> & { instrumentId: string },
+): HoldingValuation {
   return {
     quantity: "10",
     avgCost: "100",
@@ -43,17 +45,47 @@ describe("bestAndWorst", () => {
       holding({
         instrumentId: "a",
         dayChangePct: "-8.0", // biggest magnitude, but a loser
-        instrument: { symbol: "AAA", market: "IDX", assetClass: "equity", unit: "share", sector: null, sectorWeights: null, countryWeights: null, name: "Alpha", displayName: null },
+        instrument: {
+          symbol: "AAA",
+          market: "IDX",
+          assetClass: "equity",
+          unit: "share",
+          sector: null,
+          sectorWeights: null,
+          countryWeights: null,
+          name: "Alpha",
+          displayName: null,
+        },
       }),
       holding({
         instrumentId: "b",
         dayChangePct: "3.0",
-        instrument: { symbol: "BBB", market: "IDX", assetClass: "equity", unit: "share", sector: null, sectorWeights: null, countryWeights: null, name: "Beta", displayName: null },
+        instrument: {
+          symbol: "BBB",
+          market: "IDX",
+          assetClass: "equity",
+          unit: "share",
+          sector: null,
+          sectorWeights: null,
+          countryWeights: null,
+          name: "Beta",
+          displayName: null,
+        },
       }),
       holding({
         instrumentId: "c",
         dayChangePct: "-1.0",
-        instrument: { symbol: "CCC", market: "IDX", assetClass: "gold", unit: "gram", sector: null, sectorWeights: null, countryWeights: null, name: "Gamma", displayName: null },
+        instrument: {
+          symbol: "CCC",
+          market: "IDX",
+          assetClass: "gold",
+          unit: "gram",
+          sector: null,
+          sectorWeights: null,
+          countryWeights: null,
+          name: "Gamma",
+          displayName: null,
+        },
       }),
     ];
 

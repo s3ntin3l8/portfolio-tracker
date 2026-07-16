@@ -75,9 +75,7 @@ export function NetWorthHistoryChart({
     setLoading(true);
     try {
       setData(
-        selectedId
-          ? await api.getPortfolioHistory(selectedId, r)
-          : await api.getNetWorthHistory(r),
+        selectedId ? await api.getPortfolioHistory(selectedId, r) : await api.getNetWorthHistory(r),
       );
     } catch {
       // keep last good series on failed refetch
@@ -124,10 +122,7 @@ export function NetWorthHistoryChart({
 
   const collectingNote = (
     <p
-      className={cn(
-        "py-8 text-center text-sm",
-        isHero ? "text-white/80" : "text-muted-foreground",
-      )}
+      className={cn("py-8 text-center text-sm", isHero ? "text-white/80" : "text-muted-foreground")}
     >
       {t("collectingIntraday")}
     </p>
@@ -199,11 +194,7 @@ export function NetWorthHistoryChart({
       ) : data.length > 1 ? (
         chart
       ) : (
-        <EmptyState
-          icon={LineChart}
-          title={te("historyTitle")}
-          description={te("historyBody")}
-        />
+        <EmptyState icon={LineChart} title={te("historyTitle")} description={te("historyBody")} />
       )}
     </div>
   );

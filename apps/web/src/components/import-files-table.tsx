@@ -61,7 +61,11 @@ export function ImportFilesTable({
     { key: "file", get: (g) => g.filename, type: "text" },
     { key: "count", get: (g) => countByImport(g.importId), type: "numeric" },
   ];
-  const { sortKey, sortDir, toggle: toggleSort } = useTableSort<{
+  const {
+    sortKey,
+    sortDir,
+    toggle: toggleSort,
+  } = useTableSort<{
     importId: string;
     filename: string;
   }>(COLS);

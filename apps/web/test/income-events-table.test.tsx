@@ -38,7 +38,10 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
-import { IncomeEventsTable, type IncomeEventRow } from "../src/components/income/income-events-table";
+import {
+  IncomeEventsTable,
+  type IncomeEventRow,
+} from "../src/components/income/income-events-table";
 
 const HISTORICAL: IncomeEventRow = {
   transactionId: "tx1",

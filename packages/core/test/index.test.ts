@@ -101,7 +101,13 @@ describe("computeHoldings", () => {
   it("throws when one instrument has transactions in multiple currencies", () => {
     const txs: CoreTransaction[] = [
       tx({ type: "buy", quantity: "10", price: "100", currency: "USD" }),
-      tx({ type: "buy", quantity: "10", price: "950", currency: "EUR", executedAt: new Date("2026-01-02") }),
+      tx({
+        type: "buy",
+        quantity: "10",
+        price: "950",
+        currency: "EUR",
+        executedAt: new Date("2026-01-02"),
+      }),
     ];
     expect(() => computeHoldings(txs)).toThrow(/multiple currencies/);
   });
@@ -109,7 +115,7 @@ describe("computeHoldings", () => {
   it("excludes transactions after the asOf cutoff", () => {
     const txs: CoreTransaction[] = [
       tx({ type: "buy", quantity: "100", price: "9500", executedAt: new Date("2025-03-01") }),
-      tx({ type: "buy", quantity: "50",  price: "10000", executedAt: new Date("2025-09-01") }), // after cutoff
+      tx({ type: "buy", quantity: "50", price: "10000", executedAt: new Date("2025-09-01") }), // after cutoff
     ];
     const cutoff = new Date("2025-06-30");
     const [h] = computeHoldings(txs, [], cutoff);
@@ -189,17 +195,43 @@ describe("xirr", () => {
 });
 
 describe("cashFlow", () => {
-  const base = { instrumentId: AAPL, quantity: "0", price: "0", fees: "0", currency: "IDR", executedAt: new Date() };
+  const base = {
+    instrumentId: AAPL,
+    quantity: "0",
+    price: "0",
+    fees: "0",
+    currency: "IDR",
+    executedAt: new Date(),
+  };
   it("signs each transaction type correctly", () => {
     expect(cashFlow({ ...base, type: "deposit", price: "1000" }).toString()).toBe("1000");
     expect(cashFlow({ ...base, type: "withdrawal", price: "1000" }).toString()).toBe("-1000");
-    expect(cashFlow({ ...base, type: "buy", quantity: "10", price: "100", fees: "5" }).toString()).toBe("-1005");
-    expect(cashFlow({ ...base, type: "savings_plan", quantity: "10", price: "100" }).toString()).toBe("-1000");
-    expect(cashFlow({ ...base, type: "sell", quantity: "10", price: "100", fees: "5" }).toString()).toBe("995");
+    expect(
+      cashFlow({ ...base, type: "buy", quantity: "10", price: "100", fees: "5" }).toString(),
+    ).toBe("-1005");
+    expect(
+      cashFlow({ ...base, type: "savings_plan", quantity: "10", price: "100" }).toString(),
+    ).toBe("-1000");
+    expect(
+      cashFlow({ ...base, type: "sell", quantity: "10", price: "100", fees: "5" }).toString(),
+    ).toBe("995");
     // With capital-gains tax: gross proceeds − fees − tax
-    expect(cashFlow({ ...base, type: "sell", quantity: "10", price: "100", fees: "5", tax: "3" }).toString()).toBe("992");
-    expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "250" }).toString()).toBe("250");
-    expect(cashFlow({ ...base, type: "dividend", quantity: "10", price: "25" }).toString()).toBe("250");
+    expect(
+      cashFlow({
+        ...base,
+        type: "sell",
+        quantity: "10",
+        price: "100",
+        fees: "5",
+        tax: "3",
+      }).toString(),
+    ).toBe("992");
+    expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "250" }).toString()).toBe(
+      "250",
+    );
+    expect(cashFlow({ ...base, type: "dividend", quantity: "10", price: "25" }).toString()).toBe(
+      "250",
+    );
     expect(cashFlow({ ...base, type: "coupon", price: "300" }).toString()).toBe("300");
     expect(cashFlow({ ...base, type: "fee", price: "20" }).toString()).toBe("-20");
     // `tax` (e.g. Vorabpauschale): magnitude in price → a cash outflow, like fee.
@@ -210,18 +242,47 @@ describe("cashFlow", () => {
     // bonus_cash = lump-sum income (same economics as interest): price − fees
     expect(cashFlow({ ...base, type: "bonus_cash", price: "22.86" }).toString()).toBe("22.86");
     // A negative price (dividend reversal stored as net) correctly reduces cash
-    expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "-0.07" }).toString()).toBe("-0.07");
+    expect(cashFlow({ ...base, type: "dividend", quantity: "0", price: "-0.07" }).toString()).toBe(
+      "-0.07",
+    );
   });
 
   it("treats a saveback purchase as cash-neutral (TR's reward funds it), round-up as a real cash-out", () => {
     // Saveback: TR cashback reward (= the invested amount, not on the timeline feed) funds the
     // buy → net 0 cash, shares still acquired at basis. Only fees (≈0) touch cash.
-    expect(cashFlow({ ...base, type: "savings_plan", quantity: "0.013699", price: "702.24", kind: "saveback" }).toString()).toBe("0");
-    expect(cashFlow({ ...base, type: "savings_plan", quantity: "1", price: "9.62", fees: "0.5", kind: "saveback" }).toString()).toBe("-0.5");
+    expect(
+      cashFlow({
+        ...base,
+        type: "savings_plan",
+        quantity: "0.013699",
+        price: "702.24",
+        kind: "saveback",
+      }).toString(),
+    ).toBe("0");
+    expect(
+      cashFlow({
+        ...base,
+        type: "savings_plan",
+        quantity: "1",
+        price: "9.62",
+        fees: "0.5",
+        kind: "saveback",
+      }).toString(),
+    ).toBe("-0.5");
     // Round-up is the user's OWN spare change → a genuine cash-out, unaffected.
-    expect(cashFlow({ ...base, type: "buy", quantity: "1", price: "2", kind: "roundup" }).toString()).toBe("-2");
+    expect(
+      cashFlow({ ...base, type: "buy", quantity: "1", price: "2", kind: "roundup" }).toString(),
+    ).toBe("-2");
     // Crypto "1% bonus" is reward-funded like saveback → cash-neutral.
-    expect(cashFlow({ ...base, type: "buy", quantity: "0.0002", price: "100550", kind: "crypto_bonus" }).toString()).toBe("0");
+    expect(
+      cashFlow({
+        ...base,
+        type: "buy",
+        quantity: "0.0002",
+        price: "100550",
+        kind: "crypto_bonus",
+      }).toString(),
+    ).toBe("0");
   });
 });
 
@@ -263,7 +324,13 @@ describe("summarizePortfolio", () => {
       mk({ type: "buy", quantity: "100", price: "10500", executedAt: new Date("2026-01-03") }),
       mk({ type: "sell", quantity: "50", price: "11000", executedAt: new Date("2026-01-04") }),
       // unpriced holding — returned but excluded from market-value totals
-      mk({ type: "buy", instrumentId: I2, quantity: "10", price: "100", executedAt: new Date("2026-01-05") }),
+      mk({
+        type: "buy",
+        instrumentId: I2,
+        quantity: "10",
+        price: "100",
+        executedAt: new Date("2026-01-05"),
+      }),
     ];
 
     const summary = summarizePortfolio({
@@ -313,9 +380,7 @@ describe("summarizePortfolio", () => {
     // Cash-inside (default) but only securities buys, no deposit/withdrawal: the derived
     // balance would be a phantom negative (−950,000). Instead cash is reported untracked
     // and net worth is the securities sleeve only — no phantom drag.
-    const txs: CoreTransaction[] = [
-      mk({ type: "buy", quantity: "100", price: "9500" }),
-    ];
+    const txs: CoreTransaction[] = [mk({ type: "buy", quantity: "100", price: "9500" })];
     const summary = summarizePortfolio({
       transactions: txs,
       prices: { [I1]: { price: "11000", currency: "IDR" } },
@@ -340,9 +405,7 @@ describe("summarizePortfolio", () => {
     // Mirrors the IBKR standing-cash case: an otherwise-empty account where the only
     // booked event is the opening-balance deposit. Cash must be tracked and counted.
     const summary = summarizePortfolio({
-      transactions: [
-        mk({ type: "deposit", instrumentId: null, price: "9.9981", currency: "EUR" }),
-      ],
+      transactions: [mk({ type: "deposit", instrumentId: null, price: "9.9981", currency: "EUR" })],
       prices: {},
       displayCurrency: "EUR",
       cashCounted: true,
@@ -543,12 +606,7 @@ describe("projectDividends", () => {
     const borderline = entry({ executedAt: new Date("2025-06-10T00:00:00.000Z") });
     // 2026-03-01 is this year → outside source window (only last year accepted).
     const thisYear = entry({ executedAt: new Date("2026-03-01T00:00:00.000Z") });
-    const result = projectDividends(
-      [tooOld, borderline, thisYear],
-      heldQty,
-      qtyAt,
-      now,
-    );
+    const result = projectDividends([tooOld, borderline, thisYear], heldQty, qtyAt, now);
     expect(result).toHaveLength(0);
   });
 
@@ -559,11 +617,15 @@ describe("projectDividends", () => {
   });
 
   it("returns results sorted ascending by projected date", () => {
-    const heldQty = new Map([["bbca", "100"], ["vwrl", "50"]]);
+    const heldQty = new Map([
+      ["bbca", "100"],
+      ["vwrl", "50"],
+    ]);
     const qtyAt = () => "100";
     const e1 = entry({ executedAt: new Date("2025-12-01T00:00:00.000Z") }); // → 2026-12-01
     const e2 = entry({
-      instrumentId: "vwrl", symbol: "VWRL",
+      instrumentId: "vwrl",
+      symbol: "VWRL",
       executedAt: new Date("2025-09-15T00:00:00.000Z"), // → 2026-09-15
     });
     const result = projectDividends([e1, e2], heldQty, qtyAt, now);
@@ -575,18 +637,54 @@ describe("projectDividends", () => {
     // Source window: (2025-06-17, 2025-12-31] → only Sep 12 and Dec 12 2025 qualify
     // Projected: Sep 12 2026 and Dec 12 2026 (both > now = 2026-06-15)
     const msftDivs: IncomeEntry[] = [
-      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.75", currency: "USD", executedAt: new Date("2025-03-12T00:00:00.000Z") },
-      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.75", currency: "USD", executedAt: new Date("2025-06-12T00:00:00.000Z") },
-      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.80", currency: "USD", executedAt: new Date("2025-09-12T00:00:00.000Z") },
-      { instrumentId: "msft", symbol: "MSFT", name: "Microsoft", assetClass: "equity", type: "dividend", price: "0.80", currency: "USD", executedAt: new Date("2025-12-12T00:00:00.000Z") },
+      {
+        instrumentId: "msft",
+        symbol: "MSFT",
+        name: "Microsoft",
+        assetClass: "equity",
+        type: "dividend",
+        price: "0.75",
+        currency: "USD",
+        executedAt: new Date("2025-03-12T00:00:00.000Z"),
+      },
+      {
+        instrumentId: "msft",
+        symbol: "MSFT",
+        name: "Microsoft",
+        assetClass: "equity",
+        type: "dividend",
+        price: "0.75",
+        currency: "USD",
+        executedAt: new Date("2025-06-12T00:00:00.000Z"),
+      },
+      {
+        instrumentId: "msft",
+        symbol: "MSFT",
+        name: "Microsoft",
+        assetClass: "equity",
+        type: "dividend",
+        price: "0.80",
+        currency: "USD",
+        executedAt: new Date("2025-09-12T00:00:00.000Z"),
+      },
+      {
+        instrumentId: "msft",
+        symbol: "MSFT",
+        name: "Microsoft",
+        assetClass: "equity",
+        type: "dividend",
+        price: "0.80",
+        currency: "USD",
+        executedAt: new Date("2025-12-12T00:00:00.000Z"),
+      },
     ];
     const heldQty = new Map([["msft", "10"]]);
     const qtyAt = () => "10";
     const result = projectDividends(msftDivs, heldQty, qtyAt, now);
     expect(result).toHaveLength(2);
     expect(result.map((r) => r.date)).toEqual(["2026-09-12", "2026-12-12"]);
-    expect(Number(result[0].amount)).toBe(0.80);
-    expect(Number(result[1].amount)).toBe(0.80);
+    expect(Number(result[0].amount)).toBe(0.8);
+    expect(Number(result[1].amount)).toBe(0.8);
   });
 });
 
@@ -597,10 +695,25 @@ describe("trailingIncomeByInstrument / trailingYield", () => {
   it("sums dividend and coupon cash per instrument since the cutoff", () => {
     const income = trailingIncomeByInstrument(
       [
-        ev({ instrumentId: "a", type: "dividend", price: "100", executedAt: new Date("2026-01-10") }),
-        ev({ instrumentId: "a", type: "dividend", price: "150", executedAt: new Date("2026-03-10") }),
+        ev({
+          instrumentId: "a",
+          type: "dividend",
+          price: "100",
+          executedAt: new Date("2026-01-10"),
+        }),
+        ev({
+          instrumentId: "a",
+          type: "dividend",
+          price: "150",
+          executedAt: new Date("2026-03-10"),
+        }),
         ev({ instrumentId: "b", type: "coupon", price: "300", executedAt: new Date("2026-02-10") }),
-        ev({ instrumentId: "a", type: "dividend", price: "999", executedAt: new Date("2024-01-10") }), // too old
+        ev({
+          instrumentId: "a",
+          type: "dividend",
+          price: "999",
+          executedAt: new Date("2024-01-10"),
+        }), // too old
         ev({ instrumentId: "a", type: "buy", price: "50", executedAt: new Date("2026-04-10") }), // not income
       ],
       since,
@@ -633,7 +746,13 @@ describe("netWorth", () => {
   it("sums holdings (FX-converted) and cash in the display currency", () => {
     const value = netWorth({
       holdings: [
-        { instrumentId: AAPL, quantity: "300", avgCost: "5000", costBasis: "1500000", realizedPnL: "0" },
+        {
+          instrumentId: AAPL,
+          quantity: "300",
+          avgCost: "5000",
+          costBasis: "1500000",
+          realizedPnL: "0",
+        },
       ],
       prices: { [AAPL]: { price: "11000", currency: "IDR" } },
       cash: { IDR: "1000000", EUR: "100" },
@@ -787,7 +906,7 @@ describe("cross-currency holdings and valuation", () => {
     quantity: "0.196633",
     price: "127.14",
     fees: "1",
-    currency: "EUR",          // trade currency
+    currency: "EUR", // trade currency
     executedAt: new Date("2025-08-26"),
   };
 
@@ -802,7 +921,7 @@ describe("cross-currency holdings and valuation", () => {
     const [h] = computeHoldings([pepBuy]);
     expect(h.costCurrency).toBe("EUR");
     // costBasis = 0.196633 * 127.14 + 1 ≈ 26.00
-    expect(Number(h.costBasis)).toBeCloseTo(26.00, 1);
+    expect(Number(h.costBasis)).toBeCloseTo(26.0, 1);
   });
 
   it("computeHoldings costCurrency is null for instruments with no price-bearing txns", () => {
@@ -834,11 +953,11 @@ describe("cross-currency holdings and valuation", () => {
     // Market value: 0.196633 * 142.02 USD * 0.8708 = approx €24.32
     expect(Number(h.marketValueDisplay)).toBeCloseTo(24.32, 1);
     // Cost basis: 26.00 EUR * 1 (EUR→EUR) = 26.00
-    expect(Number(h.costBasisDisplay)).toBeCloseTo(26.00, 1);
+    expect(Number(h.costBasisDisplay)).toBeCloseTo(26.0, 1);
     // Unrealized: 24.32 - 26.00 ≈ -1.68 (a real loss)
     expect(Number(h.unrealizedPnLDisplay)).toBeCloseTo(-1.68, 1);
     // totalCost uses cost ccy (EUR), not quote ccy (USD)
-    expect(Number(summary.totalCost)).toBeCloseTo(26.00, 1);
+    expect(Number(summary.totalCost)).toBeCloseTo(26.0, 1);
   });
 
   it("summarizePortfolio is unchanged for same-currency holdings (no regression)", () => {

@@ -98,10 +98,7 @@ describe("pytr import → confirm", () => {
         payload: { name: "TR", baseCurrency: "EUR" },
       })
     ).json().id;
-    const [pf] = await getDb()
-      .select()
-      .from(portfolios)
-      .where(eq(portfolios.id, portfolioId));
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
 
     const importId = await stagePytrImport(portfolioId, pf.userId);
     const confirm = await app.inject({
@@ -115,9 +112,7 @@ describe("pytr import → confirm", () => {
     expect(confirmed).toBe(2);
 
     const buy = transactions.find((x: { externalId: string }) => x.externalId === "tr-1");
-    const deposit = transactions.find(
-      (x: { externalId: string }) => x.externalId === "tr-2",
-    );
+    const deposit = transactions.find((x: { externalId: string }) => x.externalId === "tr-2");
     expect(buy).toMatchObject({ source: "pytr", type: "buy" });
     expect(buy.instrumentId).toBeTruthy();
     expect(deposit).toMatchObject({ source: "pytr", type: "deposit" });
@@ -236,10 +231,7 @@ describe("pytr import → confirm", () => {
         payload: { name: "TR", baseCurrency: "EUR" },
       })
     ).json().id;
-    const [pf] = await getDb()
-      .select()
-      .from(portfolios)
-      .where(eq(portfolios.id, portfolioId));
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
     const [imp] = await getDb()
       .insert(screenshotImports)
       .values({
@@ -258,10 +250,7 @@ describe("pytr import → confirm", () => {
     });
     expect(confirm.statusCode).toBe(201);
     const instrumentId = confirm.json().transactions[0].instrumentId as string;
-    const [inst] = await getDb()
-      .select()
-      .from(instruments)
-      .where(eq(instruments.id, instrumentId));
+    const [inst] = await getDb().select().from(instruments).where(eq(instruments.id, instrumentId));
     return inst;
   }
 
@@ -305,7 +294,11 @@ describe("pytr import → confirm", () => {
   it("keeps an unresolved EU ISIN pinned to the broker's Xetra/EUR default", async () => {
     const inst = await confirmDraftInstrument(
       await token("tr-eu"),
-      securityDraft({ isin: "IE00BK5BQT80", name: "Vanguard FTSE All-World", externalId: "vwce-1" }),
+      securityDraft({
+        isin: "IE00BK5BQT80",
+        name: "Vanguard FTSE All-World",
+        externalId: "vwce-1",
+      }),
     );
     expect(inst).toMatchObject({ market: "XETRA", currency: "EUR" });
   });
@@ -313,7 +306,12 @@ describe("pytr import → confirm", () => {
   it("carries the WKN (sourced from TR's instrument detail) onto the instrument", async () => {
     const inst = await confirmDraftInstrument(
       await token("tr-wkn"),
-      securityDraft({ isin: "IE00BK5BQT80", wkn: "A2PKXG", name: "Vanguard FTSE All-World", externalId: "wkn-1" }),
+      securityDraft({
+        isin: "IE00BK5BQT80",
+        wkn: "A2PKXG",
+        name: "Vanguard FTSE All-World",
+        externalId: "wkn-1",
+      }),
     );
     expect(inst).toMatchObject({ isin: "IE00BK5BQT80", wkn: "A2PKXG", market: "XETRA" });
   });
@@ -469,7 +467,12 @@ describe("pytr import → confirm", () => {
         parsedJson: {
           drafts: [DRAFTS[0]],
           errors: [
-            { eventId: "iss-1", eventType: "MYSTERY", severity: "attention", message: "unmapped event type: MYSTERY" },
+            {
+              eventId: "iss-1",
+              eventType: "MYSTERY",
+              severity: "attention",
+              message: "unmapped event type: MYSTERY",
+            },
           ],
         },
         status: "draft",
@@ -507,10 +510,7 @@ describe("pytr import → confirm", () => {
         payload: { name: "TR", baseCurrency: "EUR" },
       })
     ).json().id;
-    const [pf] = await getDb()
-      .select()
-      .from(portfolios)
-      .where(eq(portfolios.id, portfolioId));
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
     const importId = await stagePytrImport(portfolioId, pf.userId);
 
     // Confirm only the first draft (tr-1).
@@ -528,7 +528,9 @@ describe("pytr import → confirm", () => {
       .from(screenshotImports)
       .where(eq(screenshotImports.id, importId));
     expect(mid.status).toBe("draft");
-    expect((mid.parsedJson as { drafts: { externalId: string }[] }).drafts.map((d) => d.externalId)).toEqual(["tr-2"]);
+    expect(
+      (mid.parsedJson as { drafts: { externalId: string }[] }).drafts.map((d) => d.externalId),
+    ).toEqual(["tr-2"]);
 
     // Confirm the rest → the import closes.
     const second = await app.inject({
@@ -555,10 +557,7 @@ describe("pytr import → confirm", () => {
         payload: { name: "TR", baseCurrency: "EUR" },
       })
     ).json().id;
-    const [pf] = await getDb()
-      .select()
-      .from(portfolios)
-      .where(eq(portfolios.id, portfolioId));
+    const [pf] = await getDb().select().from(portfolios).where(eq(portfolios.id, portfolioId));
 
     const first = await app.inject({
       method: "POST",
@@ -603,8 +602,18 @@ describe("pytr import → confirm", () => {
         parsedJson: {
           drafts: [],
           errors: [
-            { code: "unmapped_event_type", eventType: "TAXES", severity: "attention", message: "unmapped event type: TAXES", raw: { amount: -1.23 } },
-            { code: "unparseable_event", severity: "attention", message: "unparseable event: eventType Required" },
+            {
+              code: "unmapped_event_type",
+              eventType: "TAXES",
+              severity: "attention",
+              message: "unmapped event type: TAXES",
+              raw: { amount: -1.23 },
+            },
+            {
+              code: "unparseable_event",
+              severity: "attention",
+              message: "unparseable event: eventType Required",
+            },
             { eventType: "CARD_VERIFICATION", severity: "info", message: "card verification" },
           ],
         },
@@ -619,7 +628,13 @@ describe("pytr import → confirm", () => {
         parsedJson: {
           drafts: [],
           errors: [
-            { code: "unmapped_event_type", eventType: "TAXES", severity: "attention", message: "unmapped event type: TAXES", raw: { amount: -4.5 } },
+            {
+              code: "unmapped_event_type",
+              eventType: "TAXES",
+              severity: "attention",
+              message: "unmapped event type: TAXES",
+              raw: { amount: -4.5 },
+            },
           ],
         },
       });
@@ -633,7 +648,12 @@ describe("pytr import → confirm", () => {
         parsedJson: {
           drafts: [],
           errors: [
-            { code: "unmapped_event_type", eventType: "GHOST", severity: "attention", message: "unmapped event type: GHOST" },
+            {
+              code: "unmapped_event_type",
+              eventType: "GHOST",
+              severity: "attention",
+              message: "unmapped event type: GHOST",
+            },
           ],
         },
       });

@@ -51,10 +51,7 @@ async function createPortfolio(t: string, opts: Record<string, unknown> = {}) {
   return res.json().id as string;
 }
 
-async function createHolder(
-  t: string,
-  opts: Record<string, unknown> = {},
-): Promise<string> {
+async function createHolder(t: string, opts: Record<string, unknown> = {}): Promise<string> {
   const res = await app.inject({
     method: "POST",
     url: "/account-holders",
@@ -130,7 +127,10 @@ describe("tax routes", () => {
         taxResidence: "DE",
       });
       // Portfolio carries the per-depot FSA allocation.
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "1000",
+      });
 
       const res = await app.inject({
         method: "GET",
@@ -153,7 +153,10 @@ describe("tax routes", () => {
         name: "Single Depot Holder",
         taxAllowanceAnnual: "1000",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "1000",
+      });
 
       await app.inject({
         method: "PUT",
@@ -179,7 +182,10 @@ describe("tax routes", () => {
         name: "Multi Depot Holder",
         taxAllowanceAnnual: "1000",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "500" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "500",
+      });
       await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "500" });
 
       await app.inject({
@@ -239,7 +245,10 @@ describe("tax routes", () => {
         name: "No LCF Holder",
         taxAllowanceAnnual: "1000",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "1000",
+      });
 
       const res = await app.inject({
         method: "GET",
@@ -259,7 +268,10 @@ describe("tax routes", () => {
         name: "No Year Holder",
         taxAllowanceAnnual: "800",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, taxAllowanceAnnual: "800" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "800",
+      });
 
       const res = await app.inject({
         method: "GET",
@@ -274,7 +286,10 @@ describe("tax routes", () => {
       const t1 = await token("tax-scope-1a");
       const t2 = await token("tax-scope-1b");
       const holderId = await createHolder(t1, { name: "Holder 1", taxAllowanceAnnual: "1000" });
-      const portfolioId = await createPortfolio(t1, { accountHolderId: holderId, taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t1, {
+        accountHolderId: holderId,
+        taxAllowanceAnnual: "1000",
+      });
 
       // User 2 cannot access user 1's portfolio.
       const res = await app.inject({
@@ -293,7 +308,13 @@ describe("tax routes", () => {
       // Insert an ETF with NO explicit partialExemptionRate.
       const [etf] = await app.db
         .insert(instruments)
-        .values({ symbol: "WORLD-ETF", market: "XETRA", assetClass: "etf", currency: "EUR", name: "World ETF" })
+        .values({
+          symbol: "WORLD-ETF",
+          market: "XETRA",
+          assetClass: "etf",
+          currency: "EUR",
+          name: "World ETF",
+        })
         .returning();
 
       const holderId = await createHolder(t, {
@@ -302,7 +323,11 @@ describe("tax routes", () => {
         capitalGainsTaxRate: "0.25",
         taxResidence: "DE",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       // Upsert the user and create a buy + sell for a 1000 EUR gross gain.
       await app.inject({ method: "GET", url: "/me", headers: auth(t) });
@@ -424,7 +449,9 @@ describe("tax routes", () => {
       const t1 = await token("tax-scope-nw-1a");
       const t2 = await token("tax-scope-nw-1b");
       await createHolder(t1, { name: "Private Holder", taxAllowanceAnnual: "1000" });
-      await createPortfolio(t1, { accountHolderId: (await createHolder(t1, { name: "PH2", taxAllowanceAnnual: "500" })) });
+      await createPortfolio(t1, {
+        accountHolderId: await createHolder(t1, { name: "PH2", taxAllowanceAnnual: "500" }),
+      });
 
       // User 2 should see no entries.
       const res = await app.inject({
@@ -618,19 +645,40 @@ describe("tax routes", () => {
 
       const [stock] = await app.db
         .insert(instruments)
-        .values({ symbol: "PAST-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Past Stock" })
+        .values({
+          symbol: "PAST-STOCK",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "Past Stock",
+        })
         .returning();
 
-      const holderId = await createHolder(t, { name: "Past Year Holder", taxAllowanceAnnual: "1000" });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const holderId = await createHolder(t, {
+        name: "Past Year Holder",
+        taxAllowanceAnnual: "1000",
+      });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "buy", instrumentId: stock.id, quantity: "10", price: "50",
-        currency: "EUR", executedAt: buyDate,
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "10",
+        price: "50",
+        currency: "EUR",
+        executedAt: buyDate,
       });
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "dividend", instrumentId: stock.id, quantity: "0", price: "20",
-        currency: "EUR", executedAt: lastYearDivDate,
+        type: "dividend",
+        instrumentId: stock.id,
+        quantity: "0",
+        price: "20",
+        currency: "EUR",
+        executedAt: lastYearDivDate,
       });
 
       // Ask for a past year — forecast must be 0.
@@ -652,7 +700,13 @@ describe("tax routes", () => {
 
       const [stock] = await app.db
         .insert(instruments)
-        .values({ symbol: "CUR-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Current Stock" })
+        .values({
+          symbol: "CUR-STOCK",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "Current Stock",
+        })
         .returning();
 
       const holderId = await createHolder(t, {
@@ -660,16 +714,28 @@ describe("tax routes", () => {
         taxAllowanceAnnual: "1000",
         capitalGainsTaxRate: "0.25",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       // Hold 10 shares; dividend from last year's rest-of-year window (no withholding).
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "buy", instrumentId: stock.id, quantity: "10", price: "100",
-        currency: "EUR", executedAt: buyDate,
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "10",
+        price: "100",
+        currency: "EUR",
+        executedAt: buyDate,
       });
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "dividend", instrumentId: stock.id, quantity: "0", price: "30",
-        currency: "EUR", executedAt: lastYearDivDate,
+        type: "dividend",
+        instrumentId: stock.id,
+        quantity: "0",
+        price: "30",
+        currency: "EUR",
+        executedAt: lastYearDivDate,
       });
 
       // Current year, no year param.
@@ -696,7 +762,13 @@ describe("tax routes", () => {
 
       const [stock] = await app.db
         .insert(instruments)
-        .values({ symbol: "GUP-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Grossup Stock" })
+        .values({
+          symbol: "GUP-STOCK",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "Grossup Stock",
+        })
         .returning();
 
       const holderId = await createHolder(t, {
@@ -704,16 +776,29 @@ describe("tax routes", () => {
         taxAllowanceAnnual: "1000",
         capitalGainsTaxRate: "0.25",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "buy", instrumentId: stock.id, quantity: "10", price: "100",
-        currency: "EUR", executedAt: buyDate,
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "10",
+        price: "100",
+        currency: "EUR",
+        executedAt: buyDate,
       });
       // Dividend: net price=60, withholding tax=20 → gross=80, ratio=80/60≈1.333.
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "dividend", instrumentId: stock.id, quantity: "0", price: "60",
-        tax: "20", currency: "EUR", executedAt: lastYearDivDate,
+        type: "dividend",
+        instrumentId: stock.id,
+        quantity: "0",
+        price: "60",
+        tax: "20",
+        currency: "EUR",
+        executedAt: lastYearDivDate,
       });
 
       const noTaxRes = await app.inject({
@@ -728,7 +813,7 @@ describe("tax routes", () => {
       // forecastIncomeRestOfYear should be ~80, not ~60.
       const forecast = parseFloat(u.forecastIncomeRestOfYear);
       expect(forecast).toBeGreaterThan(60); // gross > net
-      expect(forecast).toBeCloseTo(80, 0);  // ≈ net + tax = 80
+      expect(forecast).toBeCloseTo(80, 0); // ≈ net + tax = 80
     });
 
     it("harvest suggestions use projectedRemaining, not remaining", async () => {
@@ -737,7 +822,13 @@ describe("tax routes", () => {
 
       const [stock] = await app.db
         .insert(instruments)
-        .values({ symbol: "HARV-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Harvest Stock" })
+        .values({
+          symbol: "HARV-STOCK",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "Harvest Stock",
+        })
         .returning();
 
       const holderId = await createHolder(t, {
@@ -745,17 +836,29 @@ describe("tax routes", () => {
         taxAllowanceAnnual: "1000",
         capitalGainsTaxRate: "0.25",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       // Buy at 50, still open (unrealized gain drives harvest suggestion).
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "buy", instrumentId: stock.id, quantity: "10", price: "50",
-        currency: "EUR", executedAt: buyDate,
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "10",
+        price: "50",
+        currency: "EUR",
+        executedAt: buyDate,
       });
       // Large dividend from last year's window (e.g. 900 EUR) → forecast eats most of 1000 allowance.
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "dividend", instrumentId: stock.id, quantity: "0", price: "900",
-        currency: "EUR", executedAt: lastYearDivDate,
+        type: "dividend",
+        instrumentId: stock.id,
+        quantity: "0",
+        price: "900",
+        currency: "EUR",
+        executedAt: lastYearDivDate,
       });
 
       const res = await app.inject({
@@ -786,7 +889,13 @@ describe("tax routes", () => {
 
       const [stock] = await app.db
         .insert(instruments)
-        .values({ symbol: "NW-STOCK", market: "XETRA", assetClass: "equity", currency: "EUR", name: "NW Stock" })
+        .values({
+          symbol: "NW-STOCK",
+          market: "XETRA",
+          assetClass: "equity",
+          currency: "EUR",
+          name: "NW Stock",
+        })
         .returning();
 
       const holderId = await createHolder(t, {
@@ -795,15 +904,27 @@ describe("tax routes", () => {
         capitalGainsTaxRate: "0.25",
         taxResidence: "DE",
       });
-      const portfolioId = await createPortfolio(t, { accountHolderId: holderId, baseCurrency: "EUR", taxAllowanceAnnual: "1000" });
+      const portfolioId = await createPortfolio(t, {
+        accountHolderId: holderId,
+        baseCurrency: "EUR",
+        taxAllowanceAnnual: "1000",
+      });
 
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "buy", instrumentId: stock.id, quantity: "5", price: "100",
-        currency: "EUR", executedAt: buyDate,
+        type: "buy",
+        instrumentId: stock.id,
+        quantity: "5",
+        price: "100",
+        currency: "EUR",
+        executedAt: buyDate,
       });
       await seedTransaction(app, portfolioId, auth(t), {
-        type: "dividend", instrumentId: stock.id, quantity: "0", price: "50",
-        currency: "EUR", executedAt: lastYearDivDate,
+        type: "dividend",
+        instrumentId: stock.id,
+        quantity: "0",
+        price: "50",
+        currency: "EUR",
+        executedAt: lastYearDivDate,
       });
 
       const res = await app.inject({

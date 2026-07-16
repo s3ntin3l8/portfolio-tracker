@@ -106,9 +106,7 @@ describe("DividendsTable", () => {
   });
 
   it("renders the empty state when there's no dividend income", () => {
-    wrapClient(
-      <DividendsTable rows={[]} totalsByCurrency={[]} locale="en" year={2026} />,
-    );
+    wrapClient(<DividendsTable rows={[]} totalsByCurrency={[]} locale="en" year={2026} />);
     expect(screen.getByText(/No dividend\/interest income/)).toBeInTheDocument();
   });
 });
@@ -307,7 +305,12 @@ describe("HarvestSummaryNote", () => {
             instrument: null,
           },
         ]}
-        combined={{ positionsUsed: 0, combinedHarvestableGross: "0", combinedTaxSaving: "0", plan: [] }}
+        combined={{
+          positionsUsed: 0,
+          combinedHarvestableGross: "0",
+          combinedTaxSaving: "0",
+          plan: [],
+        }}
         money={money}
         t={t}
       />,
@@ -379,7 +382,9 @@ describe("IdByYearTable", () => {
   });
 
   it("renders nothing when there are no years", () => {
-    const { container } = wrapClient(<IdByYearTable rows={[]} currency={CURRENCY} locale={LOCALE} />);
+    const { container } = wrapClient(
+      <IdByYearTable rows={[]} currency={CURRENCY} locale={LOCALE} />,
+    );
     expect(container).toBeEmptyDOMElement();
   });
 });

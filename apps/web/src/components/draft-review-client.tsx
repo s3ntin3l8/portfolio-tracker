@@ -101,7 +101,12 @@ export function DraftReviewClient({
       ds.map((d) => {
         const ann = byServerIdx.get(d._serverIdx);
         const likelyDuplicate: LikelyDuplicate | null = ann
-          ? { kind: ann.kind, source: ann.matchedSource, executedAt: ann.matchedExecutedAt, matchedTransactionId: ann.matchedTransactionId }
+          ? {
+              kind: ann.kind,
+              source: ann.matchedSource,
+              executedAt: ann.matchedExecutedAt,
+              matchedTransactionId: ann.matchedTransactionId,
+            }
           : null;
         return { ...d, likelyDuplicate };
       }),
@@ -168,11 +173,7 @@ export function DraftReviewClient({
                 })
               : ti("accountMismatch.noMatch", { account: accountMismatch.detected })}
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void confirm(undefined, true)}
-          >
+          <Button size="sm" variant="outline" onClick={() => void confirm(undefined, true)}>
             {ti("accountMismatch.importAnyway")}
           </Button>
         </div>

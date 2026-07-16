@@ -63,7 +63,9 @@ describe("SettingsInstallItem", () => {
     renderItem();
     const prompt = fireBeforeInstallPrompt();
 
-    const button = await screen.findByRole("button", { name: new RegExp(messages.Settings.navInstall) });
+    const button = await screen.findByRole("button", {
+      name: new RegExp(messages.Settings.navInstall),
+    });
     fireEvent.click(button);
 
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
@@ -73,7 +75,9 @@ describe("SettingsInstallItem", () => {
     setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari");
     renderItem();
 
-    const button = await screen.findByRole("button", { name: new RegExp(messages.Settings.navInstall) });
+    const button = await screen.findByRole("button", {
+      name: new RegExp(messages.Settings.navInstall),
+    });
     fireEvent.click(button);
 
     expect(toast.info).toHaveBeenCalledWith(
@@ -92,6 +96,8 @@ describe("SettingsInstallItem", () => {
   it("renders the rail variant with the same accessible label", async () => {
     renderItem("rail");
     fireBeforeInstallPrompt();
-    expect(await screen.findByRole("button", { name: new RegExp(messages.Settings.navInstall) })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: new RegExp(messages.Settings.navInstall) }),
+    ).toBeInTheDocument();
   });
 });

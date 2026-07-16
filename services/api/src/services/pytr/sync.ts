@@ -8,7 +8,12 @@ import {
   trResolvedEvents,
 } from "@portfolio/db";
 import type { ImportIssue, ParsedTransaction } from "@portfolio/schema";
-import { mapTrEvents, mapTrEventToDraft, isCashMovementEvent, extractReportDocuments } from "./mapper.js";
+import {
+  mapTrEvents,
+  mapTrEventToDraft,
+  isCashMovementEvent,
+  extractReportDocuments,
+} from "./mapper.js";
 import { PytrAuthError } from "./runner.js";
 import type { PytrRunner } from "./runner.js";
 import {
@@ -69,7 +74,8 @@ interface CollectorJson {
 function asCollectorJson(v: unknown, log?: FastifyBaseLogger): CollectorJson | null {
   const o = v as Record<string, unknown> | null;
   if (o && Array.isArray(o.drafts) && Array.isArray(o.errors)) return o as unknown as CollectorJson;
-  if (v != null) log?.warn({ parsedJson: v }, "tr collector json malformed — ignoring (will re-stage)");
+  if (v != null)
+    log?.warn({ parsedJson: v }, "tr collector json malformed — ignoring (will re-stage)");
   return null;
 }
 
@@ -192,9 +198,7 @@ export async function syncTrConnection(
   // per-event instrument resolution work). `draft`/`archived` rows are unconfirmed/discarded
   // and are tracked separately (the table row itself + the ledger), so only seed the durable
   // "confirmed" ledger from genuinely-confirmed rows (normal/cash_neutral) — never drafts.
-  const existingTxIds = new Set(
-    pytrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)),
-  );
+  const existingTxIds = new Set(pytrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)));
   const confirmedIds = pytrRows
     .filter((r) => r.status === "normal" || r.status === "cash_neutral")
     .map((r) => r.ext)
@@ -202,7 +206,14 @@ export async function syncTrConnection(
   if (confirmedIds.length) {
     await db
       .insert(trResolvedEvents)
-      .values(confirmedIds.map((eventId) => ({ portfolioId, source: "pytr", eventId, resolution: "confirmed" })))
+      .values(
+        confirmedIds.map((eventId) => ({
+          portfolioId,
+          source: "pytr",
+          eventId,
+          resolution: "confirmed",
+        })),
+      )
       .onConflictDoNothing();
   }
   const resolvedRows = await db
@@ -247,7 +258,10 @@ export async function syncTrConnection(
           ),
         );
       for (const id of healable) resolved.delete(id);
-      log?.info({ connectionId, healed: healable.length }, "tr discarded events re-staged (mapper updated)");
+      log?.info(
+        { connectionId, healed: healable.length },
+        "tr discarded events re-staged (mapper updated)",
+      );
     }
   }
 
@@ -341,7 +355,13 @@ export async function syncTrConnection(
   if (!importId && (draftsToMaterialize.length > 0 || mergedErrors.length > 0)) {
     const [imp] = await db
       .insert(screenshotImports)
-      .values({ userId: connection.userId, portfolioId, parser: "pytr", parsedJson: anchorJson, status: anchorStatus })
+      .values({
+        userId: connection.userId,
+        portfolioId,
+        parser: "pytr",
+        parsedJson: anchorJson,
+        status: anchorStatus,
+      })
       .returning();
     importId = imp.id;
   }
@@ -369,7 +389,14 @@ export async function syncTrConnection(
     if (res.collapsed.length > 0) {
       await db
         .insert(trResolvedEvents)
-        .values(res.collapsed.map((eventId) => ({ portfolioId, source: "pytr", eventId, resolution: "confirmed" })))
+        .values(
+          res.collapsed.map((eventId) => ({
+            portfolioId,
+            source: "pytr",
+            eventId,
+            resolution: "confirmed",
+          })),
+        )
         .onConflictDoNothing();
     }
   }
@@ -398,7 +425,11 @@ export async function syncTrConnection(
     session: { phone, pin, sessionData: result.sessionData },
     log,
   });
-  const { requested: documentsRequested, stored: documentsStored, error: documentsError } = docResult;
+  const {
+    requested: documentsRequested,
+    stored: documentsStored,
+    error: documentsError,
+  } = docResult;
 
   // 6b-report. Fetch account-level report documents (e.g. the annual tax report) into the
   // user's tax-reports inbox — best-effort, independent of importId/documentRetention (see

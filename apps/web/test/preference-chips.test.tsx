@@ -31,7 +31,10 @@ describe("PreferenceChips", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Germany" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Indonesia" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Indonesia" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("persists taxRegime and refreshes the route when a different chip is clicked", async () => {

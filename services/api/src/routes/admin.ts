@@ -19,10 +19,7 @@ import {
   storageSettingsUpdateSchema,
   storageSecretSchema,
 } from "@portfolio/schema";
-import {
-  getImportStrategy,
-  IMPORT_SETTINGS_ID,
-} from "../services/import-settings.js";
+import { getImportStrategy, IMPORT_SETTINGS_ID } from "../services/import-settings.js";
 import {
   PROVIDER_REGISTRY,
   resolveProviderConfig,
@@ -43,22 +40,14 @@ import {
   setStorageSecret,
   clearStorageSecret,
 } from "../services/storage-settings.js";
-import {
-  invalidateStorage,
-  FolderProvider,
-  S3Provider,
-} from "../storage/index.js";
+import { invalidateStorage, FolderProvider, S3Provider } from "../storage/index.js";
 import { deleteStorageObjectsByKey } from "../storage/receipts.js";
 import {
   refreshAntamBuyback,
   refreshGaleri24Buyback,
   refreshNav,
 } from "../services/scrapers/store.js";
-import {
-  JOB_DESCRIPTORS,
-  getActiveBoss,
-  triggerJob,
-} from "../services/scheduler.js";
+import { JOB_DESCRIPTORS, getActiveBoss, triggerJob } from "../services/scheduler.js";
 
 /**
  * Admin-only server configuration (requires the Authentik admin group via
@@ -114,11 +103,7 @@ export async function adminRoute(app: FastifyInstance) {
       const hasUrl = Boolean(cred?.urlOverride);
       const desc = PROVIDER_REGISTRY.find((d) => d.id === p.id);
       const keySource: "db" | "env" | null =
-        hasKey || hasUrl
-          ? "db"
-          : desc?.keyEnvVar && process.env[desc.keyEnvVar]
-          ? "env"
-          : null;
+        hasKey || hasUrl ? "db" : desc?.keyEnvVar && process.env[desc.keyEnvVar] ? "env" : null;
       return { ...p, hasKey, keyHint, hasUrl, keySource, usage: usage[p.id] ?? null };
     });
   }
@@ -136,39 +121,35 @@ export async function adminRoute(app: FastifyInstance) {
   );
 
   // Upsert enable/priority for one or more providers, then hot-reload the service.
-  app.patch(
-    "/admin/providers",
-    { preHandler: app.requireAdmin },
-    async (request, reply) => {
-      const updates = providerSettingsUpdateSchema.parse(request.body);
-      const knownIds = new Set(PROVIDER_REGISTRY.map((d) => d.id));
-      const unknown = updates.filter((u) => !knownIds.has(u.id));
-      if (unknown.length > 0) {
-        return reply.code(400).send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
-      }
-      for (const u of updates) {
-        await app.db
-          .insert(providerSettings)
-          .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
-          .onConflictDoUpdate({
-            target: providerSettings.provider,
-            set: { enabled: u.enabled, priority: u.priority, updatedAt: new Date() },
-          });
-      }
-      await app.db.insert(adminAuditLog).values({
-        actorSub: request.user!.authSub,
-        action: "update_providers",
-        target: updates.map((u) => u.id).join(","),
-        meta: updates.reduce<Record<string, unknown>>(
-          (acc, u) => ({ ...acc, [u.id]: { enabled: u.enabled, priority: u.priority } }),
-          {},
-        ),
-      });
-      // Drop the cached MarketDataService so the next request/job rebuilds the chain.
-      invalidateMarketData();
-      return providersResponse(await listProviders());
-    },
-  );
+  app.patch("/admin/providers", { preHandler: app.requireAdmin }, async (request, reply) => {
+    const updates = providerSettingsUpdateSchema.parse(request.body);
+    const knownIds = new Set(PROVIDER_REGISTRY.map((d) => d.id));
+    const unknown = updates.filter((u) => !knownIds.has(u.id));
+    if (unknown.length > 0) {
+      return reply.code(400).send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
+    }
+    for (const u of updates) {
+      await app.db
+        .insert(providerSettings)
+        .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
+        .onConflictDoUpdate({
+          target: providerSettings.provider,
+          set: { enabled: u.enabled, priority: u.priority, updatedAt: new Date() },
+        });
+    }
+    await app.db.insert(adminAuditLog).values({
+      actorSub: request.user!.authSub,
+      action: "update_providers",
+      target: updates.map((u) => u.id).join(","),
+      meta: updates.reduce<Record<string, unknown>>(
+        (acc, u) => ({ ...acc, [u.id]: { enabled: u.enabled, priority: u.priority } }),
+        {},
+      ),
+    });
+    // Drop the cached MarketDataService so the next request/job rebuilds the chain.
+    invalidateMarketData();
+    return providersResponse(await listProviders());
+  });
 
   // ─── Per-provider credential management ──────────────────────────────────
 
@@ -206,12 +187,11 @@ export async function adminRoute(app: FastifyInstance) {
         });
 
       // Audit: record action but never the key value
-      const keyHint =
-        body.apiKey
-          ? body.apiKey.length >= 4
-            ? `••••${body.apiKey.slice(-4)}`
-            : "••••"
-          : undefined;
+      const keyHint = body.apiKey
+        ? body.apiKey.length >= 4
+          ? `••••${body.apiKey.slice(-4)}`
+          : "••••"
+        : undefined;
       await app.db.insert(adminAuditLog).values({
         actorSub: request.user!.authSub,
         action: "set_credential",
@@ -233,9 +213,7 @@ export async function adminRoute(app: FastifyInstance) {
       if (!PROVIDER_REGISTRY.some((d) => d.id === id)) {
         return reply.code(404).send({ error: "unknown_provider" });
       }
-      await app.db
-        .delete(providerCredentials)
-        .where(eq(providerCredentials.provider, id));
+      await app.db.delete(providerCredentials).where(eq(providerCredentials.provider, id));
       await app.db.insert(adminAuditLog).values({
         actorSub: request.user!.authSub,
         action: "clear_credential",
@@ -251,11 +229,7 @@ export async function adminRoute(app: FastifyInstance) {
 
   // Recent admin actions (newest first, capped to 100 entries for the UI).
   app.get("/admin/audit", { preHandler: app.requireAdmin }, async () => {
-    const rows = await app.db
-      .select()
-      .from(adminAuditLog)
-      .orderBy(adminAuditLog.at)
-      .limit(100);
+    const rows = await app.db.select().from(adminAuditLog).orderBy(adminAuditLog.at).limit(100);
     return rows.reverse();
   });
 
@@ -297,9 +271,7 @@ export async function adminRoute(app: FastifyInstance) {
         .then((rs) => rs.filter((r) => r.provider.startsWith("vision:"))),
     ]);
 
-    const credMap = new Map(
-      credRows.map((r) => [r.provider.slice("vision:".length), r]),
-    );
+    const credMap = new Map(credRows.map((r) => [r.provider.slice("vision:".length), r]));
     const credentials = await resolveVisionCredentials();
 
     return resolveVisionProviderConfig(rows, credentials).map((p) => {
@@ -317,18 +289,12 @@ export async function adminRoute(app: FastifyInstance) {
       const hasUrl = Boolean(cred?.urlOverride);
       const vDesc = VISION_PROVIDER_REGISTRY.find((d) => d.id === p.id);
       const keySource: "db" | "env" | null =
-        hasKey || hasUrl
-          ? "db"
-          : vDesc?.keyEnvVar && process.env[vDesc.keyEnvVar]
-          ? "env"
-          : null;
+        hasKey || hasUrl ? "db" : vDesc?.keyEnvVar && process.env[vDesc.keyEnvVar] ? "env" : null;
       return { ...p, hasKey, keyHint, hasUrl, keySource };
     });
   }
 
-  function visionProvidersResponse(
-    providers: Awaited<ReturnType<typeof listVisionProviders>>,
-  ) {
+  function visionProvidersResponse(providers: Awaited<ReturnType<typeof listVisionProviders>>) {
     return { providers, encryptionEnabled: app.encryption.isEnabled };
   }
 
@@ -338,40 +304,34 @@ export async function adminRoute(app: FastifyInstance) {
   );
 
   // Upsert enable/priority for one or more vision providers, then hot-reload the parser.
-  app.patch(
-    "/admin/vision-providers",
-    { preHandler: app.requireAdmin },
-    async (request, reply) => {
-      const updates = providerSettingsUpdateSchema.parse(request.body);
-      const knownIds = new Set(VISION_PROVIDER_REGISTRY.map((d) => d.id));
-      const unknown = updates.filter((u) => !knownIds.has(u.id));
-      if (unknown.length > 0) {
-        return reply
-          .code(400)
-          .send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
-      }
-      for (const u of updates) {
-        await app.db
-          .insert(visionProviderSettings)
-          .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
-          .onConflictDoUpdate({
-            target: visionProviderSettings.provider,
-            set: { enabled: u.enabled, priority: u.priority, updatedAt: new Date() },
-          });
-      }
-      await app.db.insert(adminAuditLog).values({
-        actorSub: request.user!.authSub,
-        action: "update_vision_providers",
-        target: updates.map((u) => u.id).join(","),
-        meta: updates.reduce<Record<string, unknown>>(
-          (acc, u) => ({ ...acc, [u.id]: { enabled: u.enabled, priority: u.priority } }),
-          {},
-        ),
-      });
-      invalidateScreenshotParser();
-      return visionProvidersResponse(await listVisionProviders());
-    },
-  );
+  app.patch("/admin/vision-providers", { preHandler: app.requireAdmin }, async (request, reply) => {
+    const updates = providerSettingsUpdateSchema.parse(request.body);
+    const knownIds = new Set(VISION_PROVIDER_REGISTRY.map((d) => d.id));
+    const unknown = updates.filter((u) => !knownIds.has(u.id));
+    if (unknown.length > 0) {
+      return reply.code(400).send({ error: "unknown_provider", ids: unknown.map((u) => u.id) });
+    }
+    for (const u of updates) {
+      await app.db
+        .insert(visionProviderSettings)
+        .values({ provider: u.id, enabled: u.enabled, priority: u.priority })
+        .onConflictDoUpdate({
+          target: visionProviderSettings.provider,
+          set: { enabled: u.enabled, priority: u.priority, updatedAt: new Date() },
+        });
+    }
+    await app.db.insert(adminAuditLog).values({
+      actorSub: request.user!.authSub,
+      action: "update_vision_providers",
+      target: updates.map((u) => u.id).join(","),
+      meta: updates.reduce<Record<string, unknown>>(
+        (acc, u) => ({ ...acc, [u.id]: { enabled: u.enabled, priority: u.priority } }),
+        {},
+      ),
+    });
+    invalidateScreenshotParser();
+    return visionProvidersResponse(await listVisionProviders());
+  });
 
   // Set or rotate an API key / URL for a vision provider (namespaced as "vision:<id>").
   app.put(
@@ -458,22 +418,18 @@ export async function adminRoute(app: FastifyInstance) {
   });
 
   /** Update the active provider and/or non-secret fields. */
-  app.patch(
-    "/admin/storage-providers",
-    { preHandler: app.requireAdmin },
-    async (request) => {
-      const body = storageSettingsUpdateSchema.parse(request.body);
-      await updateStorageSettings(app.db, body);
-      await app.db.insert(adminAuditLog).values({
-        actorSub: request.user!.authSub,
-        action: "update_storage_settings",
-        target: "storage",
-        meta: { activeProvider: body.activeProvider ?? null },
-      });
-      invalidateStorage();
-      return getStorageSettingsResponse(app.db, app.config, app.encryption);
-    },
-  );
+  app.patch("/admin/storage-providers", { preHandler: app.requireAdmin }, async (request) => {
+    const body = storageSettingsUpdateSchema.parse(request.body);
+    await updateStorageSettings(app.db, body);
+    await app.db.insert(adminAuditLog).values({
+      actorSub: request.user!.authSub,
+      action: "update_storage_settings",
+      target: "storage",
+      meta: { activeProvider: body.activeProvider ?? null },
+    });
+    invalidateStorage();
+    return getStorageSettingsResponse(app.db, app.config, app.encryption);
+  });
 
   /** Set or rotate the S3 secret access key (encrypted at rest). */
   app.put(
@@ -569,45 +525,45 @@ export async function adminRoute(app: FastifyInstance) {
       preHandler: app.requireAdmin,
     },
     async () => {
-    // The key user-data tables whose size we surface in the UI. Admin/config tables
-    // (provider_settings, audit_log, etc.) are omitted — they stay small by design.
-    const TABLES = [
-      "users",
-      "portfolios",
-      "instruments",
-      "transactions",
-      "screenshot_imports",
-      "prices",
-      "last_prices",
-      "fx_rates",
-      "portfolio_snapshots",
-      "dividend_events",
-      "corporate_actions",
-      "loans",
-      "tr_connections",
-      "tr_resolved_events",
-    ] as const;
+      // The key user-data tables whose size we surface in the UI. Admin/config tables
+      // (provider_settings, audit_log, etc.) are omitted — they stay small by design.
+      const TABLES = [
+        "users",
+        "portfolios",
+        "instruments",
+        "transactions",
+        "screenshot_imports",
+        "prices",
+        "last_prices",
+        "fx_rates",
+        "portfolio_snapshots",
+        "dividend_events",
+        "corporate_actions",
+        "loans",
+        "tr_connections",
+        "tr_resolved_events",
+      ] as const;
 
-    let dbSizeBytes: number | null = null;
-    let tableStats: { name: string; rows: number | null; sizeBytes: number | null }[] = [];
+      let dbSizeBytes: number | null = null;
+      let tableStats: { name: string; rows: number | null; sizeBytes: number | null }[] = [];
 
-    if (process.env.NODE_ENV !== "test") {
-      try {
-        // DB total size
-        const [{ size }] = await app.db.execute<{ size: string }>(
-          sql`SELECT pg_database_size(current_database()) AS size`,
-        );
-        dbSizeBytes = Number(size);
+      if (process.env.NODE_ENV !== "test") {
+        try {
+          // DB total size
+          const [{ size }] = await app.db.execute<{ size: string }>(
+            sql`SELECT pg_database_size(current_database()) AS size`,
+          );
+          dbSizeBytes = Number(size);
 
-        // Per-table: estimated live rows + total size (table + indexes + toast).
-        // pg_stat_user_tables.n_live_tup is refreshed by autovacuum — exact after
-        // VACUUM ANALYZE, otherwise a fast estimate. ANALYZE is scheduled nightly.
-        const rows = await app.db.execute<{
-          tablename: string;
-          n_live_tup: string;
-          total_bytes: string;
-        }>(
-          sql`SELECT
+          // Per-table: estimated live rows + total size (table + indexes + toast).
+          // pg_stat_user_tables.n_live_tup is refreshed by autovacuum — exact after
+          // VACUUM ANALYZE, otherwise a fast estimate. ANALYZE is scheduled nightly.
+          const rows = await app.db.execute<{
+            tablename: string;
+            n_live_tup: string;
+            total_bytes: string;
+          }>(
+            sql`SELECT
                 t.tablename,
                 COALESCE(s.n_live_tup, 0) AS n_live_tup,
                 pg_total_relation_size(quote_ident(t.tablename)::regclass) AS total_bytes
@@ -616,69 +572,76 @@ export async function adminRoute(app: FastifyInstance) {
               WHERE t.schemaname = 'public'
                 AND t.tablename IN ${TABLES}
               ORDER BY total_bytes DESC`,
-        );
+          );
 
-        tableStats = TABLES.map((name) => {
-          const row = rows.find((r) => r.tablename === name);
-          return {
-            name,
-            rows: row ? Number(row.n_live_tup) : 0,
-            sizeBytes: row ? Number(row.total_bytes) : 0,
-          };
-        });
-      } catch {
-        // Catalog query failed (e.g. insufficient permissions or very early boot).
-        // Return nulls rather than 500 — the UI will display "unavailable".
-      }
-    }
-
-    // Storage stats — omitted under test (same PGlite guard rationale) but we still
-    // return a shaped response so the UI always gets a consistent object.
-    let objectStorage: {
-      configured: boolean;
-      provider?: string;
-      objectCount?: number;
-      totalBytes?: number;
-      freeBytes?: number;
-      diskTotalBytes?: number;
-      error?: string;
-    } = { configured: false };
-
-    if (process.env.NODE_ENV !== "test") {
-      try {
-        // Resolve the underlying provider to determine its type for the UI label
-        const { getStorageProvider: resolveProvider } = await import("../storage/index.js");
-        const underlyingProvider = await resolveProvider(app);
-        const isFolder = underlyingProvider instanceof FolderProvider;
-        const providerLabel = isFolder ? "folder" : underlyingProvider instanceof S3Provider ? "s3" : "unknown";
-
-        const stats = await underlyingProvider.stats?.();
-        if (stats) {
-          objectStorage = {
-            configured: true,
-            provider: providerLabel,
-            objectCount: stats.objectCount,
-            totalBytes: stats.totalBytes,
-            ...(stats.freeBytes !== undefined ? { freeBytes: stats.freeBytes } : {}),
-            ...(stats.diskTotalBytes !== undefined ? { diskTotalBytes: stats.diskTotalBytes } : {}),
-          };
-        } else {
-          objectStorage = { configured: true, provider: providerLabel };
+          tableStats = TABLES.map((name) => {
+            const row = rows.find((r) => r.tablename === name);
+            return {
+              name,
+              rows: row ? Number(row.n_live_tup) : 0,
+              sizeBytes: row ? Number(row.total_bytes) : 0,
+            };
+          });
+        } catch {
+          // Catalog query failed (e.g. insufficient permissions or very early boot).
+          // Return nulls rather than 500 — the UI will display "unavailable".
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        objectStorage = { configured: true, error: message };
       }
-    }
 
-    return {
-      db: {
-        sizeBytes: dbSizeBytes,
-        tables: tableStats,
-      },
-      objectStorage,
-    };
-  });
+      // Storage stats — omitted under test (same PGlite guard rationale) but we still
+      // return a shaped response so the UI always gets a consistent object.
+      let objectStorage: {
+        configured: boolean;
+        provider?: string;
+        objectCount?: number;
+        totalBytes?: number;
+        freeBytes?: number;
+        diskTotalBytes?: number;
+        error?: string;
+      } = { configured: false };
+
+      if (process.env.NODE_ENV !== "test") {
+        try {
+          // Resolve the underlying provider to determine its type for the UI label
+          const { getStorageProvider: resolveProvider } = await import("../storage/index.js");
+          const underlyingProvider = await resolveProvider(app);
+          const isFolder = underlyingProvider instanceof FolderProvider;
+          const providerLabel = isFolder
+            ? "folder"
+            : underlyingProvider instanceof S3Provider
+              ? "s3"
+              : "unknown";
+
+          const stats = await underlyingProvider.stats?.();
+          if (stats) {
+            objectStorage = {
+              configured: true,
+              provider: providerLabel,
+              objectCount: stats.objectCount,
+              totalBytes: stats.totalBytes,
+              ...(stats.freeBytes !== undefined ? { freeBytes: stats.freeBytes } : {}),
+              ...(stats.diskTotalBytes !== undefined
+                ? { diskTotalBytes: stats.diskTotalBytes }
+                : {}),
+            };
+          } else {
+            objectStorage = { configured: true, provider: providerLabel };
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          objectStorage = { configured: true, error: message };
+        }
+      }
+
+      return {
+        db: {
+          sizeBytes: dbSizeBytes,
+          tables: tableStats,
+        },
+        objectStorage,
+      };
+    },
+  );
 
   // ─── Background jobs panel (#105 + Slice 5) ──────────────────────────────
 
@@ -804,27 +767,23 @@ export async function adminRoute(app: FastifyInstance) {
   }));
 
   // Set the import strategy (singleton row id=1), then audit it.
-  app.patch(
-    "/admin/import-settings",
-    { preHandler: app.requireAdmin },
-    async (request) => {
-      const { strategy } = importSettingsUpdateSchema.parse(request.body);
-      await app.db
-        .insert(importSettings)
-        .values({ id: IMPORT_SETTINGS_ID, strategy })
-        .onConflictDoUpdate({
-          target: importSettings.id,
-          set: { strategy, updatedAt: new Date() },
-        });
-      await app.db.insert(adminAuditLog).values({
-        actorSub: request.user!.authSub,
-        action: "update_import_settings",
-        target: strategy,
-        meta: { strategy },
+  app.patch("/admin/import-settings", { preHandler: app.requireAdmin }, async (request) => {
+    const { strategy } = importSettingsUpdateSchema.parse(request.body);
+    await app.db
+      .insert(importSettings)
+      .values({ id: IMPORT_SETTINGS_ID, strategy })
+      .onConflictDoUpdate({
+        target: importSettings.id,
+        set: { strategy, updatedAt: new Date() },
       });
-      return { strategy };
-    },
-  );
+    await app.db.insert(adminAuditLog).values({
+      actorSub: request.user!.authSub,
+      action: "update_import_settings",
+      target: strategy,
+      meta: { strategy },
+    });
+    return { strategy };
+  });
 
   // ─── User management (#486) ────────────────────────────────────────────────
 

@@ -1,9 +1,4 @@
-import type {
-  AssetClass,
-  InstrumentRef,
-  MarketDataProvider,
-  Quote,
-} from "./types.js";
+import type { AssetClass, InstrumentRef, MarketDataProvider, Quote } from "./types.js";
 import type { ProviderOptions } from "./twelve-data.js";
 
 /**
@@ -29,9 +24,7 @@ export class NavProvider implements MarketDataProvider {
 
   async getQuote(ref: InstrumentRef): Promise<Quote | null> {
     try {
-      const res = await this.doFetch(
-        `${this.baseUrl}/${encodeURIComponent(ref.symbol)}`,
-      );
+      const res = await this.doFetch(`${this.baseUrl}/${encodeURIComponent(ref.symbol)}`);
       if (!res.ok) return null;
       const nav = extractNav(await res.json());
       if (nav === undefined) return null;

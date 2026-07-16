@@ -59,8 +59,7 @@ export function InstrumentPriceCard({
     }
   }
 
-  const changeTone =
-    lastPrice?.change == null ? "neutral" : lastPrice.change >= 0 ? "up" : "down";
+  const changeTone = lastPrice?.change == null ? "neutral" : lastPrice.change >= 0 ? "up" : "down";
 
   return (
     <div className="space-y-4">
@@ -90,7 +89,11 @@ export function InstrumentPriceCard({
       )}
       <div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
         {history.length > 0 ? (
-          <PriceChart data={history} currency={history[0]?.currency ?? currency} showYAxis={isDesktop} />
+          <PriceChart
+            data={history}
+            currency={history[0]?.currency ?? currency}
+            showYAxis={isDesktop}
+          />
         ) : (
           <EmptyState icon={LineChart} title={t("priceHistory")} description={t("noHistory")} />
         )}

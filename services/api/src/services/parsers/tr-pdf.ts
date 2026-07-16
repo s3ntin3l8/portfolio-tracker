@@ -47,7 +47,11 @@
  */
 
 import { Decimal } from "decimal.js";
-import { parsedTransactionSchema, type ParsedTransaction, type TaxComponents } from "@portfolio/schema";
+import {
+  parsedTransactionSchema,
+  type ParsedTransaction,
+  type TaxComponents,
+} from "@portfolio/schema";
 import { parseEuroDecimal, parseDkbDate } from "./dkb.js";
 
 export interface TrPdfResult {
@@ -210,7 +214,10 @@ function extractBuchung(text: string): { date: Date | null; amountRaw: string | 
  * Determine the action from the ÜBERSICHT description line.
  * TR uses German and English mixed in different formats.
  */
-function tradeAction(text: string): { action: ParsedTransaction["action"]; kind: string | undefined } {
+function tradeAction(text: string): {
+  action: ParsedTransaction["action"];
+  kind: string | undefined;
+} {
   // Check for special kinds first.
   if (/Sparplanausführung|SPARPLAN/.test(text)) {
     return { action: "savings_plan", kind: undefined };
@@ -261,9 +268,8 @@ function parseTrTrade(text: string): TrPdfResult {
   const headerDate = parseTrDate(headerDateStr);
 
   // --- Action from ÜBERSICHT ---
-  const ubersichtM = text.match(
-    /ÜBERSICHT\s+([\s\S]*?)(?=POSITION|ABRECHNUNG|BUCHUNG|$)/,
-  )?.[1] ?? "";
+  const ubersichtM =
+    text.match(/ÜBERSICHT\s+([\s\S]*?)(?=POSITION|ABRECHNUNG|BUCHUNG|$)/)?.[1] ?? "";
   const { action, kind } = tradeAction(text + " " + ubersichtM);
   const venue = extractVenue(ubersichtM);
 
@@ -442,7 +448,9 @@ function parseTrDividend(text: string): TrPdfResult {
   // don't have that ambiguity, and the [A-Z]{3}/[A-Z]{3} class below doesn't care which order
   // the pair prints in either way.
   const fxM = text.match(
-    new RegExp(`Zwischensumme\\s+(${NUM})\\s+[A-Z]{3}\\s+Zwischensumme\\s+${NUM}\\s+[A-Z]{3}\\/[A-Z]{3}\\s+(${NUM})\\s+EUR`),
+    new RegExp(
+      `Zwischensumme\\s+(${NUM})\\s+[A-Z]{3}\\s+Zwischensumme\\s+${NUM}\\s+[A-Z]{3}\\/[A-Z]{3}\\s+(${NUM})\\s+EUR`,
+    ),
   );
   const fxForeignNet = fxM ? parseNum(fxM[1]) : null;
   const fxEurNet = fxM ? parseNum(fxM[2]) : null;
@@ -483,9 +491,7 @@ function parseTrDividend(text: string): TrPdfResult {
 
   // Tax rollup.
   const tax =
-    quellenEur || kapst || soli || kirche
-      ? addMoney(quellenEur, kapst, soli, kirche)
-      : undefined;
+    quellenEur || kapst || soli || kirche ? addMoney(quellenEur, kapst, soli, kirche) : undefined;
   const taxNum = tax ? Number(tax) : 0;
 
   const taxComponents: TaxComponents = {};
@@ -570,8 +576,7 @@ function parseTrInterest(text: string): TrPdfResult {
   const total = besteuerung ?? (net && tax ? addMoney(net, tax) : (net ?? undefined));
 
   const payDateStr = payDate ? payDate.toISOString().slice(0, 10) : undefined;
-  const externalId =
-    account && payDateStr ? `tr:int:${account}:${payDateStr}` : undefined;
+  const externalId = account && payDateStr ? `tr:int:${account}:${payDateStr}` : undefined;
 
   pushDraft(
     {

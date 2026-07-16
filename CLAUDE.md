@@ -39,15 +39,15 @@ cash** with live IDX prices and a real-time gold ticker.
 
 Run from the repo root (Turborepo fans out across workspaces):
 
-| Command | Does |
-|---------|------|
-| `npm install` | Install all workspace deps (single root lockfile). |
-| `npm run dev` | Run all `dev` tasks (API watch + Next dev). |
-| `npm run build` | Build every workspace. |
-| `npm run lint` | ESLint across workspaces. |
-| `npm run typecheck` | `tsc --noEmit` across workspaces. |
-| `npm test` | Vitest across workspaces. |
-| `npm run format` | Prettier write. |
+| Command             | Does                                               |
+| ------------------- | -------------------------------------------------- |
+| `npm install`       | Install all workspace deps (single root lockfile). |
+| `npm run dev`       | Run all `dev` tasks (API watch + Next dev).        |
+| `npm run build`     | Build every workspace.                             |
+| `npm run lint`      | ESLint across workspaces.                          |
+| `npm run typecheck` | `tsc --noEmit` across workspaces.                  |
+| `npm test`          | Vitest across workspaces.                          |
+| `npm run format`    | Prettier write.                                    |
 
 Target one workspace with `--workspace @portfolio/<name>` (e.g.
 `npm run dev --workspace @portfolio/api`). DB: `npm run db:generate` /
@@ -63,7 +63,7 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 > stale `tsx watch` process holding the port before re-running.
 
 > **Known console warning:** Next.js logs `Encountered a script tag while rendering
-> React component` from `ThemeProvider`. This is an upstream bug in `next-themes`
+React component` from `ThemeProvider`. This is an upstream bug in `next-themes`
 > (issue #387) caused by its inline FOUC-prevention `<script>` conflicting with React
 > 19's new script-handling rules. Cosmetic only — themes work correctly. Track
 > [pacocoursey/next-themes#387](https://github.com/pacocoursey/next-themes/issues/387)
@@ -78,8 +78,8 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 - **Transactions are the source of truth.** Holdings, P&L, cash balance, XIRR and net
   worth are derived in `packages/core` — never stored as primary state.
 - **One boundary per portfolio (contributions & performance).** Each portfolio declares
-  whether cash is *inside* its investment boundary (savings/deposit accounts — Tagesgeld,
-  Festgeld, a child's savings depot) or *outside* it (mixed/checking, invest-only) via the
+  whether cash is _inside_ its investment boundary (savings/deposit accounts — Tagesgeld,
+  Festgeld, a child's savings depot) or _outside_ it (mixed/checking, invest-only) via the
   `cashCounted` flag. **Contribution = net external cash crossing that boundary; the
   performance value = what's inside it — same boundary for numerator and denominator,
   always.** Cash-inside: contribution = deposits − withdrawals, value = net worth incl. cash.
@@ -94,7 +94,7 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
   at carried cost basis — no P&L on `transfer_out` (not a disposal). This replaces the legacy
   `bonus`+`kind:"transfer_in"` sub-type pattern (those rows should be migrated). Inside-
   boundary: `transfer_in` is an inflow at carried cost; outside-boundary: at avg cost.
-- **Imports never auto-commit.** Screenshot/CSV parses become *draft* records that the
+- **Imports never auto-commit.** Screenshot/CSV parses become _draft_ records that the
   user confirms before a transaction is written. Dedup runs at three levels: **file-level**
   (same file re-upload → `contentHash`), **within-source transaction-level** (the
   `(portfolioId, source, externalId)` unique index + `onConflictDoNothing`), and
@@ -137,7 +137,7 @@ Local backing services: `docker compose up -d postgres minio` (then `npm run dev
 - **Python (pytr):** the vendored Trade Republic entrypoints in `services/api/python`
   have **pytest** unit tests (`test_tr_export.py`) for the detail-extraction heuristics —
   the part not exercised by the Node mapper tests. Run with `npm run test:py --workspace
-  @portfolio/api` (uses `.venv-pytr`) or `python -m pytest services/api/python`; CI runs
+@portfolio/api` (uses `.venv-pytr`) or `python -m pytest services/api/python`; CI runs
   them in the `test-python` job. Outside the Vitest coverage gate.
 - **Web:** **jsdom + React Testing Library** (`@vitejs/plugin-react`). Render client
   components inside `NextIntlClientProvider` with `messages/en.json`. Server components

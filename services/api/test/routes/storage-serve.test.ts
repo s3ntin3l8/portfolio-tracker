@@ -43,7 +43,9 @@ describe("GET /storage/:key — folder provider serving", () => {
   it("serves a file with a valid signed URL (token extracted from the URL)", async () => {
     const signedUrl = await provider.getSignedUrl("receipts/test.pdf", TTL);
     // signedUrl is root-relative (/storage/...) — strip the host part if present
-    const urlPath = signedUrl.startsWith("http") ? new URL(signedUrl).pathname + "?" + new URL(signedUrl).search : signedUrl;
+    const urlPath = signedUrl.startsWith("http")
+      ? new URL(signedUrl).pathname + "?" + new URL(signedUrl).search
+      : signedUrl;
 
     const res = await app.inject({ method: "GET", url: urlPath });
     expect(res.statusCode).toBe(200);

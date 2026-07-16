@@ -30,7 +30,13 @@ interface Props {
 
 /** A small segmented control that persists its selection as a global user preference
  *  and refreshes the current route so every consumer picks up the new value. */
-export function PreferenceChips({ prefKey, current, options, variant = "compact", className }: Props) {
+export function PreferenceChips({
+  prefKey,
+  current,
+  options,
+  variant = "compact",
+  className,
+}: Props) {
   const router = useRouter();
   const api = useApiClient();
   const [pending, setPending] = useState<string | null>(null);

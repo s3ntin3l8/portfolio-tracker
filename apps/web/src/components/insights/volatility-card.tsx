@@ -3,11 +3,7 @@ import { Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { InsightsVolatility } from "@portfolio/api-client";
 
-export function VolatilityCard({
-  volatility,
-}: {
-  volatility: InsightsVolatility;
-}) {
+export function VolatilityCard({ volatility }: { volatility: InsightsVolatility }) {
   const t = useTranslations("Insights.volatility");
   const vol = volatility.annualizedVolatility ? Number(volatility.annualizedVolatility) : null;
   const sharpe = volatility.sharpeRatio ? Number(volatility.sharpeRatio) : null;

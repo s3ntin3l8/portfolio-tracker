@@ -35,11 +35,7 @@ export interface MiniSplitBarSegment {
   amountLabel?: string;
 }
 
-export function MiniSplitBar({
-  segments,
-}: {
-  segments: MiniSplitBarSegment[];
-}) {
+export function MiniSplitBar({ segments }: { segments: MiniSplitBarSegment[] }) {
   return (
     <div className="flex h-[7px] w-full gap-[3px]">
       {segments.map((s, i) => (

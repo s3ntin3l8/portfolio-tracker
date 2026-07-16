@@ -69,9 +69,8 @@ export function splitAdjustmentFactor(
   let factor = D(1);
   for (const ca of cas) {
     if (ca.instrumentId !== instrumentId) continue;
-    const caDate = ca.exDate instanceof Date
-      ? ca.exDate.toISOString().slice(0, 10)
-      : String(ca.exDate);
+    const caDate =
+      ca.exDate instanceof Date ? ca.exDate.toISOString().slice(0, 10) : String(ca.exDate);
     if (caDate > date) {
       if (ca.type === "split") {
         factor = factor.mul(D(ca.ratio));

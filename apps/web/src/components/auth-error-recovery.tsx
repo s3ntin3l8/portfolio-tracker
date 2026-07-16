@@ -64,9 +64,7 @@ export function AuthErrorRecovery() {
         <span className="flex size-16 items-center justify-center rounded-[20px] bg-primary/10 text-primary">
           <Loader2 className="size-7 animate-spin" />
         </span>
-        <h1 className="text-balance text-2xl font-extrabold tracking-tight">
-          {t("retrying")}
-        </h1>
+        <h1 className="text-balance text-2xl font-extrabold tracking-tight">{t("retrying")}</h1>
       </div>
     );
   }

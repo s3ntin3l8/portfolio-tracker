@@ -30,8 +30,14 @@ const reassignImport = vi.fn(async () => ({ moved: 4, skippedConflicts: 0, skipp
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh, push: pushMock }),
-  Link: ({ href, children, ...rest }: { href: string; children: ReactNode } & Record<string, unknown>) => (
-    <a href={href} {...rest}>{children}</a>
+  Link: ({
+    href,
+    children,
+    ...rest
+  }: { href: string; children: ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
   ),
 }));
 vi.mock("@/lib/api", () => ({
@@ -228,9 +234,7 @@ describe("ImportHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
     fireEvent.click(desktop().getByRole("button", { name: m.reassign }));
     // The dialog confirms the move to the chosen portfolio.
-    fireEvent.click(
-      screen.getByRole("button", { name: messages.Transactions.reassign.confirm }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: messages.Transactions.reassign.confirm }));
     await waitFor(() => expect(reassignImport).toHaveBeenCalledWith("conf1", "p1"));
     expect(refresh).toHaveBeenCalled();
   });
@@ -455,9 +459,7 @@ describe("ImportHistory", () => {
     discardImport.mockRejectedValueOnce(new Error("network error"));
     renderHistory();
     fireEvent.click(desktop().getByRole("button", { name: m.discard }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.actionError));
     // The spinner resolves — the button is no longer spinning.
     expect(discardImport).toHaveBeenCalled();
   });
@@ -469,9 +471,7 @@ describe("ImportHistory", () => {
     fireEvent.click(desktop().getByRole("button", { name: m.undo }));
     // Two-step: first click shows warning; second triggers the delete.
     fireEvent.click(desktop().getByRole("button", { name: m.undo }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.actionError));
   });
 
   it("shows an error banner when clear fails", async () => {
@@ -482,9 +482,7 @@ describe("ImportHistory", () => {
       </NextIntlClientProvider>,
     );
     fireEvent.click(desktop().getByRole("button", { name: m.clear }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.actionError));
   });
 
   it("shows an error banner when clearAllDiscarded fails", async () => {
@@ -499,9 +497,7 @@ describe("ImportHistory", () => {
       </NextIntlClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: m.clearAll }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.actionError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.actionError));
   });
 
   it("shows a download error banner when receipt fetch fails", async () => {
@@ -515,7 +511,13 @@ describe("ImportHistory", () => {
       count: 2,
       createdAt: "2026-06-09T10:00:00.000Z",
       batchId: null,
-      document: { id: "doc1", originalFilename: "export.pdf", mimeType: "application/pdf", sizeBytes: 12345, storedAt: "2026-06-09T10:00:00.000Z" },
+      document: {
+        id: "doc1",
+        originalFilename: "export.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 12345,
+        storedAt: "2026-06-09T10:00:00.000Z",
+      },
       originalFilename: "export.pdf",
     };
     render(
@@ -525,15 +527,35 @@ describe("ImportHistory", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /Show completed/ }));
     fireEvent.click(desktop().getByRole("button", { name: m.downloadReceipt }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(m.downloadError),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(m.downloadError));
   });
 
   it("bulk-deletes a multi-select of drafts in one request (no confirm step)", async () => {
     const drafts: ImportRecord[] = [
-      { id: "d1", portfolioId: "p1", parser: "csv", status: "draft", confidence: null, count: 2, createdAt: "2026-06-10T10:00:00.000Z", batchId: null, document: null, originalFilename: null },
-      { id: "d2", portfolioId: "p1", parser: "dkb", status: "draft", confidence: null, count: 3, createdAt: "2026-06-09T10:00:00.000Z", batchId: null, document: null, originalFilename: null },
+      {
+        id: "d1",
+        portfolioId: "p1",
+        parser: "csv",
+        status: "draft",
+        confidence: null,
+        count: 2,
+        createdAt: "2026-06-10T10:00:00.000Z",
+        batchId: null,
+        document: null,
+        originalFilename: null,
+      },
+      {
+        id: "d2",
+        portfolioId: "p1",
+        parser: "dkb",
+        status: "draft",
+        confidence: null,
+        count: 3,
+        createdAt: "2026-06-09T10:00:00.000Z",
+        batchId: null,
+        document: null,
+        originalFilename: null,
+      },
     ];
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -550,7 +572,18 @@ describe("ImportHistory", () => {
   });
 
   it("requires a confirmation click before bulk-deleting a selection with confirmed imports", async () => {
-    const confirmed: ImportRecord = { id: "c1", portfolioId: "p1", parser: "dkb", status: "confirmed", confidence: null, count: 7, createdAt: "2026-06-09T10:00:00.000Z", batchId: null, document: null, originalFilename: null };
+    const confirmed: ImportRecord = {
+      id: "c1",
+      portfolioId: "p1",
+      parser: "dkb",
+      status: "confirmed",
+      confidence: null,
+      count: 7,
+      createdAt: "2026-06-09T10:00:00.000Z",
+      batchId: null,
+      document: null,
+      originalFilename: null,
+    };
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
         <ImportHistory items={[confirmed]} />
@@ -570,8 +603,30 @@ describe("ImportHistory", () => {
 
   it("groups same-batch uploads and selects the whole batch in one click", async () => {
     const batched: ImportRecord[] = [
-      { id: "b-a", portfolioId: "p1", parser: "dkb-pdf", status: "draft", confidence: null, count: 1, createdAt: "2026-06-10T10:00:01.000Z", batchId: "batch-1", document: null, originalFilename: "statement.pdf" },
-      { id: "b-b", portfolioId: "p1", parser: "dkb-pdf", status: "draft", confidence: null, count: 1, createdAt: "2026-06-10T10:00:02.000Z", batchId: "batch-1", document: null, originalFilename: "statement.pdf" },
+      {
+        id: "b-a",
+        portfolioId: "p1",
+        parser: "dkb-pdf",
+        status: "draft",
+        confidence: null,
+        count: 1,
+        createdAt: "2026-06-10T10:00:01.000Z",
+        batchId: "batch-1",
+        document: null,
+        originalFilename: "statement.pdf",
+      },
+      {
+        id: "b-b",
+        portfolioId: "p1",
+        parser: "dkb-pdf",
+        status: "draft",
+        confidence: null,
+        count: 1,
+        createdAt: "2026-06-10T10:00:02.000Z",
+        batchId: "batch-1",
+        document: null,
+        originalFilename: "statement.pdf",
+      },
     ];
     render(
       <NextIntlClientProvider locale="en" messages={messages}>

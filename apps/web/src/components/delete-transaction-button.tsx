@@ -42,21 +42,11 @@ export function DeleteTransactionButton({
   if (confirming) {
     return (
       <span className="flex items-center justify-end gap-1">
-        <Button
-          size="sm"
-          variant="destructive"
-          onClick={onDelete}
-          disabled={busy}
-        >
+        <Button size="sm" variant="destructive" onClick={onDelete} disabled={busy}>
           {busy && <Loader2 className="size-3.5 animate-spin" />}
           {t("confirm")}
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setConfirming(false)}
-          disabled={busy}
-        >
+        <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
           {t("cancel")}
         </Button>
       </span>

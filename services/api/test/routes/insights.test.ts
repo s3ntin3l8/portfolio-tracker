@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
-import { corporateActions, instruments, portfolioSnapshots, prices, transactions } from "@portfolio/db";
+import {
+  corporateActions,
+  instruments,
+  portfolioSnapshots,
+  prices,
+  transactions,
+} from "@portfolio/db";
 import { buildApp } from "../../src/app.js";
 import { closeDb } from "../../src/db/client.js";
 
@@ -62,9 +68,30 @@ describe("GET /insights", () => {
     // sold, or otherwise flowed through holdings) — only netWorth (which includes
     // cash) drops sharply on day 2, as a large cash withdrawal would.
     await app.db.insert(portfolioSnapshots).values([
-      { portfolioId, date: "2026-01-01", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
-      { portfolioId, date: "2026-01-02", netWorth: "200000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
-      { portfolioId, date: "2026-01-03", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
+      {
+        portfolioId,
+        date: "2026-01-01",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
+      {
+        portfolioId,
+        date: "2026-01-02",
+        netWorth: "200000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
+      {
+        portfolioId,
+        date: "2026-01-03",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
     ]);
 
     const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
@@ -91,16 +118,56 @@ describe("GET /insights", () => {
     const crashId = await mk("Crash");
 
     await app.db.insert(portfolioSnapshots).values([
-      { portfolioId: flatId, date: "2026-01-01", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
-      { portfolioId: flatId, date: "2026-01-02", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
+      {
+        portfolioId: flatId,
+        date: "2026-01-01",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
+      {
+        portfolioId: flatId,
+        date: "2026-01-02",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
       // A real holdings crash: marketValue halves with no offsetting effectiveFlow.
-      { portfolioId: crashId, date: "2026-01-01", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "0", currency: "IDR" },
-      { portfolioId: crashId, date: "2026-01-02", netWorth: "500000", marketValue: "500000", effectiveFlow: "0", currency: "IDR" },
+      {
+        portfolioId: crashId,
+        date: "2026-01-01",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
+      {
+        portfolioId: crashId,
+        date: "2026-01-02",
+        netWorth: "500000",
+        marketValue: "500000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
     ]);
 
-    const flat = await app.inject({ method: "GET", url: `/insights?range=all&portfolioId=${flatId}`, headers: auth(t) });
-    const crash = await app.inject({ method: "GET", url: `/insights?range=all&portfolioId=${crashId}`, headers: auth(t) });
-    const aggregate = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
+    const flat = await app.inject({
+      method: "GET",
+      url: `/insights?range=all&portfolioId=${flatId}`,
+      headers: auth(t),
+    });
+    const crash = await app.inject({
+      method: "GET",
+      url: `/insights?range=all&portfolioId=${crashId}`,
+      headers: auth(t),
+    });
+    const aggregate = await app.inject({
+      method: "GET",
+      url: "/insights?range=all",
+      headers: auth(t),
+    });
 
     expect(Number(flat.json().drawdown.maxDrawdownPct)).toBeCloseTo(0, 6);
     expect(Number(crash.json().drawdown.maxDrawdownPct)).toBeCloseTo(-0.5, 6);
@@ -112,7 +179,11 @@ describe("GET /insights", () => {
 
     // A portfolio owned by someone else must not be selectable.
     const other = await token("insights-scope-other-user");
-    const cross = await app.inject({ method: "GET", url: `/insights?portfolioId=${flatId}`, headers: auth(other) });
+    const cross = await app.inject({
+      method: "GET",
+      url: `/insights?portfolioId=${flatId}`,
+      headers: auth(other),
+    });
     expect(cross.statusCode).toBe(200);
     expect(cross.json().drawdown.maxDrawdownPct).toBe("0");
   });
@@ -133,12 +204,40 @@ describe("GET /insights", () => {
     const portfolioId = create.json().id;
 
     await app.db.insert(portfolioSnapshots).values([
-      { portfolioId, date: "2026-01-01", netWorth: "1000000", marketValue: "1000000", effectiveFlow: "1000000", currency: "IDR" },
-      { portfolioId, date: "2026-01-02", netWorth: "1100000", marketValue: "1100000", effectiveFlow: "0", currency: "IDR" },
+      {
+        portfolioId,
+        date: "2026-01-01",
+        netWorth: "1000000",
+        marketValue: "1000000",
+        effectiveFlow: "1000000",
+        currency: "IDR",
+      },
+      {
+        portfolioId,
+        date: "2026-01-02",
+        netWorth: "1100000",
+        marketValue: "1100000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
       // Gap day: price missing for the held instrument → marketValue recorded as 0,
       // no compensating flow.
-      { portfolioId, date: "2026-01-03", netWorth: "0", marketValue: "0", effectiveFlow: "0", currency: "IDR" },
-      { portfolioId, date: "2026-01-04", netWorth: "1150000", marketValue: "1150000", effectiveFlow: "0", currency: "IDR" },
+      {
+        portfolioId,
+        date: "2026-01-03",
+        netWorth: "0",
+        marketValue: "0",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
+      {
+        portfolioId,
+        date: "2026-01-04",
+        netWorth: "1150000",
+        marketValue: "1150000",
+        effectiveFlow: "0",
+        currency: "IDR",
+      },
     ]);
 
     const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
@@ -160,16 +259,54 @@ describe("GET /insights", () => {
       });
       const portfolioId = create.json().id;
 
-      const [instA] = await app.db.insert(instruments).values({
-        symbol: "INSTA", name: "Instrument A", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
-      }).returning({ id: instruments.id });
-      const [instB] = await app.db.insert(instruments).values({
-        symbol: "INSTB", name: "Instrument B", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
-      }).returning({ id: instruments.id });
+      const [instA] = await app.db
+        .insert(instruments)
+        .values({
+          symbol: "INSTA",
+          name: "Instrument A",
+          assetClass: "equity",
+          unit: "shares",
+          market: "IDX",
+          sector: null,
+          currency: "IDR",
+        })
+        .returning({ id: instruments.id });
+      const [instB] = await app.db
+        .insert(instruments)
+        .values({
+          symbol: "INSTB",
+          name: "Instrument B",
+          assetClass: "equity",
+          unit: "shares",
+          market: "IDX",
+          sector: null,
+          currency: "IDR",
+        })
+        .returning({ id: instruments.id });
 
       // Both bought before Jan 2026 — held at period start (Jan 1) → qualifies as continuously-held.
-      await app.db.insert(transactions).values({ portfolioId, instrumentId: instA.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2025-12-15") });
-      await app.db.insert(transactions).values({ portfolioId, instrumentId: instB.id, type: "buy", quantity: "20", price: "50", currency: "IDR", executedAt: new Date("2025-12-15") });
+      await app.db
+        .insert(transactions)
+        .values({
+          portfolioId,
+          instrumentId: instA.id,
+          type: "buy",
+          quantity: "10",
+          price: "100",
+          currency: "IDR",
+          executedAt: new Date("2025-12-15"),
+        });
+      await app.db
+        .insert(transactions)
+        .values({
+          portfolioId,
+          instrumentId: instB.id,
+          type: "buy",
+          quantity: "20",
+          price: "50",
+          currency: "IDR",
+          executedAt: new Date("2025-12-15"),
+        });
 
       // Prices at period start and period end: A goes up 50%, B goes down 40%.
       await app.db.insert(prices).values([
@@ -180,9 +317,30 @@ describe("GET /insights", () => {
       ]);
 
       await app.db.insert(portfolioSnapshots).values([
-        { portfolioId, date: "2026-01-01", netWorth: "2000", marketValue: "2000", effectiveFlow: "2000", currency: "IDR" },
-        { portfolioId, date: "2026-01-15", netWorth: "2100", marketValue: "2100", effectiveFlow: "0", currency: "IDR" },
-        { portfolioId, date: "2026-01-31", netWorth: "2100", marketValue: "2100", effectiveFlow: "0", currency: "IDR" },
+        {
+          portfolioId,
+          date: "2026-01-01",
+          netWorth: "2000",
+          marketValue: "2000",
+          effectiveFlow: "2000",
+          currency: "IDR",
+        },
+        {
+          portfolioId,
+          date: "2026-01-15",
+          netWorth: "2100",
+          marketValue: "2100",
+          effectiveFlow: "0",
+          currency: "IDR",
+        },
+        {
+          portfolioId,
+          date: "2026-01-31",
+          netWorth: "2100",
+          marketValue: "2100",
+          effectiveFlow: "0",
+          currency: "IDR",
+        },
       ]);
 
       const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
@@ -214,19 +372,60 @@ describe("GET /insights", () => {
       const portfolioId = create.json().id;
 
       // Two instruments held before and during Jan 2026.
-      const [instA] = await app.db.insert(instruments).values({
-        symbol: "SPLIT", name: "Split Co", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
-      }).returning({ id: instruments.id });
-      const [instB] = await app.db.insert(instruments).values({
-        symbol: "NORMAL", name: "Normal Co", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
-      }).returning({ id: instruments.id });
+      const [instA] = await app.db
+        .insert(instruments)
+        .values({
+          symbol: "SPLIT",
+          name: "Split Co",
+          assetClass: "equity",
+          unit: "shares",
+          market: "IDX",
+          sector: null,
+          currency: "IDR",
+        })
+        .returning({ id: instruments.id });
+      const [instB] = await app.db
+        .insert(instruments)
+        .values({
+          symbol: "NORMAL",
+          name: "Normal Co",
+          assetClass: "equity",
+          unit: "shares",
+          market: "IDX",
+          sector: null,
+          currency: "IDR",
+        })
+        .returning({ id: instruments.id });
 
-      await app.db.insert(transactions).values({ portfolioId, instrumentId: instA.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2025-12-15") });
-      await app.db.insert(transactions).values({ portfolioId, instrumentId: instB.id, type: "buy", quantity: "10", price: "50", currency: "IDR", executedAt: new Date("2025-12-15") });
+      await app.db
+        .insert(transactions)
+        .values({
+          portfolioId,
+          instrumentId: instA.id,
+          type: "buy",
+          quantity: "10",
+          price: "100",
+          currency: "IDR",
+          executedAt: new Date("2025-12-15"),
+        });
+      await app.db
+        .insert(transactions)
+        .values({
+          portfolioId,
+          instrumentId: instB.id,
+          type: "buy",
+          quantity: "10",
+          price: "50",
+          currency: "IDR",
+          executedAt: new Date("2025-12-15"),
+        });
 
       // Inst A has a 2:1 split on Jan 15 — raw close on Jan 31 is half the start.
       await app.db.insert(corporateActions).values({
-        instrumentId: instA.id, type: "split", ratio: "2", exDate: "2026-01-15",
+        instrumentId: instA.id,
+        type: "split",
+        ratio: "2",
+        exDate: "2026-01-15",
       });
 
       await app.db.insert(prices).values([
@@ -238,9 +437,30 @@ describe("GET /insights", () => {
       ]);
 
       await app.db.insert(portfolioSnapshots).values([
-        { portfolioId, date: "2026-01-01", netWorth: "1500", marketValue: "1500", effectiveFlow: "1500", currency: "IDR" },
-        { portfolioId, date: "2026-01-15", netWorth: "1500", marketValue: "1500", effectiveFlow: "0", currency: "IDR" },
-        { portfolioId, date: "2026-01-31", netWorth: "1250", marketValue: "1250", effectiveFlow: "0", currency: "IDR" },
+        {
+          portfolioId,
+          date: "2026-01-01",
+          netWorth: "1500",
+          marketValue: "1500",
+          effectiveFlow: "1500",
+          currency: "IDR",
+        },
+        {
+          portfolioId,
+          date: "2026-01-15",
+          netWorth: "1500",
+          marketValue: "1500",
+          effectiveFlow: "0",
+          currency: "IDR",
+        },
+        {
+          portfolioId,
+          date: "2026-01-31",
+          netWorth: "1250",
+          marketValue: "1250",
+          effectiveFlow: "0",
+          currency: "IDR",
+        },
       ]);
 
       const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });
@@ -268,11 +488,30 @@ describe("GET /insights", () => {
       const portfolioId = create.json().id;
 
       // Only one instrument — no best/worst pair possible.
-      const [inst] = await app.db.insert(instruments).values({
-        symbol: "ONLY", name: "Only One", assetClass: "equity", unit: "shares", market: "IDX", sector: null, currency: "IDR",
-      }).returning({ id: instruments.id });
+      const [inst] = await app.db
+        .insert(instruments)
+        .values({
+          symbol: "ONLY",
+          name: "Only One",
+          assetClass: "equity",
+          unit: "shares",
+          market: "IDX",
+          sector: null,
+          currency: "IDR",
+        })
+        .returning({ id: instruments.id });
 
-      await app.db.insert(transactions).values({ portfolioId, instrumentId: inst.id, type: "buy", quantity: "10", price: "100", currency: "IDR", executedAt: new Date("2026-01-02") });
+      await app.db
+        .insert(transactions)
+        .values({
+          portfolioId,
+          instrumentId: inst.id,
+          type: "buy",
+          quantity: "10",
+          price: "100",
+          currency: "IDR",
+          executedAt: new Date("2026-01-02"),
+        });
 
       await app.db.insert(prices).values([
         { instrumentId: inst.id, date: "2026-01-01", close: "100", currency: "IDR" },
@@ -280,8 +519,22 @@ describe("GET /insights", () => {
       ]);
 
       await app.db.insert(portfolioSnapshots).values([
-        { portfolioId, date: "2026-01-01", netWorth: "1000", marketValue: "1000", effectiveFlow: "1000", currency: "IDR" },
-        { portfolioId, date: "2026-01-31", netWorth: "1100", marketValue: "1100", effectiveFlow: "0", currency: "IDR" },
+        {
+          portfolioId,
+          date: "2026-01-01",
+          netWorth: "1000",
+          marketValue: "1000",
+          effectiveFlow: "1000",
+          currency: "IDR",
+        },
+        {
+          portfolioId,
+          date: "2026-01-31",
+          netWorth: "1100",
+          marketValue: "1100",
+          effectiveFlow: "0",
+          currency: "IDR",
+        },
       ]);
 
       const res = await app.inject({ method: "GET", url: "/insights?range=all", headers: auth(t) });

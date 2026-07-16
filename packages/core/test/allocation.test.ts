@@ -20,7 +20,7 @@ const BBCA = "inst-bbca"; // IDX equity, IDR-quoted
 const XETR = "inst-xetr"; // XETRA equity, EUR-quoted
 const GOLD = "inst-gold"; // XAU gold, IDR-quoted
 const BOND = "inst-bond"; // BEI bond, IDR-quoted
-const ETF  = "inst-etf";  // US ETF (e.g. S&P 500), USD-quoted
+const ETF = "inst-etf"; // US ETF (e.g. S&P 500), USD-quoted
 
 function tx(p: Partial<CoreTransaction> & { instrumentId?: string | null }): CoreTransaction {
   return {
@@ -68,14 +68,56 @@ function makeSummary(): PortfolioSummary {
   return summarizePortfolio({
     transactions: [
       // IDR deposit covering all IDR buys plus leaving 500 000 IDR cash
-      tx({ instrumentId: null, type: "deposit", price: "11400000", quantity: "1", fees: "0", currency: "IDR" }),
+      tx({
+        instrumentId: null,
+        type: "deposit",
+        price: "11400000",
+        quantity: "1",
+        fees: "0",
+        currency: "IDR",
+      }),
       // EUR deposit covering the XETR buy exactly (no EUR cash left)
-      tx({ instrumentId: null, type: "deposit", price: "1000", quantity: "1", fees: "0", currency: "EUR" }),
+      tx({
+        instrumentId: null,
+        type: "deposit",
+        price: "1000",
+        quantity: "1",
+        fees: "0",
+        currency: "EUR",
+      }),
 
-      tx({ instrumentId: BBCA, type: "buy", quantity: "100", price: "9000", fees: "0", currency: "IDR" }),
-      tx({ instrumentId: XETR, type: "buy", quantity: "10", price: "100", fees: "0", currency: "EUR" }),
-      tx({ instrumentId: GOLD, type: "buy", quantity: "5", price: "1000000", fees: "0", currency: "IDR" }),
-      tx({ instrumentId: BOND, type: "buy", quantity: "50", price: "100000", fees: "0", currency: "IDR" }),
+      tx({
+        instrumentId: BBCA,
+        type: "buy",
+        quantity: "100",
+        price: "9000",
+        fees: "0",
+        currency: "IDR",
+      }),
+      tx({
+        instrumentId: XETR,
+        type: "buy",
+        quantity: "10",
+        price: "100",
+        fees: "0",
+        currency: "EUR",
+      }),
+      tx({
+        instrumentId: GOLD,
+        type: "buy",
+        quantity: "5",
+        price: "1000000",
+        fees: "0",
+        currency: "IDR",
+      }),
+      tx({
+        instrumentId: BOND,
+        type: "buy",
+        quantity: "50",
+        price: "100000",
+        fees: "0",
+        currency: "IDR",
+      }),
     ],
     prices: {
       [BBCA]: { price: "9500", currency: "IDR" },
@@ -286,8 +328,24 @@ describe("allocationBreakdown — ETF sectorWeights look-through", () => {
     return summarizePortfolio({
       transactions: [
         // Deposit then buy ETF so cash = 0
-        { instrumentId: null, type: "deposit", price: "1", quantity: "1", fees: "0", currency: "IDR", executedAt: new Date("2026-01-01") },
-        { instrumentId: ETF,  type: "buy",     price: "1", quantity: "1", fees: "0", currency: "IDR", executedAt: new Date("2026-01-01") },
+        {
+          instrumentId: null,
+          type: "deposit",
+          price: "1",
+          quantity: "1",
+          fees: "0",
+          currency: "IDR",
+          executedAt: new Date("2026-01-01"),
+        },
+        {
+          instrumentId: ETF,
+          type: "buy",
+          price: "1",
+          quantity: "1",
+          fees: "0",
+          currency: "IDR",
+          executedAt: new Date("2026-01-01"),
+        },
       ],
       prices: { [ETF]: { price: "10000", currency: "IDR" } },
       displayCurrency: "IDR",
@@ -326,7 +384,11 @@ describe("allocationBreakdown — ETF sectorWeights look-through", () => {
 
   it("ETF with weights summing to exactly 1 produces no 'Other' bucket", () => {
     const exactInst: Record<string, AllocationInstrumentMeta> = {
-      [ETF]: { assetClass: "etf", market: "US", sectorWeights: { Technology: 0.5, Financials: 0.5 } },
+      [ETF]: {
+        assetClass: "etf",
+        market: "US",
+        sectorWeights: { Technology: 0.5, Financials: 0.5 },
+      },
     };
     const result = allocationBreakdown(makeEtfSummary(), exactInst);
     expect(result.bySector.find((s) => s.key === "Other")).toBeUndefined();
@@ -563,8 +625,24 @@ describe("allocationBreakdown — ETF countryWeights look-through", () => {
   function makeEtfCwSummary(): PortfolioSummary {
     return summarizePortfolio({
       transactions: [
-        { instrumentId: null, type: "deposit", price: "1", quantity: "1", fees: "0", currency: "USD", executedAt: new Date("2026-01-01") },
-        { instrumentId: ETF_CW, type: "buy", price: "1", quantity: "1", fees: "0", currency: "USD", executedAt: new Date("2026-01-01") },
+        {
+          instrumentId: null,
+          type: "deposit",
+          price: "1",
+          quantity: "1",
+          fees: "0",
+          currency: "USD",
+          executedAt: new Date("2026-01-01"),
+        },
+        {
+          instrumentId: ETF_CW,
+          type: "buy",
+          price: "1",
+          quantity: "1",
+          fees: "0",
+          currency: "USD",
+          executedAt: new Date("2026-01-01"),
+        },
       ],
       prices: { [ETF_CW]: { price: "10000", currency: "USD" } },
       displayCurrency: "USD",

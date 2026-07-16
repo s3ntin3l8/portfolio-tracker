@@ -62,30 +62,18 @@ export function ErrorState({
         className,
       )}
     >
-      <span
-        className={cn(
-          "flex size-16 items-center justify-center rounded-[20px]",
-          CHIP[tone],
-        )}
-      >
+      <span className={cn("flex size-16 items-center justify-center rounded-[20px]", CHIP[tone])}>
         <Icon className="size-7" strokeWidth={1.8} />
       </span>
 
       {eyebrow && (
-        <span
-          className={cn(
-            "text-[11px] font-extrabold uppercase tracking-[0.16em]",
-            FG[tone],
-          )}
-        >
+        <span className={cn("text-[11px] font-extrabold uppercase tracking-[0.16em]", FG[tone])}>
           {eyebrow}
         </span>
       )}
 
       <h1 className="text-balance text-2xl font-extrabold tracking-tight">{title}</h1>
-      <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
-        {body}
-      </p>
+      <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">{body}</p>
 
       {code && (
         <span className="rounded-lg bg-muted px-3 py-1.5 font-mono text-xs text-muted-foreground">

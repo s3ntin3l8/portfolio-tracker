@@ -7,11 +7,7 @@ import { portfolios } from "@portfolio/db";
 // can reuse them without one route module importing the other.
 
 /** Fetch a portfolio by id, scoped to its owner; null when not found or not owned. */
-export async function ownedPortfolio(
-  app: FastifyInstance,
-  userId: string,
-  portfolioId: string,
-) {
+export async function ownedPortfolio(app: FastifyInstance, userId: string, portfolioId: string) {
   const [p] = await app.db
     .select()
     .from(portfolios)

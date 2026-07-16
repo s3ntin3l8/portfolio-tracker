@@ -21,9 +21,7 @@ export function AdminStats({ stats }: { stats: AdminStats }) {
       <div className="flex items-baseline gap-2">
         <span className="text-sm font-medium">Database</span>
         {db.sizeBytes !== null ? (
-          <span className="text-sm text-muted-foreground">
-            {formatBytes(db.sizeBytes)} total
-          </span>
+          <span className="text-sm text-muted-foreground">{formatBytes(db.sizeBytes)} total</span>
         ) : (
           <span className="text-xs text-muted-foreground italic">size unavailable</span>
         )}
@@ -36,7 +34,9 @@ export function AdminStats({ stats }: { stats: AdminStats }) {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground">Table</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rows (est.)</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                    Rows (est.)
+                  </th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">Size</th>
                 </tr>
               </thead>

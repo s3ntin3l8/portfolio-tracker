@@ -151,12 +151,7 @@ export async function syncIbkrConnection(
   const resolvedRows = await db
     .select({ eventId: trResolvedEvents.eventId })
     .from(trResolvedEvents)
-    .where(
-      and(
-        eq(trResolvedEvents.portfolioId, portfolioId),
-        eq(trResolvedEvents.source, "ibkr"),
-      ),
-    );
+    .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.source, "ibkr")));
   const resolved = new Set(resolvedRows.map((r) => r.eventId));
 
   // Every ibkr transaction already materialized (ANY status) — its event must not be
@@ -166,9 +161,7 @@ export async function syncIbkrConnection(
     .select({ ext: transactions.externalId, status: transactions.status })
     .from(transactions)
     .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "ibkr")));
-  const existingTxIds = new Set(
-    ibkrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)),
-  );
+  const existingTxIds = new Set(ibkrRows.map((r) => r.ext).filter((x): x is string => Boolean(x)));
   const confirmedIds = ibkrRows
     .filter((r) => r.status === "normal" || r.status === "cash_neutral")
     .map((r) => r.ext)
@@ -176,7 +169,14 @@ export async function syncIbkrConnection(
   if (confirmedIds.length) {
     await db
       .insert(trResolvedEvents)
-      .values(confirmedIds.map((eventId) => ({ portfolioId, source: "ibkr", eventId, resolution: "confirmed" })))
+      .values(
+        confirmedIds.map((eventId) => ({
+          portfolioId,
+          source: "ibkr",
+          eventId,
+          resolution: "confirmed",
+        })),
+      )
       .onConflictDoNothing();
     for (const id of confirmedIds) resolved.add(id);
   }
@@ -230,7 +230,13 @@ export async function syncIbkrConnection(
   if (!importId && (draftsToMaterialize.length > 0 || mergedErrors.length > 0)) {
     const [imp] = await db
       .insert(screenshotImports)
-      .values({ userId: connection.userId, portfolioId, parser: "ibkr", parsedJson: anchorJson, status: anchorStatus })
+      .values({
+        userId: connection.userId,
+        portfolioId,
+        parser: "ibkr",
+        parsedJson: anchorJson,
+        status: anchorStatus,
+      })
       .returning();
     importId = imp.id;
   }
@@ -252,7 +258,14 @@ export async function syncIbkrConnection(
     if (res.collapsed.length > 0) {
       await db
         .insert(trResolvedEvents)
-        .values(res.collapsed.map((eventId) => ({ portfolioId, source: "ibkr", eventId, resolution: "confirmed" })))
+        .values(
+          res.collapsed.map((eventId) => ({
+            portfolioId,
+            source: "ibkr",
+            eventId,
+            resolution: "confirmed",
+          })),
+        )
         .onConflictDoNothing();
     }
   }

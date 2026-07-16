@@ -24,12 +24,7 @@ export interface ContractReviewProps {
  * (the one figure that comes from a separate receipt page) before confirming. The
  * transaction legs are re-derived server-side on confirm, so only the contract is edited.
  */
-export function ContractReview({
-  contracts,
-  onUpdate,
-  onConfirm,
-  onDiscard,
-}: ContractReviewProps) {
+export function ContractReview({ contracts, onUpdate, onConfirm, onDiscard }: ContractReviewProps) {
   const t = useTranslations("Import.contract");
   const [busy, setBusy] = useState(false);
 

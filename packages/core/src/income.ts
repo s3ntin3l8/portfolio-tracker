@@ -7,10 +7,7 @@ import { convert, type FxRateFn } from "./networth.js";
 
 /** Whole-month count between two UTC dates (b − a, may be negative). */
 function monthsBetween(a: Date, b: Date): number {
-  return (
-    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
-    (b.getUTCMonth() - a.getUTCMonth())
-  );
+  return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
 }
 
 /** Return a new Date advanced by `months` UTC months. */
@@ -83,10 +80,7 @@ function computeGrowthFactor(
 
   // Require enough data points in each window for a meaningful ratio.
   // Annual payers (1 payment/window) fall through to flat.
-  if (
-    trailingAmts.length < MIN_PAYMENTS_FOR_GROWTH ||
-    priorAmts.length < MIN_PAYMENTS_FOR_GROWTH
-  ) {
+  if (trailingAmts.length < MIN_PAYMENTS_FOR_GROWTH || priorAmts.length < MIN_PAYMENTS_FOR_GROWTH) {
     return 1.0;
   }
 
@@ -261,10 +255,7 @@ function bucketMonthly(entries: IncomeEntry[]): IncomeEntry[] {
       out.push(list[0]);
       continue;
     }
-    const totalPrice = list.reduce(
-      (sum, e) => sum.add(new Decimal(e.price)),
-      new Decimal(0),
-    );
+    const totalPrice = list.reduce((sum, e) => sum.add(new Decimal(e.price)), new Decimal(0));
     const latest = list.reduce((a, b) => (b.executedAt > a.executedAt ? b : a));
     out.push({ ...list[0], executedAt: latest.executedAt, price: totalPrice.toString() });
   }
@@ -299,9 +290,7 @@ export function projectDividends(
   } = {},
 ): ProjectedDividend[] {
   // Source window: last year's equivalent of (now, Dec 31].
-  const lastYearEnd = new Date(
-    Date.UTC(now.getUTCFullYear() - 1, 11, 31, 23, 59, 59, 999),
-  );
+  const lastYearEnd = new Date(Date.UTC(now.getUTCFullYear() - 1, 11, 31, 23, 59, 59, 999));
   const pastStart = new Date(now);
   pastStart.setUTCFullYear(pastStart.getUTCFullYear() - 1);
 
@@ -341,9 +330,7 @@ export function projectDividends(
       : new Decimal(0);
     const hasAccumulation = accRate.gt(0);
     const monthsAhead = Math.max(0, monthsBetween(now, projected));
-    const projectedQty = hasAccumulation
-      ? currentQty.add(accRate.mul(monthsAhead))
-      : currentQty;
+    const projectedQty = hasAccumulation ? currentQty.add(accRate.mul(monthsAhead)) : currentQty;
 
     // Per-share stays at last year's actual run-rate (no growth applied for the
     // rest-of-year window). Scale by the projected qty; fall back to the raw
@@ -455,9 +442,7 @@ export function projectNextYearDividends(
     const currentQty = new Decimal(currentQtyStr);
 
     // Sort ascending.
-    const sorted = [...entries].sort(
-      (a, b) => a.executedAt.getTime() - b.executedAt.getTime(),
-    );
+    const sorted = [...entries].sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
 
     // Skip instruments with no recent activity.
     const hasRecent = sorted.some((e) => e.executedAt >= cutoff24mo);
@@ -509,15 +494,12 @@ export function projectNextYearDividends(
     }
 
     // Infer cadence from recent dates (trailing 24 months).
-    const recentDates = sorted
-      .filter((e) => e.executedAt >= cutoff24mo)
-      .map((e) => e.executedAt);
+    const recentDates = sorted.filter((e) => e.executedAt >= cutoff24mo).map((e) => e.executedAt);
     const intervalMonths = inferIntervalMonths(recentDates);
 
     // Growth factor for the next-year window.
     const growthFactor = applyGrowth ? computeGrowthFactor(perShareAmounts, now) : 1.0;
-    const growthApplied =
-      Math.abs(growthFactor - 1.0) > 0.001 ? growthFactor : undefined;
+    const growthApplied = Math.abs(growthFactor - 1.0) > 0.001 ? growthFactor : undefined;
     const source: "flat" | "grown" = growthApplied !== undefined ? "grown" : "flat";
 
     // Accumulation rate (shares/month) for this instrument.
@@ -536,9 +518,7 @@ export function projectNextYearDividends(
     // Emit one entry per generated date within the window.
     while (d <= windowEnd) {
       const monthsAhead = Math.max(0, monthsBetween(now, d));
-      const projectedQty = hasAccumulation
-        ? currentQty.add(accRate.mul(monthsAhead))
-        : currentQty;
+      const projectedQty = hasAccumulation ? currentQty.add(accRate.mul(monthsAhead)) : currentQty;
       const perShareFinal = perSharePerPayment.mul(growthFactor);
       const amount = perShareFinal.mul(projectedQty);
 
@@ -579,25 +559,16 @@ export function trailingIncomeByInstrument(
 ): Record<string, string> {
   const acc: Record<string, Decimal> = {};
   for (const t of txns) {
-    if (
-      (t.type === "dividend" || t.type === "coupon") &&
-      t.instrumentId &&
-      t.executedAt >= since
-    ) {
+    if ((t.type === "dividend" || t.type === "coupon") && t.instrumentId && t.executedAt >= since) {
       const amt = convert(t.price, t.currency, displayCurrency, fx);
       acc[t.instrumentId] = (acc[t.instrumentId] ?? new Decimal(0)).add(amt);
     }
   }
-  return Object.fromEntries(
-    Object.entries(acc).map(([k, v]) => [k, v.toString()]),
-  );
+  return Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, v.toString()]));
 }
 
 /** Trailing yield = trailing income ÷ market value, or null when value is zero. */
-export function trailingYield(
-  trailingIncome: string,
-  marketValue: string,
-): string | null {
+export function trailingYield(trailingIncome: string, marketValue: string): string | null {
   const mv = new Decimal(marketValue);
   if (mv.isZero()) return null;
   return new Decimal(trailingIncome).div(mv).toString();
@@ -792,8 +763,7 @@ export function aggregateIncome(input: AggregateIncomeInput): IncomeStats {
       }
     }
     if (e.executedAt.getUTCFullYear() === currentYear) thisYear = thisYear.add(amount);
-    else if (e.executedAt.getUTCFullYear() === currentYear - 1)
-      lastYear = lastYear.add(amount);
+    else if (e.executedAt.getUTCFullYear() === currentYear - 1) lastYear = lastYear.add(amount);
   }
 
   const pct = (v: Decimal) => (lifetime.isZero() ? 0 : v.div(lifetime).toNumber());

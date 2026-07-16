@@ -109,17 +109,9 @@ export const txSourceTypeEnum = pgEnum("tx_source_type", [
   "ibkr",
 ]);
 
-export const corpActionTypeEnum = pgEnum("corporate_action_type", [
-  "split",
-  "bonus",
-  "rights",
-]);
+export const corpActionTypeEnum = pgEnum("corporate_action_type", ["split", "bonus", "rights"]);
 
-export const importStatusEnum = pgEnum("import_status", [
-  "draft",
-  "confirmed",
-  "discarded",
-]);
+export const importStatusEnum = pgEnum("import_status", ["draft", "confirmed", "discarded"]);
 
 export const trConnectionStatusEnum = pgEnum("tr_connection_status", [
   "disconnected",
@@ -138,7 +130,7 @@ export const ibkrConnectionStatusEnum = pgEnum("ibkr_connection_status", [
 
 export const dividendStatusEnum = pgEnum("dividend_status", [
   "announced", // ex-date known, amount may still change
-  "paid",      // cash has settled; amount is final
+  "paid", // cash has settled; amount is final
 ]);
 
 // Verlustverrechnungstopf (loss pot): "stock" = Aktienverlusttopf (share-sale losses,
@@ -263,9 +255,7 @@ export const portfolios = pgTable(
     // for the same holder should not exceed it. Null = no FSA submitted for this depot
     // → the tax page shows "unconfigured" for this portfolio.
     taxAllowanceAnnual: numeric("tax_allowance_annual"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("portfolios_user_id_idx").on(t.userId)],
 ).enableRLS();
@@ -338,9 +328,7 @@ export const instruments = pgTable(
      * Never applied to individual stocks or bonds.
      */
     partialExemptionRate: numeric("partial_exemption_rate"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("instruments_market_symbol_idx").on(t.market, t.symbol),
@@ -521,8 +509,8 @@ export const scrapedQuotes = pgTable("scraped_quotes", {
 // (e.g. "twelvedata", "vision:gemini") so one table serves both registries.
 export const providerCredentials = pgTable("provider_credentials", {
   provider: text("provider").primaryKey(),
-  apiKeyEnc: text("api_key_enc"),     // encrypted; null for url-only or keyless providers
-  urlOverride: text("url_override"),  // optional endpoint override (e.g. ANTAM_BUYBACK_URL)
+  apiKeyEnc: text("api_key_enc"), // encrypted; null for url-only or keyless providers
+  urlOverride: text("url_override"), // optional endpoint override (e.g. ANTAM_BUYBACK_URL)
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
@@ -544,7 +532,7 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   // "set_credential" | "clear_credential" | "update_providers" | "update_vision_providers" | "update_import_settings" | "update_storage_settings" | "set_storage_secret" | "clear_storage_secret"
   action: text("action").notNull(),
   target: text("target").notNull(), // provider id, e.g. "twelvedata" or "vision:gemini"
-  meta: jsonb("meta"),              // non-secret context, e.g. { keyHint: "••••abc1" }
+  meta: jsonb("meta"), // non-secret context, e.g. { keyHint: "••••abc1" }
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
@@ -567,7 +555,7 @@ export const importSettings = pgTable("import_settings", {
 // fields are DB overrides; a null value falls back to the matching STORAGE_* env var.
 // Only the S3 secret access key is stored encrypted (EncryptionService, `enc:` prefix).
 export const storageSettings = pgTable("storage_settings", {
-  id: integer("id").primaryKey().default(1),              // enforced singleton
+  id: integer("id").primaryKey().default(1), // enforced singleton
   activeProvider: text("active_provider").notNull().default("s3"), // "s3" | "folder"
   // S3 / S3-compatible (MinIO, Supabase Storage, R2, AWS). Null ⇒ env fallback.
   s3Endpoint: text("s3_endpoint"),
@@ -726,9 +714,7 @@ export const transactions = pgTable(
     }),
     // Stable id from the source (broker ref / CSV row hash) for idempotent imports.
     externalId: text("external_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("transactions_portfolio_id_idx").on(t.portfolioId),
@@ -844,11 +830,7 @@ export const dismissedAnomalies = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("dismissed_anomalies_pf_tx_code_idx").on(
-      t.portfolioId,
-      t.transactionId,
-      t.code,
-    ),
+    uniqueIndex("dismissed_anomalies_pf_tx_code_idx").on(t.portfolioId, t.transactionId, t.code),
     index("dismissed_anomalies_portfolio_id_idx").on(t.portfolioId),
   ],
 ).enableRLS();
@@ -934,9 +916,7 @@ export const dividendEvents = pgTable(
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("dividend_events_instrument_exdate_idx").on(t.instrumentId, t.exDate),
-  ],
+  (t) => [uniqueIndex("dividend_events_instrument_exdate_idx").on(t.instrumentId, t.exDate)],
 ).enableRLS();
 
 // Historical daily closes.
@@ -984,16 +964,9 @@ export const portfolioSnapshots = pgTable(
     /** Effective capital flow on this day (buys − sells − income for realSeries), base currency. */
     effectiveFlow: numeric("effective_flow").notNull().default("0"),
     currency: text("currency").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("portfolio_snapshots_portfolio_date_idx").on(
-      t.portfolioId,
-      t.date,
-    ),
-  ],
+  (t) => [uniqueIndex("portfolio_snapshots_portfolio_date_idx").on(t.portfolioId, t.date)],
 ).enableRLS();
 
 /**
@@ -1016,15 +989,10 @@ export const portfolioIntradaySnapshots = pgTable(
     /** Holdings market value (excl. cash), in the portfolio's base currency. */
     marketValue: numeric("market_value").notNull().default("0"),
     currency: text("currency").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("portfolio_intraday_snapshots_portfolio_captured_idx").on(
-      t.portfolioId,
-      t.capturedAt,
-    ),
+    index("portfolio_intraday_snapshots_portfolio_captured_idx").on(t.portfolioId, t.capturedAt),
   ],
 ).enableRLS();
 
@@ -1098,7 +1066,9 @@ export const lossCarryforward = pgTable(
 // (cost-basis method, tax regime — see the Settings "Investing" section and the Tax
 // screen's DE/ID toggle, which both read/write these same two columns).
 export const userPreferences = pgTable("user_preferences", {
-  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
   dashboardPeriod: text("dashboard_period").notNull().default("max"),
   dashboardKpis: jsonb("dashboard_kpis").$type<string[]>(),
   // 'purchase_price' | 'total_paid' — how P&L cost basis is computed everywhere

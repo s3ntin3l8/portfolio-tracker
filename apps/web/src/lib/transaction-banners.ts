@@ -51,7 +51,8 @@ function yoyIncome(incomeRows: TxRow[], now: Date): { ytdTotal: number; trendPct
     return d.getFullYear() === year - 1 && d <= lastYearCutoff;
   });
   const lastYearTotal = sumBy(lastYearRows, txNetAmountDisplay);
-  const trendPct = lastYearTotal !== 0 ? (ytdTotal - lastYearTotal) / Math.abs(lastYearTotal) : null;
+  const trendPct =
+    lastYearTotal !== 0 ? (ytdTotal - lastYearTotal) / Math.abs(lastYearTotal) : null;
   return { ytdTotal, trendPct };
 }
 
@@ -98,8 +99,18 @@ export function computeAllBanner(
   return {
     currency: scopeCurrency,
     tiles: [
-      { label: labels.invested, value: money(investedTotal), sub: labels.buysCount(buys.length), tone: "neutral" },
-      { label: labels.proceeds, value: money(proceedsTotal), sub: labels.sellsCount(sells.length), tone: "neutral" },
+      {
+        label: labels.invested,
+        value: money(investedTotal),
+        sub: labels.buysCount(buys.length),
+        tone: "neutral",
+      },
+      {
+        label: labels.proceeds,
+        value: money(proceedsTotal),
+        sub: labels.sellsCount(sells.length),
+        tone: "neutral",
+      },
       {
         label: labels.incomeYtd,
         value: money(incomeYtdTotal),
@@ -108,9 +119,24 @@ export function computeAllBanner(
       },
     ],
     mix: [
-      { label: labels.buys, value: money(investedTotal), pct: barPct(investedTotal, max), color: PALETTE[0] },
-      { label: labels.sells, value: money(proceedsTotal), pct: barPct(proceedsTotal, max), color: PALETTE[1] },
-      { label: labels.income, value: money(incomeYtdTotal), pct: barPct(incomeYtdTotal, max), color: PALETTE[3] },
+      {
+        label: labels.buys,
+        value: money(investedTotal),
+        pct: barPct(investedTotal, max),
+        color: PALETTE[0],
+      },
+      {
+        label: labels.sells,
+        value: money(proceedsTotal),
+        pct: barPct(proceedsTotal, max),
+        color: PALETTE[1],
+      },
+      {
+        label: labels.income,
+        value: money(incomeYtdTotal),
+        pct: barPct(incomeYtdTotal, max),
+        color: PALETTE[3],
+      },
     ],
   };
 }
@@ -161,15 +187,39 @@ export function computeIncomeBanner(
 
   const year = now.getFullYear();
   const ytdRows = incomeRows.filter((r) => new Date(r.executedAt).getFullYear() === year);
-  const dividends = sumBy(ytdRows.filter((r) => r.type === "dividend"), txNetAmountDisplay);
-  const coupons = sumBy(ytdRows.filter((r) => r.type === "coupon" || r.type === "interest"), txNetAmountDisplay);
-  const other = sumBy(ytdRows.filter((r) => r.type === "bonus_cash"), txNetAmountDisplay);
+  const dividends = sumBy(
+    ytdRows.filter((r) => r.type === "dividend"),
+    txNetAmountDisplay,
+  );
+  const coupons = sumBy(
+    ytdRows.filter((r) => r.type === "coupon" || r.type === "interest"),
+    txNetAmountDisplay,
+  );
+  const other = sumBy(
+    ytdRows.filter((r) => r.type === "bonus_cash"),
+    txNetAmountDisplay,
+  );
   const sourceMax = Math.max(dividends, coupons, other, 1);
   const bySource: FlowMixRow[] = (
     [
-      dividends > 0 && { label: labels.dividends, value: money(dividends), pct: barPct(dividends, sourceMax), color: PALETTE[0] },
-      coupons > 0 && { label: labels.couponsInterest, value: money(coupons), pct: barPct(coupons, sourceMax), color: PALETTE[1] },
-      other > 0 && { label: labels.other, value: money(other), pct: barPct(other, sourceMax), color: PALETTE[3] },
+      dividends > 0 && {
+        label: labels.dividends,
+        value: money(dividends),
+        pct: barPct(dividends, sourceMax),
+        color: PALETTE[0],
+      },
+      coupons > 0 && {
+        label: labels.couponsInterest,
+        value: money(coupons),
+        pct: barPct(coupons, sourceMax),
+        color: PALETTE[1],
+      },
+      other > 0 && {
+        label: labels.other,
+        value: money(other),
+        pct: barPct(other, sourceMax),
+        color: PALETTE[3],
+      },
     ] as const
   ).filter((v): v is FlowMixRow => v !== false);
 

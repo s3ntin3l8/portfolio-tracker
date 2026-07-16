@@ -1,5 +1,9 @@
 import { Decimal } from "decimal.js";
-import { parsedTransactionSchema, type ParsedTransaction, type TaxComponents } from "@portfolio/schema";
+import {
+  parsedTransactionSchema,
+  type ParsedTransaction,
+  type TaxComponents,
+} from "@portfolio/schema";
 import { parseEuroDecimal, parseDkbDate } from "./dkb.js";
 
 /**
@@ -95,7 +99,12 @@ function deductedAfter(text: string, label: string, gap = false): string | null 
 }
 
 /** Pull the security identity: name (between Stück <qty> and the ISIN), ISIN, WKN. */
-function extractSecurity(text: string): { name?: string; isin?: string; wkn?: string; quantity?: string } {
+function extractSecurity(text: string): {
+  name?: string;
+  isin?: string;
+  wkn?: string;
+  quantity?: string;
+} {
   const isin = text.match(ISIN_RE)?.[1];
   const wkn = isin ? text.match(new RegExp(`${isin}\\s*\\(([0-9A-Z]{6})\\)`))?.[1] : undefined;
   const quantity = parseEuroDecimal(text.match(/St(?:ü|ue)ck\s+([\d.,]+)/)?.[1]) ?? undefined;
@@ -145,12 +154,7 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
     }
 
     const value = new Decimal(kurswert);
-    const leg = (
-      side: "out" | "in",
-      m: RegExpMatchArray,
-      qty: string,
-      price: string,
-    ) =>
+    const leg = (side: "out" | "in", m: RegExpMatchArray, qty: string, price: string) =>
       pushDraft(
         {
           assetClass: /\bETF\b/.test(m[2]) ? "etf" : /Fonds/.test(m[2]) ? "mutual_fund" : "equity",
@@ -198,7 +202,8 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
     const total = addMoney(net, tax);
     // Build per-component breakdown (preserved instead of discarded).
     const incomeTaxComponents: TaxComponents = {};
-    if (quellensteuer && Number(quellensteuer) > 0) incomeTaxComponents.quellensteuer = quellensteuer;
+    if (quellensteuer && Number(quellensteuer) > 0)
+      incomeTaxComponents.quellensteuer = quellensteuer;
     if (kapst && Number(kapst) > 0) incomeTaxComponents.kapitalertragsteuer = kapst;
     if (solz && Number(solz) > 0) incomeTaxComponents.solidaritaetszuschlag = solz;
     if (kirche && Number(kirche) > 0) incomeTaxComponents.kirchensteuer = kirche;
@@ -242,7 +247,8 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
         price: net ?? "",
         total,
         tax: Number(tax) > 0 ? tax : undefined,
-        taxComponents: Object.keys(incomeTaxComponents).length > 0 ? incomeTaxComponents : undefined,
+        taxComponents:
+          Object.keys(incomeTaxComponents).length > 0 ? incomeTaxComponents : undefined,
         fxRate: fxRate ?? undefined,
         shares: quantity,
         perShare: perShare ?? undefined,
@@ -279,10 +285,17 @@ export function parseDkbPdf(rawText: string): DkbPdfResult {
     parseDkbDate(text.match(/Schlusstag(?:\/-?Zeit)?\s+(\d{2}\.\d{2}\.\d{4})/)?.[1]) ?? docDate;
   // venue: prefer the named counterparty, else the execution venue.
   const venue =
-    collapse(text.match(/Handelspartner\s+(.+?)\s+(?:Schlusstag|Auftraggeber|Auftragserteilung)/)?.[1] ?? "") ||
-    collapse(text.match(/Gegenpartei bei diesem Geschäft war\s+(.+?)\s+(?:ABR|Ihr|Die|Sofern)/)?.[1] ?? "") ||
     collapse(
-      text.match(/Handels-\/Ausführungsplatz\s+(.+?)\s+(?:Handelspartner|Handelszeit|Schlusstag|Auftraggeber|Gegenpartei|Kurswert)/)?.[1] ?? "",
+      text.match(/Handelspartner\s+(.+?)\s+(?:Schlusstag|Auftraggeber|Auftragserteilung)/)?.[1] ??
+        "",
+    ) ||
+    collapse(
+      text.match(/Gegenpartei bei diesem Geschäft war\s+(.+?)\s+(?:ABR|Ihr|Die|Sofern)/)?.[1] ?? "",
+    ) ||
+    collapse(
+      text.match(
+        /Handels-\/Ausführungsplatz\s+(.+?)\s+(?:Handelspartner|Handelszeit|Schlusstag|Auftraggeber|Gegenpartei|Kurswert)/,
+      )?.[1] ?? "",
     );
   const auftrag = text.match(/Auftragsnummer\s+(\S+)/)?.[1];
   const externalId = auftrag ? `dkb:${auftrag.replace(/\D/g, "")}` : undefined;

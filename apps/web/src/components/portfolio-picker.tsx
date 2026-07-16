@@ -11,15 +11,10 @@ import {
 import { BrokerageIcon } from "@/components/brokerage-icon";
 import { cn } from "@/lib/utils";
 
-export type PickablePortfolio = Pick<
-  Portfolio,
-  "id" | "name" | "brokerage" | "accountHolder"
->;
+export type PickablePortfolio = Pick<Portfolio, "id" | "name" | "brokerage" | "accountHolder">;
 
 /** `name · brokerage · accountHolder`, skipping the blanks. Mirrors PortfolioSwitcher. */
-export function portfolioLabel(
-  p: Pick<Portfolio, "name" | "brokerage" | "accountHolder">,
-): string {
+export function portfolioLabel(p: Pick<Portfolio, "name" | "brokerage" | "accountHolder">): string {
   const parts = [p.name];
   if (p.brokerage) parts.push(p.brokerage);
   if (p.accountHolder) parts.push(p.accountHolder);
@@ -57,9 +52,7 @@ export function PortfolioPicker({
           triggerClassName,
         )}
       >
-        {selected && (
-          <BrokerageIcon brokerage={selected.brokerage} className="size-5 rounded-md" />
-        )}
+        {selected && <BrokerageIcon brokerage={selected.brokerage} className="size-5 rounded-md" />}
         <span className="truncate">{selected?.name ?? ""}</span>
         <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>

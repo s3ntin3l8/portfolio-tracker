@@ -14,13 +14,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  instruments,
-  portfolios,
-  portfolioSnapshots,
-  transactions,
-  users,
-} from "@portfolio/db";
+import { instruments, portfolios, portfolioSnapshots, transactions, users } from "@portfolio/db";
 import {
   MarketDataService,
   type MarketDataProvider,
@@ -28,10 +22,7 @@ import {
   type Candle,
 } from "@portfolio/market-data";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
-import {
-  backfillPortfolioHistory,
-  backfillStalePortfolios,
-} from "../../src/services/backfill.js";
+import { backfillPortfolioHistory, backfillStalePortfolios } from "../../src/services/backfill.js";
 
 // ---------------------------------------------------------------------------
 // Weekday-only candle provider for the test
@@ -79,10 +70,10 @@ class WeekdayCandleProvider implements MarketDataProvider {
 // ---------------------------------------------------------------------------
 
 const INCEPTION = "2026-01-19"; // Monday
-const FRIDAY    = "2026-01-23"; // last trading day before the weekend
-const SATURDAY  = "2026-01-24";
-const SUNDAY    = "2026-01-25";
-const MONDAY2   = "2026-01-26"; // next trading week
+const FRIDAY = "2026-01-23"; // last trading day before the weekend
+const SATURDAY = "2026-01-24";
+const SUNDAY = "2026-01-25";
+const MONDAY2 = "2026-01-26"; // next trading week
 
 const PRICE_FRI = "10000"; // IDR close on Friday
 const PRICE_MON = "10500"; // IDR close on following Monday
@@ -92,8 +83,8 @@ const CANDLES: Record<string, string> = {
   "2026-01-20": "9200",
   "2026-01-21": "9500",
   "2026-01-22": "9800",
-  [FRIDAY]:     PRICE_FRI,
-  [MONDAY2]:    PRICE_MON,
+  [FRIDAY]: PRICE_FRI,
+  [MONDAY2]: PRICE_MON,
 };
 
 const QTY = "2"; // 2 shares held
@@ -101,9 +92,7 @@ const QTY = "2"; // 2 shares held
 describe("backfillPortfolioHistory — weekend carry-forward", () => {
   let portfolioId: string;
 
-  const svc = new MarketDataService([
-    new WeekdayCandleProvider("WKND", CANDLES, "IDR"),
-  ]);
+  const svc = new MarketDataService([new WeekdayCandleProvider("WKND", CANDLES, "IDR")]);
 
   beforeAll(async () => {
     const db = await ensureDb();
@@ -213,20 +202,18 @@ describe("backfillStalePortfolios — force option", () => {
   let forceInstrId: string;
 
   const FORCE_INCEPTION = "2026-02-02"; // Monday
-  const FORCE_FRIDAY    = "2026-02-06";
-  const FORCE_SATURDAY  = "2026-02-07";
+  const FORCE_FRIDAY = "2026-02-06";
+  const FORCE_SATURDAY = "2026-02-07";
 
   const FORCE_CANDLES: Record<string, string> = {
     [FORCE_INCEPTION]: "5000",
     "2026-02-03": "5100",
     "2026-02-04": "5200",
     "2026-02-05": "5300",
-    [FORCE_FRIDAY]:    "5400",
+    [FORCE_FRIDAY]: "5400",
   };
 
-  const svc2 = new MarketDataService([
-    new WeekdayCandleProvider("FORC", FORCE_CANDLES, "EUR"),
-  ]);
+  const svc2 = new MarketDataService([new WeekdayCandleProvider("FORC", FORCE_CANDLES, "EUR")]);
 
   beforeAll(async () => {
     const db = await ensureDb();

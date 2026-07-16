@@ -52,7 +52,10 @@ function makeTrackingStorage(): StorageProvider & {
     get: async (key) => data.get(key) ?? null,
     move: async (src, dest) => {
       const buf = data.get(src);
-      if (buf) { data.set(dest, buf); data.delete(src); }
+      if (buf) {
+        data.set(dest, buf);
+        data.delete(src);
+      }
     },
   };
 }
@@ -268,7 +271,12 @@ describe("retention=true — confirm retains bytes, download URL issued", () => 
   it("transaction document-url resolves the import's receipt", async () => {
     const { t, portfolioId } = await setup("tx-doc-user", true);
     const { importId, drafts } = await uploadCsv(t);
-    const { transactions: txns } = await confirmImport(t, portfolioId, importId, drafts as unknown[]);
+    const { transactions: txns } = await confirmImport(
+      t,
+      portfolioId,
+      importId,
+      drafts as unknown[],
+    );
     const txId = txns[0].id;
 
     const res = await app.inject({
@@ -283,7 +291,12 @@ describe("retention=true — confirm retains bytes, download URL issued", () => 
   it("per-source document-url falls back to the import receipt when the CSV source row has no documentId", async () => {
     const { t, portfolioId } = await setup("src-doc-user", true);
     const { importId, drafts } = await uploadCsv(t);
-    const { transactions: txns } = await confirmImport(t, portfolioId, importId, drafts as unknown[]);
+    const { transactions: txns } = await confirmImport(
+      t,
+      portfolioId,
+      importId,
+      drafts as unknown[],
+    );
     const txId = txns[0].id;
 
     // Read the transaction's source rows: a CSV source has documentId=null but is
@@ -296,7 +309,12 @@ describe("retention=true — confirm retains bytes, download URL issued", () => 
     expect(listRes.statusCode).toBe(200);
     const list = listRes.json() as Array<{
       id: string;
-      sources: Array<{ id: string; documentId: string | null; hasDocument: boolean; filename: string | null }>;
+      sources: Array<{
+        id: string;
+        documentId: string | null;
+        hasDocument: boolean;
+        filename: string | null;
+      }>;
     }>;
     const src = list.find((r) => r.id === txId)!.sources[0];
     expect(src.documentId).toBeNull();
@@ -408,7 +426,12 @@ describe("IDOR guard on document-url endpoints", () => {
     const userC = await setup("idor-user-c", true);
     const csv2 = `date,action,assetClass,ticker,name,quantity,unit,price,fees,currency\n2026-03-02,buy,equity,BMRI,Bank Mandiri,50,shares,6000,0,IDR`;
     const { importId, drafts } = await uploadCsv(userC.t, csv2);
-    const { transactions: txns } = await confirmImport(userC.t, userC.portfolioId, importId, drafts as unknown[]);
+    const { transactions: txns } = await confirmImport(
+      userC.t,
+      userC.portfolioId,
+      importId,
+      drafts as unknown[],
+    );
     const txId = txns[0].id;
 
     // User D attempts to access user C's transaction document.

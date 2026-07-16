@@ -5,8 +5,8 @@ Trade Republic sync runs the vendored **pytr** entrypoints
 spawns them using the interpreter named by **`PYTR_PYTHON_BIN`**
 (`services/api/src/services/pytr/runner.ts`, default `python3`). If that interpreter has
 no `pytr` installed, `tr_login.py` exits with `pytr not installed` and the route returns
-**502 `tr_pairing_failed`** — the web UI shows the generic *"Something went wrong. Please
-try again."*
+**502 `tr_pairing_failed`** — the web UI shows the generic _"Something went wrong. Please
+try again."_
 
 Production handles this in the `Dockerfile` (a venv at `/opt/pytr-venv`). Local dev needs
 the same two steps:
@@ -43,9 +43,9 @@ Python side); approve promptly or the attempt expires and you start over.
 
 ## Relevant config
 
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `PYTR_PYTHON_BIN` | `python3` | Interpreter that runs the pytr entrypoints; point at the venv python. |
-| `PYTR_WAF_STRATEGY` | `awswaf` | AWS-WAF token strategy. `awswaf` is no-browser; `playwright` needs a bundled Chromium (not installed by default). |
-| `PYTR_ENABLED` | `true` | Master switch for the TR feature (subprocess + routes). |
-| `DB_ENCRYPTION_KEY` | — | Required: phone/PIN/session are encrypted at rest. Missing → 503 `encryption_required`. |
+| Var                 | Default   | Purpose                                                                                                           |
+| ------------------- | --------- | ----------------------------------------------------------------------------------------------------------------- |
+| `PYTR_PYTHON_BIN`   | `python3` | Interpreter that runs the pytr entrypoints; point at the venv python.                                             |
+| `PYTR_WAF_STRATEGY` | `awswaf`  | AWS-WAF token strategy. `awswaf` is no-browser; `playwright` needs a bundled Chromium (not installed by default). |
+| `PYTR_ENABLED`      | `true`    | Master switch for the TR feature (subprocess + routes).                                                           |
+| `DB_ENCRYPTION_KEY` | —         | Required: phone/PIN/session are encrypted at rest. Missing → 503 `encryption_required`.                           |

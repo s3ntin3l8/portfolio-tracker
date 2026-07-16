@@ -19,8 +19,7 @@ const h = vi.hoisted(() => {
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({
-    get: (name: string) =>
-      h.cookies[name] !== undefined ? { value: h.cookies[name] } : undefined,
+    get: (name: string) => (h.cookies[name] !== undefined ? { value: h.cookies[name] } : undefined),
     getAll: () => Object.entries(h.cookies).map(([name, value]) => ({ name, value })),
   }),
 }));
@@ -120,7 +119,7 @@ describe("loadTransactionsAcrossPortfolios (holder scope)", () => {
     const pfWithHolders = [
       { id: "p1", name: "Self-A", baseCurrency: "IDR", accountHolderId: "h1" },
       { id: "p2", name: "Self-B", baseCurrency: "EUR", accountHolderId: "h1" },
-      { id: "p3", name: "Other",  baseCurrency: "IDR", accountHolderId: "h2" },
+      { id: "p3", name: "Other", baseCurrency: "IDR", accountHolderId: "h2" },
     ];
     h.client.listPortfolios = async () => pfWithHolders;
     h.client.listTransactions = async (id: string) =>
@@ -372,7 +371,9 @@ describe("aggregate + misc loaders", () => {
 
   it("loadNetWorthHistory uses the aggregate when no portfolio is selected", async () => {
     h.client.listPortfolios = async () => PF;
-    const getNetWorthHistory = vi.fn(async (range: string) => [{ date: "2026-01-01", netWorth: range }]);
+    const getNetWorthHistory = vi.fn(async (range: string) => [
+      { date: "2026-01-01", netWorth: range },
+    ]);
     h.client.getNetWorthHistory = getNetWorthHistory;
     h.client.getPortfolioHistory = vi.fn();
 
@@ -384,11 +385,15 @@ describe("aggregate + misc loaders", () => {
   it("loadNetWorthHistory uses getPortfolioHistory when a portfolio is selected", async () => {
     h.client.listPortfolios = async () => PF;
     h.cookies = { pf: "p2" };
-    const getPortfolioHistory = vi.fn(async (id: string, range: string) => [{ date: "2026-01-01", netWorth: `${id}/${range}` }]);
+    const getPortfolioHistory = vi.fn(async (id: string, range: string) => [
+      { date: "2026-01-01", netWorth: `${id}/${range}` },
+    ]);
     h.client.getPortfolioHistory = getPortfolioHistory;
     h.client.getNetWorthHistory = vi.fn();
 
-    expect(await api.loadNetWorthHistory("1m")).toEqual([{ date: "2026-01-01", netWorth: "p2/1m" }]);
+    expect(await api.loadNetWorthHistory("1m")).toEqual([
+      { date: "2026-01-01", netWorth: "p2/1m" },
+    ]);
     expect(getPortfolioHistory).toHaveBeenCalledWith("p2", "1m");
     expect(h.client.getNetWorthHistory).not.toHaveBeenCalled();
   });
@@ -887,7 +892,13 @@ describe("loadTaxYearDetail", () => {
     ];
 
     const holders = [
-      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "p1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
     ] as unknown as TaxSummaryHolder[];
 
     const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;
@@ -921,8 +932,20 @@ describe("loadTaxYearDetail", () => {
     h.client.listIncomeByYear = async () => [];
 
     const holders = [
-      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
-      { holder: { id: "h2" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "h1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
+      {
+        holder: { id: "h2" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
     ] as unknown as TaxSummaryHolder[];
 
     const map = await api.loadTaxYearDetail(holders, 2026);
@@ -948,8 +971,20 @@ describe("loadTaxYearDetail", () => {
     h.client.listIncomeByYear = async () => [];
 
     const holders = [
-      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
-      { holder: { id: "h2" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "h1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
+      {
+        holder: { id: "h2" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
     ] as unknown as TaxSummaryHolder[];
 
     const map = await api.loadTaxYearDetail(holders, 2026);
@@ -960,7 +995,13 @@ describe("loadTaxYearDetail", () => {
   it("returns an empty map when not signed in", async () => {
     h.accessToken = null;
     const holders = [
-      { holder: { id: "h1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "h1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
     ] as unknown as TaxSummaryHolder[];
     expect((await api.loadTaxYearDetail(holders, 2026)).size).toBe(0);
   });
@@ -976,14 +1017,26 @@ describe("loadTaxYearDetail", () => {
           instrument: { symbol: "BBNI", name: "BBNI", assetClass: "equity", market: "IDX" },
           legs: [
             {
-              acqDate: "2025-01-01", sellDate: "2026-05-18", quantity: "10",
-              cost: "1000", proceeds: "1640", gain: "640", holdingDays: 100,
-              longTerm: false, taxYear: 2026,
+              acqDate: "2025-01-01",
+              sellDate: "2026-05-18",
+              quantity: "10",
+              cost: "1000",
+              proceeds: "1640",
+              gain: "640",
+              holdingDays: 100,
+              longTerm: false,
+              taxYear: 2026,
             },
             {
-              acqDate: "2024-01-01", sellDate: "2025-06-01", quantity: "5",
-              cost: "400", proceeds: "500", gain: "100", holdingDays: 200,
-              longTerm: true, taxYear: 2025,
+              acqDate: "2024-01-01",
+              sellDate: "2025-06-01",
+              quantity: "5",
+              cost: "400",
+              proceeds: "500",
+              gain: "100",
+              holdingDays: 200,
+              longTerm: true,
+              taxYear: 2025,
             },
           ],
         },
@@ -1000,7 +1053,13 @@ describe("loadTaxYearDetail", () => {
     h.client.listIncomeByYear = async () => [];
 
     const holders = [
-      { holder: { id: "p1" }, year: 2026, allowanceUsage: baseUsage, harvestSuggestions: [], distribution: {} },
+      {
+        holder: { id: "p1" },
+        year: 2026,
+        allowanceUsage: baseUsage,
+        harvestSuggestions: [],
+        distribution: {},
+      },
     ] as unknown as TaxSummaryHolder[];
 
     const detail = (await api.loadTaxYearDetail(holders, 2026)).get("p1")!;

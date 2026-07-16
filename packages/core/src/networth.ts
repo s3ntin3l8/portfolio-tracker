@@ -9,12 +9,7 @@ export interface PriceQuote {
   currency: string;
 }
 
-export function convert(
-  amount: string,
-  from: string,
-  to: string,
-  fx: FxRateFn,
-): string {
+export function convert(amount: string, from: string, to: string, fx: FxRateFn): string {
   if (from === to) return amount;
   return new Decimal(amount).mul(new Decimal(fx(from, to))).toString();
 }
@@ -42,15 +37,11 @@ export function netWorth(input: NetWorthInput): string {
     const quote = input.prices[h.instrumentId];
     if (!quote) continue;
     const mv = new Decimal(h.quantity).mul(new Decimal(quote.price)).toString();
-    total = total.add(
-      new Decimal(convert(mv, quote.currency, input.displayCurrency, fx)),
-    );
+    total = total.add(new Decimal(convert(mv, quote.currency, input.displayCurrency, fx)));
   }
 
   for (const [currency, amount] of Object.entries(input.cash)) {
-    total = total.add(
-      new Decimal(convert(amount, currency, input.displayCurrency, fx)),
-    );
+    total = total.add(new Decimal(convert(amount, currency, input.displayCurrency, fx)));
   }
 
   if (input.liabilities) total = total.sub(new Decimal(input.liabilities));

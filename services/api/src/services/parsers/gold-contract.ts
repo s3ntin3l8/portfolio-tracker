@@ -43,10 +43,7 @@ export function goldInstrumentForContract(c: ParsedGoldContract): {
  * upfront cash. Only installments due on/before `now` become repayment legs; the
  * rest live in the loan's schedule for display and a future "mark paid" action.
  */
-export function buildContractLegs(
-  c: ParsedGoldContract,
-  now: Date,
-): ContractLeg[] {
+export function buildContractLegs(c: ParsedGoldContract, now: Date): ContractLeg[] {
   const currency = c.currency;
   const grams = new Decimal(c.grams);
   const purchase = new Decimal(c.purchasePrice);

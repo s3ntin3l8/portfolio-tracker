@@ -52,7 +52,11 @@ export function registerInsightsRoutes(app: FastifyInstance) {
       const range = request.query.range ?? "all";
 
       const pfs = await app.db
-        .select({ id: portfolios.id, includeInAggregate: portfolios.includeInAggregate, cashCounted: portfolios.cashCounted })
+        .select({
+          id: portfolios.id,
+          includeInAggregate: portfolios.includeInAggregate,
+          cashCounted: portfolios.cashCounted,
+        })
         .from(portfolios)
         .where(
           portfolioId != null
@@ -63,9 +67,24 @@ export function registerInsightsRoutes(app: FastifyInstance) {
         );
       if (pfs.length === 0) {
         return reply.send({
-          drawdown: { maxDrawdownPct: "0", peakDate: null, troughDate: null, currentDrawdownPct: "0" },
+          drawdown: {
+            maxDrawdownPct: "0",
+            peakDate: null,
+            troughDate: null,
+            currentDrawdownPct: "0",
+          },
           volatility: { annualizedVolatility: null, sharpeRatio: null, sortinoRatio: null },
-          streaks: { bestStreak: null, worstStreak: null, bestMonth: null, worstMonth: null, bestYear: null, worstYear: null, positiveMonths: 0, negativeMonths: 0, totalMonths: 0 },
+          streaks: {
+            bestStreak: null,
+            worstStreak: null,
+            bestMonth: null,
+            worstMonth: null,
+            bestYear: null,
+            worstYear: null,
+            positiveMonths: 0,
+            negativeMonths: 0,
+            totalMonths: 0,
+          },
           benchmark: null,
           concentrationTrend: [],
           bestWorstMonthly: { best: null, worst: null },
@@ -84,7 +103,12 @@ export function registerInsightsRoutes(app: FastifyInstance) {
       const result = await withDerivationCache(insightsCache, cacheKey, async () => {
         // ── Portfolio history (TWR index) ──────────────────────────────
         const start = rangeStart(range);
-        const conds = [inArray(portfolioSnapshots.portfolioId, pfs.map((p) => p.id))];
+        const conds = [
+          inArray(
+            portfolioSnapshots.portfolioId,
+            pfs.map((p) => p.id),
+          ),
+        ];
         if (start) conds.push(gte(portfolioSnapshots.date, start));
         const snapshots = await app.db
           .select()
@@ -94,9 +118,24 @@ export function registerInsightsRoutes(app: FastifyInstance) {
 
         if (snapshots.length === 0) {
           return {
-            drawdown: { maxDrawdownPct: "0", peakDate: null, troughDate: null, currentDrawdownPct: "0" },
+            drawdown: {
+              maxDrawdownPct: "0",
+              peakDate: null,
+              troughDate: null,
+              currentDrawdownPct: "0",
+            },
             volatility: { annualizedVolatility: null, sharpeRatio: null, sortinoRatio: null },
-            streaks: { bestStreak: null, worstStreak: null, bestMonth: null, worstMonth: null, bestYear: null, worstYear: null, positiveMonths: 0, negativeMonths: 0, totalMonths: 0 },
+            streaks: {
+              bestStreak: null,
+              worstStreak: null,
+              bestMonth: null,
+              worstMonth: null,
+              bestYear: null,
+              worstYear: null,
+              positiveMonths: 0,
+              negativeMonths: 0,
+              totalMonths: 0,
+            },
             benchmark: null,
             concentrationTrend: [],
             bestWorstMonthly: { best: null, worst: null },
@@ -113,7 +152,16 @@ export function registerInsightsRoutes(app: FastifyInstance) {
         const dates = [...new Set(snapshots.map((r) => r.date))];
         const ratesByDate = await getFxRatesForDates(app.db, currencies, display, dates);
 
-        const perPortfolio = new Map<string, { date: string; marketValue: string; effectiveFlow: string; netWorth: string; currency: string }[]>();
+        const perPortfolio = new Map<
+          string,
+          {
+            date: string;
+            marketValue: string;
+            effectiveFlow: string;
+            netWorth: string;
+            currency: string;
+          }[]
+        >();
         for (const r of snapshots) {
           const list = perPortfolio.get(r.portfolioId) ?? [];
           list.push(r);
@@ -164,7 +212,12 @@ export function registerInsightsRoutes(app: FastifyInstance) {
         const streaks = streakAnalysis(idxPoints);
 
         // ── Benchmark comparison ───────────────────────────────────────
-        let benchmark: { symbol: string; activeReturn: string; trackingError: string; correlation: string } | null = null;
+        let benchmark: {
+          symbol: string;
+          activeReturn: string;
+          trackingError: string;
+          correlation: string;
+        } | null = null;
         if (indexed.length > 0) {
           const bmDates = indexed.map((p) => p.date);
           const existingBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
@@ -173,7 +226,9 @@ export function registerInsightsRoutes(app: FastifyInstance) {
             try {
               const md = await getMarketData();
               await fetchBenchmarkPrices(app.db, md, id, bmConfig.symbol, missingDates[0]);
-            } catch { /* non-fatal */ }
+            } catch {
+              /* non-fatal */
+            }
           }
           const refreshedBm = await getBenchmarkPrices(app.db, id, bmConfig.symbol, bmDates);
           if (refreshedBm.size > 1) {
@@ -190,13 +245,23 @@ export function registerInsightsRoutes(app: FastifyInstance) {
                 // makeFxRateFn falls back to "1" (unconverted) for a pair it has no rate
                 // for; count that so it can be flagged below instead of silently leaving
                 // that day's benchmark close in its native currency.
-                if (bmConfig.currency !== display && !dayRates[bmConfig.currency]) bmFxMissingDates++;
+                if (bmConfig.currency !== display && !dayRates[bmConfig.currency])
+                  bmFxMissingDates++;
                 const fx = makeFxRateFn(dayRates, display);
-                return { date: d, close: convert(refreshedBm.get(d)!, bmConfig.currency, display, fx) };
+                return {
+                  date: d,
+                  close: convert(refreshedBm.get(d)!, bmConfig.currency, display, fx),
+                };
               });
             if (bmFxMissingDates > 0) {
               app.log.warn(
-                { userId: id, symbol: bmConfig.symbol, currency: bmConfig.currency, display, missingDates: bmFxMissingDates },
+                {
+                  userId: id,
+                  symbol: bmConfig.symbol,
+                  currency: bmConfig.currency,
+                  display,
+                  missingDates: bmFxMissingDates,
+                },
                 "insights: benchmark FX rate missing for some dates — those days left unconverted",
               );
             }
@@ -212,10 +277,21 @@ export function registerInsightsRoutes(app: FastifyInstance) {
         }
 
         // ── Concentration trend (monthly, simplified) ──────────────────
-        const concentrationTrend: { date: string; hhi: number; top1Pct: number; classCount: number }[] = [];
+        const concentrationTrend: {
+          date: string;
+          hhi: number;
+          top1Pct: number;
+          classCount: number;
+        }[] = [];
         const months = [...new Set(dates.map((d) => d.slice(0, 7)))].slice(-60);
         const pfIds = pfs.map((p) => p.id);
-        type PeriodMoverResult = { instrumentId: string; symbol: string; name: string | null; assetClass: string; pct: number };
+        type PeriodMoverResult = {
+          instrumentId: string;
+          symbol: string;
+          name: string | null;
+          assetClass: string;
+          pct: number;
+        };
         type BestWorstPair = { best: PeriodMoverResult | null; worst: PeriodMoverResult | null };
         let bestWorstMonthly: BestWorstPair = { best: null, worst: null };
         let bestWorstYearly: BestWorstPair = { best: null, worst: null };
@@ -225,7 +301,9 @@ export function registerInsightsRoutes(app: FastifyInstance) {
             .select()
             .from(transactions)
             .where(inArray(transactions.portfolioId, pfIds));
-          const instIds = [...new Set(allTxRows.filter((t) => t.instrumentId).map((t) => t.instrumentId!))];
+          const instIds = [
+            ...new Set(allTxRows.filter((t) => t.instrumentId).map((t) => t.instrumentId!)),
+          ];
           const allInstRows = await app.db
             .select()
             .from(instruments)
@@ -327,7 +405,10 @@ export function registerInsightsRoutes(app: FastifyInstance) {
               .map((h) => [h.instrumentId!, h]),
           );
 
-          const computePeriodMovers = (startDate: string, heldAtStartSet: Set<string>): BestWorstPair => {
+          const computePeriodMovers = (
+            startDate: string,
+            heldAtStartSet: Set<string>,
+          ): BestWorstPair => {
             const movers: PeriodMoverResult[] = [];
             for (const instId of heldAtEnd.keys()) {
               if (!heldAtStartSet.has(instId)) continue;
@@ -365,7 +446,15 @@ export function registerInsightsRoutes(app: FastifyInstance) {
           bestWorstYearly = computePeriodMovers(yearStart, heldAtYearStart);
         }
 
-        return { drawdown, volatility, streaks, benchmark, concentrationTrend, bestWorstMonthly, bestWorstYearly };
+        return {
+          drawdown,
+          volatility,
+          streaks,
+          benchmark,
+          concentrationTrend,
+          bestWorstMonthly,
+          bestWorstYearly,
+        };
       });
 
       const durationMs = performance.now() - t0;

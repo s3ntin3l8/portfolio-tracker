@@ -3,11 +3,7 @@ import { ReportHeader } from "@/components/report-header";
 import { TaxReportsInbox } from "@/components/tax-reports-inbox";
 import { loadDocuments, resolveSelection } from "@/lib/server-api";
 
-export default async function TaxReportsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function TaxReportsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("TaxReports");

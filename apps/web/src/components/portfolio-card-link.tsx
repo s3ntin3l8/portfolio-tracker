@@ -7,13 +7,7 @@ import { useRouter } from "@/i18n/navigation";
  * with a transient ?portfolio=<id> query param — does NOT write the global
  * selection cookie, so transactions/dashboard keep their existing scope.
  */
-export function PortfolioCardLink({
-  portfolioId,
-  name,
-}: {
-  portfolioId: string;
-  name: string;
-}) {
+export function PortfolioCardLink({ portfolioId, name }: { portfolioId: string; name: string }) {
   const router = useRouter();
 
   return (

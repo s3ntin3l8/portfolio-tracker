@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  instruments,
-  portfolios,
-  portfolioSnapshots,
-  transactions,
-  users,
-} from "@portfolio/db";
+import { instruments, portfolios, portfolioSnapshots, transactions, users } from "@portfolio/db";
 import { MarketDataService, FixtureProvider } from "@portfolio/market-data";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { backfillStalePortfolios } from "../../src/services/backfill.js";

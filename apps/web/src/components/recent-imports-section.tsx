@@ -40,13 +40,9 @@ export function RecentImportsSection({
         <span className="font-semibold normal-case tracking-normal text-text-3">
           ({visibleCount})
         </span>
-        <ChevronDown
-          className={cn("size-[13px] transition-transform", open && "rotate-180")}
-        />
+        <ChevronDown className={cn("size-[13px] transition-transform", open && "rotate-180")} />
       </button>
-      {open && (
-        <ImportHistory items={items} showTitle={false} portfolios={portfolios} />
-      )}
+      {open && <ImportHistory items={items} showTitle={false} portfolios={portfolios} />}
     </div>
   );
 }

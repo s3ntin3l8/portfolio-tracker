@@ -37,9 +37,32 @@ export function ByCurrencyTable({ rows, displayCurrency }: ByCurrencyTableProps)
     <Table>
       <TableHeader>
         <TableRow>
-          <SortableTableHead colKey="currency" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("type")}</SortableTableHead>
-          <SortableTableHead colKey="native" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("native")}</SortableTableHead>
-          <SortableTableHead colKey="normalized" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} align="right">{t("normalized")}</SortableTableHead>
+          <SortableTableHead
+            colKey="currency"
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onToggle={toggle}
+          >
+            {t("type")}
+          </SortableTableHead>
+          <SortableTableHead
+            colKey="native"
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onToggle={toggle}
+            align="right"
+          >
+            {t("native")}
+          </SortableTableHead>
+          <SortableTableHead
+            colKey="normalized"
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onToggle={toggle}
+            align="right"
+          >
+            {t("normalized")}
+          </SortableTableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

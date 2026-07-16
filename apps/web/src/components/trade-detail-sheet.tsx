@@ -38,7 +38,9 @@ function Row({
         divider && "border-t border-border",
       )}
     >
-      <span className={cn("text-sm", bold ? "font-semibold text-foreground" : "text-muted-foreground")}>
+      <span
+        className={cn("text-sm", bold ? "font-semibold text-foreground" : "text-muted-foreground")}
+      >
         {label}
       </span>
       <span
@@ -128,7 +130,12 @@ export function TradeDetailSheet({ trade, currency, open, onOpenChange }: TradeD
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
               {t("detail.realizedPnl")}
             </p>
-            <p className={cn("tabular mt-1 text-4xl font-extrabold", tone === "up" ? "text-success" : "text-destructive")}>
+            <p
+              className={cn(
+                "tabular mt-1 text-4xl font-extrabold",
+                tone === "up" ? "text-success" : "text-destructive",
+              )}
+            >
               {signed(realized)}
             </p>
             <p className="mt-2">
@@ -150,7 +157,13 @@ export function TradeDetailSheet({ trade, currency, open, onOpenChange }: TradeD
           <div className="overflow-hidden rounded-2xl border border-border">
             <Row label={t("detail.proceeds")} value={money(proceedsTotal)} />
             <Row label={t("detail.costBasis")} value={`− ${money(costTotal)}`} divider />
-            <Row label={t("detail.realizedPnlRow")} value={signed(realized)} bold tone={tone} divider />
+            <Row
+              label={t("detail.realizedPnlRow")}
+              value={signed(realized)}
+              bold
+              tone={tone}
+              divider
+            />
           </div>
 
           {/* Trade details */}

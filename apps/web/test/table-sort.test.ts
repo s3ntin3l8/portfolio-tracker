@@ -76,11 +76,7 @@ describe("useTableSort", () => {
     const { result } = renderHook(() => useTableSort<Row>(COLS));
     act(() => result.current.toggle("date"));
     const sorted = result.current.sort(ROWS);
-    expect(sorted.map((r) => r.date)).toEqual([
-      "2026-01-01",
-      "2026-02-01",
-      "2026-03-01",
-    ]);
+    expect(sorted.map((r) => r.date)).toEqual(["2026-01-01", "2026-02-01", "2026-03-01"]);
   });
 
   it("sorts dates descending", () => {
@@ -88,11 +84,7 @@ describe("useTableSort", () => {
     act(() => result.current.toggle("date"));
     act(() => result.current.toggle("date"));
     const sorted = result.current.sort(ROWS);
-    expect(sorted.map((r) => r.date)).toEqual([
-      "2026-03-01",
-      "2026-02-01",
-      "2026-01-01",
-    ]);
+    expect(sorted.map((r) => r.date)).toEqual(["2026-03-01", "2026-02-01", "2026-01-01"]);
   });
 
   it("does not mutate the original array", () => {
@@ -117,12 +109,8 @@ describe("useTableSort", () => {
 
   it("reads latest cols from ref when cols identity changes between renders", () => {
     const extract: (r: { n: string }) => string = (r) => r.n;
-    const COLS_A: ColDef<{ n: string }>[] = [
-      { key: "f", get: (r) => extract(r), type: "text" },
-    ];
-    const COLS_B: ColDef<{ n: string }>[] = [
-      { key: "f", get: () => "same", type: "text" },
-    ];
+    const COLS_A: ColDef<{ n: string }>[] = [{ key: "f", get: (r) => extract(r), type: "text" }];
+    const COLS_B: ColDef<{ n: string }>[] = [{ key: "f", get: () => "same", type: "text" }];
     const ROWS = [{ n: "z" }, { n: "a" }];
 
     const { result, rerender } = renderHook(

@@ -24,13 +24,27 @@ export async function AdminUsersTable({ users }: { users: AdminUser[] }) {
             <tr className="border-b border-border text-left">
               <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersEmail")}</th>
               <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersName")}</th>
-              <th className="px-3 py-2 font-medium text-muted-foreground">{t("usersSignupDate")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersPortfolios")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersTransactions")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersDocuments")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersStorage")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersTokens")}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("usersActions")}</th>
+              <th className="px-3 py-2 font-medium text-muted-foreground">
+                {t("usersSignupDate")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersPortfolios")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersTransactions")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersDocuments")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersStorage")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersTokens")}
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                {t("usersActions")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -74,15 +88,21 @@ export async function AdminUsersTable({ users }: { users: AdminUser[] }) {
                 {new Date(u.createdAt).toLocaleDateString()}
               </span>
             </div>
-            <div className="mt-0.5 truncate text-xs font-medium text-text-2">
-              {u.name ?? "—"}
-            </div>
+            <div className="mt-0.5 truncate text-xs font-medium text-text-2">{u.name ?? "—"}</div>
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-              <span>{u.portfolioCount} {t("usersPortfolios")}</span>
-              <span>{u.transactionCount} {t("usersTransactions")}</span>
-              <span>{u.documentCount} {t("usersDocuments")}</span>
+              <span>
+                {u.portfolioCount} {t("usersPortfolios")}
+              </span>
+              <span>
+                {u.transactionCount} {t("usersTransactions")}
+              </span>
+              <span>
+                {u.documentCount} {t("usersDocuments")}
+              </span>
               <span>{formatBytes(u.storageBytes)}</span>
-              <span>{u.tokenCount} {t("usersTokens")}</span>
+              <span>
+                {u.tokenCount} {t("usersTokens")}
+              </span>
             </div>
             <div className="mt-2">
               <AdminUserActions userId={u.id} email={u.email} />

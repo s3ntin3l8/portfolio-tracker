@@ -28,9 +28,7 @@ describe("DividendsTable sorting", () => {
           { symbol: "A", currency: "EUR", gross: "10", tax: "2", net: "8" },
           { symbol: "B", currency: "EUR", gross: "100", tax: "20", net: "80" },
         ]}
-        totalsByCurrency={[
-          { currency: "EUR", gross: "110", tax: "22", net: "88" },
-        ]}
+        totalsByCurrency={[{ currency: "EUR", gross: "110", tax: "22", net: "88" }]}
         locale="en"
         year={2026}
       />,

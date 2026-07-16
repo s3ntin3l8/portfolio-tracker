@@ -45,7 +45,7 @@ export class FixtureProvider implements MarketDataProvider {
       (i) =>
         i.symbol.toLowerCase().includes(q) ||
         i.name.toLowerCase().includes(q) ||
-        (i.isin?.toLowerCase() === q),
+        i.isin?.toLowerCase() === q,
     );
   }
 
@@ -53,9 +53,7 @@ export class FixtureProvider implements MarketDataProvider {
     isin: string,
   ): Promise<{ symbol: string; exchange: string; name?: string; type?: string } | null> {
     if (!isIsin(isin)) return null;
-    const match = this.catalogue.find(
-      (i) => i.isin?.toUpperCase() === isin.trim().toUpperCase(),
-    );
+    const match = this.catalogue.find((i) => i.isin?.toUpperCase() === isin.trim().toUpperCase());
     if (!match) return null;
     return {
       symbol: match.symbol,

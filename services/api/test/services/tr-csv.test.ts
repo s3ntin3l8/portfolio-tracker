@@ -7,10 +7,29 @@ import { detectCsvFormat } from "../../src/services/parsers/detect.js";
 // the ones that exercise the mapping rules: net-vs-gross dividends, fee-separate trades,
 // FX, crypto, cashback, share-in corporate actions and the unmappable tax adjustments.
 const COLS = [
-  "datetime", "date", "account_type", "category", "type", "asset_class", "name", "symbol",
-  "shares", "price", "amount", "fee", "tax", "currency", "original_amount",
-  "original_currency", "fx_rate", "description", "transaction_id", "counterparty_name",
-  "counterparty_iban", "payment_reference", "mcc_code",
+  "datetime",
+  "date",
+  "account_type",
+  "category",
+  "type",
+  "asset_class",
+  "name",
+  "symbol",
+  "shares",
+  "price",
+  "amount",
+  "fee",
+  "tax",
+  "currency",
+  "original_amount",
+  "original_currency",
+  "fx_rate",
+  "description",
+  "transaction_id",
+  "counterparty_name",
+  "counterparty_iban",
+  "payment_reference",
+  "mcc_code",
 ];
 const HEADER = COLS.join(",");
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
@@ -23,110 +42,365 @@ function csv(rows: Record<string, string>[]): string {
 
 const ROWS: Record<string, string>[] = [
   // deposit (note the embedded comma — must survive quote-aware splitting)
-  { datetime: "2023-01-31T22:20:28.617262Z", category: "CASH", type: "CUSTOMER_INPAYMENT",
-    amount: "500.000000", currency: "EUR", description: "Customer inpayment, net 500", transaction_id: id(1) },
+  {
+    datetime: "2023-01-31T22:20:28.617262Z",
+    category: "CASH",
+    type: "CUSTOMER_INPAYMENT",
+    amount: "500.000000",
+    currency: "EUR",
+    description: "Customer inpayment, net 500",
+    transaction_id: id(1),
+  },
   // stock buy: |amount| = shares*price, fee separate
-  { datetime: "2022-08-18T19:17:06.465Z", category: "TRADING", type: "BUY", asset_class: "STOCK",
-    name: "Alphabet (C)", symbol: "US02079K1079", shares: "2.0000000000", price: "120.260000",
-    amount: "-240.52", fee: "-1.00", currency: "EUR", transaction_id: id(2) },
+  {
+    datetime: "2022-08-18T19:17:06.465Z",
+    category: "TRADING",
+    type: "BUY",
+    asset_class: "STOCK",
+    name: "Alphabet (C)",
+    symbol: "US02079K1079",
+    shares: "2.0000000000",
+    price: "120.260000",
+    amount: "-240.52",
+    fee: "-1.00",
+    currency: "EUR",
+    transaction_id: id(2),
+  },
   // crypto buy: ticker, units
-  { datetime: "2021-07-25T06:58:14.412Z", category: "TRADING", type: "BUY", asset_class: "CRYPTO",
-    name: "Ethereum", symbol: "ETH", shares: "0.1200000000", price: "1859.500000",
-    amount: "-223.14", fee: "-1.00", currency: "EUR", transaction_id: id(3) },
+  {
+    datetime: "2021-07-25T06:58:14.412Z",
+    category: "TRADING",
+    type: "BUY",
+    asset_class: "CRYPTO",
+    name: "Ethereum",
+    symbol: "ETH",
+    shares: "0.1200000000",
+    price: "1859.500000",
+    amount: "-223.14",
+    fee: "-1.00",
+    currency: "EUR",
+    transaction_id: id(3),
+  },
   // sell: negative shares → positive quantity, positive amount
-  { datetime: "2024-03-22T15:57:31.844Z", category: "TRADING", type: "SELL", asset_class: "STOCK",
-    name: "E.ON", symbol: "DE000ENAG999", shares: "-42.0000000000", price: "12.440000",
-    amount: "522.48", fee: "-1.00", currency: "EUR", transaction_id: id(4) },
+  {
+    datetime: "2024-03-22T15:57:31.844Z",
+    category: "TRADING",
+    type: "SELL",
+    asset_class: "STOCK",
+    name: "E.ON",
+    symbol: "DE000ENAG999",
+    shares: "-42.0000000000",
+    price: "12.440000",
+    amount: "522.48",
+    fee: "-1.00",
+    currency: "EUR",
+    transaction_id: id(4),
+  },
   // USD dividend with withholding tax + FX: price = NET (gross − tax), total = gross
-  { datetime: "2025-05-09T01:10:00.000000Z", category: "CASH", type: "DIVIDEND", asset_class: "STOCK",
-    name: "Altria Group", symbol: "US02209S1033", shares: "11.0000000000", amount: "3.940000",
-    tax: "-0.59", currency: "EUR", original_amount: "3.57", original_currency: "USD",
-    fx_rate: "1.103400", transaction_id: id(5) },
+  {
+    datetime: "2025-05-09T01:10:00.000000Z",
+    category: "CASH",
+    type: "DIVIDEND",
+    asset_class: "STOCK",
+    name: "Altria Group",
+    symbol: "US02209S1033",
+    shares: "11.0000000000",
+    amount: "3.940000",
+    tax: "-0.59",
+    currency: "EUR",
+    original_amount: "3.57",
+    original_currency: "USD",
+    fx_rate: "1.103400",
+    transaction_id: id(5),
+  },
   // fund distribution, no tax, HTML-escaped name
-  { datetime: "2024-01-02T23:05:45.497301Z", category: "CASH", type: "DISTRIBUTION", asset_class: "FUND",
-    name: "Core S&amp;P 500 USD (Dist)", symbol: "IE0031442068", shares: "5.9857000000",
-    amount: "0.790000", currency: "EUR", original_amount: "0.71", original_currency: "USD",
-    fx_rate: "1.106930", transaction_id: id(6) },
+  {
+    datetime: "2024-01-02T23:05:45.497301Z",
+    category: "CASH",
+    type: "DISTRIBUTION",
+    asset_class: "FUND",
+    name: "Core S&amp;P 500 USD (Dist)",
+    symbol: "IE0031442068",
+    shares: "5.9857000000",
+    amount: "0.790000",
+    currency: "EUR",
+    original_amount: "0.71",
+    original_currency: "USD",
+    fx_rate: "1.106930",
+    transaction_id: id(6),
+  },
   // interest, tax explicitly "0.00" (→ no tax)
-  { datetime: "2023-03-01T10:29:28.417746Z", category: "CASH", type: "INTEREST_PAYMENT",
-    amount: "1.740000", tax: "0.00", currency: "EUR", description: "Interest payment Booking", transaction_id: id(7) },
+  {
+    datetime: "2023-03-01T10:29:28.417746Z",
+    category: "CASH",
+    type: "INTEREST_PAYMENT",
+    amount: "1.740000",
+    tax: "0.00",
+    currency: "EUR",
+    description: "Interest payment Booking",
+    transaction_id: id(7),
+  },
   // domestic card spend → withdrawal
-  { datetime: "2024-11-24T09:16:54.048610Z", category: "CASH", type: "CARD_TRANSACTION",
-    name: "Some Merchant", amount: "-34.810000", currency: "EUR", description: "TR Card Transaction",
-    transaction_id: id(8), mcc_code: "5712" },
+  {
+    datetime: "2024-11-24T09:16:54.048610Z",
+    category: "CASH",
+    type: "CARD_TRANSACTION",
+    name: "Some Merchant",
+    amount: "-34.810000",
+    currency: "EUR",
+    description: "TR Card Transaction",
+    transaction_id: id(8),
+    mcc_code: "5712",
+  },
   // international card spend → withdrawal, carries fx_rate
-  { datetime: "2024-11-24T13:19:11.897913Z", category: "CASH", type: "CARD_TRANSACTION_INTERNATIONAL",
-    name: "Foreign Merchant", amount: "-231.690000", currency: "EUR", original_amount: "-5866.19",
-    original_currency: "CZK", fx_rate: "0.039496", description: "TR Card Transaction",
-    transaction_id: id(9), mcc_code: "5309" },
+  {
+    datetime: "2024-11-24T13:19:11.897913Z",
+    category: "CASH",
+    type: "CARD_TRANSACTION_INTERNATIONAL",
+    name: "Foreign Merchant",
+    amount: "-231.690000",
+    currency: "EUR",
+    original_amount: "-5866.19",
+    original_currency: "CZK",
+    fx_rate: "0.039496",
+    description: "TR Card Transaction",
+    transaction_id: id(9),
+    mcc_code: "5309",
+  },
   // card ordering fee: amount 0, the charge lives in `fee`
-  { datetime: "2024-05-06T11:47:18.865042Z", category: "CASH", type: "CARD_ORDERING_FEE",
-    amount: "0.000000", fee: "-5.00", currency: "EUR", description: "Trade Republic Card", transaction_id: id(10) },
+  {
+    datetime: "2024-05-06T11:47:18.865042Z",
+    category: "CASH",
+    type: "CARD_ORDERING_FEE",
+    amount: "0.000000",
+    fee: "-5.00",
+    currency: "EUR",
+    description: "Trade Republic Card",
+    transaction_id: id(10),
+  },
   // saveback cashback: reward credit → bonus_cash (collapses into its funding buy when one
   // exists; none in this fixture, so it stays a standalone bonus_cash income row). Name kept.
-  { datetime: "2025-02-03T15:59:12.456716Z", category: "CASH", type: "BENEFITS_SAVEBACK", asset_class: "FUND",
-    name: "Core S&amp;P 500 USD (Acc)", symbol: "IE00B5BMR087", amount: "0.550000", currency: "EUR",
-    description: "Your Saveback payment", transaction_id: id(11) },
+  {
+    datetime: "2025-02-03T15:59:12.456716Z",
+    category: "CASH",
+    type: "BENEFITS_SAVEBACK",
+    asset_class: "FUND",
+    name: "Core S&amp;P 500 USD (Acc)",
+    symbol: "IE00B5BMR087",
+    amount: "0.550000",
+    currency: "EUR",
+    description: "Your Saveback payment",
+    transaction_id: id(11),
+  },
   // promo bonus: deposit + kind
-  { datetime: "2025-12-11T16:59:40.549057Z", category: "CASH", type: "BONUS",
-    amount: "22.860000", currency: "EUR", description: "Crypto bonus", transaction_id: id(12) },
+  {
+    datetime: "2025-12-11T16:59:40.549057Z",
+    category: "CASH",
+    type: "BONUS",
+    amount: "22.860000",
+    currency: "EUR",
+    description: "Crypto bonus",
+    transaction_id: id(12),
+  },
   // free receipt (gifted shares): bonus, currency column blank → EUR default
-  { datetime: "2022-09-16T20:41:14.655Z", category: "DELIVERY", type: "FREE_RECEIPT", asset_class: "STOCK",
-    name: "Rio Tinto", symbol: "GB0007188757", shares: "21.0000000000", description: "FREE_RECEIPT", transaction_id: id(13) },
+  {
+    datetime: "2022-09-16T20:41:14.655Z",
+    category: "DELIVERY",
+    type: "FREE_RECEIPT",
+    asset_class: "STOCK",
+    name: "Rio Tinto",
+    symbol: "GB0007188757",
+    shares: "21.0000000000",
+    description: "FREE_RECEIPT",
+    transaction_id: id(13),
+  },
   // dividend reinvestment: bonus (shares in, no cash)
-  { datetime: "2025-05-02T09:48:13.603Z", category: "CORPORATE_ACTION", type: "DIVIDEND_REINVESTMENT", asset_class: "STOCK",
-    name: "Rio Tinto", symbol: "GB0007188757", shares: "1.0132700000", description: "DIVIDEND_REINVESTMENT", transaction_id: id(14) },
+  {
+    datetime: "2025-05-02T09:48:13.603Z",
+    category: "CORPORATE_ACTION",
+    type: "DIVIDEND_REINVESTMENT",
+    asset_class: "STOCK",
+    name: "Rio Tinto",
+    symbol: "GB0007188757",
+    shares: "1.0132700000",
+    description: "DIVIDEND_REINVESTMENT",
+    transaction_id: id(14),
+  },
   // instant transfer out → withdrawal
-  { datetime: "2024-12-28T08:45:09.549709Z", category: "CASH", type: "TRANSFER_INSTANT_OUTBOUND",
-    amount: "-1100.000000", currency: "EUR", description: "Outgoing transfer", transaction_id: id(15) },
+  {
+    datetime: "2024-12-28T08:45:09.549709Z",
+    category: "CASH",
+    type: "TRANSFER_INSTANT_OUTBOUND",
+    amount: "-1100.000000",
+    currency: "EUR",
+    description: "Outgoing transfer",
+    transaction_id: id(15),
+  },
   // incoming cash transfer (parent funding a JUNIOR depot) → deposit
-  { datetime: "2025-08-18T08:15:36.694729Z", category: "CASH", type: "TRANSFER_IN",
-    amount: "100.000000", currency: "EUR", description: "Incoming transfer from Björn", transaction_id: id(20) },
+  {
+    datetime: "2025-08-18T08:15:36.694729Z",
+    category: "CASH",
+    type: "TRANSFER_IN",
+    amount: "100.000000",
+    currency: "EUR",
+    description: "Incoming transfer from Björn",
+    transaction_id: id(20),
+  },
   // Kindergeld promo bonus → bonus_cash + kind "bonus", tiny positive cash credit
-  { datetime: "2025-09-02T14:49:49.518403Z", category: "CASH", type: "KINDERGELD_BONUS",
-    amount: "0.010000", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(21) },
+  {
+    datetime: "2025-09-02T14:49:49.518403Z",
+    category: "CASH",
+    type: "KINDERGELD_BONUS",
+    amount: "0.010000",
+    currency: "EUR",
+    description: "Your Kindergeld bonus",
+    transaction_id: id(21),
+  },
   // stock perk credited as cash (instrument present but NO shares) → bonus_cash + kind "bonus"
-  { datetime: "2025-08-26T14:01:55.126058Z", category: "CASH", type: "STOCKPERK", asset_class: "FUND",
-    name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", amount: "101.190000",
-    currency: "EUR", description: "Stockperk", transaction_id: id(22) },
+  {
+    datetime: "2025-08-26T14:01:55.126058Z",
+    category: "CASH",
+    type: "STOCKPERK",
+    asset_class: "FUND",
+    name: "Lifestrategy 80% Equity EUR (Acc)",
+    symbol: "IE00BMVB5R75",
+    amount: "101.190000",
+    currency: "EUR",
+    description: "Stockperk",
+    transaction_id: id(22),
+  },
   // dividend reversal (TR correction): amount negative, tax positive → negative net + negative tax
-  { datetime: "2025-11-15T10:00:00.000000Z", category: "CASH", type: "DIVIDEND", asset_class: "STOCK",
-    name: "Altria Group", symbol: "US02209S1033", shares: "11.0000000000", amount: "-0.10",
-    tax: "0.03", currency: "EUR", transaction_id: id(24) },
+  {
+    datetime: "2025-11-15T10:00:00.000000Z",
+    category: "CASH",
+    type: "DIVIDEND",
+    asset_class: "STOCK",
+    name: "Altria Group",
+    symbol: "US02209S1033",
+    shares: "11.0000000000",
+    amount: "-0.10",
+    tax: "0.03",
+    currency: "EUR",
+    transaction_id: id(24),
+  },
   // US-REIT 1099-DIV recharacterization: `datetime` (late posting) diverges from `date` (the
   // true original payment day) by nearly a year — a reversal leg of a prior Realty Income
   // distribution, posted 2026-03-01 but economically belonging to 2025-02-15. (Illustrative
   // round numbers, not a real dividend payment — the shape being tested is the date/datetime
   // divergence, not any specific amount.)
-  { datetime: "2026-03-01T09:00:00.000000Z", date: "2025-02-15", category: "CASH", type: "DIVIDEND",
-    asset_class: "STOCK", name: "Realty Income", symbol: "US7561091049", shares: "40.0000000000",
-    amount: "-9.000000", tax: "2.00", currency: "EUR", original_amount: "-8.50", original_currency: "USD",
-    fx_rate: "1.100000", description: "Cash Dividend for ISIN US7561091049", transaction_id: id(28) },
+  {
+    datetime: "2026-03-01T09:00:00.000000Z",
+    date: "2025-02-15",
+    category: "CASH",
+    type: "DIVIDEND",
+    asset_class: "STOCK",
+    name: "Realty Income",
+    symbol: "US7561091049",
+    shares: "40.0000000000",
+    amount: "-9.000000",
+    tax: "2.00",
+    currency: "EUR",
+    original_amount: "-8.50",
+    original_currency: "USD",
+    fx_rate: "1.100000",
+    description: "Cash Dividend for ISIN US7561091049",
+    transaction_id: id(28),
+  },
   // Vorabpauschale (advance fund tax): gross 0, only tax withheld → negative-cash income leg
-  { datetime: "2026-01-28T07:42:17.274554Z", category: "CASH", type: "EARNINGS", asset_class: "FUND",
-    name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", amount: "0.000000", tax: "-0.06",
-    currency: "EUR", description: "Vorabpauschale for ISIN IE00BK5BQT80", transaction_id: id(23) },
+  {
+    datetime: "2026-01-28T07:42:17.274554Z",
+    category: "CASH",
+    type: "EARNINGS",
+    asset_class: "FUND",
+    name: "FTSE All-World USD (Acc)",
+    symbol: "IE00BK5BQT80",
+    amount: "0.000000",
+    tax: "-0.06",
+    currency: "EUR",
+    description: "Vorabpauschale for ISIN IE00BK5BQT80",
+    transaction_id: id(23),
+  },
   // FREE_RECEIPT WITH a price = crypto grant (income at market basis, NOT a transfer)
-  { datetime: "2021-07-01T00:00:00.000Z", category: "DELIVERY", type: "FREE_RECEIPT", asset_class: "CRYPTO",
-    name: "Bitcoin", symbol: "BTC", shares: "0.001", price: "32000.00",
-    currency: "EUR", transaction_id: id(25) },
+  {
+    datetime: "2021-07-01T00:00:00.000Z",
+    category: "DELIVERY",
+    type: "FREE_RECEIPT",
+    asset_class: "CRYPTO",
+    name: "Bitcoin",
+    symbol: "BTC",
+    shares: "0.001",
+    price: "32000.00",
+    currency: "EUR",
+    transaction_id: id(25),
+  },
   // sell WITH withholding tax: amount=net cash, fee separate, tax separate
   // gross 500, fee 1, tax 2 → net amount = 500 − 1 − 2 = 497; price column = 100 (per share)
-  { datetime: "2024-06-10T10:00:00.000Z", category: "TRADING", type: "SELL", asset_class: "STOCK",
-    name: "Siemens", symbol: "DE0007236101", shares: "-5.0000000000", price: "100.000000",
-    amount: "497.00", fee: "-1.00", tax: "-2.00", currency: "EUR", transaction_id: id(26) },
+  {
+    datetime: "2024-06-10T10:00:00.000Z",
+    category: "TRADING",
+    type: "SELL",
+    asset_class: "STOCK",
+    name: "Siemens",
+    symbol: "DE0007236101",
+    shares: "-5.0000000000",
+    price: "100.000000",
+    amount: "497.00",
+    fee: "-1.00",
+    tax: "-2.00",
+    currency: "EUR",
+    transaction_id: id(26),
+  },
   // interest WITH withholding tax: amount=gross, tax=negative withholding → price=net
-  { datetime: "2024-08-01T00:00:00.000Z", category: "CASH", type: "INTEREST_PAYMENT",
-    amount: "10.00", tax: "-1.50", currency: "EUR", transaction_id: id(27) },
+  {
+    datetime: "2024-08-01T00:00:00.000Z",
+    category: "CASH",
+    type: "INTEREST_PAYMENT",
+    amount: "10.00",
+    tax: "-1.50",
+    currency: "EUR",
+    transaction_id: id(27),
+  },
   // --- unmappable: surfaced as errors, never silently dropped ---
-  { datetime: "2025-04-24T13:03:27.956868Z", category: "CASH", type: "TAX_OPTIMIZATION",
-    amount: "0.000000", tax: "-1.77", currency: "EUR", description: "Tax Optimisation", transaction_id: id(16) },
-  { datetime: "2024-05-30T07:56:47.847459Z", category: "CASH", type: "SEC_ACCOUNT", asset_class: "STOCK",
-    name: "AbbVie", symbol: "US00287Y1091", amount: "0.000000", tax: "1.50", currency: "EUR", transaction_id: id(17) },
-  { datetime: "2024-08-28T14:00:43.775Z", category: "CORPORATE_ACTION", type: "DIVIDEND_OPTION_CANCELLED", asset_class: "STOCK",
-    name: "Main Street Capital", symbol: "US56035L1044", shares: "-0.1423570000", transaction_id: id(18) },
-  { datetime: "2026-01-01T00:00:00.000000Z", category: "CASH", type: "MYSTERY_EVENT",
-    amount: "1.000000", currency: "EUR", transaction_id: id(19) },
+  {
+    datetime: "2025-04-24T13:03:27.956868Z",
+    category: "CASH",
+    type: "TAX_OPTIMIZATION",
+    amount: "0.000000",
+    tax: "-1.77",
+    currency: "EUR",
+    description: "Tax Optimisation",
+    transaction_id: id(16),
+  },
+  {
+    datetime: "2024-05-30T07:56:47.847459Z",
+    category: "CASH",
+    type: "SEC_ACCOUNT",
+    asset_class: "STOCK",
+    name: "AbbVie",
+    symbol: "US00287Y1091",
+    amount: "0.000000",
+    tax: "1.50",
+    currency: "EUR",
+    transaction_id: id(17),
+  },
+  {
+    datetime: "2024-08-28T14:00:43.775Z",
+    category: "CORPORATE_ACTION",
+    type: "DIVIDEND_OPTION_CANCELLED",
+    asset_class: "STOCK",
+    name: "Main Street Capital",
+    symbol: "US56035L1044",
+    shares: "-0.1423570000",
+    transaction_id: id(18),
+  },
+  {
+    datetime: "2026-01-01T00:00:00.000000Z",
+    category: "CASH",
+    type: "MYSTERY_EVENT",
+    amount: "1.000000",
+    currency: "EUR",
+    transaction_id: id(19),
+  },
 ];
 
 const TR_CSV = csv(ROWS);
@@ -163,19 +437,37 @@ describe("parseTrCsv", () => {
   });
 
   it("maps a cash deposit (quote-aware splitting survives the comma in description)", () => {
-    expect(draft(1)).toMatchObject({ action: "deposit", quantity: "0", price: "500", currency: "EUR" });
+    expect(draft(1)).toMatchObject({
+      action: "deposit",
+      quantity: "0",
+      price: "500",
+      currency: "EUR",
+    });
   });
 
   it("maps a stock buy: |amount| = shares × price, fee carried separately", () => {
     expect(draft(2)).toMatchObject({
-      action: "buy", assetClass: "equity", isin: "US02079K1079", ticker: undefined,
-      quantity: "2", unit: "shares", price: "120.26", fees: "1", total: "241.52", currency: "EUR",
+      action: "buy",
+      assetClass: "equity",
+      isin: "US02079K1079",
+      ticker: undefined,
+      quantity: "2",
+      unit: "shares",
+      price: "120.26",
+      fees: "1",
+      total: "241.52",
+      currency: "EUR",
     });
   });
 
   it("maps a crypto buy with a ticker symbol and units", () => {
     expect(draft(3)).toMatchObject({
-      action: "buy", assetClass: "crypto", ticker: "ETH", isin: undefined, unit: "units", quantity: "0.12",
+      action: "buy",
+      assetClass: "crypto",
+      ticker: "ETH",
+      isin: undefined,
+      unit: "units",
+      quantity: "0.12",
     });
   });
 
@@ -185,9 +477,14 @@ describe("parseTrCsv", () => {
 
   it("maps a foreign dividend to NET price, GROSS total, and absolute tax + FX", () => {
     expect(draft(5)).toMatchObject({
-      action: "dividend", isin: "US02209S1033", quantity: "0",
+      action: "dividend",
+      isin: "US02209S1033",
+      quantity: "0",
       price: "3.35", // 3.94 gross − 0.59 tax = net cash credited (drives cashFlow/XIRR)
-      total: "3.94", tax: "0.59", fxRate: "1.103400", currency: "EUR",
+      total: "3.94",
+      tax: "0.59",
+      fxRate: "1.103400",
+      currency: "EUR",
       // #508: the CSV `shares` column is the holding the dividend was paid on — carried
       // through as the informational `shares` field. There's no per-share rate column for
       // a dividend row (unlike BUY/SELL), so `perShare` stays unset here; the read-time
@@ -199,7 +496,11 @@ describe("parseTrCsv", () => {
 
   it("maps a fund distribution with no tax and decodes the HTML-escaped name", () => {
     expect(draft(6)).toMatchObject({
-      action: "dividend", assetClass: "equity", name: "Core S&P 500 USD (Dist)", price: "0.79", total: "0.79",
+      action: "dividend",
+      assetClass: "equity",
+      name: "Core S&P 500 USD (Dist)",
+      price: "0.79",
+      total: "0.79",
       shares: "5.9857",
     });
     expect(draft(6)?.tax).toBeUndefined();
@@ -222,7 +523,12 @@ describe("parseTrCsv", () => {
   it("maps saveback cashback and broker cash bonuses to bonus_cash (collapse-eligible)", () => {
     // BENEFITS_SAVEBACK is a reward-funded buy → bonus_cash; collapsePerkFundedAcquisitions
     // folds it into its funding buy when one exists (none in this fixture → stays bonus_cash).
-    expect(draft(11)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "0.55", name: "Core S&P 500 USD (Acc)" });
+    expect(draft(11)).toMatchObject({
+      action: "bonus_cash",
+      kind: "bonus",
+      price: "0.55",
+      name: "Core S&P 500 USD (Acc)",
+    });
     expect(draft(11)?.isin).toBeUndefined();
     // BONUS/KINDERGELD_BONUS/STOCKPERK → bonus_cash so they show as "Bonus" (not "Interest").
     expect(draft(12)).toMatchObject({ action: "bonus_cash", kind: "bonus", price: "22.86" });
@@ -232,8 +538,12 @@ describe("parseTrCsv", () => {
     // A depot-to-depot share transfer: no price column → action:transfer_in, confidence 0.5.
     // NOT also an attention error (drafts and attention are mutually exclusive per row).
     expect(draft(13)).toMatchObject({
-      action: "transfer_in", isin: "GB0007188757", quantity: "21",
-      price: "0", currency: "EUR", confidence: 0.5,
+      action: "transfer_in",
+      isin: "GB0007188757",
+      quantity: "21",
+      price: "0",
+      currency: "EUR",
+      confidence: 0.5,
     });
     // The low-confidence draft must NOT generate a duplicate attention issue.
     const attentionForId13 = errors.find((e) => e.eventId?.includes(id(13)));
@@ -249,7 +559,12 @@ describe("parseTrCsv", () => {
   });
 
   it("maps an incoming cash transfer (TRANSFER_IN) to a deposit, so it counts as a contribution", () => {
-    expect(draft(20)).toMatchObject({ action: "deposit", quantity: "0", price: "100", currency: "EUR" });
+    expect(draft(20)).toMatchObject({
+      action: "deposit",
+      quantity: "0",
+      price: "100",
+      currency: "EUR",
+    });
   });
 
   it("maps Kindergeld and stock-perk credits to bonus_cash (kind bonus), dropping the instrument", () => {
@@ -331,7 +646,11 @@ describe("parseTrCsv", () => {
   it("captures withholding tax on sells so cashFlow = qty×price − fees − tax = net cash", () => {
     // Sell row: price=100 gross, fee=1, tax=2 → amount (net) = 497
     expect(draft(26)).toMatchObject({
-      action: "sell", quantity: "5", price: "100", fees: "1", tax: "2",
+      action: "sell",
+      quantity: "5",
+      price: "100",
+      fees: "1",
+      tax: "2",
     });
     // Sanity: no-tax sell (row 4) must not get a tax field
     expect(draft(4)?.tax).toBeUndefined();
@@ -361,12 +680,31 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
     // (cash in) that reimburses it. Collapsed, the shares are received free.
     const { drafts } = parseTrCsv(
       csv([
-        { datetime: "2025-08-26T14:01:54.463Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "2.7104",
-          price: "37.335", amount: "-101.19", currency: "EUR", transaction_id: id(100) },
-        { datetime: "2025-08-26T14:01:55.126058Z", category: "CASH", type: "STOCKPERK", asset_class: "FUND",
-          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", amount: "101.19",
-          currency: "EUR", description: "Stockperk", transaction_id: id(101) },
+        {
+          datetime: "2025-08-26T14:01:54.463Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)",
+          symbol: "IE00BMVB5R75",
+          shares: "2.7104",
+          price: "37.335",
+          amount: "-101.19",
+          currency: "EUR",
+          transaction_id: id(100),
+        },
+        {
+          datetime: "2025-08-26T14:01:55.126058Z",
+          category: "CASH",
+          type: "STOCKPERK",
+          asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)",
+          symbol: "IE00BMVB5R75",
+          amount: "101.19",
+          currency: "EUR",
+          description: "Stockperk",
+          transaction_id: id(101),
+        },
       ]),
     );
     expect(drafts).toHaveLength(1);
@@ -389,24 +727,61 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
     const { drafts } = parseTrCsv(
       csv([
         // Named variant → matches the buy on the shared instrument name.
-        { datetime: "2026-01-01T00:14:38.919214Z", category: "CASH", type: "BENEFITS_SAVEBACK", asset_class: "FUND",
-          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", amount: "10.03",
-          currency: "EUR", description: "Your Saveback payment", transaction_id: id(120) },
-        { datetime: "2026-01-02T14:59:23.431Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", shares: "0.015935",
-          price: "629.4", amount: "-10.03", currency: "EUR", transaction_id: id(121) },
+        {
+          datetime: "2026-01-01T00:14:38.919214Z",
+          category: "CASH",
+          type: "BENEFITS_SAVEBACK",
+          asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)",
+          symbol: "IE00B5BMR087",
+          amount: "10.03",
+          currency: "EUR",
+          description: "Your Saveback payment",
+          transaction_id: id(120),
+        },
+        {
+          datetime: "2026-01-02T14:59:23.431Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)",
+          symbol: "IE00B5BMR087",
+          shares: "0.015935",
+          price: "629.4",
+          amount: "-10.03",
+          currency: "EUR",
+          transaction_id: id(121),
+        },
         // Instrument-less variant → matches on amount + window.
-        { datetime: "2026-02-01T00:45:23.994476Z", category: "CASH", type: "BENEFITS_SAVEBACK",
-          amount: "11.71", currency: "EUR",
-          description: "Saveback cash reward 00000000-0000-0000-0000-0000000000aa for reservation: 00000000-0000-0000-0000-0000000000bb",
-          transaction_id: id(122) },
-        { datetime: "2026-02-02T14:52:08.122Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "Core S&P 500 USD (Acc)", symbol: "IE00B5BMR087", shares: "0.018587",
-          price: "630", amount: "-11.71", currency: "EUR", transaction_id: id(123) },
+        {
+          datetime: "2026-02-01T00:45:23.994476Z",
+          category: "CASH",
+          type: "BENEFITS_SAVEBACK",
+          amount: "11.71",
+          currency: "EUR",
+          description:
+            "Saveback cash reward 00000000-0000-0000-0000-0000000000aa for reservation: 00000000-0000-0000-0000-0000000000bb",
+          transaction_id: id(122),
+        },
+        {
+          datetime: "2026-02-02T14:52:08.122Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "Core S&P 500 USD (Acc)",
+          symbol: "IE00B5BMR087",
+          shares: "0.018587",
+          price: "630",
+          amount: "-11.71",
+          currency: "EUR",
+          transaction_id: id(123),
+        },
       ]),
     );
     expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
-    expect(drafts.filter((d) => d.action === "bonus_cash" || d.action === "interest")).toHaveLength(0);
+    expect(drafts.filter((d) => d.action === "bonus_cash" || d.action === "interest")).toHaveLength(
+      0,
+    );
     expect(drafts.every((d) => d.isin === "IE00B5BMR087")).toBe(true);
   });
 
@@ -414,16 +789,50 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
     // Real June shape: two KINDERGELD on 06-01, two savings-plan buys on 06-02 (both 0.02).
     const { drafts } = parseTrCsv(
       csv([
-        { datetime: "2026-06-01T03:39:52.425210Z", category: "CASH", type: "KINDERGELD_BONUS",
-          amount: "0.02", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(110) },
-        { datetime: "2026-06-01T03:32:21.745383Z", category: "CASH", type: "KINDERGELD_BONUS",
-          amount: "0.02", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(111) },
-        { datetime: "2026-06-02T12:43:21.171Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "0.000461",
-          price: "43.38", amount: "-0.02", currency: "EUR", transaction_id: id(112) },
-        { datetime: "2026-06-02T18:00:23.194Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", shares: "0.000121",
-          price: "164.7", amount: "-0.02", currency: "EUR", transaction_id: id(113) },
+        {
+          datetime: "2026-06-01T03:39:52.425210Z",
+          category: "CASH",
+          type: "KINDERGELD_BONUS",
+          amount: "0.02",
+          currency: "EUR",
+          description: "Your Kindergeld bonus",
+          transaction_id: id(110),
+        },
+        {
+          datetime: "2026-06-01T03:32:21.745383Z",
+          category: "CASH",
+          type: "KINDERGELD_BONUS",
+          amount: "0.02",
+          currency: "EUR",
+          description: "Your Kindergeld bonus",
+          transaction_id: id(111),
+        },
+        {
+          datetime: "2026-06-02T12:43:21.171Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)",
+          symbol: "IE00BMVB5R75",
+          shares: "0.000461",
+          price: "43.38",
+          amount: "-0.02",
+          currency: "EUR",
+          transaction_id: id(112),
+        },
+        {
+          datetime: "2026-06-02T18:00:23.194Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "FTSE All-World USD (Acc)",
+          symbol: "IE00BK5BQT80",
+          shares: "0.000121",
+          price: "164.7",
+          amount: "-0.02",
+          currency: "EUR",
+          transaction_id: id(113),
+        },
       ]),
     );
     expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
@@ -433,16 +842,50 @@ describe("parseTrCsv — perk-funded buys collapse into one bonus row", () => {
   it("two KINDERGELD credits + two same-day savings-plan buys → two bonus rows, no bonus_cash", () => {
     const { drafts } = parseTrCsv(
       csv([
-        { datetime: "2025-09-02T12:07:49.149Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "Lifestrategy 80% Equity EUR (Acc)", symbol: "IE00BMVB5R75", shares: "0.000269",
-          price: "37.07", amount: "-0.01", currency: "EUR", transaction_id: id(102) },
-        { datetime: "2025-09-02T14:49:49.518403Z", category: "CASH", type: "KINDERGELD_BONUS",
-          amount: "0.01", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(103) },
-        { datetime: "2025-09-02T12:08:03.554282Z", category: "CASH", type: "KINDERGELD_BONUS",
-          amount: "0.01", currency: "EUR", description: "Your Kindergeld bonus", transaction_id: id(104) },
-        { datetime: "2025-09-02T15:21:47.423Z", category: "TRADING", type: "BUY", asset_class: "FUND",
-          name: "FTSE All-World USD (Acc)", symbol: "IE00BK5BQT80", shares: "0.000074",
-          price: "134.9", amount: "-0.01", currency: "EUR", transaction_id: id(105) },
+        {
+          datetime: "2025-09-02T12:07:49.149Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "Lifestrategy 80% Equity EUR (Acc)",
+          symbol: "IE00BMVB5R75",
+          shares: "0.000269",
+          price: "37.07",
+          amount: "-0.01",
+          currency: "EUR",
+          transaction_id: id(102),
+        },
+        {
+          datetime: "2025-09-02T14:49:49.518403Z",
+          category: "CASH",
+          type: "KINDERGELD_BONUS",
+          amount: "0.01",
+          currency: "EUR",
+          description: "Your Kindergeld bonus",
+          transaction_id: id(103),
+        },
+        {
+          datetime: "2025-09-02T12:08:03.554282Z",
+          category: "CASH",
+          type: "KINDERGELD_BONUS",
+          amount: "0.01",
+          currency: "EUR",
+          description: "Your Kindergeld bonus",
+          transaction_id: id(104),
+        },
+        {
+          datetime: "2025-09-02T15:21:47.423Z",
+          category: "TRADING",
+          type: "BUY",
+          asset_class: "FUND",
+          name: "FTSE All-World USD (Acc)",
+          symbol: "IE00BK5BQT80",
+          shares: "0.000074",
+          price: "134.9",
+          amount: "-0.01",
+          currency: "EUR",
+          transaction_id: id(105),
+        },
       ]),
     );
     expect(drafts.filter((d) => d.action === "bonus")).toHaveLength(2);
@@ -457,6 +900,8 @@ describe("detectCsvFormat — Trade Republic", () => {
   });
 
   it("does not misclassify a generic CSV as tr-csv", () => {
-    expect(detectCsvFormat("date,action,ticker,quantity,price\n2026-01-01,buy,AAPL,1,100")).toBe("generic");
+    expect(detectCsvFormat("date,action,ticker,quantity,price\n2026-01-01,buy,AAPL,1,100")).toBe(
+      "generic",
+    );
   });
 });

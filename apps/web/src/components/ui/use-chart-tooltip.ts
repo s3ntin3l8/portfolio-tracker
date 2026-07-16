@@ -60,21 +60,18 @@ export function useChartTooltip<C>() {
   // handles the synchronous write/read.
   const panelSizeRef = useRef<{ width: number; height: number }>({ width: 200, height: 80 });
 
-  const update = useCallback(
-    (el: Element) => {
-      const r = el.getBoundingClientRect();
-      const TIP_W = panelSizeRef.current.width;
-      const TIP_H = panelSizeRef.current.height;
-      const GAP = 8;
-      const flipX = r.right + TIP_W + GAP > window.innerWidth - 12;
-      const flipY = r.bottom + TIP_H + GAP > window.innerHeight - 12;
-      setPos({
-        x: flipX ? Math.max(12, r.left - TIP_W - GAP) : r.right + GAP,
-        y: flipY ? Math.max(12, r.top - TIP_H - GAP) : r.bottom + GAP,
-      });
-    },
-    [],
-  );
+  const update = useCallback((el: Element) => {
+    const r = el.getBoundingClientRect();
+    const TIP_W = panelSizeRef.current.width;
+    const TIP_H = panelSizeRef.current.height;
+    const GAP = 8;
+    const flipX = r.right + TIP_W + GAP > window.innerWidth - 12;
+    const flipY = r.bottom + TIP_H + GAP > window.innerHeight - 12;
+    setPos({
+      x: flipX ? Math.max(12, r.left - TIP_W - GAP) : r.right + GAP,
+      y: flipY ? Math.max(12, r.top - TIP_H - GAP) : r.bottom + GAP,
+    });
+  }, []);
 
   // Stable identity across renders so the panel's `useEffect([onSize])`
   // doesn't re-fire on every parent render. Returning a new function

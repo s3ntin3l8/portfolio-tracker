@@ -53,7 +53,9 @@ export async function initDb(databaseUrl?: string): Promise<DB> {
     const { drizzle: drizzlePglite } = await import("drizzle-orm/pglite");
     const { pg_trgm } = await import("@electric-sql/pglite/contrib/pg_trgm");
     const dataDir = pgliteDataDir(url);
-    const client = dataDir ? new PGlite(dataDir, { extensions: { pg_trgm } }) : new PGlite({ extensions: { pg_trgm } });
+    const client = dataDir
+      ? new PGlite(dataDir, { extensions: { pg_trgm } })
+      : new PGlite({ extensions: { pg_trgm } });
     pglite = client;
     dbInstance = drizzlePglite(client, { schema }) as unknown as DB;
   } else {

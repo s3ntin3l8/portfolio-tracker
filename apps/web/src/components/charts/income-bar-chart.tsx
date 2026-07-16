@@ -152,13 +152,7 @@ function BarTotalLabels({ data, format }: { data: IncomeBar[]; format: (v: numbe
  * paid amounts as a shaded segment. Theming + axes mirror
  * {@link ForecastChart}/{@link PriceChart}.
  */
-export function IncomeBarChart({
-  data,
-  currency,
-}: {
-  data: IncomeBar[];
-  currency: string;
-}) {
+export function IncomeBarChart({ data, currency }: { data: IncomeBar[]; currency: string }) {
   const locale = useLocale();
   const t = useTranslations("Income");
   const money = (v: number) => formatMoney(v, currency, locale);
@@ -178,7 +172,15 @@ export function IncomeBarChart({
               patternUnits="userSpaceOnUse"
             >
               <rect width={6} height={6} fill="var(--color-primary)" fillOpacity={0.14} />
-              <line x1={0} y1={0} x2={0} y2={6} stroke="var(--color-primary)" strokeOpacity={0.55} strokeWidth={2} />
+              <line
+                x1={0}
+                y1={0}
+                x2={0}
+                y2={6}
+                stroke="var(--color-primary)"
+                strokeOpacity={0.55}
+                strokeWidth={2}
+              />
             </pattern>
           </defs>
           <XAxis

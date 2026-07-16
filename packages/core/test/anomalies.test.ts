@@ -135,9 +135,7 @@ describe("sell_before_acquisition", () => {
 
 describe("missing_transfer_basis", () => {
   it("flags a transfer_in with price=0", () => {
-    const anomalies = detectAnomalies([
-      tx({ type: "transfer_in", price: "0", id: "tin-1" }),
-    ]);
+    const anomalies = detectAnomalies([tx({ type: "transfer_in", price: "0", id: "tin-1" })]);
     expect(anomalies).toHaveLength(1);
     expect(anomalies[0]).toMatchObject({
       code: "missing_transfer_basis",
@@ -147,9 +145,7 @@ describe("missing_transfer_basis", () => {
   });
 
   it("does NOT flag a transfer_in with a real price", () => {
-    const anomalies = detectAnomalies([
-      tx({ type: "transfer_in", price: "42.50", id: "tin-2" }),
-    ]);
+    const anomalies = detectAnomalies([tx({ type: "transfer_in", price: "42.50", id: "tin-2" })]);
     expect(anomalies).toHaveLength(0);
   });
 });
@@ -158,7 +154,11 @@ describe("zero_price", () => {
   it("flags a buy with price=0", () => {
     const anomalies = detectAnomalies([tx({ type: "buy", price: "0", id: "buy-0" })]);
     expect(anomalies).toHaveLength(1);
-    expect(anomalies[0]).toMatchObject({ code: "zero_price", severity: "warning", transactionId: "buy-0" });
+    expect(anomalies[0]).toMatchObject({
+      code: "zero_price",
+      severity: "warning",
+      transactionId: "buy-0",
+    });
   });
 
   it("does NOT flag a zero_price on transfer_in (has its own code)", () => {
@@ -238,9 +238,30 @@ describe("negative_cash", () => {
 
   it("only flags the first crossing, not subsequent deeper dips", () => {
     const txns = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "10", id: "dep", executedAt: new Date("2024-01-01") }),
-      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "15", id: "w1", executedAt: new Date("2024-02-01") }),
-      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "5", id: "w2", executedAt: new Date("2024-03-01") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "10",
+        id: "dep",
+        executedAt: new Date("2024-01-01"),
+      }),
+      tx({
+        type: "withdrawal",
+        instrumentId: null,
+        quantity: "1",
+        price: "15",
+        id: "w1",
+        executedAt: new Date("2024-02-01"),
+      }),
+      tx({
+        type: "withdrawal",
+        instrumentId: null,
+        quantity: "1",
+        price: "5",
+        id: "w2",
+        executedAt: new Date("2024-03-01"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true });
     const negs = anomalies.filter((a) => a.code === "negative_cash");
@@ -252,8 +273,21 @@ describe("negative_cash", () => {
     // A buy posts before its same-day funding deposit clears — intraday it dips, but the
     // day closes positive, so it must not flag.
     const txns = [
-      tx({ type: "buy", quantity: "1", price: "100", id: "buy", executedAt: new Date("2024-05-05") }),
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep", executedAt: new Date("2024-05-05") }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        id: "buy",
+        executedAt: new Date("2024-05-05"),
+      }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "100",
+        id: "dep",
+        executedAt: new Date("2024-05-05"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true });
     expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
@@ -262,26 +296,70 @@ describe("negative_cash", () => {
   it("still flags a cross-day negative even if a later deposit recovers it", () => {
     // Sophia's DKB case: buy day N takes cash to −0.98, deposit on day N+3 zeroes it.
     const txns = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep1", executedAt: new Date("2021-11-01") }),
-      tx({ type: "buy", quantity: "1", price: "100.98", id: "buy", executedAt: new Date("2021-11-05") }),
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "0.98", id: "dep2", executedAt: new Date("2021-11-08") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "100",
+        id: "dep1",
+        executedAt: new Date("2021-11-01"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "100.98",
+        id: "buy",
+        executedAt: new Date("2021-11-05"),
+      }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "0.98",
+        id: "dep2",
+        executedAt: new Date("2021-11-08"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true });
     const negs = anomalies.filter((a) => a.code === "negative_cash");
     expect(negs).toHaveLength(1);
-    expect(negs[0]).toMatchObject({ transactionId: "buy", meta: { currency: "EUR", balance: "-0.98" } });
+    expect(negs[0]).toMatchObject({
+      transactionId: "buy",
+      meta: { currency: "EUR", balance: "-0.98" },
+    });
   });
 
   it("attributes a same-day end-of-day negative deterministically regardless of input order", () => {
     const base = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "150", id: "dep", executedAt: new Date("2021-11-01") }),
-      tx({ type: "buy", quantity: "1", price: "100", id: "buy-a", executedAt: new Date("2021-11-05") }),
-      tx({ type: "buy", quantity: "1", price: "51", id: "buy-b", executedAt: new Date("2021-11-05") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "150",
+        id: "dep",
+        executedAt: new Date("2021-11-01"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "100",
+        id: "buy-a",
+        executedAt: new Date("2021-11-05"),
+      }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "51",
+        id: "buy-b",
+        executedAt: new Date("2021-11-05"),
+      }),
     ];
-    const forward = detectAnomalies(base, [], { cashCounted: true })
-      .filter((a) => a.code === "negative_cash");
-    const reversed = detectAnomalies([base[0], base[2], base[1]], [], { cashCounted: true })
-      .filter((a) => a.code === "negative_cash");
+    const forward = detectAnomalies(base, [], { cashCounted: true }).filter(
+      (a) => a.code === "negative_cash",
+    );
+    const reversed = detectAnomalies([base[0], base[2], base[1]], [], { cashCounted: true }).filter(
+      (a) => a.code === "negative_cash",
+    );
     expect(forward).toHaveLength(1);
     expect(reversed).toHaveLength(1);
     // Same attributed transaction (last under (executedAt, id) → "buy-b") both ways.
@@ -293,18 +371,47 @@ describe("negative_cash", () => {
     // Same day nets negative (−150) but ends with an inflow that sorts last by id. The flag
     // must point at the buy (which caused the dip), not the deposit (which added cash).
     const txns = [
-      tx({ type: "buy", quantity: "1", price: "200", id: "aaa-buy", executedAt: new Date("2024-05-05") }),
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "50", id: "zzz-dep", executedAt: new Date("2024-05-05") }),
+      tx({
+        type: "buy",
+        quantity: "1",
+        price: "200",
+        id: "aaa-buy",
+        executedAt: new Date("2024-05-05"),
+      }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "50",
+        id: "zzz-dep",
+        executedAt: new Date("2024-05-05"),
+      }),
     ];
-    const negs = detectAnomalies(txns, [], { cashCounted: true }).filter((a) => a.code === "negative_cash");
+    const negs = detectAnomalies(txns, [], { cashCounted: true }).filter(
+      (a) => a.code === "negative_cash",
+    );
     expect(negs).toHaveLength(1);
     expect(negs[0].transactionId).toBe("aaa-buy");
   });
 
   it("does NOT flag negative cash when allowNegativeCash=true", () => {
     const txns = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "10", id: "dep", executedAt: new Date("2024-01-01") }),
-      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "50", id: "w", executedAt: new Date("2024-02-01") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "10",
+        id: "dep",
+        executedAt: new Date("2024-01-01"),
+      }),
+      tx({
+        type: "withdrawal",
+        instrumentId: null,
+        quantity: "1",
+        price: "50",
+        id: "w",
+        executedAt: new Date("2024-02-01"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true, allowNegativeCash: true });
     expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
@@ -316,8 +423,22 @@ describe("negative_cash", () => {
     // ~-8e-11 EUR on a real TR portfolio. Below NEGATIVE_CASH_TOLERANCE (1e-6), this must
     // not fire the `error`-severity negative_cash anomaly.
     const txns = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100.0000000001", id: "dep", executedAt: new Date("2024-01-01") }),
-      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "100.0000000002", id: "wdraw", executedAt: new Date("2024-02-01") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "100.0000000001",
+        id: "dep",
+        executedAt: new Date("2024-01-01"),
+      }),
+      tx({
+        type: "withdrawal",
+        instrumentId: null,
+        quantity: "1",
+        price: "100.0000000002",
+        id: "wdraw",
+        executedAt: new Date("2024-02-01"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true });
     expect(anomalies.filter((a) => a.code === "negative_cash")).toHaveLength(0);
@@ -327,13 +448,30 @@ describe("negative_cash", () => {
     // -0.00001 is ten times NEGATIVE_CASH_TOLERANCE (1e-6) — a real (if tiny) shortfall,
     // not reconstruction noise, so it must still flag.
     const txns = [
-      tx({ type: "deposit", instrumentId: null, quantity: "1", price: "100", id: "dep", executedAt: new Date("2024-01-01") }),
-      tx({ type: "withdrawal", instrumentId: null, quantity: "1", price: "100.00001", id: "wdraw", executedAt: new Date("2024-02-01") }),
+      tx({
+        type: "deposit",
+        instrumentId: null,
+        quantity: "1",
+        price: "100",
+        id: "dep",
+        executedAt: new Date("2024-01-01"),
+      }),
+      tx({
+        type: "withdrawal",
+        instrumentId: null,
+        quantity: "1",
+        price: "100.00001",
+        id: "wdraw",
+        executedAt: new Date("2024-02-01"),
+      }),
     ];
     const anomalies = detectAnomalies(txns, [], { cashCounted: true });
     const negs = anomalies.filter((a) => a.code === "negative_cash");
     expect(negs).toHaveLength(1);
-    expect(negs[0]).toMatchObject({ transactionId: "wdraw", meta: { currency: "EUR", balance: "-0.00001" } });
+    expect(negs[0]).toMatchObject({
+      transactionId: "wdraw",
+      meta: { currency: "EUR", balance: "-0.00001" },
+    });
   });
 });
 
@@ -389,7 +527,13 @@ describe("reconciliation_drift (incremental guard)", () => {
         // Absolute gap (0.60) is below the €1 gap threshold, so no reconciliation_gap — but it
         // moved 0.60 since last sync, above the €0.50 drift bound → a drift warning.
         cash: [
-          { currency: "EUR", reported: "100.00", derived: "99.40", diff: "0.60", driftSincePrev: "0.60" },
+          {
+            currency: "EUR",
+            reported: "100.00",
+            derived: "99.40",
+            diff: "0.60",
+            driftSincePrev: "0.60",
+          },
         ],
       },
     });
@@ -408,7 +552,13 @@ describe("reconciliation_drift (incremental guard)", () => {
         // A €26.70 standing gap that did not move this sync: the absolute-gap warning fires,
         // but the incremental drift guard stays quiet (driftSincePrev within the bound).
         cash: [
-          { currency: "EUR", reported: "100.00", derived: "73.30", diff: "26.70", driftSincePrev: "0.00" },
+          {
+            currency: "EUR",
+            reported: "100.00",
+            derived: "73.30",
+            diff: "26.70",
+            driftSincePrev: "0.00",
+          },
         ],
       },
     });
@@ -419,7 +569,13 @@ describe("reconciliation_drift (incremental guard)", () => {
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
         cash: [
-          { currency: "EUR", reported: "100.00", derived: "99.70", diff: "0.30", driftSincePrev: "0.30" },
+          {
+            currency: "EUR",
+            reported: "100.00",
+            derived: "99.70",
+            diff: "0.30",
+            driftSincePrev: "0.30",
+          },
         ],
       },
     });
@@ -439,7 +595,13 @@ describe("reconciliation_drift (incremental guard)", () => {
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
         cash: [
-          { currency: "EUR", reported: "100.00", derived: "97.50", diff: "2.50", driftSincePrev: "1.00" },
+          {
+            currency: "EUR",
+            reported: "100.00",
+            derived: "97.50",
+            diff: "2.50",
+            driftSincePrev: "1.00",
+          },
         ],
       },
     });
@@ -457,7 +619,9 @@ describe("position_gap", () => {
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
         cash: [],
-        positions: [{ isin: "DE000A0D9PT0", reported: "10.000000", derived: "9.000000", diff: "1.000000" }],
+        positions: [
+          { isin: "DE000A0D9PT0", reported: "10.000000", derived: "9.000000", diff: "1.000000" },
+        ],
       },
     });
     expect(anomalies).toHaveLength(1);
@@ -473,7 +637,9 @@ describe("position_gap", () => {
     const anomalies = detectAnomalies([], [], {
       reconciliationGap: {
         cash: [],
-        positions: [{ isin: "DE000A0D9PT0", reported: "10.000000", derived: "10.000050", diff: "0.000050" }],
+        positions: [
+          { isin: "DE000A0D9PT0", reported: "10.000000", derived: "10.000050", diff: "0.000050" },
+        ],
       },
     });
     expect(anomalies).toHaveLength(0);
@@ -531,9 +697,21 @@ describe("edge cases", () => {
 
   it("handles multiple instruments independently", () => {
     const anomalies = detectAnomalies([
-      { ...tx({ type: "buy", quantity: "10" }), instrumentId: "A", executedAt: new Date("2024-01-01") },
-      { ...tx({ type: "sell", quantity: "5" }), instrumentId: "A", executedAt: new Date("2024-02-01") },
-      { ...tx({ type: "sell", quantity: "3", id: "b-sell" }), instrumentId: "B", executedAt: new Date("2024-01-01") },
+      {
+        ...tx({ type: "buy", quantity: "10" }),
+        instrumentId: "A",
+        executedAt: new Date("2024-01-01"),
+      },
+      {
+        ...tx({ type: "sell", quantity: "5" }),
+        instrumentId: "A",
+        executedAt: new Date("2024-02-01"),
+      },
+      {
+        ...tx({ type: "sell", quantity: "3", id: "b-sell" }),
+        instrumentId: "B",
+        executedAt: new Date("2024-01-01"),
+      },
     ]);
     const codes = anomalies.map((a) => a.code);
     expect(codes).toEqual(["sell_before_acquisition"]);

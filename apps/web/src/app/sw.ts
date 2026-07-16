@@ -99,8 +99,7 @@ const serwist = new Serwist({
       {
         url: `/${routing.defaultLocale}/offline`,
         matcher: ({ request }: HandlerDidErrorCallbackParam) =>
-          request.destination === "document" &&
-          !new URL(request.url).pathname.startsWith("/api"),
+          request.destination === "document" && !new URL(request.url).pathname.startsWith("/api"),
       },
     ],
   },

@@ -1,14 +1,39 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, inArray } from "drizzle-orm";
-import { accountHolders, dividendEvents, instruments, lossCarryforward, portfolios, users } from "@portfolio/db";
+import {
+  accountHolders,
+  dividendEvents,
+  instruments,
+  lossCarryforward,
+  portfolios,
+  users,
+} from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import type { CoreTransaction, PortfolioSummary, IncomeEntry, TradeLog } from "@portfolio/core";
-import { cashFlow, allowanceUsageYTD, harvestSuggestions, projectCoupons, projectDividends, convert, mergeTradeLogs } from "@portfolio/core";
+import {
+  cashFlow,
+  allowanceUsageYTD,
+  harvestSuggestions,
+  projectCoupons,
+  projectDividends,
+  convert,
+  mergeTradeLogs,
+} from "@portfolio/core";
 import { getFxRates, makeFxRateFn } from "../../services/fx.js";
-import { derivationCacheKey, getCachedFifoTradeLog, type InstrumentMeta } from "../../services/valuation.js";
+import {
+  derivationCacheKey,
+  getCachedFifoTradeLog,
+  type InstrumentMeta,
+} from "../../services/valuation.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
-import { ownedPortfolio, loadValuation, buildTradeLog, PORTFOLIO_VALUATION_CONCURRENCY, type PortfolioParams } from "./shared.js";
+import {
+  ownedPortfolio,
+  loadValuation,
+  buildTradeLog,
+  PORTFOLIO_VALUATION_CONCURRENCY,
+  type PortfolioParams,
+} from "./shared.js";
 
 async function lossCarryForwardFor(
   app: FastifyInstance,
@@ -47,19 +72,14 @@ async function restOfYearForecastGross(
 ): Promise<string> {
   if (year !== now.getUTCFullYear()) return "0";
 
-  const heldIds = summary.holdings
-    .filter((h) => Number(h.quantity) > 0)
-    .map((h) => h.instrumentId);
+  const heldIds = summary.holdings.filter((h) => Number(h.quantity) > 0).map((h) => h.instrumentId);
   if (heldIds.length === 0) return "0";
 
   const heldQtyMap = new Map<string, string>(
-    summary.holdings
-      .filter((h) => Number(h.quantity) > 0)
-      .map((h) => [h.instrumentId, h.quantity]),
+    summary.holdings.filter((h) => Number(h.quantity) > 0).map((h) => [h.instrumentId, h.quantity]),
   );
 
-  const qtyAt = (_instrumentId: string, _at: Date): string =>
-    heldQtyMap.get(_instrumentId) ?? "0";
+  const qtyAt = (_instrumentId: string, _at: Date): string => heldQtyMap.get(_instrumentId) ?? "0";
 
   const pastDivEvents: IncomeEntry[] = coreTxns
     .filter((t) => t.type === "dividend" && t.instrumentId)
@@ -90,9 +110,7 @@ async function restOfYearForecastGross(
   const projectedDivs = projectDividends(pastDivEvents, heldQtyMap, qtyAt, now);
 
   const todayStr = now.toISOString().slice(0, 10);
-  const yearEndStr = new Date(Date.UTC(now.getUTCFullYear(), 11, 31))
-    .toISOString()
-    .slice(0, 10);
+  const yearEndStr = new Date(Date.UTC(now.getUTCFullYear(), 11, 31)).toISOString().slice(0, 10);
 
   const announcedRows =
     heldIds.length > 0
@@ -264,10 +282,19 @@ export function registerTaxRoutes(app: FastifyInstance) {
       );
       const { coreTxns, prices, metaById, summary, corporateActions: cas, fxRates } = valuation;
       const cacheKey = derivationCacheKey(
-        portfolioId, portfolio.baseCurrency, undefined, portfolio.cashCounted,
+        portfolioId,
+        portfolio.baseCurrency,
+        undefined,
+        portfolio.cashCounted,
       );
       const tradeLog = await getCachedFifoTradeLog(
-        cacheKey, coreTxns, prices, portfolio.baseCurrency, metaById, cas, fxRates,
+        cacheKey,
+        coreTxns,
+        prices,
+        portfolio.baseCurrency,
+        metaById,
+        cas,
+        fxRates,
       );
       const tfRates: Record<string, string> = {};
       for (const t of tradeLog.trades) {
@@ -288,7 +315,12 @@ export function registerTaxRoutes(app: FastifyInstance) {
       const taxRate = holderProfile?.capitalGainsTaxRate ?? "0.25";
 
       const forecastIncomeRestOfYear = await restOfYearForecastGross(
-        app, coreTxns, summary, portfolio.baseCurrency, year, now,
+        app,
+        coreTxns,
+        summary,
+        portfolio.baseCurrency,
+        year,
+        now,
       );
 
       const usage = allowanceUsageYTD({
@@ -301,7 +333,14 @@ export function registerTaxRoutes(app: FastifyInstance) {
         assetClasses,
         lossCarryForward: lossCarryForwardInput,
       });
-      const suggestions = harvestSuggestions({ tradeLog, tfRates, allowanceAnnual, taxRate, year, usage });
+      const suggestions = harvestSuggestions({
+        tradeLog,
+        tfRates,
+        allowanceAnnual,
+        taxRate,
+        year,
+        usage,
+      });
 
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /portfolios/:id/tax", durationMs, {
@@ -342,7 +381,9 @@ export function registerTaxRoutes(app: FastifyInstance) {
       const t0 = performance.now();
       const { id } = requireUser(request);
       const { holderId: filterHolderId } = request.query;
-      const year = request.query.year ? parseInt(request.query.year, 10) : new Date().getUTCFullYear();
+      const year = request.query.year
+        ? parseInt(request.query.year, 10)
+        : new Date().getUTCFullYear();
 
       const [u] = await app.db
         .select({ displayCurrency: users.displayCurrency })
@@ -371,7 +412,11 @@ export function registerTaxRoutes(app: FastifyInstance) {
 
       const perHolderResults = await mapPool(holderRows, 2, async (holder) => {
         const pfs = await app.db
-          .select({ id: portfolios.id, cashCounted: portfolios.cashCounted, taxAllowanceAnnual: portfolios.taxAllowanceAnnual })
+          .select({
+            id: portfolios.id,
+            cashCounted: portfolios.cashCounted,
+            taxAllowanceAnnual: portfolios.taxAllowanceAnnual,
+          })
           .from(portfolios)
           .where(and(eq(portfolios.userId, id), eq(portfolios.accountHolderId, holder.id)));
 
@@ -382,9 +427,30 @@ export function registerTaxRoutes(app: FastifyInstance) {
 
         const now = new Date();
         const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-          const { coreTxns, prices, metaById, summary } = await loadValuation(app, p.id, display, undefined, p.cashCounted);
-          const log = await buildTradeLog(app, coreTxns, prices, display, "fifo", undefined, metaById);
-          const pfForecast = await restOfYearForecastGross(app, coreTxns, summary, display, year, now);
+          const { coreTxns, prices, metaById, summary } = await loadValuation(
+            app,
+            p.id,
+            display,
+            undefined,
+            p.cashCounted,
+          );
+          const log = await buildTradeLog(
+            app,
+            coreTxns,
+            prices,
+            display,
+            "fifo",
+            undefined,
+            metaById,
+          );
+          const pfForecast = await restOfYearForecastGross(
+            app,
+            coreTxns,
+            summary,
+            display,
+            year,
+            now,
+          );
           return { log, metaById, forecast: Number(pfForecast) };
         });
         const logs: TradeLog[] = perPortfolio.map((r) => r.log);
@@ -412,7 +478,8 @@ export function registerTaxRoutes(app: FastifyInstance) {
           [...meta.entries()].map(([iid, m]) => [iid, m.assetClass]),
         );
         const taxRate = holder.capitalGainsTaxRate ?? "0.25";
-        const forecastIncomeRestOfYear = totalForecastGross > 0 ? totalForecastGross.toFixed(2) : "0";
+        const forecastIncomeRestOfYear =
+          totalForecastGross > 0 ? totalForecastGross.toFixed(2) : "0";
         const lossCarryForward = await lossCarryForwardFor(app, holder.id, year);
 
         const holderAllowanceCap = Number(holder.taxAllowanceAnnual ?? 1000);
@@ -431,7 +498,14 @@ export function registerTaxRoutes(app: FastifyInstance) {
           assetClasses,
           lossCarryForward,
         });
-        const suggestions = harvestSuggestions({ tradeLog: mergedLog, tfRates, allowanceAnnual, taxRate, year, usage });
+        const suggestions = harvestSuggestions({
+          tradeLog: mergedLog,
+          tfRates,
+          allowanceAnnual,
+          taxRate,
+          year,
+          usage,
+        });
 
         return {
           holder: {

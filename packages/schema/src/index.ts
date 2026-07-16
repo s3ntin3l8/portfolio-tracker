@@ -62,13 +62,7 @@ export type TransactionType = z.infer<typeof transactionTypeSchema>;
 export const costBasisModeSchema = z.enum(["purchase_price", "total_paid"]);
 export type CostBasisMode = z.infer<typeof costBasisModeSchema>;
 
-export const transactionSourceSchema = z.enum([
-  "screenshot",
-  "csv",
-  "manual",
-  "pytr",
-  "pdf",
-]);
+export const transactionSourceSchema = z.enum(["screenshot", "csv", "manual", "pytr", "pdf"]);
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
 
 // Parse-confidence cutoff (0–1): a source row below this is "low confidence" and its draft is
@@ -80,9 +74,7 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.9;
 
 // Money/quantities are decimal strings (matches Postgres `numeric`, preserves
 // precision — never a float).
-export const decimalString = z
-  .string()
-  .regex(/^-?\d+(\.\d+)?$/, "must be a decimal string");
+export const decimalString = z.string().regex(/^-?\d+(\.\d+)?$/, "must be a decimal string");
 
 // ISO-4217-style 3-letter currency code, normalised to upper case.
 export const currencyCode = z
@@ -597,10 +589,9 @@ export const lossCarryforwardSetSchema = z
     taxYear: z.number().int().min(2000).max(2100),
     entries: z.array(lossCarryforwardEntrySchema).max(2),
   })
-  .refine(
-    (d) => new Set(d.entries.map((e) => e.pot)).size === d.entries.length,
-    { message: "At most one entry per pot" },
-  );
+  .refine((d) => new Set(d.entries.map((e) => e.pot)).size === d.entries.length, {
+    message: "At most one entry per pot",
+  });
 export type LossCarryforwardSet = z.infer<typeof lossCarryforwardSetSchema>;
 
 // --- Global search -------------------------------------------------------

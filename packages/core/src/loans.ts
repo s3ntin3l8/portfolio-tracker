@@ -9,9 +9,7 @@ const D = (v: string | number) => new Decimal(v);
  * `Σ loan_drawdown.price − Σ loan_repayment.price`. Never stored — the balance
  * is always re-derived so it cannot drift from the transactions.
  */
-export function loanBalances(
-  transactions: CoreTransaction[],
-): Record<string, string> {
+export function loanBalances(transactions: CoreTransaction[]): Record<string, string> {
   const totals = new Map<string, Decimal>();
   for (const tx of transactions) {
     if (tx.loanId == null) continue;
@@ -27,9 +25,7 @@ export function loanBalances(
 }
 
 /** Outstanding loan principal per currency — the netting term for net worth. */
-export function liabilityBalances(
-  transactions: CoreTransaction[],
-): Record<string, string> {
+export function liabilityBalances(transactions: CoreTransaction[]): Record<string, string> {
   const totals = new Map<string, Decimal>();
   for (const tx of transactions) {
     if (tx.type === "loan_drawdown") {
@@ -64,9 +60,7 @@ export function totalLiabilities(
  * so it subtracts) plus the financing margin carried in each booked
  * `loan_repayment.fees`. Attributed to the instrument of the loan's buy leg.
  */
-export function financingByInstrument(
-  transactions: CoreTransaction[],
-): Record<string, string> {
+export function financingByInstrument(transactions: CoreTransaction[]): Record<string, string> {
   // Map each loan to the instrument it financed (the buy leg carries both).
   const loanInstrument = new Map<string, string>();
   for (const tx of transactions) {
@@ -91,7 +85,5 @@ export function financingByInstrument(
     if (!instrumentId) continue;
     out[instrumentId] = (out[instrumentId] ?? D(0)).add(amount);
   }
-  return Object.fromEntries(
-    Object.entries(out).map(([k, v]) => [k, v.toString()]),
-  );
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.toString()]));
 }

@@ -31,8 +31,7 @@ export interface LotView {
 }
 
 type Event =
-  | { kind: "tx"; at: Date; tx: CoreTransaction }
-  | { kind: "ca"; at: Date; ca: CorporateAction };
+  { kind: "tx"; at: Date; tx: CoreTransaction } | { kind: "ca"; at: Date; ca: CorporateAction };
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -76,11 +75,7 @@ export function openLots(
       if (ev.kind === "ca") {
         const ratio = D(ev.ca.ratio);
         const factor =
-          ev.ca.type === "split"
-            ? ratio
-            : ev.ca.type === "bonus"
-              ? D(1).add(ratio)
-              : null; // rights: no-op
+          ev.ca.type === "split" ? ratio : ev.ca.type === "bonus" ? D(1).add(ratio) : null; // rights: no-op
         if (factor) {
           for (const l of lots) {
             l.qty = l.qty.mul(factor);

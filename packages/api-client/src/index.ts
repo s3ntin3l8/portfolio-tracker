@@ -99,7 +99,7 @@ export interface AdminAuditEntry {
 
 /** A vision LLM provider's effective config (GET/PATCH /admin/vision-providers). No secrets. */
 export interface AdminVisionProvider {
-  id: string;         // "claude" | "gemini" | "openrouter" | "ollama"
+  id: string; // "claude" | "gemini" | "openrouter" | "ollama"
   label: string;
   /** Whether this provider can be used (env key/url present or DB credential set). */
   configured: boolean;
@@ -708,11 +708,7 @@ export interface Transaction {
 export interface MergePreview {
   ok: boolean;
   blockedReason?:
-    | "not_found"
-    | "same_transaction"
-    | "different_instrument"
-    | "incompatible_type"
-    | "loan_linked";
+    "not_found" | "same_transaction" | "different_instrument" | "incompatible_type" | "loan_linked";
   merged?: {
     quantity: string;
     price: string;
@@ -1835,7 +1831,8 @@ export function createApiClient(config: ApiClientConfig) {
   const doFetch = config.fetch ?? globalThis.fetch;
   const timingEnabled =
     typeof (globalThis as Record<string, unknown>).process !== "undefined" &&
-    typeof ((globalThis as Record<string, unknown>).process as Record<string, unknown>).env === "object" &&
+    typeof ((globalThis as Record<string, unknown>).process as Record<string, unknown>).env ===
+      "object" &&
     ((globalThis as Record<string, unknown>).process as Record<string, Record<string, string>>).env
       ?.TIMING_ENABLED === "true";
 
@@ -1898,17 +1895,23 @@ export function createApiClient(config: ApiClientConfig) {
     listApiTokens: () => request<ApiToken[]>("GET", "/me/tokens"),
     createApiToken: (input: ApiTokenCreate) =>
       request<ApiTokenWithSecret>("POST", "/me/tokens", input),
-    deleteApiToken: (id: string) =>
-      request<void>("DELETE", `/me/tokens/${encodeURIComponent(id)}`),
+    deleteApiToken: (id: string) => request<void>("DELETE", `/me/tokens/${encodeURIComponent(id)}`),
 
     // Admin: market-data provider config (enable/disable + fallback priority + credentials).
     getAdminProviders: () => request<AdminProvidersResponse>("GET", "/admin/providers"),
     updateAdminProviders: (input: ProviderSettingUpdate[]) =>
       request<AdminProvidersResponse>("PATCH", "/admin/providers", input),
     setAdminProviderCredential: (id: string, body: ProviderCredentialInput) =>
-      request<AdminProvidersResponse>("PUT", `/admin/providers/${encodeURIComponent(id)}/credential`, body),
+      request<AdminProvidersResponse>(
+        "PUT",
+        `/admin/providers/${encodeURIComponent(id)}/credential`,
+        body,
+      ),
     clearAdminProviderCredential: (id: string) =>
-      request<AdminProvidersResponse>("DELETE", `/admin/providers/${encodeURIComponent(id)}/credential`),
+      request<AdminProvidersResponse>(
+        "DELETE",
+        `/admin/providers/${encodeURIComponent(id)}/credential`,
+      ),
     getAdminAuditLog: () => request<AdminAuditEntry[]>("GET", "/admin/audit"),
 
     // Admin: vision LLM provider config (enable/disable + fallback priority + credentials).
@@ -2024,7 +2027,10 @@ export function createApiClient(config: ApiClientConfig) {
         "GET",
         `/portfolios/${portfolioId}/sparplan${includeSales ? "?includeSales=true" : ""}`,
       ),
-    getNetWorthHistory: (range = "1y", opts?: { include?: string[]; exclude?: string[]; holderId?: string }) => {
+    getNetWorthHistory: (
+      range = "1y",
+      opts?: { include?: string[]; exclude?: string[]; holderId?: string },
+    ) => {
       const params = new URLSearchParams({ range });
       if (opts?.include?.length) params.set("include", opts.include.join(","));
       if (opts?.exclude?.length) params.set("exclude", opts.exclude.join(","));
@@ -2044,7 +2050,8 @@ export function createApiClient(config: ApiClientConfig) {
     },
 
     listPortfolios: () => request<Portfolio[]>("GET", "/portfolios"),
-    listPortfolioValues: () => request<{ id: string; netWorth: string }[]>("GET", "/portfolios/values"),
+    listPortfolioValues: () =>
+      request<{ id: string; netWorth: string }[]>("GET", "/portfolios/values"),
     createPortfolio: (input: PortfolioInput) => request<Portfolio>("POST", "/portfolios", input),
     updatePortfolio: (portfolioId: string, input: Partial<PortfolioInput>) =>
       request<Portfolio>("PATCH", `/portfolios/${portfolioId}`, input),
@@ -2085,10 +2092,12 @@ export function createApiClient(config: ApiClientConfig) {
       if (type) params.set("type", type);
       if (year) params.set("year", year);
       if (q) params.set("q", q);
-      return request<{ rows: Transaction[]; total: number; summary?: { totalInvested: string; totalProceeds: string; totalIncome: string }; years?: string[] }>(
-        "GET",
-        `/portfolios/${portfolioId}/transactions?${params}`,
-      );
+      return request<{
+        rows: Transaction[];
+        total: number;
+        summary?: { totalInvested: string; totalProceeds: string; totalIncome: string };
+        years?: string[];
+      }>("GET", `/portfolios/${portfolioId}/transactions?${params}`);
     },
     /** Aggregate paginated transactions across all portfolios (networth scope).
      *  Same enrichment + filter pattern as the per-portfolio paginated variant. */
@@ -2110,10 +2119,7 @@ export function createApiClient(config: ApiClientConfig) {
     },
     /** List income-only rows for a portfolio in the given tax year (lightweight, no instrument/sources enrichment). */
     listIncomeByYear: (portfolioId: string, year: number) =>
-      request<Transaction[]>(
-        "GET",
-        `/portfolios/${portfolioId}/income-year?year=${year}`,
-      ),
+      request<Transaction[]>("GET", `/portfolios/${portfolioId}/income-year?year=${year}`),
     /** Look up a single FX rate for a given currency pair and date. Returns null when no
      *  rate is available for that pair/date (caller falls back to 1:1). */
     getFxRate: (from: string, to: string, date: string) =>
@@ -2133,11 +2139,9 @@ export function createApiClient(config: ApiClientConfig) {
     /** Set a transaction's visibility status (archive a phantom, mark a reward-funded
      * buy cash_neutral, or restore to normal) without re-sending the whole row. */
     setTransactionStatus: (portfolioId: string, txId: string, status: TransactionStatus) =>
-      request<Transaction>(
-        "PATCH",
-        `/portfolios/${portfolioId}/transactions/${txId}/status`,
-        { status },
-      ),
+      request<Transaction>("PATCH", `/portfolios/${portfolioId}/transactions/${txId}/status`, {
+        status,
+      }),
     bulkDeleteTransactions: (portfolioId: string, ids: string[]) =>
       request<{ deleted: number }>("POST", `/portfolios/${portfolioId}/transactions/bulk-delete`, {
         ids,
@@ -2145,11 +2149,7 @@ export function createApiClient(config: ApiClientConfig) {
     /** Resolve draft transactions (from a sync/import) in bulk: "confirm" (→ normal, starts
      * counting) or "discard" (→ archived, kept but excluded from every derivation). One
      * request for N ids — used for both single-row and batch actions. */
-    resolveDraftTransactions: (
-      portfolioId: string,
-      ids: string[],
-      action: "confirm" | "discard",
-    ) =>
+    resolveDraftTransactions: (portfolioId: string, ids: string[], action: "confirm" | "discard") =>
       request<{ updated: number }>(
         "POST",
         `/portfolios/${portfolioId}/transactions/resolve-drafts`,
@@ -2172,11 +2172,7 @@ export function createApiClient(config: ApiClientConfig) {
     /** Reassign transactions to another portfolio (move a wrong-portfolio import in one
      * action). Rows already in the target, or whose economic identity already exists there,
      * are skipped (`skippedConflicts`); financed-gold legs are skipped (`skippedLoans`). */
-    reassignTransactions: (
-      portfolioId: string,
-      ids: string[],
-      targetPortfolioId: string,
-    ) =>
+    reassignTransactions: (portfolioId: string, ids: string[], targetPortfolioId: string) =>
       request<{ moved: number; skippedConflicts: number; skippedLoans: number }>(
         "POST",
         `/portfolios/${portfolioId}/transactions/reassign`,
@@ -2204,11 +2200,10 @@ export function createApiClient(config: ApiClientConfig) {
      * pair). `survivorId` keeps its core economic fields; `absorbedId`'s sources/documents
      * fold in and it is deleted. */
     mergeTransactions: (portfolioId: string, survivorId: string, absorbedId: string) =>
-      request<{ survivorId: string }>(
-        "POST",
-        `/portfolios/${portfolioId}/transactions/merge`,
-        { survivorId, absorbedId },
-      ),
+      request<{ survivorId: string }>("POST", `/portfolios/${portfolioId}/transactions/merge`, {
+        survivorId,
+        absorbedId,
+      }),
 
     getQuote: (ref: QuoteRef) =>
       request<Quote>(
@@ -2251,7 +2246,14 @@ export function createApiClient(config: ApiClientConfig) {
     /** Update an instrument's identifiers (ISIN, WKN, symbol, name, assetClass, market). */
     updateInstrument: (
       id: string,
-      patch: { isin?: string | null; wkn?: string | null; symbol?: string; name?: string; assetClass?: string; market?: string },
+      patch: {
+        isin?: string | null;
+        wkn?: string | null;
+        symbol?: string;
+        name?: string;
+        assetClass?: string;
+        market?: string;
+      },
     ) => request<Instrument>("PATCH", `/instruments/${id}`, patch),
     /** On-demand Börse Frankfurt enrichment — returns results with ISIN + WKN. */
     enrichInstruments: (q: string) =>
@@ -2305,16 +2307,8 @@ export function createApiClient(config: ApiClientConfig) {
      * `targets` must sum to ~100. Passing an empty array clears all targets for
      * that (portfolioId, dimension) scope.
      */
-    putPortfolioTargets: (
-      portfolioId: string,
-      dimension: string,
-      targets: TargetWeight[],
-    ) =>
-      request<TargetWeight[]>(
-        "PUT",
-        `/portfolios/${portfolioId}/targets`,
-        { dimension, targets },
-      ),
+    putPortfolioTargets: (portfolioId: string, dimension: string, targets: TargetWeight[]) =>
+      request<TargetWeight[]>("PUT", `/portfolios/${portfolioId}/targets`, { dimension, targets }),
     /** Fetch saved aggregate (networth-level) target weights for a dimension. */
     getNetworthTargets: (dimension: string) =>
       request<TargetWeight[]>(
@@ -2376,10 +2370,7 @@ export function createApiClient(config: ApiClientConfig) {
       if (year !== undefined) params.set("year", String(year));
       if (holderId !== undefined) params.set("holderId", holderId);
       const qs = params.toString();
-      return request<TaxSummaryHolder[]>(
-        "GET",
-        `/networth/tax${qs ? `?${qs}` : ""}`,
-      );
+      return request<TaxSummaryHolder[]>("GET", `/networth/tax${qs ? `?${qs}` : ""}`);
     },
 
     // `force` re-imports a file the server would otherwise dedup against an earlier import
@@ -2423,17 +2414,13 @@ export function createApiClient(config: ApiClientConfig) {
         skipped: number;
         /** Cash-movement rows dropped because the target portfolio is cash-outside (#326). */
         excludedCashMovements: number;
-      }>(
-        "POST",
-        `/imports/${importId}/confirm`,
-        {
-          portfolioId,
-          transactions,
-          contracts,
-          acknowledgeAccountMismatch,
-          acknowledgeDuplicates,
-        },
-      ),
+      }>("POST", `/imports/${importId}/confirm`, {
+        portfolioId,
+        transactions,
+        contracts,
+        acknowledgeAccountMismatch,
+        acknowledgeDuplicates,
+      }),
     /**
      * Materialize a staged import's parsed drafts into the chosen portfolio as `status='draft'`
      * transactions (the upload "confirm portfolio" step). Reads the server-stored drafts — it
@@ -2475,15 +2462,12 @@ export function createApiClient(config: ApiClientConfig) {
      * changes the target portfolio in the review screen so badges appear before Confirm (#259).
      */
     checkImportDuplicates: (importId: string, portfolioId: string) =>
-      request<{ annotations: DuplicateAnnotation[] }>(
-        "POST",
-        `/imports/${importId}/duplicates`,
-        { portfolioId },
-      ),
+      request<{ annotations: DuplicateAnnotation[] }>("POST", `/imports/${importId}/duplicates`, {
+        portfolioId,
+      }),
     listImports: () => request<ImportRecord[]>("GET", "/imports"),
     /** Safety net: event types that reached the importer but have no mapping yet. */
-    getUnmappedEventTypes: () =>
-      request<UnmappedEventType[]>("GET", "/imports/unmapped-types"),
+    getUnmappedEventTypes: () => request<UnmappedEventType[]>("GET", "/imports/unmapped-types"),
     /** Fetch a single import with its parsed drafts (to review a staged draft). */
     getImport: (importId: string) => request<ImportDetail>("GET", `/imports/${importId}`),
     /** Discard a draft import (draft → discarded). */
@@ -2492,8 +2476,7 @@ export function createApiClient(config: ApiClientConfig) {
     deleteImport: (importId: string) =>
       request<{ removed: number }>("DELETE", `/imports/${importId}`),
     /** Hard-delete a discarded import row (no-op on its already-removed children). */
-    clearImport: (importId: string) =>
-      request<void>("DELETE", `/imports/${importId}/clear`),
+    clearImport: (importId: string) => request<void>("DELETE", `/imports/${importId}/clear`),
     /** Batch hard-delete of discarded imports (one request — used by "clear all"). */
     bulkClearImports: (ids: string[]) =>
       request<{ cleared: number }>("POST", `/imports/bulk-clear`, { ids }),
@@ -2513,7 +2496,10 @@ export function createApiClient(config: ApiClientConfig) {
       request<DocumentUrlResponse>("GET", `/imports/${importId}/document-url`),
     /** Return a signed URL for the retained source document of a transaction (#231). */
     getTransactionDocumentUrl: (portfolioId: string, txId: string) =>
-      request<DocumentUrlResponse>("GET", `/portfolios/${portfolioId}/transactions/${txId}/document-url`),
+      request<DocumentUrlResponse>(
+        "GET",
+        `/portfolios/${portfolioId}/transactions/${txId}/document-url`,
+      ),
     /** Return a signed URL for the PDF linked to a specific transaction_sources row (#230).
      * Allows per-leg downloads for split orders (each leg has its own documentId). */
     getSourceDocumentUrl: (portfolioId: string, txId: string, sourceId: string) =>
@@ -2555,11 +2541,12 @@ export function createApiClient(config: ApiClientConfig) {
       if (opts.category) form.append("category", opts.category);
       if (opts.taxYear != null) form.append("taxYear", String(opts.taxYear));
       form.append("portfolioId", opts.portfolioId);
-      return request<{ id: string; duplicate: boolean; category: DocumentCategory; taxYear: number | null }>(
-        "POST",
-        "/documents",
-        form,
-      );
+      return request<{
+        id: string;
+        duplicate: boolean;
+        category: DocumentCategory;
+        taxYear: number | null;
+      }>("POST", "/documents", form);
     },
     /** Delete an inbox document (removes the stored file too). */
     deleteDocument: (documentId: string) => request<void>("DELETE", `/documents/${documentId}`),
@@ -2583,8 +2570,7 @@ export function createApiClient(config: ApiClientConfig) {
     getIbkrConnection: () => request<IbkrConnection>("GET", "/ibkr/connection"),
     connectIbkr: (input: IbkrConnectInput) =>
       request<{ status: IbkrStatus }>("POST", "/ibkr/connection", input),
-    syncIbkr: () =>
-      request<{ queued: boolean } | IbkrSyncResult>("POST", "/ibkr/connection/sync"),
+    syncIbkr: () => request<{ queued: boolean } | IbkrSyncResult>("POST", "/ibkr/connection/sync"),
     reimportIbkr: () => request<{ removed: number }>("POST", "/ibkr/connection/reimport"),
     disconnectIbkr: () => request<void>("DELETE", "/ibkr/connection"),
 

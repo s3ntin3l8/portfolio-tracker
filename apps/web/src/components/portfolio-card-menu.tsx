@@ -193,7 +193,10 @@ export function PortfolioCardMenu({
 
         {trSync && (
           <DropdownMenuItem
-            onSelect={(e) => { e.preventDefault(); void handleTrSync(); }}
+            onSelect={(e) => {
+              e.preventDefault();
+              void handleTrSync();
+            }}
             disabled={trSyncing}
           >
             <RefreshCw className={cn("size-4", trSyncing && "animate-spin")} />
@@ -203,7 +206,10 @@ export function PortfolioCardMenu({
 
         {ibkrSync && (
           <DropdownMenuItem
-            onSelect={(e) => { e.preventDefault(); void handleIbkrSync(); }}
+            onSelect={(e) => {
+              e.preventDefault();
+              void handleIbkrSync();
+            }}
             disabled={ibkrSyncing}
           >
             <RefreshCw className={cn("size-4", ibkrSyncing && "animate-spin")} />

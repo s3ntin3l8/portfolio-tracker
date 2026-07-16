@@ -29,9 +29,7 @@ function Stat({
         {primary}
       </p>
       {secondary != null && (
-        <p className={cn("tabular mt-0.5 text-[13px] font-bold", toneClass(tone))}>
-          {secondary}
-        </p>
+        <p className={cn("tabular mt-0.5 text-[13px] font-bold", toneClass(tone))}>{secondary}</p>
       )}
     </div>
   );

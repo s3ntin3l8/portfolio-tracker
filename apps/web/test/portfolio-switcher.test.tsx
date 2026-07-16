@@ -19,7 +19,12 @@ vi.mock("next/navigation", () => ({
 import { PortfolioSwitcher } from "../src/components/portfolio-switcher";
 
 function renderSwitcher(props: {
-  portfolios: { id: string; name: string; brokerage: string | null; accountHolder: string | null }[];
+  portfolios: {
+    id: string;
+    name: string;
+    brokerage: string | null;
+    accountHolder: string | null;
+  }[];
   holders?: { id: string; name: string }[];
   selectedId: string | null;
   selectedHolderId?: string | null;
@@ -31,8 +36,7 @@ function renderSwitcher(props: {
   );
 }
 
-const trigger = () =>
-  screen.getByRole("button", { name: messages.PortfolioSwitcher.label });
+const trigger = () => screen.getByRole("button", { name: messages.PortfolioSwitcher.label });
 
 // Radix opens its dropdown on pointer/keyboard events, not a synthetic click; Enter on
 // the focused trigger is the most reliable opener under jsdom.
@@ -105,9 +109,7 @@ describe("PortfolioSwitcher", () => {
     expect(
       screen.getByRole("menuitem", { name: messages.PortfolioSwitcher.all }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("menuitem", { name: /Euro · Trade Republic/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Euro · Trade Republic/ })).toBeInTheDocument();
   });
 
   it("writes the cookie and refreshes when a portfolio is chosen", () => {
@@ -128,7 +130,7 @@ describe("PortfolioSwitcher", () => {
     renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
       ],
       holders: [
         { id: "h1", name: "Self" },
@@ -147,7 +149,7 @@ describe("PortfolioSwitcher", () => {
     renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
       ],
       holders: [{ id: "h1", name: "Self" }],
       selectedId: null,
@@ -163,7 +165,7 @@ describe("PortfolioSwitcher", () => {
     renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
       ],
       holders: [{ id: "h1", name: "Self" }],
       selectedId: null,
@@ -178,7 +180,7 @@ describe("PortfolioSwitcher", () => {
     renderSwitcher({
       portfolios: [
         { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-        { id: "p2", name: "DKB",  brokerage: null, accountHolder: null },
+        { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
       ],
       selectedId: null,
     });

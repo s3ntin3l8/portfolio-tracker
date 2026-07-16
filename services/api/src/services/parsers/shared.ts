@@ -45,7 +45,10 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
               "(German 'Ausmachender Betrag'), in the booking currency.",
           },
           fees: { type: "string", description: "Decimal string, default 0." },
-          total: { type: "string", description: "Decimal string, optional gross total (before tax)." },
+          total: {
+            type: "string",
+            description: "Decimal string, optional gross total (before tax).",
+          },
           tax: {
             type: "string",
             description:
@@ -59,14 +62,19 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
           },
           fxRate: {
             type: "string",
-            description: "Decimal string. FX rate (e.g. Devisenkurs) when the trade involves a currency conversion.",
+            description:
+              "Decimal string. FX rate (e.g. Devisenkurs) when the trade involves a currency conversion.",
           },
           exchangeCode: { type: "string", description: "Exchange/market code if shown." },
           venue: {
             type: "string",
-            description: "Trading venue or counterparty (e.g. Handelsplatz / Ausführungsplatz / Gegenpartei).",
+            description:
+              "Trading venue or counterparty (e.g. Handelsplatz / Ausführungsplatz / Gegenpartei).",
           },
-          savingsPlanId: { type: "string", description: "Savings-plan identifier if the row is a plan execution." },
+          savingsPlanId: {
+            type: "string",
+            description: "Savings-plan identifier if the row is a plan execution.",
+          },
           kind: { type: "string", description: "Sub-type label (e.g. saveback, roundup)." },
           externalId: {
             type: "string",
@@ -135,14 +143,7 @@ export const TRANSACTIONS_TOOL_SCHEMA = {
           },
           confidence: { type: "number", description: "0–1 extraction confidence." },
         },
-        required: [
-          "grams",
-          "purchasePrice",
-          "principal",
-          "tenorMonths",
-          "startDate",
-          "confidence",
-        ],
+        required: ["grams", "purchasePrice", "principal", "tenorMonths", "startDate", "confidence"],
       },
     },
   },
@@ -204,7 +205,10 @@ No markdown, no code fences, no commentary.`;
 
 /** Pull a JSON object out of a model's text response, tolerating code fences. */
 export function parseJsonObject(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const trimmed = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
   return JSON.parse(trimmed);
 }
 

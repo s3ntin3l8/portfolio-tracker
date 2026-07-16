@@ -5,8 +5,7 @@ const D = (v: string | number) => new Decimal(v);
 const ZERO = new Decimal(0);
 
 type Event =
-  | { kind: "tx"; at: Date; tx: CoreTransaction }
-  | { kind: "ca"; at: Date; ca: CorporateAction };
+  { kind: "tx"; at: Date; tx: CoreTransaction } | { kind: "ca"; at: Date; ca: CorporateAction };
 
 /**
  * Derive per-instrument holdings from transactions using the **average cost**
@@ -74,8 +73,14 @@ export function computeHoldings(
       const p = D(price);
       const f = D(fees);
 
-      if (type === "buy" || type === "savings_plan" || type === "sell" ||
-          type === "transfer_in" || type === "transfer_out" || type === "bonus") {
+      if (
+        type === "buy" ||
+        type === "savings_plan" ||
+        type === "sell" ||
+        type === "transfer_in" ||
+        type === "transfer_out" ||
+        type === "bonus"
+      ) {
         if (costCurrency === null) {
           costCurrency = ev.tx.currency;
         } else if (ev.tx.currency !== costCurrency) {
@@ -277,10 +282,6 @@ export function marketValue(quantity: string, price: string): string {
 }
 
 /** Unrealized P&L = market value − remaining cost basis. */
-export function unrealizedPnL(
-  quantity: string,
-  price: string,
-  costBasis: string,
-): string {
+export function unrealizedPnL(quantity: string, price: string, costBasis: string): string {
   return D(quantity).mul(D(price)).sub(D(costBasis)).toString();
 }

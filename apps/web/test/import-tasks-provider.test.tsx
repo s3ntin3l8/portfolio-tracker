@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { ApiError } from "@portfolio/api-client";
-import {
-  ImportTasksProvider,
-  useImportTasks,
-} from "../src/components/import-tasks-provider";
+import { ImportTasksProvider, useImportTasks } from "../src/components/import-tasks-provider";
 import type { ImportClient, ImportTask } from "../src/components/import-flow";
 import messages from "../messages/en.json";
 
@@ -35,7 +32,11 @@ function makeClient(overrides: Partial<ImportClient> = {}): ImportClient {
     importScreenshot: vi.fn(),
     importCsv: vi.fn(),
     confirmImport: vi.fn(async () => ({ confirmed: 1 })),
-    materializeImport: vi.fn(async () => ({ materializedCount: 1, excludedCashMovements: 0, enrichedCount: 0 })),
+    materializeImport: vi.fn(async () => ({
+      materializedCount: 1,
+      excludedCashMovements: 0,
+      enrichedCount: 0,
+    })),
     checkAccounts: vi.fn(async () => ({ mismatches: [] })),
     uploadDocument: vi.fn(async () => ({ id: "doc1", duplicate: false })),
     ...overrides,
@@ -150,7 +151,11 @@ describe("ImportTasksProvider", () => {
   it("reports 'X of Y' and splits the gap into excluded cash + skipped duplicates", async () => {
     // Expected 12, server materializes 9 with 1 cash excluded → 2 duplicates skipped.
     h.client = makeClient({
-      materializeImport: vi.fn(async () => ({ materializedCount: 9, excludedCashMovements: 1, enrichedCount: 0 })),
+      materializeImport: vi.fn(async () => ({
+        materializedCount: 9,
+        excludedCashMovements: 1,
+        enrichedCount: 0,
+      })),
     });
     renderRunner(materializeTask({ expectedCount: 12 }));
 
@@ -165,7 +170,11 @@ describe("ImportTasksProvider", () => {
 
   it("surfaces excluded cash movements in the success description", async () => {
     h.client = makeClient({
-      materializeImport: vi.fn(async () => ({ materializedCount: 4, excludedCashMovements: 2, enrichedCount: 0 })),
+      materializeImport: vi.fn(async () => ({
+        materializedCount: 4,
+        excludedCashMovements: 2,
+        enrichedCount: 0,
+      })),
     });
 
     renderRunner(materializeTask());
@@ -251,7 +260,8 @@ describe("ImportTasksProvider", () => {
   it("partial failure → Retry resumes only the un-written units and totals correctly", async () => {
     let impBCalls = 0;
     const materializeImport = vi.fn(async (importId: string) => {
-      if (importId === "imp-a") return { materializedCount: 2, excludedCashMovements: 0, enrichedCount: 0 };
+      if (importId === "imp-a")
+        return { materializedCount: 2, excludedCashMovements: 0, enrichedCount: 0 };
       impBCalls++;
       if (impBCalls === 1) throw Object.assign(new Error("x"), { status: 401 });
       return { materializedCount: 3, excludedCashMovements: 0, enrichedCount: 0 };

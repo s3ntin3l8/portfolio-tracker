@@ -127,11 +127,7 @@ function transferInflow(tx: CoreTransaction, fx: FxRateFn, display: string): Dec
 }
 
 /** Per-day {inflow, outflow} when cash is INSIDE the boundary: net external cash. */
-function insideDays(
-  txns: CoreTransaction[],
-  fx: FxRateFn,
-  display: string,
-): Map<string, FlowAgg> {
+function insideDays(txns: CoreTransaction[], fx: FxRateFn, display: string): Map<string, FlowAgg> {
   const months = new Map<string, FlowAgg>();
   for (const tx of txns) {
     const key = dayKey(tx.executedAt);
@@ -163,14 +159,8 @@ function insideDays(
  * All real acquisitions (incl. broker-credited ones) build the average-cost pool;
  * only externally-funded ones count toward `inflow`.
  */
-function outsideDays(
-  txns: CoreTransaction[],
-  fx: FxRateFn,
-  display: string,
-): Map<string, FlowAgg> {
-  const sorted = [...txns].sort(
-    (a, b) => a.executedAt.getTime() - b.executedAt.getTime(),
-  );
+function outsideDays(txns: CoreTransaction[], fx: FxRateFn, display: string): Map<string, FlowAgg> {
+  const sorted = [...txns].sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
   const pool = new Map<string, { qty: Decimal; cost: Decimal }>();
   const months = new Map<string, FlowAgg>();
 
@@ -179,8 +169,12 @@ function outsideDays(
     const key = dayKey(tx.executedAt);
     const m = months.get(key) ?? { inflow: D(0), outflow: D(0) };
 
-    if (tx.type === "buy" || tx.type === "savings_plan" || tx.type === "bonus" ||
-        tx.type === "transfer_in") {
+    if (
+      tx.type === "buy" ||
+      tx.type === "savings_plan" ||
+      tx.type === "bonus" ||
+      tx.type === "transfer_in"
+    ) {
       const cost = acquisitionCost(tx, fx, display);
       const p = pool.get(tx.instrumentId) ?? { qty: D(0), cost: D(0) };
       p.qty = p.qty.add(D(tx.quantity).abs());
@@ -230,9 +224,7 @@ export function contributionStats(input: ContributionInput): ContributionStats {
   // Archived + draft rows are excluded from every derivation.
   const txns = input.txns.filter((t) => t.status !== "archived" && t.status !== "draft");
   const days =
-    boundary === "outside"
-      ? outsideDays(txns, fx, display)
-      : insideDays(txns, fx, display);
+    boundary === "outside" ? outsideDays(txns, fx, display) : insideDays(txns, fx, display);
 
   // Day-resolution series: non-zero net days, ascending. Drives the overlay chart so the
   // contributed step lands on the actual transaction day.
@@ -273,9 +265,7 @@ export function contributionStats(input: ContributionInput): ContributionStats {
   const now = input.now ?? new Date();
   const firstKey = [...months.keys()].sort()[0];
   const monthsElapsed = firstKey ? elapsedMonths(firstKey, now) : 1;
-  const monthlyAverage = firstKey
-    ? netContributed.div(monthsElapsed).toString()
-    : "0";
+  const monthlyAverage = firstKey ? netContributed.div(monthsElapsed).toString() : "0";
 
   return {
     displayCurrency: display,

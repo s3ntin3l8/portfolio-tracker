@@ -182,11 +182,9 @@ export function ImportReview({
     const amount = raw.amount != null ? Math.abs(raw.amount) : 0;
     // Derive a sensible default action from the event type so the user doesn't
     // have to change it for the common cases (share corp actions → bonus).
-    const defaultAction =
-      issue.eventType === "SSP_CORPORATE_ACTION_INSTRUMENT" ? "bonus" : "buy";
+    const defaultAction = issue.eventType === "SSP_CORPORATE_ACTION_INSTRUMENT" ? "bonus" : "buy";
     // Use the raw share count if available (Python may have extracted it for corp actions).
-    const defaultQty =
-      raw.shares != null && raw.shares > 0 ? String(raw.shares) : "0";
+    const defaultQty = raw.shares != null && raw.shares > 0 ? String(raw.shares) : "0";
     setMapping(issue);
     setMapForm({
       assetClass: "equity",
@@ -215,15 +213,10 @@ export function ImportReview({
   const [editingUid, setEditingUid] = useState<string | null>(null);
   // Which write is in flight, so we can disable + spin its button. A large import
   // (hundreds of rows) can take 20–30s to commit; without this the button looks idle.
-  const [pending, setPending] = useState<
-    "confirm" | "confirmSelected" | "discard" | null
-  >(null);
+  const [pending, setPending] = useState<"confirm" | "confirmSelected" | "discard" | null>(null);
   const busy = pending !== null || isSubmitting;
 
-  async function runConfirm(
-    action: "confirm" | "confirmSelected",
-    uids?: string[],
-  ) {
+  async function runConfirm(action: "confirm" | "confirmSelected", uids?: string[]) {
     setPending(action);
     try {
       await onConfirm(uids);
@@ -253,10 +246,7 @@ export function ImportReview({
   const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
   const [query, setQuery] = useState("");
 
-  function toggleFilter(
-    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
-    value: string,
-  ) {
+  function toggleFilter(setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) {
     setter((prev) => {
       const next = new Set(prev);
       if (next.has(value)) next.delete(value);
@@ -277,10 +267,7 @@ export function ImportReview({
   );
 
   const filtersActive =
-    assetClassFilter.size > 0 ||
-    actionFilter.size > 0 ||
-    needsReviewOnly ||
-    query.trim() !== "";
+    assetClassFilter.size > 0 || actionFilter.size > 0 || needsReviewOnly || query.trim() !== "";
 
   const view = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -310,8 +297,7 @@ export function ImportReview({
     () => drafts.filter((d) => selected.has(d.uid)).map((d) => d.uid),
     [drafts, selected],
   );
-  const allVisibleSelected =
-    view.length > 0 && view.every((d) => selected.has(d.uid));
+  const allVisibleSelected = view.length > 0 && view.every((d) => selected.has(d.uid));
 
   function toggle(uid: string) {
     setSelected((prev) => {
@@ -413,9 +399,7 @@ export function ImportReview({
         </TableCell>
         <TableCell>
           <Badge
-            variant={
-              d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"
-            }
+            variant={d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"}
           >
             {d.action}
           </Badge>
@@ -483,9 +467,7 @@ export function ImportReview({
         <TableCell>
           <Badge variant="outline">—</Badge>
         </TableCell>
-        <TableCell className="font-medium">
-          {issue.raw?.name ?? issue.eventType ?? "—"}
-        </TableCell>
+        <TableCell className="font-medium">{issue.raw?.name ?? issue.eventType ?? "—"}</TableCell>
         <TableCell className="tabular text-xs text-muted-foreground">
           {issue.raw?.isin ?? "—"}
         </TableCell>
@@ -535,9 +517,7 @@ export function ImportReview({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-medium">{d.name ?? "—"}</span>
-              <Badge
-                variant={d.confidence >= LOW_CONFIDENCE_THRESHOLD ? "success" : "warning"}
-              >
+              <Badge variant={d.confidence >= LOW_CONFIDENCE_THRESHOLD ? "success" : "warning"}>
                 {pct(d.confidence)}
               </Badge>
             </div>
@@ -545,20 +525,14 @@ export function ImportReview({
               <Badge variant="outline">{d.assetClass}</Badge>
               <Badge
                 variant={
-                  d.action === "sell" || d.action === "withdrawal"
-                    ? "destructive"
-                    : "success"
+                  d.action === "sell" || d.action === "withdrawal" ? "destructive" : "success"
                 }
               >
                 {d.action}
               </Badge>
               <span className="text-muted-foreground">{dateOf(d)}</span>
-              {d.isin && (
-                <span className="font-mono text-muted-foreground">{d.isin}</span>
-              )}
-              {d.wkn && (
-                <span className="font-mono text-muted-foreground">{d.wkn}</span>
-              )}
+              {d.isin && <span className="font-mono text-muted-foreground">{d.isin}</span>}
+              {d.wkn && <span className="font-mono text-muted-foreground">{d.wkn}</span>}
               {d.likelyDuplicate && (
                 <Badge variant={d.likelyDuplicate.kind === "enrichment" ? "default" : "warning"}>
                   {dupLabel(d)}
@@ -568,9 +542,7 @@ export function ImportReview({
             <div className="mt-1 tabular text-sm text-muted-foreground">
               {fmtQty(d.quantity)} × {fmtAmt(d.price)} {d.currency}
               {d.total && <span className="ml-2">= {fmtAmt(d.total)}</span>}
-              {d.fees && d.fees !== "0" && (
-                <span className="ml-1">(+{fmtAmt(d.fees)} fees)</span>
-              )}
+              {d.fees && d.fees !== "0" && <span className="ml-1">(+{fmtAmt(d.fees)} fees)</span>}
             </div>
           </button>
           {drafts.length > 1 && (
@@ -677,9 +649,7 @@ export function ImportReview({
         />
         {filtersActive && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>
-              {t("review.filters.showing", { shown: view.length, total: drafts.length })}
-            </span>
+            <span>{t("review.filters.showing", { shown: view.length, total: drafts.length })}</span>
             <Button variant="ghost" size="sm" onClick={clearFilters}>
               {t("review.filters.clear")}
             </Button>
@@ -699,33 +669,21 @@ export function ImportReview({
               disabled={busy}
               onClick={() => runConfirm("confirmSelected", selectedIds)}
             >
-              {pending === "confirmSelected" && (
-                <Loader2 className="size-3.5 animate-spin" />
-              )}
+              {pending === "confirmSelected" && <Loader2 className="size-3.5 animate-spin" />}
               {t("review.batch.confirmSelected")}
             </Button>
             {confirming ? (
               <span className="flex items-center gap-2">
-                <span className="text-muted-foreground">
-                  {t("review.batch.removePrompt")}
-                </span>
+                <span className="text-muted-foreground">{t("review.batch.removePrompt")}</span>
                 <Button size="sm" variant="destructive" onClick={removeSelected}>
                   {t("review.batch.removeConfirm")}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setConfirming(false)}
-                >
+                <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
                   {t("review.batch.cancel")}
                 </Button>
               </span>
             ) : (
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setConfirming(true)}
-              >
+              <Button size="sm" variant="destructive" onClick={() => setConfirming(true)}>
                 <Trash2 className="size-3.5" />
                 {t("review.batch.remove")}
               </Button>
@@ -748,17 +706,98 @@ export function ImportReview({
                   onChange={toggleAll}
                 />
               </TableHead>
-              <SortableTableHead colKey="confidence" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.confidence")}</SortableTableHead>
-              <SortableTableHead colKey="assetClass" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.assetClass")}</SortableTableHead>
-              <SortableTableHead colKey="action" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("review.columns.action")}</SortableTableHead>
-              <SortableTableHead colKey="name" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.name")}</SortableTableHead>
-              <SortableTableHead colKey="isin" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.isin")}</SortableTableHead>
-              <SortableTableHead colKey="wkn" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.wkn")}</SortableTableHead>
-              <SortableTableHead colKey="executedAt" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("fields.executedAt")}</SortableTableHead>
-              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.quantity")}</SortableTableHead>
-              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.price")}</SortableTableHead>
-              <SortableTableHead colKey="total" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.total")}</SortableTableHead>
-              <SortableTableHead colKey="fees" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="text-right">{t("fields.fees")}</SortableTableHead>
+              <SortableTableHead
+                colKey="confidence"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("review.columns.confidence")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="assetClass"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("review.columns.assetClass")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="action"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("review.columns.action")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="name"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("fields.name")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="isin"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("fields.isin")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="wkn"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("fields.wkn")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="executedAt"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("fields.executedAt")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="quantity"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                className="text-right"
+              >
+                {t("fields.quantity")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="price"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                className="text-right"
+              >
+                {t("fields.price")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="total"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                className="text-right"
+              >
+                {t("fields.total")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="fees"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                className="text-right"
+              >
+                {t("fields.fees")}
+              </SortableTableHead>
               <TableHead>{t("fields.currency")}</TableHead>
               <TableHead className="text-right">
                 <span className="sr-only">{tm("actions")}</span>
@@ -778,9 +817,7 @@ export function ImportReview({
                     assetClassFilter.size > 0 || actionFilter.size > 0
                       ? []
                       : groupAttn.filter(
-                          (i) =>
-                            !q ||
-                            (i.raw?.name ?? i.eventType ?? "").toLowerCase().includes(q),
+                          (i) => !q || (i.raw?.name ?? i.eventType ?? "").toLowerCase().includes(q),
                         );
                   return (
                     <React.Fragment key={g.importId}>
@@ -789,9 +826,7 @@ export function ImportReview({
                           <div className="flex items-center gap-3">
                             <button
                               type="button"
-                              aria-label={
-                                isCollapsed ? t("group.expand") : t("group.collapse")
-                              }
+                              aria-label={isCollapsed ? t("group.expand") : t("group.collapse")}
                               onClick={() => toggleCollapse(g.importId)}
                               className="flex items-center gap-1.5 text-sm font-medium text-foreground"
                             >
@@ -811,9 +846,7 @@ export function ImportReview({
                                 ariaLabel={t("group.portfolio")}
                                 portfolios={portfolios}
                                 value={
-                                  portfolioByImport?.get(g.importId) ??
-                                  portfolios[0]?.id ??
-                                  ""
+                                  portfolioByImport?.get(g.importId) ?? portfolios[0]?.id ?? ""
                                 }
                                 onChange={(id) => onPortfolioChange(g.importId, id)}
                                 triggerClassName="ml-auto h-7 w-auto text-xs"
@@ -826,20 +859,14 @@ export function ImportReview({
                         groupView.map((d) => {
                           const isSelected = selected.has(d.uid);
                           return (
-                            <TableRow
-                              key={d.uid}
-                              data-state={isSelected ? "selected" : undefined}
-                            >
+                            <TableRow key={d.uid} data-state={isSelected ? "selected" : undefined}>
                               {draftCells(d, isSelected)}
                             </TableRow>
                           );
                         })}
                       {!isCollapsed &&
                         groupIssueRows.map((issue) => (
-                          <TableRow
-                            key={issue.eventId ?? issue.eventType}
-                            className="opacity-80"
-                          >
+                          <TableRow key={issue.eventId ?? issue.eventType} className="opacity-80">
                             {issueCells(issue)}
                           </TableRow>
                         ))}
@@ -849,10 +876,7 @@ export function ImportReview({
               : view.map((d) => {
                   const isSelected = selected.has(d.uid);
                   return (
-                    <TableRow
-                      key={d.uid}
-                      data-state={isSelected ? "selected" : undefined}
-                    >
+                    <TableRow key={d.uid} data-state={isSelected ? "selected" : undefined}>
                       {draftCells(d, isSelected)}
                     </TableRow>
                   );
@@ -908,9 +932,7 @@ export function ImportReview({
                       <PortfolioPicker
                         ariaLabel={t("group.portfolio")}
                         portfolios={portfolios}
-                        value={
-                          portfolioByImport?.get(g.importId) ?? portfolios[0]?.id ?? ""
-                        }
+                        value={portfolioByImport?.get(g.importId) ?? portfolios[0]?.id ?? ""}
                         onChange={(id) => onPortfolioChange(g.importId, id)}
                         triggerClassName="h-7 w-auto text-xs"
                       />
@@ -922,9 +944,7 @@ export function ImportReview({
             })
           : view.map((d) => mobileDraftCard(d))}
         {view.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {t("review.empty")}
-          </p>
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("review.empty")}</p>
         )}
       </div>
 
@@ -934,10 +954,7 @@ export function ImportReview({
           {pending === "discard" && <Loader2 className="size-4 animate-spin" />}
           {t("discard")}
         </Button>
-        <Button
-          onClick={() => runConfirm("confirm")}
-          disabled={busy || drafts.length === 0}
-        >
+        <Button onClick={() => runConfirm("confirm")} disabled={busy || drafts.length === 0}>
           {pending === "confirm" && <Loader2 className="size-4 animate-spin" />}
           {t("confirm")}
         </Button>
@@ -959,9 +976,7 @@ export function ImportReview({
               <Field label={t("review.columns.action")}>
                 <Select
                   value={editingDraft.action}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { action: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { action: e.target.value })}
                 >
                   {MAP_ACTIONS.map((a) => (
                     <option key={a} value={a}>
@@ -973,74 +988,56 @@ export function ImportReview({
               <Field label={t("fields.currency")}>
                 <Input
                   value={editingDraft.currency}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { currency: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { currency: e.target.value })}
                 />
               </Field>
               <Field label={t("fields.name")}>
                 <Input
                   value={editingDraft.name ?? ""}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { name: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { name: e.target.value })}
                 />
               </Field>
               <Field label="ISIN">
                 <Input
                   value={editingDraft.isin ?? ""}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { isin: e.target.value || null })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { isin: e.target.value || null })}
                 />
               </Field>
               <Field label="WKN">
                 <Input
                   value={editingDraft.wkn ?? ""}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { wkn: e.target.value || null })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { wkn: e.target.value || null })}
                 />
               </Field>
               <Field label={t("fields.executedAt")}>
                 <DatePicker
                   label={t("fields.executedAt")}
                   value={editingDraft.executedAt.slice(0, 10)}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { executedAt: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { executedAt: e.target.value })}
                 />
               </Field>
               <Field label={t("fields.quantity")}>
                 <Input
                   value={editingDraft.quantity}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { quantity: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { quantity: e.target.value })}
                 />
               </Field>
               <Field label={t("fields.price")}>
                 <Input
                   value={editingDraft.price}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { price: e.target.value })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { price: e.target.value })}
                 />
               </Field>
               <Field label={t("fields.fees")}>
                 <Input
                   value={editingDraft.fees ?? ""}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { fees: e.target.value || null })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { fees: e.target.value || null })}
                 />
               </Field>
               <Field label={t("fields.tax")}>
                 <Input
                   value={editingDraft.tax ?? ""}
-                  onChange={(e) =>
-                    onUpdate(editingDraft.uid, { tax: e.target.value || null })
-                  }
+                  onChange={(e) => onUpdate(editingDraft.uid, { tax: e.target.value || null })}
                 />
               </Field>
             </div>

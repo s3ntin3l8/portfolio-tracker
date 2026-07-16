@@ -95,13 +95,20 @@ afterAll(async () => {
 /** Register a user (upserts via /me) and return their id. */
 async function ensureUser(sub: string): Promise<string> {
   const t = await makeToken(privateKey, sub);
-  const res = await app.inject({ method: "GET", url: "/me", headers: { authorization: `Bearer ${t}` } });
+  const res = await app.inject({
+    method: "GET",
+    url: "/me",
+    headers: { authorization: `Bearer ${t}` },
+  });
   return (res.json() as { id: string }).id;
 }
 
 /** Insert a bare portfolio for a user — portfolioId is now required on every inbox doc. */
 async function ensurePortfolio(userId: string): Promise<string> {
-  const [row] = await app.db.insert(portfolios).values({ userId, name: "Test" }).returning({ id: portfolios.id });
+  const [row] = await app.db
+    .insert(portfolios)
+    .values({ userId, name: "Test" })
+    .returning({ id: portfolios.id });
   return row.id;
 }
 

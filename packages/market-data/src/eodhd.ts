@@ -8,7 +8,11 @@ import type {
   Quote,
 } from "./types.js";
 import { isIsin } from "./types.js";
-import { eodhdExchangeForMarket, mapExchange, normalizeQuoteCurrency } from "./instrument-mapping.js";
+import {
+  eodhdExchangeForMarket,
+  mapExchange,
+  normalizeQuoteCurrency,
+} from "./instrument-mapping.js";
 
 export interface EodhdOptions {
   apiKey: string;
@@ -78,13 +82,9 @@ export class EodhdProvider implements MarketDataProvider {
       const hits = (await res.json()) as EodhdSearchHit[];
       const usable = (hits ?? []).filter((h) => h.Code && h.Exchange);
       const exchange = eodhdExchangeForMarket(ref.market);
-      const byMarket = exchange
-        ? usable.find((h) => h.Exchange === exchange)
-        : undefined;
+      const byMarket = exchange ? usable.find((h) => h.Exchange === exchange) : undefined;
       const byCurrency = usable.find(
-        (h) =>
-          h.Currency === ref.currency ||
-          mapExchange(h.Exchange)?.currency === ref.currency,
+        (h) => h.Currency === ref.currency || mapExchange(h.Exchange)?.currency === ref.currency,
       );
       const hit = byMarket ?? byCurrency ?? usable[0];
       ticker = hit ? `${hit.Code}.${hit.Exchange}` : null;
@@ -112,7 +112,7 @@ export class EodhdProvider implements MarketDataProvider {
     const cached = this.tickerCurrencyCache.get(ticker);
     if (cached !== undefined) return cached;
 
-    const searchTerm = isIsin(ref.symbol) ? ref.isin ?? ref.symbol : ref.symbol;
+    const searchTerm = isIsin(ref.symbol) ? (ref.isin ?? ref.symbol) : ref.symbol;
     try {
       const res = await this.doFetch(
         `${this.baseUrl}/search/${encodeURIComponent(searchTerm)}?api_token=${this.apiKey}&fmt=json`,
@@ -139,9 +139,7 @@ export class EodhdProvider implements MarketDataProvider {
     // The `/user` endpoint reports the day's request count + the daily cap (resets
     // midnight GMT). `extraLimit` is purchased headroom on top of the plan limit.
     try {
-      const res = await this.doFetch(
-        `${this.baseUrl}/user?api_token=${this.apiKey}&fmt=json`,
-      );
+      const res = await this.doFetch(`${this.baseUrl}/user?api_token=${this.apiKey}&fmt=json`);
       if (!res.ok) return null;
       const data = (await res.json()) as {
         apiRequests?: number;
@@ -152,9 +150,7 @@ export class EodhdProvider implements MarketDataProvider {
         return null;
       }
       const limit =
-        data.dailyRateLimit !== undefined
-          ? data.dailyRateLimit + (data.extraLimit ?? 0)
-          : null;
+        data.dailyRateLimit !== undefined ? data.dailyRateLimit + (data.extraLimit ?? 0) : null;
       return { window: "day", used: data.apiRequests ?? null, limit };
     } catch {
       return null;
@@ -165,14 +161,19 @@ export class EodhdProvider implements MarketDataProvider {
     const ticker = this.directTicker(ref) ?? (await this.resolveIsinTicker(ref));
     if (!ticker) return [];
     const from =
-      fromDate ??
-      new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      fromDate ?? new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const res = await this.doFetch(
       `${this.baseUrl}/div/${encodeURIComponent(ticker)}?api_token=${this.apiKey}&fmt=json&from=${from}`,
     );
     if (!res.ok) return [];
     const data = (await res.json()) as
-      | { date?: string; paymentDate?: string; unadjustedValue?: number | string; value?: number | string; currency?: string }[]
+      | {
+          date?: string;
+          paymentDate?: string;
+          unadjustedValue?: number | string;
+          value?: number | string;
+          currency?: string;
+        }[]
       | null;
     if (!Array.isArray(data)) return [];
     return data
@@ -210,9 +211,10 @@ export class EodhdProvider implements MarketDataProvider {
     if (data.close === undefined || data.close === "NA") return null;
 
     const close = Number(data.close) / divisor;
-    const prevClose = data.previousClose === undefined || data.previousClose === "NA"
-      ? null
-      : String(Number(data.previousClose) / divisor);
+    const prevClose =
+      data.previousClose === undefined || data.previousClose === "NA"
+        ? null
+        : String(Number(data.previousClose) / divisor);
 
     return {
       price: String(close),

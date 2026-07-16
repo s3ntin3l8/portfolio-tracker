@@ -2,14 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  CheckCircle2,
-  Loader2,
-  Upload,
-  AlertCircle,
-  ChevronDown,
-  FileText,
-} from "lucide-react";
+import { CheckCircle2, Loader2, Upload, AlertCircle, ChevronDown, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,11 +16,7 @@ import type {
   DocumentCategory,
 } from "@portfolio/api-client";
 import { cn } from "@/lib/utils";
-import {
-  classifyImportError,
-  importErrorDetail,
-  type ImportSkipReason,
-} from "@/lib/import-errors";
+import { classifyImportError, importErrorDetail, type ImportSkipReason } from "@/lib/import-errors";
 import { mapPool, IMPORT_CONCURRENCY } from "@/lib/promise-pool";
 import { ContractReview } from "@/components/contract-review";
 import { ImportFilesTable } from "@/components/import-files-table";
@@ -161,11 +150,7 @@ export function stripUid(draft: ReviewDraft): ImportDraft {
 
 /** The slice of the API client the import flow needs (injectable for tests). */
 export interface ImportClient {
-  importScreenshot(
-    file: File | Blob,
-    force?: boolean,
-    batchId?: string,
-  ): Promise<ImportResult>;
+  importScreenshot(file: File | Blob, force?: boolean, batchId?: string): Promise<ImportResult>;
   importCsv(
     content: string,
     filename?: string,
@@ -559,9 +544,7 @@ export function ImportFlow({
         setPortfolioByImport(
           new Map([[result.importId, result.suggestedPortfolioId ?? defaultPid]]),
         );
-        setMatchedImports(
-          result.matchedPortfolioId ? new Set([result.importId]) : new Set(),
-        );
+        setMatchedImports(result.matchedPortfolioId ? new Set([result.importId]) : new Set());
         setAccountMismatch(result.accountMismatch ?? null);
         setStep("review");
       } catch (err) {
@@ -887,11 +870,7 @@ export function ImportFlow({
             >
               {i + 1}
             </span>
-            <span
-              className={cn(
-                i <= activeIndex ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
+            <span className={cn(i <= activeIndex ? "text-foreground" : "text-muted-foreground")}>
               {t(`steps.${s}`)}
             </span>
             {i < STEPS.length - 1 && <span className="mx-1 h-px flex-1 bg-border" />}
@@ -935,9 +914,7 @@ export function ImportFlow({
             onClick={() => fileRef.current?.click()}
             className={cn(
               "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/40 px-6 py-12 text-center transition-colors",
-              dragActive
-                ? "border-primary bg-primary/5"
-                : "hover:border-primary/50 hover:bg-card",
+              dragActive ? "border-primary bg-primary/5" : "hover:border-primary/50 hover:bg-card",
             )}
           >
             <span className="flex size-12 items-center justify-center rounded-2xl bg-secondary">
@@ -1076,9 +1053,7 @@ export function ImportFlow({
                     Its own truncated line so a long (often space-less) broker filename can't
                     overflow and force a horizontal scrollbar — worst on mobile. */}
                 {groups.size > 1 && groups.get(mismatchImportId) && (
-                  <span className="block truncate font-medium">
-                    {groups.get(mismatchImportId)}
-                  </span>
+                  <span className="block truncate font-medium">{groups.get(mismatchImportId)}</span>
                 )}
                 {accountMismatch.kind === "other_portfolio"
                   ? t("accountMismatch.otherPortfolio", {
@@ -1107,7 +1082,9 @@ export function ImportFlow({
             <details className="rounded-md border border-border bg-muted/40 text-sm text-muted-foreground">
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
                 <AlertCircle className="size-3.5 shrink-0" />
-                <span className="flex-1">{t("errorBanner.summary", { count: skipped.length })}</span>
+                <span className="flex-1">
+                  {t("errorBanner.summary", { count: skipped.length })}
+                </span>
                 <ChevronDown className="size-3.5 shrink-0 transition-transform [[open]_&]:rotate-180" />
               </summary>
               <ul className="border-t border-border px-3 pb-2.5 pt-2 space-y-1.5">
@@ -1235,7 +1212,6 @@ export function ImportFlow({
           )}
         </div>
       )}
-
     </div>
   );
 }

@@ -11,11 +11,7 @@ import { loadMe, loadAdminProviders } from "@/lib/server-api";
  * the design's `view = state.view || "providers"`) — identical content to
  * `/admin/providers`, the mobile drill-in route for the same section.
  */
-export default async function AdminPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function AdminPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Admin");

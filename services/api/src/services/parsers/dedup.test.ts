@@ -80,7 +80,14 @@ describe("findCrossSourceDuplicates", () => {
 
   it("matches a CSV buy against a PDF savings_plan of the same trade (action divergence)", () => {
     const committed = [
-      { key: isin, action: "savings_plan", quantity: "1.3358", price: "72.614", executedAt: "2021-07-05", source: "screenshot" },
+      {
+        key: isin,
+        action: "savings_plan",
+        quantity: "1.3358",
+        price: "72.614",
+        executedAt: "2021-07-05",
+        source: "screenshot",
+      },
     ];
     const drafts = [
       { key: isin, action: "buy", quantity: "1.3358", price: "72.614", executedAt: "2021-07-05" },
@@ -92,7 +99,14 @@ describe("findCrossSourceDuplicates", () => {
 
   it("matches across a ±1 day settlement skew and a precision divergence", () => {
     const committed = [
-      { key: isin, action: "dividend", quantity: "0", price: "10.02", executedAt: "2021-11-17", source: "csv" },
+      {
+        key: isin,
+        action: "dividend",
+        quantity: "0",
+        price: "10.02",
+        executedAt: "2021-11-17",
+        source: "csv",
+      },
     ];
     const drafts = [
       { key: isin, action: "dividend", quantity: "0", price: "10.020", executedAt: "2021-11-18" },
@@ -102,7 +116,14 @@ describe("findCrossSourceDuplicates", () => {
 
   it("is count-aware: two same-day buys with one prior import flag only one", () => {
     const committed = [
-      { key: isin, action: "buy", quantity: "1.3358", price: "72.614", executedAt: "2021-07-05", source: "csv" },
+      {
+        key: isin,
+        action: "buy",
+        quantity: "1.3358",
+        price: "72.614",
+        executedAt: "2021-07-05",
+        source: "csv",
+      },
     ];
     const drafts = [
       { key: isin, action: "buy", quantity: "1.3358", price: "72.614", executedAt: "2021-07-05" },
@@ -115,7 +136,14 @@ describe("findCrossSourceDuplicates", () => {
 
   it("does not match two distinct same-day buys of different size", () => {
     const committed = [
-      { key: isin, action: "buy", quantity: "3.1399", price: "72.614", executedAt: "2021-07-05", source: "csv" },
+      {
+        key: isin,
+        action: "buy",
+        quantity: "3.1399",
+        price: "72.614",
+        executedAt: "2021-07-05",
+        source: "csv",
+      },
     ];
     const drafts = [
       { key: isin, action: "buy", quantity: "1.3358", price: "72.614", executedAt: "2021-07-05" },
@@ -125,7 +153,14 @@ describe("findCrossSourceDuplicates", () => {
 
   it("ignores records without an instrument identity (cash legs)", () => {
     const committed = [
-      { key: null, action: "deposit", quantity: "0", price: "100", executedAt: "2021-07-05", source: "csv" },
+      {
+        key: null,
+        action: "deposit",
+        quantity: "0",
+        price: "100",
+        executedAt: "2021-07-05",
+        source: "csv",
+      },
     ];
     const drafts = [
       { key: null, action: "deposit", quantity: "0", price: "100", executedAt: "2021-07-05" },
@@ -152,8 +187,20 @@ describe("recomputeRollup", () => {
 
   it("pdf rank beats csv rank for all scalar fields", () => {
     const rows: SourceRow[] = [
-      src({ sourceType: "csv", tax: "5.00", fees: "0.50", executedPrice: "100.00", venue: "XETRA" }),
-      src({ sourceType: "pdf", tax: "4.80", fees: "1.00", executedPrice: "99.50", venue: "Lang & Schwarz" }),
+      src({
+        sourceType: "csv",
+        tax: "5.00",
+        fees: "0.50",
+        executedPrice: "100.00",
+        venue: "XETRA",
+      }),
+      src({
+        sourceType: "pdf",
+        tax: "4.80",
+        fees: "1.00",
+        executedPrice: "99.50",
+        venue: "Lang & Schwarz",
+      }),
     ];
     const r = recomputeRollup(rows);
     expect(r.tax).toBe("4.80");

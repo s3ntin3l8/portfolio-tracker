@@ -84,7 +84,8 @@ export function createFlexClient(opts: FlexClientOptions = {}): IbkrFlexClient {
       const statementUrl = parseFieldValue(sendXml, "Url");
 
       if (status !== "Success" || !referenceCode || !statementUrl) {
-        const msg = parseFieldValue(sendXml, "ErrorMessage") ?? "SendRequest returned no ReferenceCode";
+        const msg =
+          parseFieldValue(sendXml, "ErrorMessage") ?? "SendRequest returned no ReferenceCode";
         throw mapErrorCode(sendErrorCode, msg);
       }
 

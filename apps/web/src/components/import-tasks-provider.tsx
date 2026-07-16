@@ -152,11 +152,14 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
               if (allUnits.length > 1) {
                 // Rows added so far = carried-over (from a prior partial attempt) + this pass.
                 const addedSoFar = carry.count + addedThisPass;
-                toast.loading(t("toast.importingProgress", { current: totalDone, total: allUnits.length }), {
-                  id,
-                  description:
-                    addedSoFar > 0 ? t("toast.addedSoFar", { count: addedSoFar }) : undefined,
-                });
+                toast.loading(
+                  t("toast.importingProgress", { current: totalDone, total: allUnits.length }),
+                  {
+                    id,
+                    description:
+                      addedSoFar > 0 ? t("toast.addedSoFar", { count: addedSoFar }) : undefined,
+                  },
+                );
               }
             },
           );
@@ -277,7 +280,5 @@ export function ImportTasksProvider({ children }: { children: React.ReactNode })
     };
   }, [client, router, t]);
 
-  return (
-    <ImportTasksContext.Provider value={value}>{children}</ImportTasksContext.Provider>
-  );
+  return <ImportTasksContext.Provider value={value}>{children}</ImportTasksContext.Provider>;
 }

@@ -10,8 +10,7 @@ function service(price: string, counter: { n: number }): MarketDataService {
   return {
     getQuotes: async (refs: Array<{ id: string }>) => {
       counter.n++;
-      const out: Record<string, { price: string; currency: string; asOf: string }> =
-        {};
+      const out: Record<string, { price: string; currency: string; asOf: string }> = {};
       for (const r of refs) {
         out[r.id] = { price, currency: "IDR", asOf: "2026-02-08T00:00:00.000Z" };
       }

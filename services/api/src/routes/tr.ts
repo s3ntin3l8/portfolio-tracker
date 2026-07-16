@@ -11,7 +11,12 @@ import {
   trResolvedEvents,
 } from "@portfolio/db";
 import { requireUser } from "../plugins/auth.js";
-import { PytrApprovalError, PytrAuthError, PytrError, PytrUnavailableError } from "../services/pytr/runner.js";
+import {
+  PytrApprovalError,
+  PytrAuthError,
+  PytrError,
+  PytrUnavailableError,
+} from "../services/pytr/runner.js";
 import { syncTrConnection } from "../services/pytr/sync.js";
 import { enrichTransactionsFromStoredDocuments } from "../services/enrichment.js";
 import { enqueueTrSync, SYNC_CLAIM_LEASE_MS } from "../services/scheduler.js";
@@ -102,7 +107,11 @@ export async function trRoute(app: FastifyInstance) {
     }
 
     request.log.info(
-      { userId: id, portfolioId: body.portfolioId, wafStrategy: body.wafToken ? "token" : "default" },
+      {
+        userId: id,
+        portfolioId: body.portfolioId,
+        wafStrategy: body.wafToken ? "token" : "default",
+      },
       "tr pairing started",
     );
     try {
@@ -150,123 +159,132 @@ export async function trRoute(app: FastifyInstance) {
   // Complete pairing: long-poll until the user approves the push in the TR mobile app,
   // then persist the encrypted session. Takes no body — there is no code in the v2 flow.
   // The request hangs until approval, rejection, or the approval window expires (~180s).
-  app.post(
-    "/tr/connection/verify",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { id } = requireUser(request);
+  app.post("/tr/connection/verify", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
 
-      const conn = await getConnection(id);
-      if (!conn || conn.status !== "awaiting_2fa" || !app.pytr.hasPendingPairing(id)) {
-        return reply.code(409).send({ error: "no_pairing_in_progress" });
-      }
+    const conn = await getConnection(id);
+    if (!conn || conn.status !== "awaiting_2fa" || !app.pytr.hasPendingPairing(id)) {
+      return reply.code(409).send({ error: "no_pairing_in_progress" });
+    }
 
-      request.log.info({ userId: id }, "tr approval awaiting");
-      let sessionData: string;
-      try {
-        sessionData = await app.pytr.awaitApproval(id);
-      } catch (err) {
-        const error = err instanceof Error ? err.message : "approval failed";
-        await app.db
-          .update(trConnections)
-          .set({ status: "error", lastError: error, updatedAt: new Date() })
-          .where(eq(trConnections.userId, id));
-        // A declined/expired push is a user-actionable 400; anything else is a 502.
-        if (err instanceof PytrApprovalError) {
-          request.log.info({ err }, "tr login not approved");
-          return reply.code(400).send({ error: "not_approved" });
-        }
-        request.log.warn({ err }, "tr approval failed");
-        return reply.code(502).send({ error: "tr_approval_failed" });
-      }
-
+    request.log.info({ userId: id }, "tr approval awaiting");
+    let sessionData: string;
+    try {
+      sessionData = await app.pytr.awaitApproval(id);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "approval failed";
       await app.db
         .update(trConnections)
-        .set({
-          sessionEnc: app.encryption.encryptString(sessionData),
-          status: "connected",
-          lastError: null,
-          updatedAt: new Date(),
-        })
+        .set({ status: "error", lastError: error, updatedAt: new Date() })
         .where(eq(trConnections.userId, id));
+      // A declined/expired push is a user-actionable 400; anything else is a 502.
+      if (err instanceof PytrApprovalError) {
+        request.log.info({ err }, "tr login not approved");
+        return reply.code(400).send({ error: "not_approved" });
+      }
+      request.log.warn({ err }, "tr approval failed");
+      return reply.code(502).send({ error: "tr_approval_failed" });
+    }
 
-      request.log.info({ userId: id }, "tr connected");
-      return { status: "connected" };
-    },
-  );
+    await app.db
+      .update(trConnections)
+      .set({
+        sessionEnc: app.encryption.encryptString(sessionData),
+        status: "connected",
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(trConnections.userId, id));
+
+    request.log.info({ userId: id }, "tr connected");
+    return { status: "connected" };
+  });
 
   // Sync now: enqueue a background pg-boss job (deduped per connection). Returns 202
   // immediately so the UI stays unblocked; the frontend polls GET /tr/connection watching
   // `syncing` + `lastSyncAt` to know when it's done. Falls back to inline sync when
   // pg-boss is unavailable (PGlite / tests).
-  app.post(
-    "/tr/connection/sync",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { id } = requireUser(request);
-      const conn = await getConnection(id);
-      if (!conn || conn.status !== "connected") {
-        return reply.code(409).send({ error: "not_connected" });
-      }
-      // Atomically claim the sync: flip `syncing` false→true in a single statement so two
-      // concurrent requests can't both pass the check. The single open "collector" draft is
-      // read-modify-written by syncTrConnection, so two overlapping syncs would race and the
-      // earlier one's new drafts would be lost. The flag is cleared at the end of every sync
-      // (success or failure) — but a killed/crashed worker (process restart mid-sync) can
-      // leave it set with no writer left to clear it. The scheduler's startup reaper handles
-      // the common case; this lease is the belt-and-suspenders backstop for a wedge that
-      // outlives the current process's next restart, so a claim older than the lease can
-      // always be re-taken.
-      const [claimed] = await app.db
-        .update(trConnections)
-        .set({ syncing: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(trConnections.id, conn.id),
-            or(eq(trConnections.syncing, false), lt(trConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS))),
+  app.post("/tr/connection/sync", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const conn = await getConnection(id);
+    if (!conn || conn.status !== "connected") {
+      return reply.code(409).send({ error: "not_connected" });
+    }
+    // Atomically claim the sync: flip `syncing` false→true in a single statement so two
+    // concurrent requests can't both pass the check. The single open "collector" draft is
+    // read-modify-written by syncTrConnection, so two overlapping syncs would race and the
+    // earlier one's new drafts would be lost. The flag is cleared at the end of every sync
+    // (success or failure) — but a killed/crashed worker (process restart mid-sync) can
+    // leave it set with no writer left to clear it. The scheduler's startup reaper handles
+    // the common case; this lease is the belt-and-suspenders backstop for a wedge that
+    // outlives the current process's next restart, so a claim older than the lease can
+    // always be re-taken.
+    const [claimed] = await app.db
+      .update(trConnections)
+      .set({ syncing: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(trConnections.id, conn.id),
+          or(
+            eq(trConnections.syncing, false),
+            lt(trConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS)),
           ),
-        )
-        .returning({ id: trConnections.id });
-      if (!claimed) {
-        return reply.code(409).send({ error: "sync_in_progress" });
-      }
-      // Release the claim — used on any pre-completion failure so a retry isn't blocked.
-      const releaseClaim = () =>
-        app.db
-          .update(trConnections)
-          .set({ syncing: false, updatedAt: new Date() })
-          .where(eq(trConnections.id, conn.id));
+        ),
+      )
+      .returning({ id: trConnections.id });
+    if (!claimed) {
+      return reply.code(409).send({ error: "sync_in_progress" });
+    }
+    // Release the claim — used on any pre-completion failure so a retry isn't blocked.
+    const releaseClaim = () =>
+      app.db
+        .update(trConnections)
+        .set({ syncing: false, updatedAt: new Date() })
+        .where(eq(trConnections.id, conn.id));
 
-      let queued: boolean;
-      try {
-        ({ queued } = await enqueueTrSync(conn.id));
-      } catch (err) {
-        await releaseClaim();
-        request.log.error({ err }, "tr sync enqueue failed");
-        return reply.code(502).send({ error: "tr_sync_failed" });
-      }
-      if (queued) {
-        // The worker clears `syncing` when it finishes; the poller already sees it set.
-        reply.code(202);
-        return { queued: true };
-      }
-      // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
-      try {
-        const result = await syncTrConnection(app.db, app.encryption, app.pytr, conn, request.log, app.storage);
-        request.log.info(
-          { userId: id, status: result.status, importId: result.importId, drafts: result.drafts, errors: result.errors, cancelled: result.cancelled },
-          "tr manual sync done",
-        );
-        return result;
-      } catch (err) {
-        // syncTrConnection clears `syncing` on an export failure, but a later throw would
-        // leave our claim set — release it so the next sync isn't blocked.
-        await releaseClaim();
-        request.log.error({ err }, "tr sync failed");
-        return reply.code(502).send({ error: "tr_sync_failed" });
-      }
-    },
-  );
+    let queued: boolean;
+    try {
+      ({ queued } = await enqueueTrSync(conn.id));
+    } catch (err) {
+      await releaseClaim();
+      request.log.error({ err }, "tr sync enqueue failed");
+      return reply.code(502).send({ error: "tr_sync_failed" });
+    }
+    if (queued) {
+      // The worker clears `syncing` when it finishes; the poller already sees it set.
+      reply.code(202);
+      return { queued: true };
+    }
+    // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
+    try {
+      const result = await syncTrConnection(
+        app.db,
+        app.encryption,
+        app.pytr,
+        conn,
+        request.log,
+        app.storage,
+      );
+      request.log.info(
+        {
+          userId: id,
+          status: result.status,
+          importId: result.importId,
+          drafts: result.drafts,
+          errors: result.errors,
+          cancelled: result.cancelled,
+        },
+        "tr manual sync done",
+      );
+      return result;
+    } catch (err) {
+      // syncTrConnection clears `syncing` on an export failure, but a later throw would
+      // leave our claim set — release it so the next sync isn't blocked.
+      await releaseClaim();
+      request.log.error({ err }, "tr sync failed");
+      return reply.code(502).send({ error: "tr_sync_failed" });
+    }
+  });
 
   // Re-import everything: wipe the portfolio's pytr transactions, clear the resolved-events
   // ledger, and discard any open pytr draft. The next sync then re-stages the full timeline
@@ -289,12 +307,13 @@ export async function trRoute(app: FastifyInstance) {
       .from(transactions)
       .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "pytr")));
     const txIds = toRemoveIds.map((t) => t.id);
-    const docsToClean = txIds.length > 0
-      ? await app.db
-          .select({ id: documents.id, storageKey: documents.storageKey })
-          .from(documents)
-          .where(inArray(documents.transactionId, txIds))
-      : [];
+    const docsToClean =
+      txIds.length > 0
+        ? await app.db
+            .select({ id: documents.id, storageKey: documents.storageKey })
+            .from(documents)
+            .where(inArray(documents.transactionId, txIds))
+        : [];
 
     const { removed } = await app.db.transaction(async (tx) => {
       const removedRows = await tx
@@ -303,7 +322,9 @@ export async function trRoute(app: FastifyInstance) {
         .returning({ id: transactions.id });
       await tx
         .delete(trResolvedEvents)
-        .where(and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.source, "pytr")));
+        .where(
+          and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.source, "pytr")),
+        );
       await tx
         .update(screenshotImports)
         .set({ status: "discarded" })
@@ -350,15 +371,15 @@ export async function trRoute(app: FastifyInstance) {
           .select({ id: transactions.id })
           .from(transactions)
           .where(
-            and(
-              eq(transactions.portfolioId, conn.portfolioId),
-              eq(transactions.source, "pytr"),
-            ),
+            and(eq(transactions.portfolioId, conn.portfolioId), eq(transactions.source, "pytr")),
           )
       ).map((r) => r.id);
 
       await enrichTransactionsFromStoredDocuments(app, txIds);
-      request.log.info({ userId: id, portfolioId: conn.portfolioId, count: txIds.length }, "tr reprocess-documents done");
+      request.log.info(
+        { userId: id, portfolioId: conn.portfolioId, count: txIds.length },
+        "tr reprocess-documents done",
+      );
       return { processed: txIds.length };
     },
   );
@@ -397,7 +418,9 @@ export async function trRoute(app: FastifyInstance) {
       const storageResult: StorageResult = { ok: false, signedUrlOk: false, roundTripOk: false };
       const testKey = `__healthcheck/tr-docs-${id}-${Date.now()}`;
       try {
-        await app.storage.put(testKey, Buffer.from("tr-doc-healthcheck"), { mimeType: "text/plain" });
+        await app.storage.put(testKey, Buffer.from("tr-doc-healthcheck"), {
+          mimeType: "text/plain",
+        });
         storageResult.signedUrlOk = true;
         await app.storage.getSignedUrl(testKey, 60);
         const bytes = await app.storage.get(testKey);
@@ -406,7 +429,7 @@ export async function trRoute(app: FastifyInstance) {
         storageResult.ok = storageResult.roundTripOk;
       } catch (err) {
         const e = err as Record<string, unknown>;
-        const meta = (e["$metadata"] as Record<string, unknown> | undefined);
+        const meta = e["$metadata"] as Record<string, unknown> | undefined;
         storageResult.error = {
           name: typeof e["name"] === "string" ? e["name"] : "Error",
           message: err instanceof Error ? err.message : String(err),
@@ -431,7 +454,11 @@ export async function trRoute(app: FastifyInstance) {
       if (app.pytr.isEnabled !== false) {
         // Find one confirmed pytr tx with a non-empty documentRefs.
         const txRows = await app.db
-          .select({ id: transactions.id, externalId: transactions.externalId, documentRefs: transactions.documentRefs })
+          .select({
+            id: transactions.id,
+            externalId: transactions.externalId,
+            documentRefs: transactions.documentRefs,
+          })
           .from(transactions)
           .where(
             and(
@@ -458,7 +485,9 @@ export async function trRoute(app: FastifyInstance) {
             const pin = app.encryption.decryptString(conn.pinEnc!);
             const sessionData = app.encryption.decryptString(conn.sessionEnc!);
 
-            const downloaded = await app.pytr.downloadDocuments({ phone, pin, sessionData }, [pair]);
+            const downloaded = await app.pytr.downloadDocuments({ phone, pin, sessionData }, [
+              pair,
+            ]);
             pythonResult = {
               status: "ok",
               downloaded: downloaded.docs.size,
@@ -483,7 +512,9 @@ export async function trRoute(app: FastifyInstance) {
           app.db
             .select({ confirmedPytrTxns: count() })
             .from(transactions)
-            .where(and(eq(transactions.portfolioId, conn.portfolioId), eq(transactions.source, "pytr"))),
+            .where(
+              and(eq(transactions.portfolioId, conn.portfolioId), eq(transactions.source, "pytr")),
+            ),
           app.db
             .select({ withDocumentRefs: count() })
             .from(transactions)
@@ -563,7 +594,11 @@ export async function trRoute(app: FastifyInstance) {
 
       // Select all confirmed pytr transactions with at least one documentRef.
       const txRows = await app.db
-        .select({ id: transactions.id, externalId: transactions.externalId, documentRefs: transactions.documentRefs })
+        .select({
+          id: transactions.id,
+          externalId: transactions.externalId,
+          documentRefs: transactions.documentRefs,
+        })
         .from(transactions)
         .where(
           and(
@@ -580,7 +615,14 @@ export async function trRoute(app: FastifyInstance) {
       });
 
       if (eligible.length === 0) {
-        return { scanned: txRows.length, eligible: 0, downloaded: 0, stored: 0, linked: 0, failures: [] };
+        return {
+          scanned: txRows.length,
+          eligible: 0,
+          downloaded: 0,
+          stored: 0,
+          linked: 0,
+          failures: [],
+        };
       }
 
       // Filter out transactions already covered by a retained document.
@@ -589,7 +631,14 @@ export async function trRoute(app: FastifyInstance) {
       const needsDoc = eligible.filter((tx) => !alreadyCovered.has(tx.id));
 
       if (needsDoc.length === 0) {
-        return { scanned: txRows.length, eligible: eligible.length, downloaded: 0, stored: 0, linked: 0, failures: [] };
+        return {
+          scanned: txRows.length,
+          eligible: eligible.length,
+          downloaded: 0,
+          stored: 0,
+          linked: 0,
+          failures: [],
+        };
       }
 
       // Build (eventId, docId) pairs; track the tx they belong to for linking.
@@ -676,7 +725,16 @@ export async function trRoute(app: FastifyInstance) {
       }
 
       request.log.info(
-        { userId: id, portfolioId: conn.portfolioId, scanned: txRows.length, eligible: needsDoc.length, downloaded, stored, linked, failures: failures.length },
+        {
+          userId: id,
+          portfolioId: conn.portfolioId,
+          scanned: txRows.length,
+          eligible: needsDoc.length,
+          downloaded,
+          stored,
+          linked,
+          failures: failures.length,
+        },
         "tr backfill-documents done",
       );
 
@@ -692,16 +750,12 @@ export async function trRoute(app: FastifyInstance) {
   );
 
   // Disconnect: wipe the stored connection (and any pending pairing).
-  app.delete(
-    "/tr/connection",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { id } = requireUser(request);
-      app.pytr.cancelPairing(id);
-      await app.db.delete(trConnections).where(eq(trConnections.userId, id));
-      request.log.info({ userId: id }, "tr disconnected");
-      reply.code(204);
-      return null;
-    },
-  );
+  app.delete("/tr/connection", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    app.pytr.cancelPairing(id);
+    await app.db.delete(trConnections).where(eq(trConnections.userId, id));
+    request.log.info({ userId: id }, "tr disconnected");
+    reply.code(204);
+    return null;
+  });
 }

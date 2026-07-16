@@ -2,10 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Receipt, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import {
-  TransactionsTable,
-  type TxRow,
-} from "@/components/transactions-table";
+import { TransactionsTable, type TxRow } from "@/components/transactions-table";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { ExportDocumentsButton } from "@/components/export-documents-button";
 import { AddTransactionMenu } from "@/components/add-transaction-menu";
@@ -57,14 +54,21 @@ export default async function TransactionsPage({
   let status: "ok" | "empty" | "unavailable";
   let rows: TxRow[] = [];
   let total = 0;
-  let txSummary: { totalInvested: string; totalProceeds: string; totalIncome: string } | null = null;
+  let txSummary: { totalInvested: string; totalProceeds: string; totalIncome: string } | null =
+    null;
   let txYears: string[] = [];
   let singlePortfolio: { id: string; name: string; documentRetention: boolean } | null = null;
   let anomalies: Anomaly[] | null = null;
   let scopeCurrency = "IDR";
 
   if (aggregate) {
-    const result = await loadNetworthTransactionsPaginated(page, PAGE_SIZE, typeFilter, yearFilter, searchQuery);
+    const result = await loadNetworthTransactionsPaginated(
+      page,
+      PAGE_SIZE,
+      typeFilter,
+      yearFilter,
+      searchQuery,
+    );
     status = result.status;
     rows = result.rows;
     total = result.total;
@@ -73,7 +77,15 @@ export default async function TransactionsPage({
     scopeCurrency = me?.displayCurrency ?? "IDR";
   } else {
     const [txResult, anomalyResult] = await Promise.all([
-      loadTransactionsPaginated(selectedId!, page, PAGE_SIZE, undefined, typeFilter, yearFilter, searchQuery),
+      loadTransactionsPaginated(
+        selectedId!,
+        page,
+        PAGE_SIZE,
+        undefined,
+        typeFilter,
+        yearFilter,
+        searchQuery,
+      ),
       loadAnomalies(),
     ]);
     status = txResult.status;
@@ -123,9 +135,7 @@ export default async function TransactionsPage({
   }
 
   const importsSection =
-    imports.length > 0 ? (
-      <RecentImportsSection items={imports} portfolios={portfolioList} />
-    ) : null;
+    imports.length > 0 ? <RecentImportsSection items={imports} portfolios={portfolioList} /> : null;
 
   // Plain-data CSV of the visible transactions (built client-side on click).
   const exportHeaders = [

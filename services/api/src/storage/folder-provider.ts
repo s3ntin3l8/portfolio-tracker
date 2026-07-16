@@ -87,11 +87,7 @@ export class FolderProvider implements StorageProvider {
 
     const fileMeta: FileMeta = { mimeType: meta.mimeType };
     if (meta.originalFilename) fileMeta.originalFilename = meta.originalFilename;
-    await fs.writeFile(
-      this.metaPath(filePath),
-      JSON.stringify(fileMeta),
-      "utf8",
-    );
+    await fs.writeFile(this.metaPath(filePath), JSON.stringify(fileMeta), "utf8");
   }
 
   async getSignedUrl(
@@ -259,7 +255,5 @@ export class FolderProvider implements StorageProvider {
 
 /** Compute HMAC-SHA256(secret, `${key}:${exp}`) as base64url. */
 function sign(secret: string, key: string, exp: number): string {
-  return createHmac("sha256", secret)
-    .update(`${key}:${exp}`)
-    .digest("base64url");
+  return createHmac("sha256", secret).update(`${key}:${exp}`).digest("base64url");
 }

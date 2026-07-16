@@ -7,8 +7,16 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney, cn } from "@/lib/utils";
 import { monogram, softTintFor } from "@/lib/brokerages";
-import { SparplanTargetEditor, type TargetSleeve } from "@/components/savings/sparplan-target-editor";
-import type { SparplanStats, DetectedPlan, DriftRow, SparplanContributionSplit } from "@portfolio/api-client";
+import {
+  SparplanTargetEditor,
+  type TargetSleeve,
+} from "@/components/savings/sparplan-target-editor";
+import type {
+  SparplanStats,
+  DetectedPlan,
+  DriftRow,
+  SparplanContributionSplit,
+} from "@portfolio/api-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,11 +92,7 @@ function StepHint({
         date: curr.since.slice(0, 7),
       })}
     >
-      {isIncrease ? (
-        <TrendingUp className="size-3" />
-      ) : (
-        <TrendingDown className="size-3" />
-      )}
+      {isIncrease ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
     </span>
   );
 }
@@ -175,7 +179,11 @@ function PlanRow({
         <p className="mt-0.5 truncate text-[11px] font-medium text-text-2">
           {cadenceLabel(plan.cadenceMonths, t)}
           {plan.status === "active" && (
-            <> {" · "}{t("planNext", { date: shortDate(nextExecution(plan), locale) })}</>
+            <>
+              {" "}
+              {" · "}
+              {t("planNext", { date: shortDate(nextExecution(plan), locale) })}
+            </>
           )}
         </p>
       </div>
@@ -342,7 +350,14 @@ function AllocationSection({
 // Main export
 // ---------------------------------------------------------------------------
 
-export function SparplanSection({ data, currency, locale, portfolioId, drift, contributionSplit }: Props) {
+export function SparplanSection({
+  data,
+  currency,
+  locale,
+  portfolioId,
+  drift,
+  contributionSplit,
+}: Props) {
   const t = useTranslations("Savings");
   const td = useTranslations("DriftBadge");
   const [targetsOpen, setTargetsOpen] = useState(false);
@@ -384,9 +399,7 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
   const monthlyTotal = formatMoney(Number(data.activeMonthlyTotalDisplay), currency, locale);
   const nextDue =
     activePlans.length > 0
-      ? activePlans
-          .map(nextExecution)
-          .reduce((min, d) => (d < min ? d : min))
+      ? activePlans.map(nextExecution).reduce((min, d) => (d < min ? d : min))
       : null;
 
   return (
@@ -417,7 +430,13 @@ export function SparplanSection({ data, currency, locale, portfolioId, drift, co
       {data.activePlanCount > 0 && (
         <p className="mt-0.5 text-xs font-medium text-text-2">
           {t("planTotalMonthly", { amount: monthlyTotal })}
-          {nextDue && <> {" · "}{t("planNext", { date: shortDate(nextDue, locale) })}</>}
+          {nextDue && (
+            <>
+              {" "}
+              {" · "}
+              {t("planNext", { date: shortDate(nextDue, locale) })}
+            </>
+          )}
         </p>
       )}
 

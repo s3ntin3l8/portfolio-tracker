@@ -39,9 +39,8 @@ export function needsSectorEnrichment(
   return instruments.some((i) => {
     if (SKIP_ASSET_CLASSES.has(i.assetClass)) return false;
     if (i.sectorCheckedAt == null) return true;
-    const checkedAt = i.sectorCheckedAt instanceof Date
-      ? i.sectorCheckedAt
-      : new Date(i.sectorCheckedAt);
+    const checkedAt =
+      i.sectorCheckedAt instanceof Date ? i.sectorCheckedAt : new Date(i.sectorCheckedAt);
     return checkedAt < staleCutoff;
   });
 }
@@ -107,15 +106,10 @@ export async function refreshInstrumentMetadata(
     .from(transactions)
     .where(isNotNull(transactions.instrumentId));
 
-  const heldIds = held
-    .map((r) => r.instrumentId)
-    .filter((x): x is string => x !== null);
+  const heldIds = held.map((r) => r.instrumentId).filter((x): x is string => x !== null);
   if (heldIds.length === 0) return 0;
 
-  const rows = await db
-    .select()
-    .from(instruments)
-    .where(inArray(instruments.id, heldIds));
+  const rows = await db.select().from(instruments).where(inArray(instruments.id, heldIds));
 
   const staleCutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
   const toEnrich = rows.filter((i) => {
@@ -195,9 +189,7 @@ export async function refreshInstrumentMetadata(
   for (const inst of etfsWithIsin) {
     // Check if country enrichment is needed
     const needsCountry =
-      opts.force ||
-      inst.countryCheckedAt == null ||
-      new Date(inst.countryCheckedAt) < staleCutoff;
+      opts.force || inst.countryCheckedAt == null || new Date(inst.countryCheckedAt) < staleCutoff;
 
     if (!needsCountry) continue;
 

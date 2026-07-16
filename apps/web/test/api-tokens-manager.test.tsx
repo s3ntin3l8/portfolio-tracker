@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ApiToken } from "@portfolio/api-client";
-import {
-  ApiTokensManager,
-  type ApiTokensClient,
-} from "../src/components/api-tokens-manager";
+import { ApiTokensManager, type ApiTokensClient } from "../src/components/api-tokens-manager";
 import messages from "../messages/en.json";
 
 const existing: ApiToken = {

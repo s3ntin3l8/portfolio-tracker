@@ -65,14 +65,10 @@ export function useTableSort<T>(cols: ColDef<T>[]): UseTableSortResult<T> {
         let aMissing = aVal == null || aVal === "";
         let bMissing = bVal == null || bVal === "";
         if (!aMissing && col.type !== "text") {
-          aMissing = isNaN(
-            col.type === "date" ? Date.parse(String(aVal)) : Number(aVal),
-          );
+          aMissing = isNaN(col.type === "date" ? Date.parse(String(aVal)) : Number(aVal));
         }
         if (!bMissing && col.type !== "text") {
-          bMissing = isNaN(
-            col.type === "date" ? Date.parse(String(bVal)) : Number(bVal),
-          );
+          bMissing = isNaN(col.type === "date" ? Date.parse(String(bVal)) : Number(bVal));
         }
         if (aMissing && bMissing) return 0;
         if (aMissing) return 1;

@@ -36,9 +36,7 @@ type TestPortfolio = {
 
 function renderTabs(
   defaultTab?: "transaction" | "corporate-action" | "merger",
-  portfolios: TestPortfolio[] = [
-    { id: "p1", name: "Main", brokerage: null, accountHolder: null },
-  ],
+  portfolios: TestPortfolio[] = [{ id: "p1", name: "Main", brokerage: null, accountHolder: null }],
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
@@ -57,9 +55,7 @@ describe("NewEntryTabs", () => {
 
     // Transaction tab active: the manual form's submit button is shown; the corp form
     // (inactive tab) is unmounted, so its Ratio field is absent.
-    expect(
-      screen.getByRole("button", { name: tx.submit }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tx.submit })).toBeInTheDocument();
     expect(screen.queryByLabelText(ca.ratio)).not.toBeInTheDocument();
 
     // Radix tab triggers activate on mouseDown (primary button), not a synthetic click.
@@ -83,9 +79,7 @@ describe("NewEntryTabs", () => {
   it("offers the rich portfolio picker only when more than one portfolio exists", () => {
     // Single portfolio: no picker (destination is unambiguous).
     const { unmount } = renderTabs();
-    expect(
-      screen.queryByRole("button", { name: tx.portfolioPicker }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: tx.portfolioPicker })).not.toBeInTheDocument();
     unmount();
 
     // Two portfolios: the rich picker (a Radix dropdown trigger, not a native select) is
@@ -98,9 +92,7 @@ describe("NewEntryTabs", () => {
     expect(trigger).toBeInTheDocument();
     // Radix opens on pointer/keyboard events, not a synthetic click.
     fireEvent.keyDown(trigger, { key: "Enter" });
-    expect(
-      screen.getByRole("menuitem", { name: /DKB · DKB/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /DKB · DKB/ })).toBeInTheDocument();
   });
 
   it("shares the rich portfolio picker with the merger tab", () => {
@@ -108,9 +100,7 @@ describe("NewEntryTabs", () => {
       { id: "p1", name: "Main", brokerage: null, accountHolder: null },
       { id: "p2", name: "DKB", brokerage: null, accountHolder: null },
     ]);
-    expect(
-      screen.getByRole("button", { name: tx.portfolioPicker }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tx.portfolioPicker })).toBeInTheDocument();
   });
 
   // Regression test for #472: the tab bar used to shrink-wrap and hug the left edge

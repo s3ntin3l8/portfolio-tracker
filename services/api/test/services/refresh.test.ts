@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import {
-  users,
-  portfolios,
-  instruments,
-  transactions,
-  lastPrices,
-} from "@portfolio/db";
+import { users, portfolios, instruments, transactions, lastPrices } from "@portfolio/db";
 import type { InstrumentRef, MarketDataService } from "@portfolio/market-data";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { refreshHeldPrices } from "../../src/services/refresh.js";
@@ -14,8 +8,7 @@ function service(counter: { n: number }): MarketDataService {
   return {
     getQuotes: async (refs: Array<{ id: string }>) => {
       counter.n++;
-      const out: Record<string, { price: string; currency: string; asOf: string }> =
-        {};
+      const out: Record<string, { price: string; currency: string; asOf: string }> = {};
       for (const r of refs) {
         out[r.id] = { price: "100", currency: "IDR", asOf: "2026-02-09T00:00:00.000Z" };
       }
@@ -39,7 +32,14 @@ describe("refreshHeldPrices", () => {
       .insert(instruments)
       .values([
         { symbol: "BBCA", market: "IDX", assetClass: "equity", currency: "IDR", name: "BCA" },
-        { symbol: "GOLD", market: "XAU", assetClass: "gold", unit: "grams", currency: "IDR", name: "Gold" },
+        {
+          symbol: "GOLD",
+          market: "XAU",
+          assetClass: "gold",
+          unit: "grams",
+          currency: "IDR",
+          name: "Gold",
+        },
       ])
       .returning();
     await db.insert(transactions).values(

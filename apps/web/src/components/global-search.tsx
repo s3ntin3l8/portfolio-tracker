@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
-import type { GlobalSearchResult, SearchInstrumentResult, SearchTransactionResult } from "@portfolio/api-client";
+import type {
+  GlobalSearchResult,
+  SearchInstrumentResult,
+  SearchTransactionResult,
+} from "@portfolio/api-client";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -149,9 +153,7 @@ export function GlobalSearch({ holderId }: { holderId?: string | null }) {
             onValueChange={handleQueryChange}
           />
           <CommandList>
-            {emptyContent !== null && (
-              <CommandEmpty>{emptyContent}</CommandEmpty>
-            )}
+            {emptyContent !== null && <CommandEmpty>{emptyContent}</CommandEmpty>}
 
             {instruments.length > 0 && (
               <CommandGroup heading={t("groupInstruments")}>

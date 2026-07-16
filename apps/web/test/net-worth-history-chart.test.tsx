@@ -61,9 +61,7 @@ describe("NetWorthHistoryChart", () => {
       </NextIntlClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "3M" }));
-    await waitFor(() =>
-      expect(getPortfolioHistory).toHaveBeenCalledWith("p2", "3m"),
-    );
+    await waitFor(() => expect(getPortfolioHistory).toHaveBeenCalledWith("p2", "3m"));
     expect(getNetWorthHistory).not.toHaveBeenCalled();
   });
 
@@ -83,11 +81,7 @@ describe("NetWorthHistoryChart", () => {
     getNetWorthHistory.mockResolvedValueOnce([]);
     renderChart();
     fireEvent.click(screen.getByRole("button", { name: "1D" }));
-    await waitFor(() =>
-      expect(
-        screen.getByText(/Collecting intraday data/i),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Collecting intraday data/i)).toBeInTheDocument());
     expect(screen.queryByTestId("chart")).not.toBeInTheDocument();
   });
 

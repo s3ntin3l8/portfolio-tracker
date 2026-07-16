@@ -48,7 +48,10 @@ export function BenchmarkSettingsForm({
         <label className="text-xs font-medium text-text-3">{t("benchmarkSymbolLabel")}</label>
         <Input
           value={benchmarkSymbol}
-          onChange={(e) => { setBenchmarkSymbol(e.target.value); setSaved(false); }}
+          onChange={(e) => {
+            setBenchmarkSymbol(e.target.value);
+            setSaved(false);
+          }}
           placeholder="^GSPC"
           className="h-8 text-sm"
         />
@@ -62,17 +65,16 @@ export function BenchmarkSettingsForm({
           min="0"
           max="1"
           value={riskFreeRate}
-          onChange={(e) => { setRiskFreeRate(e.target.value); setSaved(false); }}
+          onChange={(e) => {
+            setRiskFreeRate(e.target.value);
+            setSaved(false);
+          }}
           placeholder="0.03"
           className="h-8 text-sm"
         />
         <p className="px-0.5 text-xs text-muted-foreground">{t("riskFreeRateHint")}</p>
       </div>
-      <Button
-        size="sm"
-        disabled={!dirty || saving}
-        onClick={handleSave}
-      >
+      <Button size="sm" disabled={!dirty || saving} onClick={handleSave}>
         {saving ? t("saving") : saved ? t("saved") : t("save")}
       </Button>
     </div>

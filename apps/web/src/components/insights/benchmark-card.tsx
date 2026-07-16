@@ -35,11 +35,7 @@ export function BenchmarkCard({
             {t("setBenchmark")}
           </Button>
         </div>
-        <EditBenchmarkDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          currentSymbol={null}
-        />
+        <EditBenchmarkDialog open={dialogOpen} onOpenChange={setDialogOpen} currentSymbol={null} />
       </Card>
     );
   }
@@ -58,17 +54,28 @@ export function BenchmarkCard({
       >
         <Pencil className="size-3.5 text-text-3" />
       </button>
-      <p className="text-xs font-semibold text-text-2">{t("vs", { symbol: benchmarkLabel(benchmark.symbol) })}</p>
-      <p className={cn("tabular mt-1 text-[22px] font-extrabold leading-none", activeReturn >= 0 ? "text-success" : "text-destructive")}>
+      <p className="text-xs font-semibold text-text-2">
+        {t("vs", { symbol: benchmarkLabel(benchmark.symbol) })}
+      </p>
+      <p
+        className={cn(
+          "tabular mt-1 text-[22px] font-extrabold leading-none",
+          activeReturn >= 0 ? "text-success" : "text-destructive",
+        )}
+      >
         {formatPercent(activeReturn, locale)}
       </p>
       <p className="mt-1 text-xs font-medium text-text-2">{t("activeReturn")}</p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-text-2">
         <span>
-          {t("trackingError")}: <span className="font-semibold">{trackingError > 0 ? formatPercent(trackingError, locale) : "—"}</span>
+          {t("trackingError")}:{" "}
+          <span className="font-semibold">
+            {trackingError > 0 ? formatPercent(trackingError, locale) : "—"}
+          </span>
         </span>
         <span>
-          {t("correlation")}: <span className="font-semibold">{correlation ? correlation.toFixed(2) : "—"}</span>
+          {t("correlation")}:{" "}
+          <span className="font-semibold">{correlation ? correlation.toFixed(2) : "—"}</span>
         </span>
       </div>
       <EditBenchmarkDialog

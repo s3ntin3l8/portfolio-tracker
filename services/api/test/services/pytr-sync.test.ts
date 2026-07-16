@@ -14,7 +14,12 @@ import {
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
 import { EncryptionService } from "../../src/services/encryption.js";
 import { syncTrConnection } from "../../src/services/pytr/sync.js";
-import { PytrAuthError, type PytrRunner, type DocDownloadResult, type DownloadDocumentsResult } from "../../src/services/pytr/runner.js";
+import {
+  PytrAuthError,
+  type PytrRunner,
+  type DocDownloadResult,
+  type DownloadDocumentsResult,
+} from "../../src/services/pytr/runner.js";
 import type { StorageProvider } from "../../src/storage/types.js";
 
 // Mock extractPdfText so the #508 enrichment test below doesn't need real PDF bytes.
@@ -79,15 +84,38 @@ function makeTrackingStorage(): StorageProvider & {
     get: async (key) => data.get(key) ?? null,
     move: async (src: string, dest: string) => {
       const buf = data.get(src);
-      if (buf) { data.set(dest, buf); data.delete(src); }
+      if (buf) {
+        data.set(dest, buf);
+        data.delete(src);
+      }
     },
   };
 }
 
 const EVENTS = [
-  { id: "tr-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "DE0007236101", currency: "EUR" },
-  { id: "tr-2", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" },
-  { id: "tr-3", timestamp: "2026-03-03T10:00:00.000Z", eventType: "MYSTERY", amount: 1, currency: "EUR" },
+  {
+    id: "tr-1",
+    timestamp: "2026-03-01T10:00:00.000Z",
+    eventType: "ORDER_EXECUTED",
+    amount: -1000,
+    shares: 10,
+    isin: "DE0007236101",
+    currency: "EUR",
+  },
+  {
+    id: "tr-2",
+    timestamp: "2026-03-02T10:00:00.000Z",
+    eventType: "PAYMENT_INBOUND",
+    amount: 500,
+    currency: "EUR",
+  },
+  {
+    id: "tr-3",
+    timestamp: "2026-03-03T10:00:00.000Z",
+    eventType: "MYSTERY",
+    amount: 1,
+    currency: "EUR",
+  },
 ];
 
 /** Read the externalIds of the draft transactions materialized for a portfolio (sorted). */
@@ -96,7 +124,10 @@ async function draftTxIds(portfolioId: string): Promise<string[]> {
     .select({ ext: transactions.externalId })
     .from(transactions)
     .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.status, "draft")));
-  return rows.map((r) => r.ext).filter((x): x is string => Boolean(x)).sort();
+  return rows
+    .map((r) => r.ext)
+    .filter((x): x is string => Boolean(x))
+    .sort();
 }
 
 async function makeConnection(suffix: string, cashCounted = true) {
@@ -183,20 +214,41 @@ describe("syncTrConnection", () => {
     const db = getDb();
 
     // First sync materializes the two mappable events as draft transactions.
-    const first = await syncTrConnection(db, enc, runnerWith(async () => ({ events: EVENTS, sessionData: "J1" })), conn);
+    const first = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: EVENTS, sessionData: "J1" })),
+      conn,
+    );
     expect(first.drafts).toBe(2);
 
     // Re-sync with the identical timeline → nothing new (already materialized), same anchor.
-    const again = await syncTrConnection(db, enc, runnerWith(async () => ({ events: EVENTS, sessionData: "J2" })), conn);
+    const again = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: EVENTS, sessionData: "J2" })),
+      conn,
+    );
     expect(again.drafts).toBe(0);
     expect(again.importId).toBe(first.importId);
 
     // A genuinely new event materializes against the same anchor.
     const withNew = [
       ...EVENTS,
-      { id: "tr-4", timestamp: "2026-03-04T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 250, currency: "EUR" },
+      {
+        id: "tr-4",
+        timestamp: "2026-03-04T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 250,
+        currency: "EUR",
+      },
     ];
-    const third = await syncTrConnection(db, enc, runnerWith(async () => ({ events: withNew, sessionData: "J3" })), conn);
+    const third = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: withNew, sessionData: "J3" })),
+      conn,
+    );
     expect(third.drafts).toBe(1);
     expect(third.importId).toBe(first.importId);
 
@@ -210,15 +262,32 @@ describe("syncTrConnection", () => {
 
     // Sync 1: a trade whose detail fetch failed → no share count → an attention error.
     const thin = [
-      { id: "heal-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, isin: "DE0007236101", currency: "EUR" },
+      {
+        id: "heal-1",
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "ORDER_EXECUTED",
+        amount: -1000,
+        isin: "DE0007236101",
+        currency: "EUR",
+      },
     ];
-    const first = await syncTrConnection(db, enc, runnerWith(async () => ({ events: thin, sessionData: "J1" })), conn);
+    const first = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: thin, sessionData: "J1" })),
+      conn,
+    );
     expect(first.drafts).toBe(0);
     expect(first.errors).toBe(1);
 
     // Sync 2: TR's detail now resolves, so the same event arrives with its share count.
     const full = [{ ...thin[0], shares: 10 }];
-    const second = await syncTrConnection(db, enc, runnerWith(async () => ({ events: full, sessionData: "J2" })), conn);
+    const second = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: full, sessionData: "J2" })),
+      conn,
+    );
 
     // The staged error was re-derived into a proper draft transaction — not kept as an error.
     expect(second.drafts).toBe(1);
@@ -228,7 +297,12 @@ describe("syncTrConnection", () => {
     const [imp] = await db
       .select()
       .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.parser, "pytr")));
+      .where(
+        and(
+          eq(screenshotImports.portfolioId, conn.portfolioId!),
+          eq(screenshotImports.parser, "pytr"),
+        ),
+      );
     const parsed = imp.parsedJson as { drafts: unknown[]; errors: { eventId?: string }[] };
     expect(parsed.errors.some((e) => e.eventId === "heal-1")).toBe(false);
   });
@@ -244,7 +318,9 @@ describe("syncTrConnection", () => {
     const [draftBuy] = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+      .where(
+        and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")),
+      );
     expect(draftBuy).toBeDefined();
 
     // Simulate the same trade having been imported earlier via a TR settlement PDF:
@@ -281,7 +357,12 @@ describe("syncTrConnection", () => {
     const ledger = await db
       .select()
       .from(trResolvedEvents)
-      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, "tr-1")));
+      .where(
+        and(
+          eq(trResolvedEvents.portfolioId, conn.portfolioId!),
+          eq(trResolvedEvents.eventId, "tr-1"),
+        ),
+      );
     expect(ledger).toHaveLength(1);
   });
 
@@ -301,13 +382,20 @@ describe("syncTrConnection", () => {
 
     // Next sync sees tr-1 flipped to CANCELED.
     const cancelledEvents = EVENTS.map((e) => (e.id === "tr-1" ? { ...e, status: "CANCELED" } : e));
-    const result = await syncTrConnection(db, enc, runnerWith(async () => ({ events: cancelledEvents, sessionData: "JX" })), conn);
+    const result = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: cancelledEvents, sessionData: "JX" })),
+      conn,
+    );
 
     expect(result.cancelled).toBe(1);
     const rows = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+      .where(
+        and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")),
+      );
     expect(rows).toHaveLength(0);
   });
 
@@ -415,17 +503,45 @@ describe("syncTrConnection", () => {
     const rows = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")));
+      .where(
+        and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-1")),
+      );
     expect(rows).toHaveLength(0);
   });
 
   // Boundary events shared by the two cash-boundary tests (#326): a trade, a deposit, card
   // spending, and an unknown event type.
   const BOUNDARY_EVENTS = [
-    { id: "b-trade", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "DE0007236101", currency: "EUR" },
-    { id: "b-dep", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" },
-    { id: "b-card", timestamp: "2026-03-03T10:00:00.000Z", eventType: "CARD_TRANSACTION", amount: -12.5, currency: "EUR" },
-    { id: "b-unknown", timestamp: "2026-03-04T10:00:00.000Z", eventType: "MYSTERY", amount: 1, currency: "EUR" },
+    {
+      id: "b-trade",
+      timestamp: "2026-03-01T10:00:00.000Z",
+      eventType: "ORDER_EXECUTED",
+      amount: -1000,
+      shares: 10,
+      isin: "DE0007236101",
+      currency: "EUR",
+    },
+    {
+      id: "b-dep",
+      timestamp: "2026-03-02T10:00:00.000Z",
+      eventType: "PAYMENT_INBOUND",
+      amount: 100,
+      currency: "EUR",
+    },
+    {
+      id: "b-card",
+      timestamp: "2026-03-03T10:00:00.000Z",
+      eventType: "CARD_TRANSACTION",
+      amount: -12.5,
+      currency: "EUR",
+    },
+    {
+      id: "b-unknown",
+      timestamp: "2026-03-04T10:00:00.000Z",
+      eventType: "MYSTERY",
+      amount: 1,
+      currency: "EUR",
+    },
   ];
 
   it("cash-inside portfolio imports everything incl. deposits and card spending (#326)", async () => {
@@ -458,7 +574,12 @@ describe("syncTrConnection", () => {
     const [anchor] = await db
       .select()
       .from(screenshotImports)
-      .where(and(eq(screenshotImports.portfolioId, conn.portfolioId!), eq(screenshotImports.status, "draft")));
+      .where(
+        and(
+          eq(screenshotImports.portfolioId, conn.portfolioId!),
+          eq(screenshotImports.status, "draft"),
+        ),
+      );
     const parsed = anchor.parsedJson as { errors: { eventId?: string }[] };
     expect(parsed.errors.some((e) => e.eventId === "b-unknown")).toBe(true);
     expect(parsed.errors.some((e) => e.eventId === "b-dep" || e.eventId === "b-card")).toBe(false);
@@ -474,7 +595,10 @@ describe("syncTrConnection", () => {
     expect(r1.drafts).toBe(1);
 
     // Flip the boundary to cash-inside; the previously-excluded movements now stage.
-    await db.update(portfolios).set({ cashCounted: true }).where(eq(portfolios.id, conn.portfolioId!));
+    await db
+      .update(portfolios)
+      .set({ cashCounted: true })
+      .where(eq(portfolios.id, conn.portfolioId!));
     const r2 = await syncTrConnection(db, enc, runner, conn);
     expect(r2.drafts).toBe(2); // the deposit + card; the trade was already materialized
 
@@ -497,7 +621,13 @@ describe("syncTrConnection", () => {
     });
 
     const evs = [
-      { id: eventId, timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" },
+      {
+        id: eventId,
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 100,
+        currency: "EUR",
+      },
     ];
     const runner = runnerWith(async () => ({ events: evs, sessionData: "J" }));
     const result = await syncTrConnection(db, enc, runner, conn);
@@ -507,7 +637,12 @@ describe("syncTrConnection", () => {
     const ledger = await db
       .select()
       .from(trResolvedEvents)
-      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, eventId)));
+      .where(
+        and(
+          eq(trResolvedEvents.portfolioId, conn.portfolioId!),
+          eq(trResolvedEvents.eventId, eventId),
+        ),
+      );
     expect(ledger).toHaveLength(0); // removed from ledger
   });
 
@@ -525,16 +660,32 @@ describe("syncTrConnection", () => {
     });
 
     const evs = [
-      { id: eventId, timestamp: "2026-03-01T10:00:00.000Z", eventType: "CARD_VERIFICATION", amount: 0, currency: "EUR" },
+      {
+        id: eventId,
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "CARD_VERIFICATION",
+        amount: 0,
+        currency: "EUR",
+      },
     ];
-    const result = await syncTrConnection(db, enc, runnerWith(async () => ({ events: evs, sessionData: "J" })), conn);
+    const result = await syncTrConnection(
+      db,
+      enc,
+      runnerWith(async () => ({ events: evs, sessionData: "J" })),
+      conn,
+    );
 
     // Not healed — still skipped, still discarded.
     expect(result.drafts).toBe(0);
     const ledger = await db
       .select()
       .from(trResolvedEvents)
-      .where(and(eq(trResolvedEvents.portfolioId, conn.portfolioId!), eq(trResolvedEvents.eventId, eventId)));
+      .where(
+        and(
+          eq(trResolvedEvents.portfolioId, conn.portfolioId!),
+          eq(trResolvedEvents.eventId, eventId),
+        ),
+      );
     expect(ledger).toHaveLength(1);
     expect(ledger[0].resolution).toBe("discarded");
   });
@@ -545,7 +696,15 @@ describe("syncTrConnection", () => {
     // A €500 deposit; derived cash from mapping = 500. TR reports 480 → diff -20.
     // Crucially: nothing is pre-confirmed in transactions — reconciliation no longer reads
     // from the DB, so even a brand-new import (zero confirmed rows) gives a correct diff.
-    const evs = [{ id: "d-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" }];
+    const evs = [
+      {
+        id: "d-1",
+        timestamp: "2026-03-02T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 500,
+        currency: "EUR",
+      },
+    ];
     const runner = runnerWith(async () => ({
       events: evs,
       sessionData: "J",
@@ -570,8 +729,20 @@ describe("syncTrConnection", () => {
     const conn = await makeConnection("reconcile-cash-outside", false);
     const db = getDb();
     const evs = [
-      { id: "ro-dep", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" },
-      { id: "ro-card", timestamp: "2026-03-02T10:00:00.000Z", eventType: "CARD_TRANSACTION", amount: -12.5, currency: "EUR" },
+      {
+        id: "ro-dep",
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 500,
+        currency: "EUR",
+      },
+      {
+        id: "ro-card",
+        timestamp: "2026-03-02T10:00:00.000Z",
+        eventType: "CARD_TRANSACTION",
+        amount: -12.5,
+        currency: "EUR",
+      },
     ];
     const runner = runnerWith(async () => ({
       events: evs,
@@ -591,12 +762,25 @@ describe("syncTrConnection", () => {
   it("reports incremental drift vs the previous sync's reconciliation", async () => {
     const conn = await makeConnection("reconcile-drift");
     const db = getDb();
-    const evs = [{ id: "d-1", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" }];
+    const evs = [
+      {
+        id: "d-1",
+        timestamp: "2026-03-02T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 500,
+        currency: "EUR",
+      },
+    ];
 
     // Sync 1: TR reports 480 → diff -20.00 (no baseline yet → no drift).
     const r1 = await syncTrConnection(
-      db, enc,
-      runnerWith(async () => ({ events: evs, sessionData: "J", summary: { cash: [{ currency: "EUR", amount: 480 }] } })),
+      db,
+      enc,
+      runnerWith(async () => ({
+        events: evs,
+        sessionData: "J",
+        summary: { cash: [{ currency: "EUR", amount: 480 }] },
+      })),
       conn,
     );
     expect(r1.reconciliation?.cash[0]).toMatchObject({ diff: "-20.00" });
@@ -605,8 +789,13 @@ describe("syncTrConnection", () => {
     // a slightly different reported balance (478 → diff -22.00). The diff moved by -2.00.
     const [reloaded] = await db.select().from(trConnections).where(eq(trConnections.id, conn.id));
     const r2 = await syncTrConnection(
-      db, enc,
-      runnerWith(async () => ({ events: evs, sessionData: "J", summary: { cash: [{ currency: "EUR", amount: 478 }] } })),
+      db,
+      enc,
+      runnerWith(async () => ({
+        events: evs,
+        sessionData: "J",
+        summary: { cash: [{ currency: "EUR", amount: 478 }] },
+      })),
       reloaded,
     );
     expect(r2.reconciliation?.cash[0]).toMatchObject({
@@ -622,7 +811,15 @@ describe("syncTrConnection", () => {
     const db = getDb();
     // One buy of 10 shares of DE0007236101. TR reports 12 → diff = 2.
     const evs = [
-      { id: "pos-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -1000, shares: 10, isin: "DE0007236101", currency: "EUR" },
+      {
+        id: "pos-1",
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "ORDER_EXECUTED",
+        amount: -1000,
+        shares: 10,
+        isin: "DE0007236101",
+        currency: "EUR",
+      },
     ];
     const runner = runnerWith(async () => ({
       events: evs,
@@ -652,7 +849,15 @@ describe("syncTrConnection", () => {
   it("stores no positions field when summary has no positions", async () => {
     const conn = await makeConnection("reconcile-no-positions");
     const db = getDb();
-    const evs = [{ id: "d-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" }];
+    const evs = [
+      {
+        id: "d-1",
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 100,
+        currency: "EUR",
+      },
+    ];
     const runner = runnerWith(async () => ({
       events: evs,
       sessionData: "J",
@@ -670,8 +875,20 @@ describe("syncTrConnection", () => {
     // Full import: all events are staged drafts, none confirmed. Derived cash must still
     // be non-zero (was always 0 before the fix because it read from transactions table).
     const evs = [
-      { id: "e-1", timestamp: "2026-01-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 1000, currency: "EUR" },
-      { id: "e-2", timestamp: "2026-01-02T10:00:00.000Z", eventType: "CARD_TRANSACTION", amount: -50, currency: "EUR" },
+      {
+        id: "e-1",
+        timestamp: "2026-01-01T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 1000,
+        currency: "EUR",
+      },
+      {
+        id: "e-2",
+        timestamp: "2026-01-02T10:00:00.000Z",
+        eventType: "CARD_TRANSACTION",
+        amount: -50,
+        currency: "EUR",
+      },
     ];
     const runner = runnerWith(async () => ({
       events: evs,
@@ -699,10 +916,10 @@ describe("syncTrConnection", () => {
         id: "sell-1",
         timestamp: "2026-04-01T10:00:00.000Z",
         eventType: "ORDER_EXECUTED",
-        amount: 497,   // net cash (sign: positive = cash in)
-        shares: -5,    // pytr: negative shares for a sell
-        fees: -1,      // pytr: negative for costs
-        tax: -2,       // pytr: negative for costs
+        amount: 497, // net cash (sign: positive = cash in)
+        shares: -5, // pytr: negative shares for a sell
+        fees: -1, // pytr: negative for costs
+        tax: -2, // pytr: negative for costs
         isin: "DE0007236101",
         currency: "EUR",
       },
@@ -725,8 +942,20 @@ describe("syncTrConnection", () => {
     const conn = await makeConnection("durable");
     const db = getDb();
     const evs = [
-      { id: "tr-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 500, currency: "EUR" },
-      { id: "tr-2", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 100, currency: "EUR" },
+      {
+        id: "tr-1",
+        timestamp: "2026-03-01T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 500,
+        currency: "EUR",
+      },
+      {
+        id: "tr-2",
+        timestamp: "2026-03-02T10:00:00.000Z",
+        eventType: "PAYMENT_INBOUND",
+        amount: 100,
+        currency: "EUR",
+      },
     ];
     const runner = runnerWith(async () => ({ events: evs, sessionData: "J" }));
 
@@ -832,10 +1061,7 @@ describe("syncTrConnection", () => {
       .select()
       .from(screenshotImports)
       .where(eq(screenshotImports.id, result.importId!));
-    const docs = await db
-      .select()
-      .from(documents)
-      .where(eq(documents.importId, imp.id));
+    const docs = await db.select().from(documents).where(eq(documents.importId, imp.id));
     expect(docs).toHaveLength(1);
     expect(docs[0].sourceEventId).toBe("tr-doc-1");
     // Drafts are real transactions now, so the doc is linked + retained immediately (the
@@ -930,7 +1156,11 @@ describe("syncTrConnection", () => {
             isin: "DE0007236101",
             currency: "EUR",
             documentRefs: [
-              { id: "doc-settlement", type: "SECURITIES_SETTLEMENT_SAVINGS_PLAN", date: "2026-03-01" },
+              {
+                id: "doc-settlement",
+                type: "SECURITIES_SETTLEMENT_SAVINGS_PLAN",
+                date: "2026-03-01",
+              },
               { id: "doc-costs", type: "COSTS_INFO_SAVINGS_PLAN_V2", date: "2026-03-01" },
               { id: "doc-order", type: "CONFIRM_ORDER_CREATE_V2", date: "2026-03-01" },
               { id: "doc-created", type: "SAVINGS_PLAN_CREATED", date: "2026-03-01" },
@@ -957,7 +1187,10 @@ describe("syncTrConnection", () => {
     // Only the settlement doc and the empty-type doc (kept by default — unreliable label,
     // not known noise) are requested; cost-info/order-confirmation/plan-notice are skipped
     // before the download call is even made.
-    expect(downloadPairs.map((p) => p.docId).sort()).toEqual(["doc-settlement", "doc-unknown-type"]);
+    expect(downloadPairs.map((p) => p.docId).sort()).toEqual([
+      "doc-settlement",
+      "doc-unknown-type",
+    ]);
     expect(storage.puts).toHaveLength(2);
     expect(storage.puts.some((k) => k.includes("doc-costs"))).toBe(false);
     expect(storage.puts.some((k) => k.includes("doc-order"))).toBe(false);
@@ -1058,7 +1291,9 @@ describe("syncTrConnection", () => {
             shares: 1,
             isin: "DE0007236101",
             currency: "EUR",
-            documentRefs: [{ id: "doc-count-1", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+            documentRefs: [
+              { id: "doc-count-1", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" },
+            ],
           },
         ],
         sessionData: "JAR",
@@ -1100,14 +1335,17 @@ describe("syncTrConnection", () => {
             shares: 1,
             isin: "DE0007236101",
             currency: "EUR",
-            documentRefs: [{ id: "doc-putfail", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+            documentRefs: [
+              { id: "doc-putfail", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" },
+            ],
           },
         ],
         sessionData: "JAR",
       }),
       async (_session, pairs) => {
         const docs = new Map<string, DocDownloadResult>();
-        for (const { docId } of pairs) docs.set(docId, { buf: Buffer.from("bytes"), mimeType: "application/pdf" });
+        for (const { docId } of pairs)
+          docs.set(docId, { buf: Buffer.from("bytes"), mimeType: "application/pdf" });
         return { docs, failures: [] };
       },
     );
@@ -1153,7 +1391,9 @@ describe("syncTrConnection", () => {
             shares: 1,
             isin: "DE0007236101",
             currency: "EUR",
-            documentRefs: [{ id: "doc-dl-throw", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" }],
+            documentRefs: [
+              { id: "doc-dl-throw", type: "SECURITIES_SETTLEMENT", date: "2026-03-01" },
+            ],
           },
         ],
         sessionData: "JAR",
@@ -1194,7 +1434,15 @@ describe("syncTrConnection", () => {
 
     const runner = runnerWith(async () => ({
       events: [
-        { id: "tr-heal-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101", currency: "EUR" },
+        {
+          id: "tr-heal-1",
+          timestamp: "2026-03-01T10:00:00.000Z",
+          eventType: "ORDER_EXECUTED",
+          amount: -100,
+          shares: 1,
+          isin: "DE0007236101",
+          currency: "EUR",
+        },
       ],
       sessionData: "JAR",
     }));
@@ -1216,7 +1464,15 @@ describe("syncTrConnection", () => {
     const fresh = (await db.select().from(trConnections).where(eq(trConnections.id, conn.id)))[0];
     const runner = runnerWith(async () => ({
       events: [
-        { id: "tr-recon-1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "ORDER_EXECUTED", amount: -100, shares: 1, isin: "DE0007236101", currency: "EUR" },
+        {
+          id: "tr-recon-1",
+          timestamp: "2026-03-01T10:00:00.000Z",
+          eventType: "ORDER_EXECUTED",
+          amount: -100,
+          shares: 1,
+          isin: "DE0007236101",
+          currency: "EUR",
+        },
       ],
       sessionData: "JAR",
     }));
@@ -1238,7 +1494,13 @@ describe("syncTrConnection", () => {
     // Sync 1: a single deposit; TR reports a balance €100 higher than derived → diff 100.
     const runner1 = runnerWith(async () => ({
       events: [
-        { id: "d1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
+        {
+          id: "d1",
+          timestamp: "2026-03-01T10:00:00.000Z",
+          eventType: "PAYMENT_INBOUND",
+          amount: 50,
+          currency: "EUR",
+        },
       ],
       sessionData: "J",
       summary: { cash: [{ currency: "EUR", amount: "150" }] },
@@ -1249,8 +1511,20 @@ describe("syncTrConnection", () => {
     const fresh = (await db.select().from(trConnections).where(eq(trConnections.id, conn.id)))[0];
     const runner2 = runnerWith(async () => ({
       events: [
-        { id: "d1", timestamp: "2026-03-01T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
-        { id: "d2", timestamp: "2026-03-02T10:00:00.000Z", eventType: "PAYMENT_INBOUND", amount: 50, currency: "EUR" },
+        {
+          id: "d1",
+          timestamp: "2026-03-01T10:00:00.000Z",
+          eventType: "PAYMENT_INBOUND",
+          amount: 50,
+          currency: "EUR",
+        },
+        {
+          id: "d2",
+          timestamp: "2026-03-02T10:00:00.000Z",
+          eventType: "PAYMENT_INBOUND",
+          amount: 50,
+          currency: "EUR",
+        },
       ],
       sessionData: "J",
       summary: { cash: [{ currency: "EUR", amount: "300" }] },
@@ -1306,7 +1580,12 @@ describe("syncTrConnection", () => {
     const [tx] = await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.portfolioId, conn.portfolioId!), eq(transactions.externalId, "tr-div-508")));
+      .where(
+        and(
+          eq(transactions.portfolioId, conn.portfolioId!),
+          eq(transactions.externalId, "tr-div-508"),
+        ),
+      );
     expect(tx).toBeDefined();
     expect(tx.type).toBe("dividend");
     // Populated purely from the re-parsed settlement PDF — pytr's own timeline event

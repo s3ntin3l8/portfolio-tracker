@@ -15,10 +15,7 @@ import { BrokerageIcon } from "@/components/brokerage-icon";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  SELECTED_PORTFOLIO_COOKIE,
-  HOLDER_SCOPE_PREFIX,
-} from "@/lib/portfolio-selection";
+import { SELECTED_PORTFOLIO_COOKIE, HOLDER_SCOPE_PREFIX } from "@/lib/portfolio-selection";
 
 const ONE_YEAR = 60 * 60 * 24 * 365;
 

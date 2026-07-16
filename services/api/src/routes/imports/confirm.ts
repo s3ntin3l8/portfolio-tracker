@@ -8,10 +8,7 @@ import {
   transactionSources,
   trResolvedEvents,
 } from "@portfolio/db";
-import {
-  parsedGoldContractSchema,
-  parsedTransactionSchema,
-} from "@portfolio/schema";
+import { parsedGoldContractSchema, parsedTransactionSchema } from "@portfolio/schema";
 import { requireUser } from "../../plugins/auth.js";
 import { accountMismatchVerdict, ownedPortfolio } from "./helpers.js";
 import {
@@ -65,10 +62,7 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         .select()
         .from(screenshotImports)
         .where(
-          and(
-            eq(screenshotImports.id, request.params.importId),
-            eq(screenshotImports.userId, id),
-          ),
+          and(eq(screenshotImports.id, request.params.importId), eq(screenshotImports.userId, id)),
         )
         .limit(1);
       if (!imp) {
@@ -109,9 +103,17 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       const importedAccountNumber = (imp.parsedJson as { accountNumber?: string | null } | null)
         ?.accountNumber;
       if (!acknowledgeAccountMismatch && imp.parser !== "pytr") {
-        const mismatch = await accountMismatchVerdict(app, id, importedAccountNumber, targetPortfolioId);
+        const mismatch = await accountMismatchVerdict(
+          app,
+          id,
+          importedAccountNumber,
+          targetPortfolioId,
+        );
         if (mismatch) {
-          request.log.info({ importId: imp.id, kind: mismatch.kind }, "confirm blocked: account mismatch");
+          request.log.info(
+            { importId: imp.id, kind: mismatch.kind },
+            "confirm blocked: account mismatch",
+          );
           return reply.code(409).send({ error: "account_mismatch", ...mismatch });
         }
       }
@@ -135,7 +137,7 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         ? "pytr"
         : isIbkr
           ? "ibkr"
-          : (isDkbPdf || isTrPdf)
+          : isDkbPdf || isTrPdf
             ? "pdf"
             : imp.parser === "csv" || isDkb || isTrCsv
               ? "csv"
@@ -165,7 +167,13 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       }
 
       request.log.info(
-        { importId: imp.id, parser: imp.parser, source, txDrafts: drafts.length, contracts: contracts.length },
+        {
+          importId: imp.id,
+          parser: imp.parser,
+          source,
+          txDrafts: drafts.length,
+          contracts: contracts.length,
+        },
         "confirm started",
       );
 
@@ -201,7 +209,12 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       const likelyDuplicates = plainDuplicates.length;
       if (likelyDuplicates > 0) {
         request.log.info(
-          { importId: imp.id, likelyDuplicates, enrichments: enrichmentMatches.length, acknowledged: acknowledgeDuplicates },
+          {
+            importId: imp.id,
+            likelyDuplicates,
+            enrichments: enrichmentMatches.length,
+            acknowledged: acknowledgeDuplicates,
+          },
           "confirm: cross-source duplicates among selected drafts",
         );
         if (!acknowledgeDuplicates) {
@@ -239,17 +252,20 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
       const created = await app.db.transaction(async (tx) => {
         // Pass 2 — write the (non-enrichment) drafts as new transactions + source rows.
         // Confirm writes status="normal"; the shared writer is also used by sync with "draft".
-        const { written: draftRows, attempted: draftAttempted, skipped: draftSkipped } =
-          await writeResolvedDrafts(tx, {
-            resolved,
-            // Confirm skips only enrichment matches; acknowledged plain duplicates are still
-            // inserted (the user opted in via acknowledgeDuplicates → 409 cleared).
-            skipDraftIndices: enrichmentDraftIndices,
-            targetPortfolioId,
-            source,
-            importId: imp.id,
-            status: "normal",
-          });
+        const {
+          written: draftRows,
+          attempted: draftAttempted,
+          skipped: draftSkipped,
+        } = await writeResolvedDrafts(tx, {
+          resolved,
+          // Confirm skips only enrichment matches; acknowledged plain duplicates are still
+          // inserted (the user opted in via acknowledgeDuplicates → 409 cleared).
+          skipDraftIndices: enrichmentDraftIndices,
+          targetPortfolioId,
+          source,
+          importId: imp.id,
+          status: "normal",
+        });
         attempted += draftAttempted;
         skipped += draftSkipped;
         const written: (typeof transactions.$inferSelect)[] = [...draftRows];
@@ -364,7 +380,10 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
           if (remaining.length > 0 || remainingAttention.length > 0) {
             await tx
               .update(screenshotImports)
-              .set({ portfolioId: targetPortfolioId, parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors } })
+              .set({
+                portfolioId: targetPortfolioId,
+                parsedJson: { ...parsed, drafts: remaining, errors: remainingErrors },
+              })
               .where(eq(screenshotImports.id, imp.id));
             finalStatus = "draft";
           } else {
@@ -431,7 +450,10 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         // bytes that enrichment reads). Best-effort: swallow errors so enrichment failure
         // never blocks the confirm response.
         try {
-          await enrichTransactionsFromStoredDocuments(app, created.map((r) => r.id));
+          await enrichTransactionsFromStoredDocuments(
+            app,
+            created.map((r) => r.id),
+          );
         } catch (err) {
           request.log.warn({ err }, "auto TR enrichment failed (non-fatal)");
         }
@@ -451,12 +473,10 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         try {
           for (const { draftIndex, matchedTransactionId } of enrichmentMatches) {
             const { draft: d } = resolved[draftIndex];
-            await enrichTransactionFromDrafts(
-              matchedTransactionId,
-              app.db,
-              [d],
-              { importId: imp.id, importSource: source },
-            );
+            await enrichTransactionFromDrafts(matchedTransactionId, app.db, [d], {
+              importId: imp.id,
+              importSource: source,
+            });
             if (retain) {
               // Link and retain the staged PDF to the target transaction so it surfaces
               // in the transaction-detail view (#259 orphan fix). The 1:1 case: single
@@ -469,10 +489,7 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
             }
             enriched++;
           }
-          request.log.info(
-            { importId: imp.id, enriched },
-            "confirm: auto-enrichment applied",
-          );
+          request.log.info({ importId: imp.id, enriched }, "confirm: auto-enrichment applied");
         } catch (err) {
           request.log.warn({ err }, "confirm: auto-enrichment failed (non-fatal)");
         }
@@ -496,10 +513,7 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
               .update(transactionSources)
               .set({ documentId: retainedDoc.id })
               .where(
-                and(
-                  eq(transactionSources.importId, imp.id),
-                  isNull(transactionSources.documentId),
-                ),
+                and(eq(transactionSources.importId, imp.id), isNull(transactionSources.documentId)),
               );
             request.log.debug(
               { importId: imp.id, docId: retainedDoc.id },
@@ -507,7 +521,10 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
             );
           }
         } catch (err) {
-          request.log.warn({ err }, "confirm: failed to link PDF source rows to document (non-fatal)");
+          request.log.warn(
+            { err },
+            "confirm: failed to link PDF source rows to document (non-fatal)",
+          );
         }
       }
 

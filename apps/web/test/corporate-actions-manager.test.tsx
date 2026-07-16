@@ -7,7 +7,15 @@ import type { CorporateAction } from "@portfolio/api-client";
 const refresh = vi.fn();
 const updateCorporateAction = vi.fn(
   async (id: string, input: Partial<CorporateAction>) =>
-    ({ id, instrumentId: "i1", type: "split", ratio: "3", exDate: "2026-02-01", terms: null, ...input }) as never,
+    ({
+      id,
+      instrumentId: "i1",
+      type: "split",
+      ratio: "3",
+      exDate: "2026-02-01",
+      terms: null,
+      ...input,
+    }) as never,
 );
 const deleteCorporateAction = vi.fn(async () => undefined);
 
@@ -67,9 +75,7 @@ describe("CorporateActionsManager", () => {
 
   it("shows the empty message when there are no actions", () => {
     renderManager([]);
-    expect(
-      screen.getByText(messages.Instrument.noCorporateActions),
-    ).toBeInTheDocument();
+    expect(screen.getByText(messages.Instrument.noCorporateActions)).toBeInTheDocument();
   });
 
   it("edits a corporate action's ratio", async () => {
@@ -94,9 +100,7 @@ describe("CorporateActionsManager", () => {
     expect(deleteCorporateAction).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: m.delete }));
-    await waitFor(() =>
-      expect(deleteCorporateAction).toHaveBeenCalledWith("ca1"),
-    );
+    await waitFor(() => expect(deleteCorporateAction).toHaveBeenCalledWith("ca1"));
     expect(refresh).toHaveBeenCalled();
   });
 

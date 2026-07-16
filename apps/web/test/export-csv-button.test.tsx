@@ -7,12 +7,7 @@ import { ExportCsvButton } from "../src/components/export-csv-button";
 function renderBtn(rows: (string | number)[][]) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <ExportCsvButton
-        filename="x.csv"
-        headers={["a"]}
-        rows={rows}
-        label="Export CSV"
-      />
+      <ExportCsvButton filename="x.csv" headers={["a"]} rows={rows} label="Export CSV" />
     </NextIntlClientProvider>,
   );
 }

@@ -46,7 +46,12 @@ describe("rowAnomalyCounts", () => {
   // instrument/portfolio-scoped by code, but still can't attach to any row.
   it("excludes a transaction-scoped anomaly with an undefined transactionId", () => {
     const anomalies: Anomaly[] = [
-      a({ severity: "error", code: "negative_cash", scope: "transaction", transactionId: undefined }),
+      a({
+        severity: "error",
+        code: "negative_cash",
+        scope: "transaction",
+        transactionId: undefined,
+      }),
     ];
     expect(rowAnomalyCounts(anomalies)).toEqual({ errors: 0, warnings: 0 });
   });
@@ -64,7 +69,12 @@ describe("bannerAnomalies", () => {
       a({ severity: "warning", transactionId: "tx-1" }),
       a({ severity: "warning", code: "reconciliation_gap", scope: "portfolio" }),
       a({ severity: "warning", code: "position_gap", scope: "portfolio" }),
-      a({ severity: "error", code: "negative_cash", scope: "transaction", transactionId: undefined }),
+      a({
+        severity: "error",
+        code: "negative_cash",
+        scope: "transaction",
+        transactionId: undefined,
+      }),
     ];
     const rows = anomalies.filter(isRowAnomaly);
     const banners = bannerAnomalies(anomalies);

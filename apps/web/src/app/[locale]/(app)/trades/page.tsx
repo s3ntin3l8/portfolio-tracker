@@ -79,7 +79,11 @@ export default async function TradesPage({
     return (
       <div className="space-y-5">
         {Heading}
-        <EmptyState icon={ScrollText} title={te("unavailableTitle")} description={te("unavailableBody")} />
+        <EmptyState
+          icon={ScrollText}
+          title={te("unavailableTitle")}
+          description={te("unavailableBody")}
+        />
       </div>
     );
   }
@@ -274,7 +278,9 @@ export default async function TradesPage({
                 {log.bonusesByYear.map((b) => (
                   <div key={b.year} className="flex justify-between">
                     <span className={TABLE_LABEL}>{b.year}</span>
-                    <span className={cn(TABLE_VALUE_STRONG, "text-success")}>{money(b.amount)}</span>
+                    <span className={cn(TABLE_VALUE_STRONG, "text-success")}>
+                      {money(b.amount)}
+                    </span>
                   </div>
                 ))}
               </div>

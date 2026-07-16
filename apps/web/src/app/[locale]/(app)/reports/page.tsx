@@ -26,11 +26,7 @@ const ICONS = {
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
 
-export default async function ReportsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function ReportsPage({ params }: { params: Promise<{ locale: string }> }) {
   // eslint-disable-next-line react-hooks/purity
   const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
@@ -63,9 +59,7 @@ export default async function ReportsPage({
   // recomputes over (see tax/page.tsx) — only fetched when relevant, and only when
   // there's something to compute over.
   const idDetailByHolder =
-    taxRegime === "ID" && taxHolders.length > 0
-      ? await loadTaxYearDetail(taxHolders)
-      : null;
+    taxRegime === "ID" && taxHolders.length > 0 ? await loadTaxYearDetail(taxHolders) : null;
 
   const cards: React.ReactNode[] = [];
 
@@ -124,7 +118,11 @@ export default async function ReportsPage({
         title={t("income.title")}
         trend={
           deltaPct !== null
-            ? { label: t("income.trendVsLastYear", { pct: formatPercent(deltaPct, locale) }), tone: deltaTone, arrow: true }
+            ? {
+                label: t("income.trendVsLastYear", { pct: formatPercent(deltaPct, locale) }),
+                tone: deltaTone,
+                arrow: true,
+              }
             : undefined
         }
         value={m(Number(s.thisYear))}
@@ -181,7 +179,9 @@ export default async function ReportsPage({
         : undefined;
     const avgHoldingDays =
       closedTrades.length > 0
-        ? Math.round(closedTrades.reduce((sum, tr) => sum + tr.avgHoldingDays, 0) / closedTrades.length)
+        ? Math.round(
+            closedTrades.reduce((sum, tr) => sum + tr.avgHoldingDays, 0) / closedTrades.length,
+          )
         : null;
 
     cards.push(
@@ -194,7 +194,9 @@ export default async function ReportsPage({
         trend={
           log.winRate !== null
             ? {
-                label: t("trades.trend", { pct: formatPercent(log.winRate, locale).replace("+", "") }),
+                label: t("trades.trend", {
+                  pct: formatPercent(log.winRate, locale).replace("+", ""),
+                }),
                 tone: log.winRate >= 0.5 ? "up" : "down",
               }
             : undefined
@@ -254,7 +256,10 @@ export default async function ReportsPage({
         title={t("savings.title")}
         trend={
           s.xirr !== null
-            ? { label: t("savings.trend", { pct: formatPercent(s.xirr, locale) }), tone: s.xirr >= 0 ? "up" : "down" }
+            ? {
+                label: t("savings.trend", { pct: formatPercent(s.xirr, locale) }),
+                tone: s.xirr >= 0 ? "up" : "down",
+              }
             : undefined
         }
         value={m(currentValue)}
@@ -288,8 +293,16 @@ export default async function ReportsPage({
       const detail = idDetailByHolder.get(entry.holder.id);
       if (!detail) continue;
       const idTax = indonesianFinalTax({
-        disposals: detail.disposals.map((d) => ({ symbol: d.symbol, when: d.when, proceeds: d.proceeds })),
-        dividends: detail.dividendRows.map((d) => ({ symbol: d.symbol, currency: d.currency, gross: d.gross })),
+        disposals: detail.disposals.map((d) => ({
+          symbol: d.symbol,
+          when: d.when,
+          proceeds: d.proceeds,
+        })),
+        dividends: detail.dividendRows.map((d) => ({
+          symbol: d.symbol,
+          currency: d.currency,
+          gross: d.gross,
+        })),
         byYear: [],
       });
       totalTax += Number(idTax.estimatedTax);
@@ -373,8 +386,14 @@ export default async function ReportsPage({
       value={String(taxReports.length)}
       caption={t("documents.caption")}
       metrics={[
-        { label: t("documents.metricLatestYear"), value: latestYear !== null ? String(latestYear) : "—" },
-        { label: t("documents.metricSources"), value: t("documents.metricSourcesValue", { fromTr, fromUpload }) },
+        {
+          label: t("documents.metricLatestYear"),
+          value: latestYear !== null ? String(latestYear) : "—",
+        },
+        {
+          label: t("documents.metricSources"),
+          value: t("documents.metricSourcesValue", { fromTr, fromUpload }),
+        },
       ]}
       href="/reports/documents"
       openLabel={openLabel}

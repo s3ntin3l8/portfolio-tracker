@@ -3,15 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { accountHolders, portfolios, users } from "@portfolio/db";
 import { requireUser } from "../../plugins/auth.js";
 import { type InstrumentMeta } from "../../services/valuation.js";
-import {
-  type TradeLog,
-  mergeTradeLogs,
-} from "@portfolio/core";
+import { type TradeLog, mergeTradeLogs } from "@portfolio/core";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
-import type {
-  PortfolioParams} from "./shared.js";
+import type { PortfolioParams } from "./shared.js";
 import {
   ownedPortfolio,
   costBasisFromQuery,
@@ -118,7 +114,15 @@ export function registerTradesRoutes(app: FastifyInstance) {
               costBasisMode,
               p.cashCounted,
             );
-            const log = await buildTradeLog(app, coreTxns, prices, display, method, costBasisMode, metaById);
+            const log = await buildTradeLog(
+              app,
+              coreTxns,
+              prices,
+              display,
+              method,
+              costBasisMode,
+              metaById,
+            );
             return { log, metaById };
           });
           const logs: TradeLog[] = perPortfolio.map((r) => r.log);

@@ -18,7 +18,9 @@ export function TwoStatFooter({
       <div className="flex min-w-0 gap-4">
         {metrics.map((m, i) => (
           <div key={i} className="min-w-0">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[.03em] text-text-3">{m.label}</p>
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[.03em] text-text-3">
+              {m.label}
+            </p>
             <p
               className="tabular mt-[3px] truncate text-[15px] font-bold"
               style={m.color ? { color: m.color } : undefined}

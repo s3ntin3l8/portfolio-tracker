@@ -31,9 +31,7 @@ function Section({ title, rows }: { title: string; rows: Row[] }) {
                 className="size-[9px] shrink-0 rounded-[2px]"
                 style={{ background: COLORS[i % COLORS.length] }}
               />
-              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
-                {r.label}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{r.label}</span>
               <span className="tabular shrink-0 text-[13px] font-bold text-text-2">
                 {r.pct.toFixed(1)}%
               </span>

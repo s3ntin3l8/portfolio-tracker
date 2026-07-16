@@ -13,22 +13,24 @@ import { detectTrPdf, parseTrPdf } from "./tr-pdf.js";
 // ---------------------------------------------------------------------------
 
 /** Build a minimal TR trade settlement (Wertpapierabrechnung) text. */
-function trTradeFixture(overrides: {
-  action?: "buy" | "sell" | "savings_plan" | "saveback" | "roundup";
-  isin?: string;
-  name?: string;
-  qty?: string;
-  price?: string;
-  total?: string;
-  fees?: string;
-  kapst?: string;
-  solz?: string;
-  kirche?: string;
-  settlement?: string;
-  auftrag?: string;
-  ausfuehrung?: string;
-  depot?: string;
-} = {}): string {
+function trTradeFixture(
+  overrides: {
+    action?: "buy" | "sell" | "savings_plan" | "saveback" | "roundup";
+    isin?: string;
+    name?: string;
+    qty?: string;
+    price?: string;
+    total?: string;
+    fees?: string;
+    kapst?: string;
+    solz?: string;
+    kirche?: string;
+    settlement?: string;
+    auftrag?: string;
+    ausfuehrung?: string;
+    depot?: string;
+  } = {},
+): string {
   const {
     action = "buy",
     isin = "IE00B5BMR087",
@@ -84,20 +86,22 @@ function trTradeFixture(overrides: {
  * Zwischensumme lines (foreign net-of-Quellensteuer, then its EUR conversion) that `fxRate`
  * is derived from — not the printed ratio's label/direction.
  */
-function trDividendFixture(overrides: {
-  isin?: string;
-  name?: string;
-  qty?: string;
-  perShare?: string;
-  foreignCcy?: string;
-  grossForeign?: string;
-  quellenForeign?: string;
-  eurNet?: string;
-  kapstEur?: string;
-  netEur?: string;
-  payDate?: string;
-  depot?: string;
-} = {}): string {
+function trDividendFixture(
+  overrides: {
+    isin?: string;
+    name?: string;
+    qty?: string;
+    perShare?: string;
+    foreignCcy?: string;
+    grossForeign?: string;
+    quellenForeign?: string;
+    eurNet?: string;
+    kapstEur?: string;
+    netEur?: string;
+    payDate?: string;
+    depot?: string;
+  } = {},
+): string {
   const {
     isin = "US0378331005",
     name = "Apple Inc.",

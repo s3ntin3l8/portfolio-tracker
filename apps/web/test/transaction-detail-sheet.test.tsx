@@ -16,12 +16,15 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ getTransactionDocumentUrl, getSourceDocumentUrl, deleteTransaction, dismissAnomaly }),
+  useApiClient: () => ({
+    getTransactionDocumentUrl,
+    getSourceDocumentUrl,
+    deleteTransaction,
+    dismissAnomaly,
+  }),
 }));
 
-import {
-  TransactionDetailSheet,
-} from "../src/components/transaction-detail-sheet";
+import { TransactionDetailSheet } from "../src/components/transaction-detail-sheet";
 import type { TxRow } from "../src/components/transactions-table";
 
 const TX: TxRow = {
@@ -84,7 +87,9 @@ describe("TransactionDetailSheet", () => {
     expect(screen.getByText(/Negative cash balance/)).toHaveTextContent("-€0.98");
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss warning" }));
-    await waitFor(() => expect(dismissAnomaly).toHaveBeenCalledWith("p-1", "tx-1", "negative_cash"));
+    await waitFor(() =>
+      expect(dismissAnomaly).toHaveBeenCalledWith("p-1", "tx-1", "negative_cash"),
+    );
     expect(onOpenChange).toHaveBeenCalledWith(false);
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
@@ -238,9 +243,7 @@ describe("TransactionDetailSheet", () => {
   it("omits Download receipt from the overflow menu when there is no document", () => {
     renderSheet({ tx: { ...TX, hasDocument: false } });
     openActions();
-    expect(
-      screen.queryByRole("menuitem", { name: messages.Manage.downloadReceipt }),
-    ).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: messages.Manage.downloadReceipt })).toBeNull();
   });
 
   it("offers Reassign in the overflow menu only when 2+ portfolios exist", () => {
@@ -275,21 +278,14 @@ describe("TransactionDetailSheet", () => {
   it("shows a Delete control", () => {
     renderSheet();
     // The DeleteTransactionButton renders a button with the delete label
-    expect(
-      screen.getByRole("button", { name: messages.Manage.delete.label }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: messages.Manage.delete.label })).toBeInTheDocument();
   });
 
   it("does not render the sheet content when open=false", () => {
     // Radix Dialog unmounts hidden content, so type badge should not appear
     render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <TransactionDetailSheet
-          tx={TX}
-          open={false}
-          onOpenChange={vi.fn()}
-          onDeleted={vi.fn()}
-        />
+        <TransactionDetailSheet tx={TX} open={false} onOpenChange={vi.fn()} onDeleted={vi.fn()} />
       </NextIntlClientProvider>,
     );
     // When closed, the dialog content is not mounted
@@ -308,12 +304,7 @@ describe("TransactionDetailSheet", () => {
   it("returns null when tx is null", () => {
     const { container } = render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <TransactionDetailSheet
-          tx={null}
-          open={true}
-          onOpenChange={vi.fn()}
-          onDeleted={vi.fn()}
-        />
+        <TransactionDetailSheet tx={null} open={true} onOpenChange={vi.fn()} onDeleted={vi.fn()} />
       </NextIntlClientProvider>,
     );
     expect(container.firstChild).toBeNull();
@@ -427,9 +418,7 @@ describe("TransactionDetailSheet", () => {
     ).toBeInTheDocument();
     // No global receipt action — the inline per-source download covers it.
     openActions();
-    expect(
-      screen.queryByRole("menuitem", { name: messages.Manage.downloadReceipt }),
-    ).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: messages.Manage.downloadReceipt })).toBeNull();
   });
 
   it("calls getSourceDocumentUrl when per-source download button is clicked", async () => {
@@ -478,8 +467,6 @@ describe("TransactionDetailSheet", () => {
       ],
     };
     renderSheet({ tx: txNoDoc });
-    expect(
-      screen.getByText(messages.Transactions.sourcesSection.notRetained),
-    ).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.sourcesSection.notRetained)).toBeInTheDocument();
   });
 });

@@ -8,7 +8,10 @@ import { getMarketData, goldSources, getBorseFrankfurt } from "../services/marke
 import { withDerivationCache, createStore } from "../lib/derivation-cache.js";
 import { logTiming } from "../lib/timing.js";
 
-const instrumentsCache = createStore<{ rows: typeof instruments.$inferSelect[]; total: number }>();
+const instrumentsCache = createStore<{
+  rows: (typeof instruments.$inferSelect)[];
+  total: number;
+}>();
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1).optional(),
@@ -49,11 +52,29 @@ export async function instrumentsRoute(app: FastifyInstance) {
           : undefined;
         const [cnt, _rows] = await Promise.all([
           conditions
-            ? app.db.select({ count: count() }).from(instruments).where(conditions).then((r) => Number(r[0].count))
-            : app.db.select({ count: count() }).from(instruments).then((r) => Number(r[0].count)),
+            ? app.db
+                .select({ count: count() })
+                .from(instruments)
+                .where(conditions)
+                .then((r) => Number(r[0].count))
+            : app.db
+                .select({ count: count() })
+                .from(instruments)
+                .then((r) => Number(r[0].count)),
           conditions
-            ? app.db.select().from(instruments).where(conditions).orderBy(asc(instruments.symbol)).limit(pageSize).offset((page - 1) * pageSize)
-            : app.db.select().from(instruments).orderBy(asc(instruments.symbol)).limit(pageSize).offset((page - 1) * pageSize),
+            ? app.db
+                .select()
+                .from(instruments)
+                .where(conditions)
+                .orderBy(asc(instruments.symbol))
+                .limit(pageSize)
+                .offset((page - 1) * pageSize)
+            : app.db
+                .select()
+                .from(instruments)
+                .orderBy(asc(instruments.symbol))
+                .limit(pageSize)
+                .offset((page - 1) * pageSize),
         ]);
         return { rows: _rows, total: cnt };
       });
@@ -139,7 +160,11 @@ export async function instrumentsRoute(app: FastifyInstance) {
         .limit(1);
       if (!inst) {
         const durationMs = performance.now() - t0;
-        logTiming(request, "GET /instruments/:id/history", durationMs, { instrumentId: request.params.id, range, found: false });
+        logTiming(request, "GET /instruments/:id/history", durationMs, {
+          instrumentId: request.params.id,
+          range,
+          found: false,
+        });
         return reply.code(404).send({ error: "instrument_not_found" });
       }
       const md = await getMarketData();
@@ -153,7 +178,11 @@ export async function instrumentsRoute(app: FastifyInstance) {
         range,
       );
       const durationMs = performance.now() - t0;
-      logTiming(request, "GET /instruments/:id/history", durationMs, { instrumentId: request.params.id, range, found: true });
+      logTiming(request, "GET /instruments/:id/history", durationMs, {
+        instrumentId: request.params.id,
+        range,
+        found: true,
+      });
       return result;
     },
   );
@@ -194,19 +223,15 @@ export async function instrumentsRoute(app: FastifyInstance) {
 
   // On-demand enrichment via Börse Frankfurt. Returns ISIN + WKN + ticker together for a
   // given query. Only available when BORSE_FRANKFURT_ENABLED=true. Not on the typeahead.
-  app.get(
-    "/instruments/enrich",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { q } = enrichQuerySchema.parse(request.query);
-      const bf = getBorseFrankfurt();
-      if (!bf) return reply.code(503).send({ error: "enrichment_unavailable" });
-      try {
-        return await bf.search(q);
-      } catch (err) {
-        request.log.warn({ err }, "BF enrichment failed");
-        return [];
-      }
-    },
-  );
+  app.get("/instruments/enrich", { preHandler: app.authenticate }, async (request, reply) => {
+    const { q } = enrichQuerySchema.parse(request.query);
+    const bf = getBorseFrankfurt();
+    if (!bf) return reply.code(503).send({ error: "enrichment_unavailable" });
+    try {
+      return await bf.search(q);
+    } catch (err) {
+      request.log.warn({ err }, "BF enrichment failed");
+      return [];
+    }
+  });
 }

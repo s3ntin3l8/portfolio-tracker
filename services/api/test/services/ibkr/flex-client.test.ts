@@ -55,7 +55,10 @@ describe("createFlexClient — fetchFlexStatement", () => {
       ["SendRequest", { body: sendRequestSuccess("REF123", STMT_URL) }],
       [STMT_URL, { body: statementXml() }],
     ]);
-    const client = createFlexClient({ baseUrl: "https://flex.ibkr.com", fetch: makeFetch(fetches) });
+    const client = createFlexClient({
+      baseUrl: "https://flex.ibkr.com",
+      fetch: makeFetch(fetches),
+    });
     const xml = await client.fetchFlexStatement("TOKEN", "QUERY");
     expect(xml).toContain("FlexQueryResponse");
   });
@@ -66,7 +69,11 @@ describe("createFlexClient — fetchFlexStatement", () => {
     const fetchFn: typeof globalThis.fetch = async (input) => {
       const url = typeof input === "string" ? input : (input as Request).url;
       if (url.includes("SendRequest")) {
-        return { ok: true, status: 200, text: async () => sendRequestSuccess("R1", STMT_URL) } as Response;
+        return {
+          ok: true,
+          status: 200,
+          text: async () => sendRequestSuccess("R1", STMT_URL),
+        } as Response;
       }
       getCount++;
       // First two attempts: still generating; third: ready.
@@ -80,11 +87,12 @@ describe("createFlexClient — fetchFlexStatement", () => {
   });
 
   it("throws IbkrFlexError(expired) on error code 1012", async () => {
-    const fetchFn: typeof globalThis.fetch = async () => ({
-      ok: true,
-      status: 200,
-      text: async () => sendRequestError("1012", "Token has expired."),
-    } as Response);
+    const fetchFn: typeof globalThis.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () => sendRequestError("1012", "Token has expired."),
+      }) as Response;
     const client = createFlexClient({ baseUrl: "https://x.com", fetch: fetchFn });
     await expect(client.fetchFlexStatement("T", "Q")).rejects.toMatchObject({
       code: "expired",
@@ -92,11 +100,12 @@ describe("createFlexClient — fetchFlexStatement", () => {
   });
 
   it("throws IbkrFlexError(error) on error code 1015", async () => {
-    const fetchFn: typeof globalThis.fetch = async () => ({
-      ok: true,
-      status: 200,
-      text: async () => sendRequestError("1015", "Invalid token or IP mismatch."),
-    } as Response);
+    const fetchFn: typeof globalThis.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () => sendRequestError("1015", "Invalid token or IP mismatch."),
+      }) as Response;
     const client = createFlexClient({ baseUrl: "https://x.com", fetch: fetchFn });
     await expect(client.fetchFlexStatement("T", "Q")).rejects.toMatchObject({
       code: "error",
@@ -104,28 +113,31 @@ describe("createFlexClient — fetchFlexStatement", () => {
   });
 
   it("throws IbkrFlexError on unexpected error code", async () => {
-    const fetchFn: typeof globalThis.fetch = async () => ({
-      ok: true,
-      status: 200,
-      text: async () => sendRequestError("9999", "Unknown."),
-    } as Response);
+    const fetchFn: typeof globalThis.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () => sendRequestError("9999", "Unknown."),
+      }) as Response;
     const client = createFlexClient({ baseUrl: "https://x.com", fetch: fetchFn });
     await expect(client.fetchFlexStatement("T", "Q")).rejects.toBeInstanceOf(IbkrFlexError);
   });
 
   it("throws when SendRequest returns no ReferenceCode", async () => {
-    const fetchFn: typeof globalThis.fetch = async () => ({
-      ok: true,
-      status: 200,
-      text: async () => `<?xml version="1.0"?><FlexStatementResponse><Status>Success</Status></FlexStatementResponse>`,
-    } as Response);
+    const fetchFn: typeof globalThis.fetch = async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          `<?xml version="1.0"?><FlexStatementResponse><Status>Success</Status></FlexStatementResponse>`,
+      }) as Response;
     const client = createFlexClient({ baseUrl: "https://x.com", fetch: fetchFn });
     await expect(client.fetchFlexStatement("T", "Q")).rejects.toBeInstanceOf(IbkrFlexError);
   });
 
   it("throws on HTTP error from SendRequest", async () => {
     const fetchFn: typeof globalThis.fetch = async () =>
-      ({ ok: false, status: 503, text: async () => "Service unavailable" } as Response);
+      ({ ok: false, status: 503, text: async () => "Service unavailable" }) as Response;
     const client = createFlexClient({ baseUrl: "https://x.com", fetch: fetchFn });
     await expect(client.fetchFlexStatement("T", "Q")).rejects.toBeInstanceOf(IbkrFlexError);
   });

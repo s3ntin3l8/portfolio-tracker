@@ -194,13 +194,11 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const data = (await res.json()) as {
         quotes?: { symbol?: string; exchange?: string }[];
       };
-      const quotes = (data.quotes ?? []).filter(
-        (q): q is { symbol: string; exchange?: string } => Boolean(q.symbol),
+      const quotes = (data.quotes ?? []).filter((q): q is { symbol: string; exchange?: string } =>
+        Boolean(q.symbol),
       );
       const byMarket = quotes.find((q) => mapExchange(q.exchange)?.market === ref.market);
-      const byCurrency = quotes.find(
-        (q) => mapExchange(q.exchange)?.currency === ref.currency,
-      );
+      const byCurrency = quotes.find((q) => mapExchange(q.exchange)?.currency === ref.currency);
       symbol = (byMarket ?? byCurrency)?.symbol ?? null;
     }
     this.isinSymbolCache.set(ref.isin, symbol);
@@ -220,8 +218,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
       : new Date().toISOString();
     const prev = result?.meta?.previousClose ?? result?.meta?.chartPreviousClose;
     // Gold pairs quote per troy ounce; the rest of the app values gold per gram.
-    const toGram = (v: number) =>
-      ref.assetClass === "gold" ? v / TROY_OUNCE_GRAMS : v;
+    const toGram = (v: number) => (ref.assetClass === "gold" ? v / TROY_OUNCE_GRAMS : v);
     // Adopt the provider's reported quote currency (e.g. "USD" for a USD-priced UCITS ETF on
     // Xetra) instead of the instrument's declared currency ("EUR"). Normalise pence codes
     // (GBp/GBX → GBP, divisor 100). Gold/crypto are handled by toGram/symbol-pair; ref.currency
@@ -258,8 +255,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
       const info = mapExchange(q.exchange);
       if (!info) continue; // unknown venue → no reliable currency, skip
       // IDX tickers come back as `BBCA.JK`; store the bare symbol (quotes re-add .JK).
-      const symbol =
-        info.market === "IDX" ? q.symbol.replace(/\.JK$/i, "") : q.symbol;
+      const symbol = info.market === "IDX" ? q.symbol.replace(/\.JK$/i, "") : q.symbol;
       out.push({
         symbol,
         name: q.longname ?? q.shortname ?? symbol,
@@ -319,9 +315,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
     // and apply the pence divisor if needed. Gold/crypto leave currency undefined so callers
     // fall back to instrument.currency (which correctly encodes the pair's denomination).
     const { currency, divisor } = this.resolveCurrency(ref, result?.meta?.currency);
-    const stampCurrency = ref.assetClass === "gold" || ref.assetClass === "crypto"
-      ? undefined
-      : currency;
+    const stampCurrency =
+      ref.assetClass === "gold" || ref.assetClass === "crypto" ? undefined : currency;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];
@@ -342,10 +337,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
    * next call. All requests go through `this.doFetch` so tests can mock them.
    */
   private async getYahooCrumb(): Promise<{ cookies: string; crumb: string } | null> {
-    if (
-      this.crumbCache &&
-      Date.now() - this.crumbCache.fetchedAt < this.CRUMB_TTL_MS
-    ) {
+    if (this.crumbCache && Date.now() - this.crumbCache.fetchedAt < this.CRUMB_TTL_MS) {
       return this.crumbCache;
     }
     try {
@@ -364,10 +356,9 @@ export class YahooFinanceProvider implements MarketDataProvider {
         .join("; ");
 
       // Step 2: fetch the crumb using the session cookie.
-      const crumbRes = await this.doFetch(
-        "https://query2.finance.yahoo.com/v1/test/getcrumb",
-        { headers: { ...this.defaultHeaders, Cookie: cookies } },
-      );
+      const crumbRes = await this.doFetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+        headers: { ...this.defaultHeaders, Cookie: cookies },
+      });
       if (!crumbRes.ok) return null;
       const crumb = (await crumbRes.text()).trim();
       // Validate: crumb is a short alphanumeric token — reject empty or multi-word values.
@@ -381,15 +372,14 @@ export class YahooFinanceProvider implements MarketDataProvider {
   }
 
   /** Parse a raw quoteSummary JSON response into an InstrumentProfile (or null). */
-  private parseQuoteSummary(
-    assetClass: AssetClass,
-    data: unknown,
-  ): InstrumentProfile | null {
+  private parseQuoteSummary(assetClass: AssetClass, data: unknown): InstrumentProfile | null {
     const typed = data as {
       quoteSummary?: {
         result?: Array<{
           assetProfile?: { sector?: string; industry?: string; country?: string };
-          topHoldings?: { sectorWeightings?: Array<Record<string, number | { raw: number; fmt: string }>> };
+          topHoldings?: {
+            sectorWeightings?: Array<Record<string, number | { raw: number; fmt: string }>>;
+          };
         }> | null;
         error?: unknown;
       };
@@ -472,9 +462,8 @@ export class YahooFinanceProvider implements MarketDataProvider {
     const closes = result?.indicators?.quote?.[0]?.close ?? [];
     const gramFactor = ref.assetClass === "gold" ? TROY_OUNCE_GRAMS : 1;
     const { currency, divisor } = this.resolveCurrency(ref, result?.meta?.currency);
-    const stampCurrency = ref.assetClass === "gold" || ref.assetClass === "crypto"
-      ? undefined
-      : currency;
+    const stampCurrency =
+      ref.assetClass === "gold" || ref.assetClass === "crypto" ? undefined : currency;
     const candles: Candle[] = [];
     for (let i = 0; i < timestamps.length; i++) {
       const close = closes[i];

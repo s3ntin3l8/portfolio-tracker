@@ -76,7 +76,10 @@ describe("PwaUpdater", () => {
     sw.emit("waiting");
 
     expect(toast.info).toHaveBeenCalledTimes(1);
-    const [message, opts] = toast.info.mock.calls[0] as [string, { id: string; action: { onClick: () => void } }];
+    const [message, opts] = toast.info.mock.calls[0] as [
+      string,
+      { id: string; action: { onClick: () => void } },
+    ];
     expect(message).toBe("A new version is available");
     expect(opts.id).toBe("pwa-update-available");
 

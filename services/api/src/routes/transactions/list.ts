@@ -16,7 +16,14 @@ import { enrichRows, enrichAggregateRows } from "./list-enrichment.js";
 export function registerListRoutes(app: FastifyInstance) {
   app.get<{
     Params: { portfolioId: string };
-    Querystring: { convertTo?: string; page?: string; pageSize?: string; type?: string; year?: string; q?: string };
+    Querystring: {
+      convertTo?: string;
+      page?: string;
+      pageSize?: string;
+      type?: string;
+      year?: string;
+      q?: string;
+    };
   }>(
     "/portfolios/:portfolioId/transactions",
     { preHandler: app.authenticate },
@@ -40,9 +47,11 @@ export function registerListRoutes(app: FastifyInstance) {
       const searchQuery = request.query.q;
 
       const conditions = [eq(transactions.portfolioId, request.params.portfolioId)];
-      if (typeFilter === "buy") conditions.push(inArray(transactions.type, ["buy", "savings_plan"]));
+      if (typeFilter === "buy")
+        conditions.push(inArray(transactions.type, ["buy", "savings_plan"]));
       if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
-      if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
+      if (typeFilter === "income")
+        conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
       if (yearFilter) {
         const y = parseInt(yearFilter, 10);
         if (!isNaN(y)) {
@@ -62,7 +71,7 @@ export function registerListRoutes(app: FastifyInstance) {
       }
 
       if (paginate) {
-        const cacheKey = `transactions:${request.params.portfolioId}:${page}:${pageSize}:${convertTo || ''}:${typeFilter || ''}:${yearFilter || ''}:${searchQuery || ''}`;
+        const cacheKey = `transactions:${request.params.portfolioId}:${page}:${pageSize}:${convertTo || ""}:${typeFilter || ""}:${yearFilter || ""}:${searchQuery || ""}`;
         const cached = await withDerivationCache(transactionsCache, cacheKey, async () => {
           const merged = await app.db
             .select({
@@ -80,7 +89,7 @@ export function registerListRoutes(app: FastifyInstance) {
 
           let cnt: number;
           let summaryRows: { totalInvested: string; totalProceeds: string; totalIncome: string };
-          let _rows: typeof transactions.$inferSelect[];
+          let _rows: (typeof transactions.$inferSelect)[];
           if (merged.length > 0) {
             cnt = Number(merged[0].__total);
             summaryRows = {
@@ -88,7 +97,9 @@ export function registerListRoutes(app: FastifyInstance) {
               totalProceeds: merged[0].__totalProceeds,
               totalIncome: merged[0].__totalIncome,
             };
-            _rows = merged.map(({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r);
+            _rows = merged.map(
+              ({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r,
+            );
           } else {
             const [c, s] = await Promise.all([
               app.db
@@ -110,7 +121,19 @@ export function registerListRoutes(app: FastifyInstance) {
             summaryRows = s;
             _rows = [];
           }
-          return enrichRows(app, _rows, cnt, summaryRows, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log, t0);
+          return enrichRows(
+            app,
+            _rows,
+            cnt,
+            summaryRows,
+            portfolioName,
+            request.params.portfolioId,
+            convertTo,
+            paginate,
+            page,
+            request.log,
+            t0,
+          );
         });
         const years = await app.db
           .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
@@ -125,48 +148,59 @@ export function registerListRoutes(app: FastifyInstance) {
         .select()
         .from(transactions)
         .where(and(...conditions));
-      const result = await enrichRows(app, rows, rows.length, undefined, portfolioName, request.params.portfolioId, convertTo, paginate, page, request.log, t0);
+      const result = await enrichRows(
+        app,
+        rows,
+        rows.length,
+        undefined,
+        portfolioName,
+        request.params.portfolioId,
+        convertTo,
+        paginate,
+        page,
+        request.log,
+        t0,
+      );
       return result.rows;
     },
   );
 
   app.get<{
     Querystring: { page?: string; pageSize?: string; type?: string; year?: string; q?: string };
-  }>(
-    "/networth/transactions",
-    { preHandler: app.authenticate },
-    async (request, _reply) => {
-      const t0 = performance.now();
-      const { id } = requireUser(request);
-      const paginate = request.query.page !== undefined;
-      const page = paginate ? Math.max(1, parseInt(request.query.page!, 10) || 1) : 1;
-      const pageSize = paginate ? Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? "25", 10) || 25)) : 0;
-      const typeFilter = request.query.type;
-      const yearFilter = request.query.year;
-      const searchQuery = request.query.q;
+  }>("/networth/transactions", { preHandler: app.authenticate }, async (request, _reply) => {
+    const t0 = performance.now();
+    const { id } = requireUser(request);
+    const paginate = request.query.page !== undefined;
+    const page = paginate ? Math.max(1, parseInt(request.query.page!, 10) || 1) : 1;
+    const pageSize = paginate
+      ? Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? "25", 10) || 25))
+      : 0;
+    const typeFilter = request.query.type;
+    const yearFilter = request.query.year;
+    const searchQuery = request.query.q;
 
-      const pfs = await app.db
-        .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
-        .from(portfolios)
-        .where(eq(portfolios.userId, id));
-      if (pfs.length === 0) return paginate ? { rows: [], total: 0 } : [];
+    const pfs = await app.db
+      .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
+      .from(portfolios)
+      .where(eq(portfolios.userId, id));
+    if (pfs.length === 0) return paginate ? { rows: [], total: 0 } : [];
 
-      const pfIds = pfs.map((p) => p.id);
-      const nameById = new Map(pfs.map((p) => [p.id, p.name]));
+    const pfIds = pfs.map((p) => p.id);
+    const nameById = new Map(pfs.map((p) => [p.id, p.name]));
 
-      const conditions = [inArray(transactions.portfolioId, pfIds)];
-      if (typeFilter === "buy") conditions.push(inArray(transactions.type, ["buy", "savings_plan"]));
-      if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
-      if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
-      if (yearFilter) {
-        const y = parseInt(yearFilter, 10);
-        if (!isNaN(y)) {
-          const { start, end } = yearRange(y);
-          conditions.push(gte(transactions.executedAt, start), lt(transactions.executedAt, end));
-        }
+    const conditions = [inArray(transactions.portfolioId, pfIds)];
+    if (typeFilter === "buy") conditions.push(inArray(transactions.type, ["buy", "savings_plan"]));
+    if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
+    if (typeFilter === "income") conditions.push(inArray(transactions.type, ACTIVITY_INCOME_TYPES));
+    if (yearFilter) {
+      const y = parseInt(yearFilter, 10);
+      if (!isNaN(y)) {
+        const { start, end } = yearRange(y);
+        conditions.push(gte(transactions.executedAt, start), lt(transactions.executedAt, end));
       }
-      if (searchQuery) {
-        conditions.push(sql`(
+    }
+    if (searchQuery) {
+      conditions.push(sql`(
           ${transactions.description}::text ILIKE '%' || ${searchQuery} || '%'
           OR ${transactions.type}::text ILIKE '%' || ${searchQuery} || '%'
           OR ${transactions.kind}::text ILIKE '%' || ${searchQuery} || '%'
@@ -174,63 +208,62 @@ export function registerListRoutes(app: FastifyInstance) {
           OR ${transactions.currency}::text ILIKE '%' || ${searchQuery} || '%'
           OR ${transactions.instrumentId} IN (SELECT id FROM instruments WHERE symbol::text ILIKE '%' || ${searchQuery} || '%' OR name::text ILIKE '%' || ${searchQuery} || '%')
         )`);
-      }
+    }
 
-      if (paginate) {
-        const cacheKey = `${id}:networth:${page}:${pageSize}:${typeFilter ?? ""}:${yearFilter ?? ""}:${searchQuery ?? ""}`;
-        const cached = await withDerivationCache(networthTransactionsCache, cacheKey, async () => {
-          const merged = await app.db
-            .select({ ...getTableColumns(transactions), __total: sql<number>`count(*) over ()` })
+    if (paginate) {
+      const cacheKey = `${id}:networth:${page}:${pageSize}:${typeFilter ?? ""}:${yearFilter ?? ""}:${searchQuery ?? ""}`;
+      const cached = await withDerivationCache(networthTransactionsCache, cacheKey, async () => {
+        const merged = await app.db
+          .select({ ...getTableColumns(transactions), __total: sql<number>`count(*) over ()` })
+          .from(transactions)
+          .where(and(...conditions))
+          .orderBy(desc(transactions.executedAt))
+          .limit(pageSize)
+          .offset((page - 1) * pageSize);
+
+        let total: number;
+        let rows: (typeof transactions.$inferSelect)[];
+        if (merged.length > 0) {
+          total = Number(merged[0].__total);
+          rows = merged.map(({ __total, ...r }) => r);
+        } else {
+          total = await app.db
+            .select({ count: count() })
             .from(transactions)
             .where(and(...conditions))
-            .orderBy(desc(transactions.executedAt))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
-
-          let total: number;
-          let rows: typeof transactions.$inferSelect[];
-          if (merged.length > 0) {
-            total = Number(merged[0].__total);
-            rows = merged.map(({ __total, ...r }) => r);
-          } else {
-            total = await app.db
-              .select({ count: count() })
-              .from(transactions)
-              .where(and(...conditions))
-              .then((r) => Number(r[0].count));
-            rows = [];
-          }
-          const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
-          return { rows: enriched, total };
-        });
-        const years = await app.db
-          .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
-          .from(transactions)
-          .where(inArray(transactions.portfolioId, pfIds))
-          .orderBy(sql`1 DESC`);
-        const yearList = years.map((r) => String(r.year));
-        const durationMs = performance.now() - t0;
-        logTiming(request, "GET /networth/transactions", durationMs, {
-          page,
-          pageSize,
-          total: cached.total,
-          portfolioCount: pfs.length,
-        });
-        return { rows: cached.rows, total: cached.total, years: yearList };
-      }
-
-      const rows = await app.db
-        .select()
+            .then((r) => Number(r[0].count));
+          rows = [];
+        }
+        const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
+        return { rows: enriched, total };
+      });
+      const years = await app.db
+        .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
         .from(transactions)
-        .where(and(...conditions))
-        .orderBy(desc(transactions.executedAt));
-      const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
+        .where(inArray(transactions.portfolioId, pfIds))
+        .orderBy(sql`1 DESC`);
+      const yearList = years.map((r) => String(r.year));
       const durationMs = performance.now() - t0;
       logTiming(request, "GET /networth/transactions", durationMs, {
-        rowCount: rows.length,
+        page,
+        pageSize,
+        total: cached.total,
         portfolioCount: pfs.length,
       });
-      return enriched;
-    },
-  );
+      return { rows: cached.rows, total: cached.total, years: yearList };
+    }
+
+    const rows = await app.db
+      .select()
+      .from(transactions)
+      .where(and(...conditions))
+      .orderBy(desc(transactions.executedAt));
+    const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
+    const durationMs = performance.now() - t0;
+    logTiming(request, "GET /networth/transactions", durationMs, {
+      rowCount: rows.length,
+      portfolioCount: pfs.length,
+    });
+    return enriched;
+  });
 }

@@ -209,10 +209,38 @@ export function ApiTokensManager({
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableTableHead colKey="name" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensName")}</SortableTableHead>
-              <SortableTableHead colKey="scope" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensScope")}</SortableTableHead>
-              <SortableTableHead colKey="lastUsed" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensLastUsed")}</SortableTableHead>
-              <SortableTableHead colKey="expires" sortKey={sortKey} sortDir={sortDir} onToggle={toggle}>{t("tokensExpires")}</SortableTableHead>
+              <SortableTableHead
+                colKey="name"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("tokensName")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="scope"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("tokensScope")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="lastUsed"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("tokensLastUsed")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="expires"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggle}
+              >
+                {t("tokensExpires")}
+              </SortableTableHead>
               <TableHead className="sr-only">{t("tokensRevoke")}</TableHead>
             </TableRow>
           </TableHeader>

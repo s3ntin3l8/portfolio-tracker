@@ -73,7 +73,10 @@ export default async function SettingsLayout({
     },
   ];
 
-  const groups = [[navItems[0], navItems[1]], [navItems[2], navItems[3]]];
+  const groups = [
+    [navItems[0], navItems[1]],
+    [navItems[2], navItems[3]],
+  ];
 
   if (me?.isAdmin) {
     navItems.push({

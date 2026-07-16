@@ -63,10 +63,7 @@ function handlers() {
   };
 }
 
-function renderReview(
-  drafts: ReviewDraft[] = DRAFTS,
-  h: ReturnType<typeof handlers> = handlers(),
-) {
+function renderReview(drafts: ReviewDraft[] = DRAFTS, h: ReturnType<typeof handlers> = handlers()) {
   const utils = render(
     <NextIntlClientProvider locale="en" messages={messages}>
       <ImportReview drafts={drafts} {...h} />
@@ -99,9 +96,7 @@ describe("ImportReview", () => {
     fireEvent.click(screen.getByRole("button", { name: tr.batch.remove }));
     // "Remove" confirm collides with per-row remove buttons — scope to the prompt region.
     const confirmRegion = screen.getByText(tr.batch.removePrompt).parentElement!;
-    fireEvent.click(
-      within(confirmRegion).getByRole("button", { name: tr.batch.removeConfirm }),
-    );
+    fireEvent.click(within(confirmRegion).getByRole("button", { name: tr.batch.removeConfirm }));
     expect(onRemoveMany).toHaveBeenCalledWith(["a", "b", "c"]);
   });
 
@@ -177,10 +172,23 @@ describe("ImportReview", () => {
               eventId: "ev-9",
               eventType: "SSP_CORPORATE_ACTION_INSTRUMENT",
               severity: "attention",
-              message: "SSP_CORPORATE_ACTION_INSTRUMENT without a share count — check the event details",
-              raw: { name: "Acme Corp", isin: "US123", currency: "EUR", executedAt: "2026-02-01", amount: 0, shares: 2 },
+              message:
+                "SSP_CORPORATE_ACTION_INSTRUMENT without a share count — check the event details",
+              raw: {
+                name: "Acme Corp",
+                isin: "US123",
+                currency: "EUR",
+                executedAt: "2026-02-01",
+                amount: 0,
+                shares: 2,
+              },
             },
-            { eventId: "ev-10", eventType: "CARD_VERIFICATION", severity: "info", message: "card verification" },
+            {
+              eventId: "ev-10",
+              eventType: "CARD_VERIFICATION",
+              severity: "info",
+              message: "card verification",
+            },
           ]}
         />
       </NextIntlClientProvider>,
@@ -235,9 +243,7 @@ describe("ImportReview", () => {
     expect(confirm).toBeDisabled();
     expect(confirm.querySelector(".animate-spin")).toBeInTheDocument();
     // Other write buttons are blocked too, so a second submit can't fire.
-    expect(
-      screen.getByRole("button", { name: messages.Import.discard }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: messages.Import.discard })).toBeDisabled();
   });
 
   it("sorts draft rows by name ascending when name header is clicked", () => {
@@ -245,7 +251,9 @@ describe("ImportReview", () => {
     const table = screen.getByRole("table");
     // DRAFTS: Antam Gold (a), Apple Inc (b), FR Bond (c) — already asc by name
     // Click the name header button
-    const nameBtn = within(table).getByRole("button", { name: new RegExp(messages.Import.fields.name, "i") });
+    const nameBtn = within(table).getByRole("button", {
+      name: new RegExp(messages.Import.fields.name, "i"),
+    });
     fireEvent.click(nameBtn);
     const rows = within(table).getAllByRole("row").slice(1);
     // Antam, Apple, FR Bond alphabetically
@@ -262,7 +270,9 @@ describe("ImportReview", () => {
   it("sorts draft rows by date (executedAt) ascending", () => {
     renderReview();
     const table = screen.getByRole("table");
-    const dateBtn = within(table).getByRole("button", { name: new RegExp(messages.Import.fields.executedAt, "i") });
+    const dateBtn = within(table).getByRole("button", {
+      name: new RegExp(messages.Import.fields.executedAt, "i"),
+    });
     fireEvent.click(dateBtn);
     const rows = within(table).getAllByRole("row").slice(1);
     // DRAFTS dates: a=2026-02-08, b=2026-02-07, c=2026-02-05
@@ -295,7 +305,10 @@ describe("ImportReview", () => {
 
   it("shows enrichment notice banner when enrichment drafts are present", () => {
     const draftsWithEnrich: ReviewDraft[] = [
-      { ...DRAFTS[0]!, likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" } },
+      {
+        ...DRAFTS[0]!,
+        likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" },
+      },
       DRAFTS[1]!,
     ];
     renderReview(draftsWithEnrich);
@@ -304,7 +317,10 @@ describe("ImportReview", () => {
 
   it("shows duplicate notice banner when duplicate drafts are present", () => {
     const draftsWithDup: ReviewDraft[] = [
-      { ...DRAFTS[0]!, likelyDuplicate: { kind: "duplicate", source: "csv", executedAt: "2026-02-08" } },
+      {
+        ...DRAFTS[0]!,
+        likelyDuplicate: { kind: "duplicate", source: "csv", executedAt: "2026-02-08" },
+      },
       DRAFTS[1]!,
     ];
     renderReview(draftsWithDup);
@@ -313,7 +329,10 @@ describe("ImportReview", () => {
 
   it("enrichment draft is included in confirm-all (no subset passed)", () => {
     const { onConfirm } = renderReview([
-      { ...DRAFTS[0]!, likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" } },
+      {
+        ...DRAFTS[0]!,
+        likelyDuplicate: { kind: "enrichment", source: "csv", executedAt: "2026-02-08" },
+      },
     ]);
     fireEvent.click(screen.getByRole("button", { name: messages.Import.confirm }));
     // confirm-all passes undefined so the hook applies its own filter

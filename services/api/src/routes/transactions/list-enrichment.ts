@@ -12,15 +12,13 @@ import { corporateActionsFor, instrumentMeta } from "./shared.js";
 export async function deriveIncomeShares(
   app: FastifyInstance,
   rowsByPortfolio: Map<string, (typeof transactions.$inferSelect)[]>,
-): Promise<
-  Map<string, { perShare: string | null; shares: string | null; sharesEstimated: true }>
-> {
+): Promise<Map<string, { perShare: string | null; shares: string | null; sharesEstimated: true }>> {
   const patch = new Map<
     string,
     { perShare: string | null; shares: string | null; sharesEstimated: true }
   >();
 
-  const isCandidate = (r: (typeof transactions.$inferSelect)) =>
+  const isCandidate = (r: typeof transactions.$inferSelect) =>
     r.type === "dividend" && r.instrumentId !== null && (r.perShare === null || r.shares === null);
 
   const portfolioIdsNeeded = [...rowsByPortfolio.entries()]
@@ -41,20 +39,29 @@ export async function deriveIncomeShares(
 
   for (const portfolioId of portfolioIdsNeeded) {
     const coreTxns = toCoreTxns(historyByPortfolio.get(portfolioId) ?? []);
-    const cas = await corporateActionsFor(app, coreTxns.map((t) => t.instrumentId));
+    const cas = await corporateActionsFor(
+      app,
+      coreTxns.map((t) => t.instrumentId),
+    );
     const timelines = buildShareTimelines(coreTxns, cas);
 
     const candidates = (rowsByPortfolio.get(portfolioId) ?? []).filter(isCandidate);
     for (const r of candidates) {
       const sharesDec =
-        r.shares !== null ? new Decimal(r.shares) : sharesHeldAt(timelines, r.instrumentId!, r.executedAt);
+        r.shares !== null
+          ? new Decimal(r.shares)
+          : sharesHeldAt(timelines, r.instrumentId!, r.executedAt);
       if (!sharesDec || sharesDec.lte(0)) continue;
       let perShare = r.perShare;
       if (perShare === null) {
         const gross = new Decimal(r.price).plus(r.tax !== null ? new Decimal(r.tax) : 0);
         perShare = gross.div(sharesDec).toString();
       }
-      patch.set(r.id, { shares: r.shares ?? sharesDec.toString(), perShare, sharesEstimated: true });
+      patch.set(r.id, {
+        shares: r.shares ?? sharesDec.toString(),
+        perShare,
+        sharesEstimated: true,
+      });
     }
   }
 
@@ -63,7 +70,7 @@ export async function deriveIncomeShares(
 
 export async function enrichRows(
   app: FastifyInstance,
-  rows: typeof transactions.$inferSelect[],
+  rows: (typeof transactions.$inferSelect)[],
   total: number,
   summary: { totalInvested: string; totalProceeds: string; totalIncome: string } | undefined,
   portfolioName: string,
@@ -75,9 +82,7 @@ export async function enrichRows(
   handlerT0?: number,
 ) {
   const t0 = handlerT0 ?? performance.now();
-  const allImportIds = rows
-    .map((r) => r.importId)
-    .filter((x): x is string => x !== null);
+  const allImportIds = rows.map((r) => r.importId).filter((x): x is string => x !== null);
   const allTxIds = rows.map((r) => r.id);
   const enrichStart = performance.now();
   let instrMs = 0;
@@ -87,7 +92,10 @@ export async function enrichRows(
   const [meta, sourcesRows, docsByTx, docsByImport] = await Promise.all([
     (async () => {
       const s = performance.now();
-      const r = await instrumentMeta(app, rows.map((r) => r.instrumentId));
+      const r = await instrumentMeta(
+        app,
+        rows.map((r) => r.instrumentId),
+      );
       instrMs = performance.now() - s;
       return r;
     })(),
@@ -124,12 +132,7 @@ export async function enrichRows(
           storedAt: documents.storedAt,
         })
         .from(documents)
-        .where(
-          and(
-            eq(documents.status, "retained"),
-            inArray(documents.transactionId, allTxIds),
-          ),
-        );
+        .where(and(eq(documents.status, "retained"), inArray(documents.transactionId, allTxIds)));
       docsTxMs = performance.now() - s;
       return r;
     })(),
@@ -148,10 +151,7 @@ export async function enrichRows(
             })
             .from(documents)
             .where(
-              and(
-                eq(documents.status, "retained"),
-                inArray(documents.importId, allImportIds),
-              ),
+              and(eq(documents.status, "retained"), inArray(documents.importId, allImportIds)),
             );
           docsImpMs = performance.now() - s;
           return r;
@@ -162,18 +162,17 @@ export async function enrichRows(
 
   const { needsReview, fullTaxDetail } = txFlagsFromSourcesRows(sourcesRows);
   const importIdsWithDocs = new Set(
-    docsRows
-      .map((r) => r.importId)
-      .filter((x): x is string => x !== null),
+    docsRows.map((r) => r.importId).filter((x): x is string => x !== null),
   );
   const txIdsWithDocs = new Set(
-    docsRows
-      .map((r) => r.transactionId)
-      .filter((x): x is string => x !== null),
+    docsRows.map((r) => r.transactionId).filter((x): x is string => x !== null),
   );
   const importMinDateById = new Map<string, Date>();
   for (const r of rows) {
-    if (r.importId && (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)) {
+    if (
+      r.importId &&
+      (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)
+    ) {
       importMinDateById.set(r.importId, r.executedAt);
     }
   }
@@ -195,10 +194,7 @@ export async function enrichRows(
   }
   const tE = performance.now();
 
-  const incomeSharesPatch = await deriveIncomeShares(
-    app,
-    new Map([[portfolioId, rows]]),
-  );
+  const incomeSharesPatch = await deriveIncomeShares(app, new Map([[portfolioId, rows]]));
 
   const responseRows = rows.map((r) => {
     let displayRate: string | undefined;
@@ -211,15 +207,12 @@ export async function enrichRows(
       ...r,
       instrument: r.instrumentId ? (meta.get(r.instrumentId) ?? null) : null,
       hasDocument:
-        txIdsWithDocs.has(r.id) ||
-        (r.importId ? importIdsWithDocs.has(r.importId) : false),
+        txIdsWithDocs.has(r.id) || (r.importId ? importIdsWithDocs.has(r.importId) : false),
       hasFullTaxDetail: fullTaxDetail.has(r.id),
       needsReview: needsReview.has(r.id),
       sources: sourcesMap.get(r.id) ?? [],
       ...(incomeSharesPatch.get(r.id) ?? {}),
-      ...(displayRate
-        ? { displayCurrency: convertTo, displayRate }
-        : {}),
+      ...(displayRate ? { displayCurrency: convertTo, displayRate } : {}),
     };
   });
 
@@ -235,7 +228,9 @@ export async function enrichRows(
     sourcesMs: Math.round(sourcesMs * 100) / 100,
     docsTxMs: Math.round(docsTxMs * 100) / 100,
     docsImpMs: Math.round(docsImpMs * 100) / 100,
-    enrichPhase2Ms: Math.round((tD - enrichStart - Math.max(instrMs, sourcesMs, docsTxMs, docsImpMs)) * 100) / 100,
+    enrichPhase2Ms:
+      Math.round((tD - enrichStart - Math.max(instrMs, sourcesMs, docsTxMs, docsImpMs)) * 100) /
+      100,
     fxMs: tE - tD,
     mapMs: performance.now() - tE,
   });
@@ -245,7 +240,7 @@ export async function enrichRows(
 
 export async function enrichAggregateRows(
   app: FastifyInstance,
-  rows: typeof transactions.$inferSelect[],
+  rows: (typeof transactions.$inferSelect)[],
   nameById: Map<string, string>,
   log: FastifyBaseLogger,
 ) {
@@ -254,7 +249,10 @@ export async function enrichAggregateRows(
   const allTxIds = rows.map((r) => r.id);
   const enrichStart = performance.now();
 
-  const meta = await instrumentMeta(app, rows.map((r) => r.instrumentId).filter((x): x is string => x !== null));
+  const meta = await instrumentMeta(
+    app,
+    rows.map((r) => r.instrumentId).filter((x): x is string => x !== null),
+  );
   const instrMs = performance.now() - enrichStart;
 
   const [sourcesRows, docsByTx, docsByImport] = await Promise.all([
@@ -285,12 +283,19 @@ export async function enrichAggregateRows(
   const sourcesMs = performance.now() - (enrichStart + instrMs);
 
   const docsRows = docsByTx.concat(docsByImport);
-  const importIdsWithDocs = new Set(docsRows.map((r) => r.importId).filter((x): x is string => x !== null));
-  const txIdsWithDocs = new Set(docsRows.map((r) => r.transactionId).filter((x): x is string => x !== null));
+  const importIdsWithDocs = new Set(
+    docsRows.map((r) => r.importId).filter((x): x is string => x !== null),
+  );
+  const txIdsWithDocs = new Set(
+    docsRows.map((r) => r.transactionId).filter((x): x is string => x !== null),
+  );
 
   const importMinDateById = new Map<string, Date>();
   for (const r of rows) {
-    if (r.importId && (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)) {
+    if (
+      r.importId &&
+      (!importMinDateById.has(r.importId) || r.executedAt < importMinDateById.get(r.importId)!)
+    ) {
       importMinDateById.set(r.importId, r.executedAt);
     }
   }
@@ -314,7 +319,7 @@ export async function enrichAggregateRows(
 
   const { needsReview, fullTaxDetail } = txFlagsFromSourcesRows(sourcesRows);
 
-  const rowsByPortfolio = new Map<string, typeof transactions.$inferSelect[]>();
+  const rowsByPortfolio = new Map<string, (typeof transactions.$inferSelect)[]>();
   for (const r of rows) {
     const list = rowsByPortfolio.get(r.portfolioId) ?? [];
     list.push(r);
@@ -329,7 +334,8 @@ export async function enrichAggregateRows(
     hasSources: (sourcesMap.get(r.id)?.length ?? 0) > 0,
     needsReview: needsReview.has(r.id),
     fullTaxDetail: fullTaxDetail.has(r.id),
-    documentRetained: txIdsWithDocs.has(r.id) || (r.importId != null && importIdsWithDocs.has(r.importId)),
+    documentRetained:
+      txIdsWithDocs.has(r.id) || (r.importId != null && importIdsWithDocs.has(r.importId)),
     portfolioName: nameById.get(r.portfolioId) ?? "",
     ...(incomeSharesPatch.get(r.id) ?? {}),
   }));

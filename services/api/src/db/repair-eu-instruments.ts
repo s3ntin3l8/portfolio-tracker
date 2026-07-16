@@ -28,7 +28,6 @@ export async function repairEuInstruments(
   db: DB,
   md: MarketDataService,
 ): Promise<{ pass1Fixed: number; pass2Fixed: number }> {
-
   // ── Pass 1: mutual_fund reclassification ────────────────────────────────────
   const allMutual = await db
     .select()
@@ -37,7 +36,9 @@ export async function repairEuInstruments(
   // Indonesian reksa dana (ISIN starting "ID") are genuine open-end funds — leave them.
   const mutualCandidates = allMutual.filter((i) => i.isin && !i.isin.startsWith("ID"));
 
-  console.log(`\nPass 1: Found ${mutualCandidates.length} foreign mutual_fund instrument(s) to inspect.`);
+  console.log(
+    `\nPass 1: Found ${mutualCandidates.length} foreign mutual_fund instrument(s) to inspect.`,
+  );
 
   let fixed = 0;
   for (const inst of mutualCandidates) {
@@ -85,9 +86,7 @@ export async function repairEuInstruments(
     .from(instruments)
     .where(and(eq(instruments.market, "US"), isNotNull(instruments.isin)));
   // Only those with a non-US ISIN — these were incorrectly pinned to the US market.
-  const usCandidates = allUsRows.filter(
-    (i) => i.isin && !i.isin.toUpperCase().startsWith("US"),
-  );
+  const usCandidates = allUsRows.filter((i) => i.isin && !i.isin.toUpperCase().startsWith("US"));
 
   console.log(
     `\nPass 2: Found ${usCandidates.length} non-US ISIN instrument(s) mis-pinned to market=US.`,
@@ -100,13 +99,10 @@ export async function repairEuInstruments(
     // Determine the correct market/currency. The resolver is now domicile-aware, so it
     // should return a Xetra listing. Guard defensively: if it still returns "US" (shouldn't
     // happen, but be safe), or resolution fails entirely, fall back to XETRA/EUR.
-    const resolvedMarket =
-      hit && hit.market !== "US" ? hit.market : "XETRA";
-    const resolvedCurrency =
-      hit && hit.market !== "US" ? hit.currency : "EUR";
+    const resolvedMarket = hit && hit.market !== "US" ? hit.market : "XETRA";
+    const resolvedCurrency = hit && hit.market !== "US" ? hit.currency : "EUR";
     // Adopt the resolved symbol only when it's a real ticker (not another ISIN).
-    const resolvedSymbol =
-      hit && !isIsin(hit.symbol) ? hit.symbol : inst.symbol;
+    const resolvedSymbol = hit && !isIsin(hit.symbol) ? hit.symbol : inst.symbol;
     const resolvedAssetClass = hit?.assetClass ?? inst.assetClass;
 
     if (
@@ -141,8 +137,7 @@ export async function repairEuInstruments(
 }
 
 // Allow running directly: `tsx src/db/repair-eu-instruments.ts`.
-const invokedDirectly =
-  process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (invokedDirectly) {
   const db = await ensureDb();
   const md = await getMarketData();

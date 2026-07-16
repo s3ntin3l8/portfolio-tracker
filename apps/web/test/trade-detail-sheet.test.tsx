@@ -93,7 +93,12 @@ function renderSheet(trade: Trade | null) {
     onOpenChange,
     ...render(
       <NextIntlClientProvider locale="en" messages={messages}>
-        <TradeDetailSheet trade={trade} currency="IDR" open={trade !== null} onOpenChange={onOpenChange} />
+        <TradeDetailSheet
+          trade={trade}
+          currency="IDR"
+          open={trade !== null}
+          onOpenChange={onOpenChange}
+        />
       </NextIntlClientProvider>,
     ),
   };

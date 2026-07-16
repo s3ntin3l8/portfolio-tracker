@@ -5,25 +5,32 @@ import type { AccountHolder, IbkrConnection, Portfolio, TrConnection } from "@po
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
-const createPortfolio = vi.fn(async () => ({
-  id: "p-new",
-  name: "Test",
-  baseCurrency: "IDR",
-  accountHolderId: null,
-  portfolioType: "standard",
-  birthYear: null,
-  brokerage: null,
-  accountHolder: null,
-  accountNumber: null,
-  userId: "u1",
-}) as unknown as Portfolio);
+const createPortfolio = vi.fn(
+  async () =>
+    ({
+      id: "p-new",
+      name: "Test",
+      baseCurrency: "IDR",
+      accountHolderId: null,
+      portfolioType: "standard",
+      birthYear: null,
+      brokerage: null,
+      accountHolder: null,
+      accountNumber: null,
+      userId: "u1",
+    }) as unknown as Portfolio,
+);
 const updatePortfolio = vi.fn(async () => ({}) as never);
 const deletePortfolio = vi.fn(async () => undefined);
 // Holders the picker offers, and the holder created when the user adds one inline.
 const listAccountHolders = vi.fn(async (): Promise<AccountHolder[]> => []);
 const listPortfolios = vi.fn(async (): Promise<Portfolio[]> => []);
 const createAccountHolder = vi.fn(
-  async (input: { name: string; type: string; birthYear: number | null }): Promise<AccountHolder> => ({
+  async (input: {
+    name: string;
+    type: string;
+    birthYear: number | null;
+  }): Promise<AccountHolder> => ({
     id: "h-new",
     userId: "u1",
     name: input.name,
@@ -36,27 +43,23 @@ const createAccountHolder = vi.fn(
     createdAt: "2026-01-01T00:00:00.000Z",
   }),
 );
-const getTrConnection = vi.fn(
-  async (): Promise<TrConnection> => ({
-    status: "disconnected",
-    portfolioId: null,
-    lastSyncAt: null,
-    lastError: null,
-    lastReconciliation: null,
-    syncing: false,
-  }),
-);
-const getIbkrConnection = vi.fn(
-  async (): Promise<IbkrConnection> => ({
-    status: "disconnected",
-    portfolioId: null,
-    flexAccountId: null,
-    lastSyncAt: null,
-    lastError: null,
-    lastReconciliation: null,
-    syncing: false,
-  }),
-);
+const getTrConnection = vi.fn(async (): Promise<TrConnection> => ({
+  status: "disconnected",
+  portfolioId: null,
+  lastSyncAt: null,
+  lastError: null,
+  lastReconciliation: null,
+  syncing: false,
+}));
+const getIbkrConnection = vi.fn(async (): Promise<IbkrConnection> => ({
+  status: "disconnected",
+  portfolioId: null,
+  flexAccountId: null,
+  lastSyncAt: null,
+  lastError: null,
+  lastReconciliation: null,
+  syncing: false,
+}));
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/api", () => ({
@@ -72,7 +75,10 @@ vi.mock("@/lib/api", () => ({
   }),
 }));
 
-import { PortfolioFormDialog, type EditablePortfolio } from "../src/components/portfolio-form-dialog";
+import {
+  PortfolioFormDialog,
+  type EditablePortfolio,
+} from "../src/components/portfolio-form-dialog";
 import { Button } from "../src/components/ui/button";
 
 const m = messages.PortfolioForm;
@@ -118,11 +124,7 @@ function renderEdit(
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <PortfolioFormDialog
-        mode="edit"
-        portfolio={portfolio}
-        trigger={<Button>{m.edit}</Button>}
-      />
+      <PortfolioFormDialog mode="edit" portfolio={portfolio} trigger={<Button>{m.edit}</Button>} />
     </NextIntlClientProvider>,
   );
 }
@@ -175,7 +177,18 @@ describe("PortfolioFormDialog", () => {
 
   it("links an existing account holder when one is picked", async () => {
     listAccountHolders.mockResolvedValue([
-      { id: "h1", userId: "u1", name: "Emma", type: "child", birthYear: 2017, taxAllowanceAnnual: null, capitalGainsTaxRate: null, churchTax: null, taxResidence: null, createdAt: "x" },
+      {
+        id: "h1",
+        userId: "u1",
+        name: "Emma",
+        type: "child",
+        birthYear: 2017,
+        taxAllowanceAnnual: null,
+        capitalGainsTaxRate: null,
+        churchTax: null,
+        taxResidence: null,
+        createdAt: "x",
+      },
     ]);
     renderCreate();
     fireEvent.click(screen.getByRole("button", { name: m.new }));
@@ -222,16 +235,20 @@ describe("PortfolioFormDialog", () => {
     fireEvent.change(screen.getByLabelText(m.birthYear), { target: { value: "2017" } });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
-    await waitFor(() => expect(createAccountHolder).toHaveBeenCalledWith({
-      name: "Luca",
-      type: "child",
-      birthYear: 2017,
-    }));
-    await waitFor(() => expect(createPortfolio).toHaveBeenCalledWith({
-      name: "Kid",
-      ...baseInput,
-      accountHolderId: "h-new",
-    }));
+    await waitFor(() =>
+      expect(createAccountHolder).toHaveBeenCalledWith({
+        name: "Luca",
+        type: "child",
+        birthYear: 2017,
+      }),
+    );
+    await waitFor(() =>
+      expect(createPortfolio).toHaveBeenCalledWith({
+        name: "Kid",
+        ...baseInput,
+        accountHolderId: "h-new",
+      }),
+    );
   });
 
   it("edits an existing portfolio via PATCH", async () => {
@@ -280,15 +297,15 @@ describe("PortfolioFormDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: m.create }));
 
-    await waitFor(() => expect(createPortfolio).toHaveBeenCalledWith({
-      name: "TR Portfolio",
-      ...baseInput,
-      brokerage: "Trade Republic",
-    }));
-    // Dialog stays open — TR section appears with Done button (no create button anymore)
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: m.done })).toBeInTheDocument(),
+      expect(createPortfolio).toHaveBeenCalledWith({
+        name: "TR Portfolio",
+        ...baseInput,
+        brokerage: "Trade Republic",
+      }),
     );
+    // Dialog stays open — TR section appears with Done button (no create button anymore)
+    await waitFor(() => expect(screen.getByRole("button", { name: m.done })).toBeInTheDocument());
     // TR section title is visible
     expect(screen.getByText(m.trSectionTitle)).toBeInTheDocument();
     // The TR connect form is fetching the connection
@@ -366,7 +383,9 @@ describe("PortfolioFormDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: m.save }));
 
-    await waitFor(() => expect(updatePortfolio).toHaveBeenCalledWith("p-tr-kid", expect.anything()));
+    await waitFor(() =>
+      expect(updatePortfolio).toHaveBeenCalledWith("p-tr-kid", expect.anything()),
+    );
     // Dialog closed — the name field and Save button are gone.
     await waitFor(() => expect(screen.queryByLabelText(m.name)).not.toBeInTheDocument());
     expect(screen.queryByRole("button", { name: m.save })).not.toBeInTheDocument();
@@ -546,9 +565,7 @@ describe("PortfolioFormDialog", () => {
 
     // The over-allocation warning should replace the helper.
     await waitFor(() =>
-      expect(
-        screen.getByText(/Total allocation exceeds the €1000 cap/),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/Total allocation exceeds the €1000 cap/)).toBeInTheDocument(),
     );
     // Normal helper text should be gone.
     expect(screen.queryByText(/€400 left/)).not.toBeInTheDocument();

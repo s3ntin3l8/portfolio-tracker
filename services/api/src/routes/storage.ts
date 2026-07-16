@@ -102,14 +102,9 @@ export const storageRoute = fp(async (app: FastifyInstance) => {
         void reply.header("Content-Length", String(data.length));
         // `download` query param takes precedence (structured name from naming.ts);
         // fall back to the stored originalFilename, then omit the header entirely.
-        const dispositionName = sanitizeDispositionName(
-          download || meta.originalFilename || "",
-        );
+        const dispositionName = sanitizeDispositionName(download || meta.originalFilename || "");
         if (dispositionName) {
-          void reply.header(
-            "Content-Disposition",
-            `attachment; filename="${dispositionName}"`,
-          );
+          void reply.header("Content-Disposition", `attachment; filename="${dispositionName}"`);
         }
         // Browsers may cache signed files for a short time but should revalidate.
         void reply.header("Cache-Control", "private, max-age=60");

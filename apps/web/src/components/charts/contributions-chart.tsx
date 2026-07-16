@@ -75,10 +75,7 @@ export function ContributionsChart({
         {/* Legend lives in the card header (right of the title) — see the Savings page. */}
         <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart
-              data={data}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-            >
+            <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 {/* Transparent base so the band starts at the lower of the two lines */}
                 <linearGradient id="cv-floor" x1="0" y1="0" x2="0" y2="1">
@@ -86,30 +83,14 @@ export function ContributionsChart({
                 </linearGradient>
                 {/* Green fill: value > contributions (the reference's default look) */}
                 <linearGradient id="cv-gain" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor="var(--color-success)"
-                    stopOpacity={0.18}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor="var(--color-success)"
-                    stopOpacity={0}
-                  />
+                  <stop offset="0%" stopColor="var(--color-success)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--color-success)" stopOpacity={0} />
                 </linearGradient>
                 {/* Red fill: value < contributions — real signal (currently underwater),
                     kept but toned down; the reference sample data never dips below cost. */}
                 <linearGradient id="cv-loss" x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor="var(--color-destructive)"
-                    stopOpacity={0.18}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor="var(--color-destructive)"
-                    stopOpacity={0}
-                  />
+                  <stop offset="0%" stopColor="var(--color-destructive)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--color-destructive)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -214,11 +195,7 @@ export function ContributionsChart({
 
   if (points.length < 2) {
     return (
-      <EmptyState
-        icon={PiggyBank}
-        title={te("historyTitle")}
-        description={te("historyBody")}
-      />
+      <EmptyState icon={PiggyBank} title={te("historyTitle")} description={te("historyBody")} />
     );
   }
 

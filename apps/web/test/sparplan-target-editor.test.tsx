@@ -15,7 +15,10 @@ vi.mock("@/i18n/navigation", () => ({
 // mount effect doesn't re-run every render. Lazily built on first call to dodge the
 // import-hoist ordering of the vi.fn() consts.
 vi.mock("@/lib/api", () => {
-  let client: { getPortfolioTargets: typeof getPortfolioTargets; putPortfolioTargets: typeof putPortfolioTargets } | null = null;
+  let client: {
+    getPortfolioTargets: typeof getPortfolioTargets;
+    putPortfolioTargets: typeof putPortfolioTargets;
+  } | null = null;
   return {
     useApiClient: () => (client ??= { getPortfolioTargets, putPortfolioTargets }),
   };

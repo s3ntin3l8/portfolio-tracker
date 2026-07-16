@@ -12,18 +12,62 @@ const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const NOW = d("2026-06-15");
 
 // EUR→IDR at 17000; everything else passes through unconverted.
-const fx = (from: string, to: string) =>
-  from === "EUR" && to === "IDR" ? "17000" : "1";
+const fx = (from: string, to: string) => (from === "EUR" && to === "IDR" ? "17000" : "1");
 
 const events: IncomeEntry[] = [
   // 2024
-  { instrumentId: "bbca", symbol: "BBCA", name: "BCA", assetClass: "equity", type: "dividend", price: "100", currency: "IDR", executedAt: d("2024-03-01") },
+  {
+    instrumentId: "bbca",
+    symbol: "BBCA",
+    name: "BCA",
+    assetClass: "equity",
+    type: "dividend",
+    price: "100",
+    currency: "IDR",
+    executedAt: d("2024-03-01"),
+  },
   // 2025
-  { instrumentId: "bbca", symbol: "BBCA", name: "BCA", assetClass: "equity", type: "dividend", price: "200", currency: "IDR", executedAt: d("2025-03-01") },
-  { instrumentId: "fr01", symbol: "FR01", name: "Bond", assetClass: "bond", type: "coupon", price: "50", currency: "IDR", executedAt: d("2025-09-01") },
+  {
+    instrumentId: "bbca",
+    symbol: "BBCA",
+    name: "BCA",
+    assetClass: "equity",
+    type: "dividend",
+    price: "200",
+    currency: "IDR",
+    executedAt: d("2025-03-01"),
+  },
+  {
+    instrumentId: "fr01",
+    symbol: "FR01",
+    name: "Bond",
+    assetClass: "bond",
+    type: "coupon",
+    price: "50",
+    currency: "IDR",
+    executedAt: d("2025-09-01"),
+  },
   // 2026 (this year, all within TTM)
-  { instrumentId: "bbca", symbol: "BBCA", name: "BCA", assetClass: "equity", type: "dividend", price: "300", currency: "IDR", executedAt: d("2026-03-01") },
-  { instrumentId: "vwrl", symbol: "VWRL", name: "Vanguard", assetClass: "etf", type: "dividend", price: "1", currency: "EUR", executedAt: d("2026-05-01") },
+  {
+    instrumentId: "bbca",
+    symbol: "BBCA",
+    name: "BCA",
+    assetClass: "equity",
+    type: "dividend",
+    price: "300",
+    currency: "IDR",
+    executedAt: d("2026-03-01"),
+  },
+  {
+    instrumentId: "vwrl",
+    symbol: "VWRL",
+    name: "Vanguard",
+    assetClass: "etf",
+    type: "dividend",
+    price: "1",
+    currency: "EUR",
+    executedAt: d("2026-05-01"),
+  },
 ];
 
 describe("aggregateIncome", () => {
@@ -149,9 +193,7 @@ describe("aggregateIncome", () => {
       fx,
       now: NOW,
       forecastCoupons: [],
-      heldQty: new Map([
-        ["bbca", "100"],
-      ]),
+      heldQty: new Map([["bbca", "100"]]),
       qtyAt: (_instId, _at) => "100",
     });
 
@@ -173,7 +215,7 @@ describe("aggregateIncome — forecastRestOfYear / forecastFullYear", () => {
       fx,
       now: NOW,
       projectedDividends: [{ amount: "200000", currency: "IDR" }],
-      restOfYearCoupons:  [{ amount: "50000",  currency: "IDR" }],
+      restOfYearCoupons: [{ amount: "50000", currency: "IDR" }],
     });
     expect(result.forecastRestOfYear).toBe("250000");
     expect(result.forecastFullYear).toBe(
@@ -188,7 +230,7 @@ describe("aggregateIncome — forecastRestOfYear / forecastFullYear", () => {
       fx, // EUR→IDR = 17000
       now: NOW,
       projectedDividends: [{ amount: "2", currency: "EUR" }], // 2 × 17000 = 34000
-      restOfYearCoupons:  [],
+      restOfYearCoupons: [],
     });
     expect(result.forecastRestOfYear).toBe("34000");
     expect(result.forecastFullYear).toBe(String(Number(thisYearActual) + 34000));
@@ -327,12 +369,7 @@ describe("projectNextYearDividends", () => {
   const nextYearStart = "2026-12-31";
   const nextYearEnd = "2027-12-31";
 
-  const hist = (
-    id: string,
-    iso: string,
-    amount: string,
-    currency = "USD",
-  ): IncomeEntry => ({
+  const hist = (id: string, iso: string, amount: string, currency = "USD"): IncomeEntry => ({
     instrumentId: id,
     type: "dividend",
     price: amount,
@@ -369,10 +406,7 @@ describe("projectNextYearDividends", () => {
   });
 
   it("projects two semiannual payments for a semiannual payer", () => {
-    const past = [
-      hist("bond1", "2025-03-01", "500"),
-      hist("bond1", "2025-09-01", "500"),
-    ];
+    const past = [hist("bond1", "2025-03-01", "500"), hist("bond1", "2025-09-01", "500")];
     const heldQty = new Map([["bond1", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW);
     expect(result).toHaveLength(2);
@@ -411,8 +445,8 @@ describe("projectNextYearDividends", () => {
     const past = [
       hist("cutco", "2024-09-01", "50"), // prior window — perShare=5
       hist("cutco", "2025-03-01", "50"), // prior window — perShare=5
-      hist("cutco", "2025-09-01", "5"),  // trailing window — perShare=0.5
-      hist("cutco", "2026-03-01", "5"),  // trailing window — perShare=0.5
+      hist("cutco", "2025-09-01", "5"), // trailing window — perShare=0.5
+      hist("cutco", "2026-03-01", "5"), // trailing window — perShare=0.5
     ];
     const heldQty = new Map([["cutco", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
@@ -427,8 +461,8 @@ describe("projectNextYearDividends", () => {
     // prior window: perShare = 1 each; trailing window: perShare = 10 each
     // raw factor = 10/1 = 10 → clamped to 2.0
     const past = [
-      hist("raiseco", "2024-09-01", "10"),  // prior window — perShare=1
-      hist("raiseco", "2025-03-01", "10"),  // prior window — perShare=1
+      hist("raiseco", "2024-09-01", "10"), // prior window — perShare=1
+      hist("raiseco", "2025-03-01", "10"), // prior window — perShare=1
       hist("raiseco", "2025-09-01", "100"), // trailing window — perShare=10
       hist("raiseco", "2026-03-01", "100"), // trailing window — perShare=10
     ];
@@ -447,13 +481,13 @@ describe("projectNextYearDividends", () => {
     // With one-off guard: median of [1,1,1,30]=1; filter >2*1=2 → exclude 30; prior mean=1
     //   factor = trailing(4) / prior(1) = 4 → clamped to 2.0
     const past = [
-      hist("spec", "2024-09-01", "10"),  // perShare=1 regular — prior window
-      hist("spec", "2024-12-01", "10"),  // perShare=1 regular — prior window
-      hist("spec", "2025-03-01", "10"),  // perShare=1 regular — prior window
+      hist("spec", "2024-09-01", "10"), // perShare=1 regular — prior window
+      hist("spec", "2024-12-01", "10"), // perShare=1 regular — prior window
+      hist("spec", "2025-03-01", "10"), // perShare=1 regular — prior window
       hist("spec", "2025-05-01", "300"), // perShare=30 SPECIAL — prior window (excluded)
-      hist("spec", "2025-09-01", "40"),  // perShare=4 regular — trailing window
-      hist("spec", "2025-12-01", "40"),  // perShare=4 regular — trailing window
-      hist("spec", "2026-03-01", "40"),  // perShare=4 regular — trailing window
+      hist("spec", "2025-09-01", "40"), // perShare=4 regular — trailing window
+      hist("spec", "2025-12-01", "40"), // perShare=4 regular — trailing window
+      hist("spec", "2026-03-01", "40"), // perShare=4 regular — trailing window
     ];
     const heldQty = new Map([["spec", "10"]]);
     const result = projectNextYearDividends(past, heldQty, () => "10", NOW, {
@@ -546,13 +580,12 @@ describe("projectNextYearDividends", () => {
     // Raw factor ≈ 0.52 → −48%: but only 1 payment per window → gate → flat.
     // Base = trailing-12mo mean: 2026-02-01 is the only qualifying payment → 113/282 ≈ 0.4006
     const past = [
-      hist("mwof", "2025-02-01", "77"),  // prior window — perShare=0.77 (inflated)
+      hist("mwof", "2025-02-01", "77"), // prior window — perShare=0.77 (inflated)
       hist("mwof", "2026-02-01", "113"), // trailing window — perShare≈0.40 (run-rate)
     ];
     const heldQty = new Map([["mwof", "282"]]);
     // qtyAt: 100 shares before 2026, 282 after (mirrors the gap from the missing transfer-in)
-    const qtyAt = (_id: string, at: Date) =>
-      at < d("2026-01-01") ? "100" : "282";
+    const qtyAt = (_id: string, at: Date) => (at < d("2026-01-01") ? "100" : "282");
     const result = projectNextYearDividends(past, heldQty, qtyAt, NOW, { applyGrowth: true });
     expect(result).toHaveLength(1); // annual → 1 payment in 2027
     expect(result[0].source).toBe("flat"); // gate blocks the noisy ratio
@@ -567,8 +600,8 @@ describe("projectNextYearDividends", () => {
     // per-share figure — manufacturing a huge outlier. This test verifies the entry
     // is excluded entirely so only valid (qty > 0) payments reach the base and growth.
     const past = [
-      hist("etf", "2024-03-01", "60"),  // qty=0 at this date — MUST be excluded
-      hist("etf", "2025-03-01", "93"),  // qty=10 → perShare=9.3
+      hist("etf", "2024-03-01", "60"), // qty=0 at this date — MUST be excluded
+      hist("etf", "2025-03-01", "93"), // qty=10 → perShare=9.3
       hist("etf", "2026-03-01", "110"), // qty=11 → perShare≈10.0
     ];
     const heldQty = new Map([["etf", "11"]]);

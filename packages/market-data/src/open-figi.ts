@@ -75,12 +75,12 @@ export class OpenFigiProvider implements MarketDataProvider {
     const isUsDomicile = isin.toUpperCase().startsWith("US");
     const match = isUsDomicile
       ? (records.find((r) => r.exchCode === "US" && r.ticker) ??
-         records.find((r) => r.ticker) ??
-         records[0])
+        records.find((r) => r.ticker) ??
+        records[0])
       : (records.find((r) => mapExchange(r.exchCode)?.market === "XETRA" && r.ticker) ??
-         records.find((r) => mapExchange(r.exchCode)?.currency === "EUR" && r.ticker) ??
-         records.find((r) => r.ticker) ??
-         records[0]);
+        records.find((r) => mapExchange(r.exchCode)?.currency === "EUR" && r.ticker) ??
+        records.find((r) => r.ticker) ??
+        records[0]);
     if (!match?.ticker) return null;
 
     return {
@@ -91,9 +91,7 @@ export class OpenFigiProvider implements MarketDataProvider {
       // as securityType "ETP" but securityType2 "Mutual Fund", so preferring the latter
       // misclassifies them. assetClassFromType checks etf/etp first, so the combined
       // string resolves ETPs to `etf` while genuine open-end funds stay `mutual_fund`.
-      type: [match.securityType, match.securityType2, match.marketSector]
-        .filter(Boolean)
-        .join(" "),
+      type: [match.securityType, match.securityType2, match.marketSector].filter(Boolean).join(" "),
     };
   }
 
@@ -125,9 +123,7 @@ export class OpenFigiProvider implements MarketDataProvider {
       symbol: match.ticker,
       exchange: match.exchCode ?? "",
       name: match.name,
-      type: [match.securityType, match.securityType2, match.marketSector]
-        .filter(Boolean)
-        .join(" "),
+      type: [match.securityType, match.securityType2, match.marketSector].filter(Boolean).join(" "),
     };
   }
 }

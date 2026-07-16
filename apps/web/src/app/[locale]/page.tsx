@@ -7,11 +7,7 @@ import { Landing } from "@/components/landing";
 const DEFAULT_CURRENCY_BY_LOCALE: Record<string, string> = { id: "IDR", en: "EUR" };
 const SUPPORTED_DEMO_CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 
-export default async function LandingPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function LandingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
 

@@ -1,10 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import {
-  UpdateProfileForm,
-  type UpdateProfileClient,
-} from "../src/components/update-profile-form";
+import { UpdateProfileForm, type UpdateProfileClient } from "../src/components/update-profile-form";
 import messages from "../messages/en.json";
 
 function renderForm(
@@ -14,11 +11,7 @@ function renderForm(
 ) {
   render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <UpdateProfileForm
-        client={client}
-        initialName={initial.initialName}
-        onSuccess={onSuccess}
-      />
+      <UpdateProfileForm client={client} initialName={initial.initialName} onSuccess={onSuccess} />
     </NextIntlClientProvider>,
   );
   return onSuccess;
@@ -47,9 +40,7 @@ describe("UpdateProfileForm", () => {
     expect(save).toBeEnabled();
     fireEvent.click(save);
 
-    await waitFor(() =>
-      expect(screen.getByText(messages.Settings.saved)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(messages.Settings.saved)).toBeInTheDocument());
     expect(client.updateMe).toHaveBeenCalledWith({ name: "Anya" });
   });
 
@@ -67,9 +58,7 @@ describe("UpdateProfileForm", () => {
     fireEvent.click(screen.getByRole("button", { name: messages.Settings.save }));
 
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        messages.Settings.updateError,
-      ),
+      expect(screen.getByRole("alert")).toHaveTextContent(messages.Settings.updateError),
     );
   });
 });

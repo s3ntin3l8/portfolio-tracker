@@ -3,12 +3,7 @@ import { useState } from "react";
 import { Settings2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -75,11 +70,7 @@ export function KpiPickerSheet({ currentKpis }: KpiPickerSheetProps) {
           <div className="py-4 space-y-3">
             {ALL_KPI_KEYS.map((key) => (
               <div key={key} className="flex items-center gap-2">
-                <Switch
-                  id={key}
-                  checked={selected.has(key)}
-                  onCheckedChange={() => toggle(key)}
-                />
+                <Switch id={key} checked={selected.has(key)} onCheckedChange={() => toggle(key)} />
                 <Label htmlFor={key}>{t(key as KpiKey)}</Label>
               </div>
             ))}

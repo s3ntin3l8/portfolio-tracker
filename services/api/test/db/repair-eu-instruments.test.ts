@@ -4,7 +4,11 @@ import { instruments, lastPrices } from "@portfolio/db";
 import { MarketDataService } from "@portfolio/market-data";
 import type { InstrumentSearchResult } from "@portfolio/market-data";
 import { ensureDb, getDb, closeDb } from "../../src/db/client.js";
-import { getMarketData, overrideMarketData, invalidateMarketData } from "../../src/services/market-data.js";
+import {
+  getMarketData,
+  overrideMarketData,
+  invalidateMarketData,
+} from "../../src/services/market-data.js";
 import { repairEuInstruments } from "../../src/db/repair-eu-instruments.js";
 
 /**
@@ -70,7 +74,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -155,7 +166,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -184,7 +202,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -222,7 +247,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -252,7 +284,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -286,7 +325,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "CSSPX", name: "WRONG US fund", market: "US", assetClass: "etf", currency: "USD", source: "mock" },
+          {
+            symbol: "CSSPX",
+            name: "WRONG US fund",
+            market: "US",
+            assetClass: "etf",
+            currency: "USD",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -344,7 +390,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "IE00BK5BQT80", name: "Vanguard FTSE All-World", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "IE00BK5BQT80",
+            name: "Vanguard FTSE All-World",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );
@@ -377,7 +430,14 @@ describe("repairEuInstruments", () => {
     overrideMarketData(
       buildMockService({
         IE00B5BMR087: [
-          { symbol: "SXR8", name: "iShares Core S&P 500", market: "XETRA", assetClass: "etf", currency: "EUR", source: "mock" },
+          {
+            symbol: "SXR8",
+            name: "iShares Core S&P 500",
+            market: "XETRA",
+            assetClass: "etf",
+            currency: "EUR",
+            source: "mock",
+          },
         ],
       }),
     );

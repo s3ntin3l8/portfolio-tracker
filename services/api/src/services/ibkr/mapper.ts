@@ -7,12 +7,7 @@ import {
   type ParsedTransaction,
 } from "@portfolio/schema";
 import { shortHash } from "../parsers/hash.js";
-import {
-  CASH_TX_TYPES,
-  parseIbkrDate,
-  selectCashRows,
-  type FlexStatement,
-} from "./flex-parse.js";
+import { CASH_TX_TYPES, parseIbkrDate, selectCashRows, type FlexStatement } from "./flex-parse.js";
 
 // ---------------------------------------------------------------------------
 // Asset-class mapping
@@ -103,10 +98,7 @@ export function mapFlexToDrafts(
   // ── 1. Trades ────────────────────────────────────────────────────────────
   for (const trade of statement.trades) {
     // Skip ORDER-level summaries when EXECUTION rows are also present.
-    if (
-      trade.levelOfDetail &&
-      trade.levelOfDetail.toUpperCase() === "ORDER"
-    ) {
+    if (trade.levelOfDetail && trade.levelOfDetail.toUpperCase() === "ORDER") {
       continue;
     }
 
@@ -132,8 +124,7 @@ export function mapFlexToDrafts(
 
     // Commission is negative in Flex; taxes is the trade-level tax (stamp duty etc.).
     const fees = String(
-      Math.abs(Number(strNum(trade.ibCommission))) +
-        Math.abs(Number(strNum(trade.taxes))),
+      Math.abs(Number(strNum(trade.ibCommission))) + Math.abs(Number(strNum(trade.taxes))),
     );
 
     const externalId = trade.tradeID
@@ -321,15 +312,9 @@ export function mapFlexToDrafts(
     const typeRaw = (xfer.type ?? "").toUpperCase();
     const dirRaw = (xfer.direction ?? "").toUpperCase();
     const isIn =
-      typeRaw === "IN" ||
-      typeRaw.includes(" IN") ||
-      typeRaw === "ACATS IN" ||
-      dirRaw === "IN";
+      typeRaw === "IN" || typeRaw.includes(" IN") || typeRaw === "ACATS IN" || dirRaw === "IN";
     const isOut =
-      typeRaw === "OUT" ||
-      typeRaw.includes(" OUT") ||
-      typeRaw === "ACATS OUT" ||
-      dirRaw === "OUT";
+      typeRaw === "OUT" || typeRaw.includes(" OUT") || typeRaw === "ACATS OUT" || dirRaw === "OUT";
 
     if (!isIn && !isOut) {
       errors.push({ message: `Unrecognised transfer direction: ${xfer.type}`, raw: xfer });
@@ -345,13 +330,9 @@ export function mapFlexToDrafts(
     if (xfer.costBasisPrice && Number(strNum(xfer.costBasisPrice)) > 0) {
       price = strNum(xfer.costBasisPrice);
     } else if (xfer.costBasisMoney && Number(qty) > 0) {
-      price = String(
-        Math.abs(Number(strNum(xfer.costBasisMoney))) / Number(qty),
-      );
+      price = String(Math.abs(Number(strNum(xfer.costBasisMoney))) / Number(qty));
     } else if (xfer.positionAmount && Number(qty) > 0) {
-      price = String(
-        Math.abs(Number(strNum(xfer.positionAmount))) / Number(qty),
-      );
+      price = String(Math.abs(Number(strNum(xfer.positionAmount))) / Number(qty));
     }
 
     const externalId = xfer.transactionID

@@ -37,9 +37,7 @@ function monthEndPoints(points: IndexPoint[]): IndexPoint[] {
   for (const p of points) {
     byMonth.set(p.date.slice(0, 7), p); // points are date-ascending → last write wins
   }
-  return [...byMonth.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([, p]) => p);
+  return [...byMonth.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, p]) => p);
 }
 
 function monthlyReturns(points: IndexPoint[]): { date: string; returnPct: number }[] {
@@ -67,7 +65,7 @@ export function streakAnalysis(points: IndexPoint[]): StreakResult {
     const isPositive = months[i].returnPct >= 0;
     let j = i;
     let compoundReturn = 1;
-    while (j < months.length && (months[j].returnPct >= 0) === isPositive) {
+    while (j < months.length && months[j].returnPct >= 0 === isPositive) {
       compoundReturn *= 1 + months[j].returnPct;
       j++;
     }

@@ -28,13 +28,19 @@ export function TradeMethodToggle({ current, labelAverage, labelFifo }: Props) {
     <div className="inline-flex items-center rounded-lg border border-border bg-muted p-1 text-sm font-medium">
       <Link
         href={href("average")}
-        className={cn("rounded-md px-3 py-1 transition-colors", current === "average" ? active : inactive)}
+        className={cn(
+          "rounded-md px-3 py-1 transition-colors",
+          current === "average" ? active : inactive,
+        )}
       >
         {labelAverage}
       </Link>
       <Link
         href={href("fifo")}
-        className={cn("rounded-md px-3 py-1 transition-colors", current === "fifo" ? active : inactive)}
+        className={cn(
+          "rounded-md px-3 py-1 transition-colors",
+          current === "fifo" ? active : inactive,
+        )}
       >
         {labelFifo}
       </Link>

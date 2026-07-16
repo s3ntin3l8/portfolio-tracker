@@ -101,7 +101,10 @@ export const SOURCE_ICON: Record<string, LucideIcon> = {
  *  dividend/coupon, cash in/out arrows, a gem for share events, teal for transfers/merger).
  *  `loan_drawdown`/`loan_repayment` (gold cicilan) have no reference equivalent — grouped
  *  with cash in/out by cashflow direction. */
-const TYPE_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }> = {
+const TYPE_ICON: Record<
+  string,
+  { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }
+> = {
   buy: { icon: ArrowDownToLine, tone: "success" },
   savings_plan: { icon: ArrowDownToLine, tone: "success" },
   sell: { icon: ArrowUpFromLine, tone: "destructive" },
@@ -130,7 +133,10 @@ const TYPE_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructi
  *  would otherwise be indistinguishable in the list (e.g. TR saveback vs round-up vs crypto
  *  bonus). Keyed by `kind`, takes precedence over {@link TYPE_ICON} when present — see
  *  {@link TypeIconChip} and the row label in the Transaction column. */
-const KIND_ICON: Record<string, { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }> = {
+const KIND_ICON: Record<
+  string,
+  { icon: LucideIcon; tone: "success" | "destructive" | "warning" | "violet" | "teal" }
+> = {
   // Real cash bonus from TR, reinvested cash-neutral — distinct from a round-up's real spend.
   saveback: { icon: Gift, tone: "violet" },
   // Spare-change purchase funded by the user's own money — a real cash-out, unlike saveback.
@@ -395,7 +401,11 @@ export function TransactionsTable({
   scopeCurrency?: string;
   /** Server-computed summary aggregates for the current filter (all pages). Present when
    *  a single portfolio is selected (not the aggregate view). */
-  summary?: { totalInvested: string | null; totalProceeds: string | null; totalIncome: string | null } | null;
+  summary?: {
+    totalInvested: string | null;
+    totalProceeds: string | null;
+    totalIncome: string | null;
+  } | null;
   /** Available years for the year filter dropdown, derived server-side from the full
    *  (unpaginated) transaction set. */
   years?: string[];
@@ -618,8 +628,7 @@ export function TransactionsTable({
   const tradeBanner = useMemo(() => {
     if (activeBannerMode !== "buy" && activeBannerMode !== "sell") return null;
     if (summary) {
-      const total =
-        activeBannerMode === "buy" ? summary.totalInvested : summary.totalProceeds;
+      const total = activeBannerMode === "buy" ? summary.totalInvested : summary.totalProceeds;
       if (!total) return null;
       const money = (n: number) => formatMoneyCompact(n, scopeCurrency, locale);
       return {
@@ -649,7 +658,12 @@ export function TransactionsTable({
   );
 
   // Cleanup debounce on unmount.
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
 
   // Anomalies with no transactionId (reconciliation_gap, position_gap, …) never drive the
   // row-level "Show flagged" toggle above — surfaced here instead, independent of any
@@ -854,10 +868,7 @@ export function TransactionsTable({
   // full filtered set), not this window, so "select all" still covers everything filtered,
   // not just what's currently rendered. Memoized (unlike `sortedRows`, a bare re-sort call)
   // so it has a stable identity for `dayGroups`' dependency array below.
-  const windowedRows = useMemo(
-    () => sortedRows.slice(0, visibleCount),
-    [sortedRows, visibleCount],
-  );
+  const windowedRows = useMemo(() => sortedRows.slice(0, visibleCount), [sortedRows, visibleCount]);
   const hasMore = sortedRows.length > windowedRows.length || accumulatedRows.length < (total ?? 0);
   // The reference groups the ledger into month bands. That only reads coherently while the
   // list is in date order (the default, or an explicit Date sort); any other sort renders flat.
@@ -946,16 +957,20 @@ export function TransactionsTable({
           bySourceLabel={tBanner("bySource")}
         />
       )}
-      {showFilterBanners && tradeBanner && (activeBannerMode === "buy" || activeBannerMode === "sell") && (
-        <TradeFilterBanner
-          data={tradeBanner}
-          totalLabel={tBanner(activeBannerMode === "buy" ? "investedAllTime" : "proceedsAllTime")}
-          ordersNote={tBanner("ordersCount", { count: tradeBanner.count })}
-          averageLabel={tBanner("averageOrder")}
-          averageNote={tBanner(activeBannerMode === "buy" ? "capitalDeployed" : "capitalReturned")}
-          headingLabel={tBanner(activeBannerMode === "buy" ? "mostBought" : "mostSold")}
-        />
-      )}
+      {showFilterBanners &&
+        tradeBanner &&
+        (activeBannerMode === "buy" || activeBannerMode === "sell") && (
+          <TradeFilterBanner
+            data={tradeBanner}
+            totalLabel={tBanner(activeBannerMode === "buy" ? "investedAllTime" : "proceedsAllTime")}
+            ordersNote={tBanner("ordersCount", { count: tradeBanner.count })}
+            averageLabel={tBanner("averageOrder")}
+            averageNote={tBanner(
+              activeBannerMode === "buy" ? "capitalDeployed" : "capitalReturned",
+            )}
+            headingLabel={tBanner(activeBannerMode === "buy" ? "mostBought" : "mostSold")}
+          />
+        )}
       {showFilterBanners &&
         portfolioAnomalies.map((a, i) => (
           <ReconciliationBanner
@@ -969,86 +984,86 @@ export function TransactionsTable({
       <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center">
         {/* Chips scroll horizontally on mobile (no awkward multi-line wrap); wrap on desktop. */}
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden">
-        {/* Reference tChips: rounded-full pills, active = white on var(--pill),
+          {/* Reference tChips: rounded-full pills, active = white on var(--pill),
             inactive = 600 on card bg with a border. Navigational — update the URL,
             server re-fetches with the new filter. "Needs review · N" is local state. */}
-        {(
-          [
-            ["all", t("filterAll")],
-            ["buy", tBanner("chipBuys")],
-            ["sell", tBanner("chipSells")],
-            ["income", tBanner("chipIncome")],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => navigateWithParam("type", key === "all" ? undefined : key)}
-            aria-pressed={key === "all" ? !typeFilter : typeFilter === key}
-            className={cn(
-              "whitespace-nowrap rounded-full px-3.5 py-[7px] text-xs",
-              (key === "all" ? !typeFilter : typeFilter === key)
-                ? "bg-pill font-bold text-white"
-                : "border border-border bg-card font-semibold text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-        {anomalyByTxId.size > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowFlagged((v) => !v)}
-            aria-pressed={showFlagged}
-            className={cn(
-              "whitespace-nowrap rounded-full border px-3 py-[7px] text-xs font-bold",
-              showFlagged
-                ? "border-[var(--gold-fg)] bg-[var(--gold-fg)] text-white"
-                : "border-[rgba(224,165,58,.34)] bg-[rgba(224,165,58,.12)] text-[var(--gold-fg)]",
-            )}
-          >
-            {tBanner("chipIssues", { count: anomalyByTxId.size })}
-          </button>
-        )}
-        {yearOptions.length > 1 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={t("filterYear")}
-                className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                {yearFilterProp ?? t("allYears")}
-                <ChevronDown className="size-3.5 shrink-0 text-text-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[9rem]">
-              {["all", ...yearOptions].map((y) => (
-                <DropdownMenuItem
-                  key={y}
-                  onSelect={() => navigateWithParam("year", y === "all" ? undefined : y)}
-                  className="justify-between gap-3"
+          {(
+            [
+              ["all", t("filterAll")],
+              ["buy", tBanner("chipBuys")],
+              ["sell", tBanner("chipSells")],
+              ["income", tBanner("chipIncome")],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => navigateWithParam("type", key === "all" ? undefined : key)}
+              aria-pressed={key === "all" ? !typeFilter : typeFilter === key}
+              className={cn(
+                "whitespace-nowrap rounded-full px-3.5 py-[7px] text-xs",
+                (key === "all" ? !typeFilter : typeFilter === key)
+                  ? "bg-pill font-bold text-white"
+                  : "border border-border bg-card font-semibold text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+          {anomalyByTxId.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowFlagged((v) => !v)}
+              aria-pressed={showFlagged}
+              className={cn(
+                "whitespace-nowrap rounded-full border px-3 py-[7px] text-xs font-bold",
+                showFlagged
+                  ? "border-[var(--gold-fg)] bg-[var(--gold-fg)] text-white"
+                  : "border-[rgba(224,165,58,.34)] bg-[rgba(224,165,58,.12)] text-[var(--gold-fg)]",
+              )}
+            >
+              {tBanner("chipIssues", { count: anomalyByTxId.size })}
+            </button>
+          )}
+          {yearOptions.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t("filterYear")}
+                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card pl-3 pr-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  {y === "all" ? t("allYears") : y}
-                  {(y === "all" ? !yearFilterProp : yearFilterProp === y) && (
-                    <Check className="size-4 text-primary" />
-                  )}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {draftCount > 0 && (
-          <select
-            aria-label={t("filterDraftLabel")}
-            value={draftFilter}
-            onChange={(e) => setDraftFilter(e.target.value as "all" | "drafts")}
-            className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="all">{t("draftShowAll")}</option>
-            <option value="drafts">{t("draftOnly", { count: draftCount })}</option>
-          </select>
-        )}
+                  {yearFilterProp ?? t("allYears")}
+                  <ChevronDown className="size-3.5 shrink-0 text-text-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[9rem]">
+                {["all", ...yearOptions].map((y) => (
+                  <DropdownMenuItem
+                    key={y}
+                    onSelect={() => navigateWithParam("year", y === "all" ? undefined : y)}
+                    className="justify-between gap-3"
+                  >
+                    {y === "all" ? t("allYears") : y}
+                    {(y === "all" ? !yearFilterProp : yearFilterProp === y) && (
+                      <Check className="size-4 text-primary" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {draftCount > 0 && (
+            <select
+              aria-label={t("filterDraftLabel")}
+              value={draftFilter}
+              onChange={(e) => setDraftFilter(e.target.value as "all" | "drafts")}
+              className="h-8 rounded-full border border-border bg-card px-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="all">{t("draftShowAll")}</option>
+              <option value="drafts">{t("draftOnly", { count: draftCount })}</option>
+            </select>
+          )}
         </div>
         <div className="relative flex items-center sm:ml-auto">
           <Search className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
@@ -1102,12 +1117,7 @@ export function TransactionsTable({
             (confirming ? (
               <span className="flex items-center gap-2">
                 <span className="text-muted-foreground">{tb("confirmPrompt")}</span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={onBatchDelete}
-                  disabled={busy}
-                >
+                <Button size="sm" variant="destructive" onClick={onBatchDelete} disabled={busy}>
                   {busy && <Loader2 className="size-3.5 animate-spin" />}
                   {tb("confirm")}
                 </Button>
@@ -1245,14 +1255,78 @@ export function TransactionsTable({
                   </Button>
                 )}
               </TableHead>
-              <SortableTableHead colKey="date" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("date")}</SortableTableHead>
-              <SortableTableHead colKey="instrument" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("transactionCol")}</SortableTableHead>
-              {showPortfolio && <SortableTableHead colKey="portfolio" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort}>{t("portfolio")}</SortableTableHead>}
-              <SortableTableHead colKey="quantity" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("quantity")}</SortableTableHead>
-              <SortableTableHead colKey="price" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("price")}</SortableTableHead>
-              <SortableTableHead colKey="tax" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right" className="hidden lg:table-cell">{t("tax")}</SortableTableHead>
-              <SortableTableHead colKey="source" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} className="hidden sm:table-cell">{t("source")}</SortableTableHead>
-              <SortableTableHead colKey="netAmount" sortKey={sortKey} sortDir={sortDir} onToggle={toggleSort} align="right">{t("amount")}</SortableTableHead>
+              <SortableTableHead
+                colKey="date"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("date")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="instrument"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+              >
+                {t("transactionCol")}
+              </SortableTableHead>
+              {showPortfolio && (
+                <SortableTableHead
+                  colKey="portfolio"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onToggle={toggleSort}
+                >
+                  {t("portfolio")}
+                </SortableTableHead>
+              )}
+              <SortableTableHead
+                colKey="quantity"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                align="right"
+              >
+                {t("quantity")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="price"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                align="right"
+              >
+                {t("price")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="tax"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                align="right"
+                className="hidden lg:table-cell"
+              >
+                {t("tax")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="source"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                className="hidden sm:table-cell"
+              >
+                {t("source")}
+              </SortableTableHead>
+              <SortableTableHead
+                colKey="netAmount"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onToggle={toggleSort}
+                align="right"
+              >
+                {t("amount")}
+              </SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1265,7 +1339,8 @@ export function TransactionsTable({
               // The band uses role="presentation" so it stays out of row counts/queries.
               const monthKey = tx.executedAt.slice(0, 7);
               const showBand =
-                groupByMonth && (i === 0 || windowedRows[i - 1].executedAt.slice(0, 7) !== monthKey);
+                groupByMonth &&
+                (i === 0 || windowedRows[i - 1].executedAt.slice(0, 7) !== monthKey);
               return (
                 <Fragment key={tx.id}>
                   {showBand && (
@@ -1278,115 +1353,117 @@ export function TransactionsTable({
                       </td>
                     </tr>
                   )}
-                <TableRow
-                  data-state={isSelected ? "selected" : undefined}
-                  className={`cursor-pointer select-none ${status === "archived" ? "opacity-50" : ""} ${
-                    status === "draft" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
-                  }`}
-                  onClick={() => onRowActivate(tx)}
-                  {...longPressHandlers(tx.id)}
-                >
-                  <TableCell className="w-16">
-                    {selectionMode && (
-                      <span onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="size-4 align-middle accent-primary"
-                          aria-label={tb("selectRow")}
-                          checked={isSelected}
-                          onChange={() => toggle(tx.id)}
-                        />
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular whitespace-nowrap text-xs font-semibold text-text-2">
-                    {rowDate(tx.executedAt)}
-                  </TableCell>
-                  {/* Reference "Transaction" column: 36px kind chip + "Buy · SYM"
+                  <TableRow
+                    data-state={isSelected ? "selected" : undefined}
+                    className={`cursor-pointer select-none ${status === "archived" ? "opacity-50" : ""} ${
+                      status === "draft" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
+                    }`}
+                    onClick={() => onRowActivate(tx)}
+                    {...longPressHandlers(tx.id)}
+                  >
+                    <TableCell className="w-16">
+                      {selectionMode && (
+                        <span onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            className="size-4 align-middle accent-primary"
+                            aria-label={tb("selectRow")}
+                            checked={isSelected}
+                            onChange={() => toggle(tx.id)}
+                          />
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="tabular whitespace-nowrap text-xs font-semibold text-text-2">
+                      {rowDate(tx.executedAt)}
+                    </TableCell>
+                    {/* Reference "Transaction" column: 36px kind chip + "Buy · SYM"
                       700 14px title + instrument name 500 12px text-2; status badges
                       and anomaly tags ride inline next to the title. */}
-                  <TableCell>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <TypeIconChip type={tx.type} kind={tx.kind} />
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-[7px]">
-                          <span className="truncate text-sm font-bold">
-                            {tx.kind && KIND_ICON[tx.kind] ? tt(tx.kind) : tt(tx.type)}
-                            {tx.instrument?.symbol ? ` · ${tx.instrument.symbol}` : ""}
-                          </span>
-                          {anomaly && (
-                            <span
-                              title={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
-                              aria-label={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
-                            >
-                              {anomaly.severity === "error" ? (
-                                <AlertCircle className="size-3.5 shrink-0 text-destructive" />
-                              ) : (
-                                <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-                              )}
+                    <TableCell>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <TypeIconChip type={tx.type} kind={tx.kind} />
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-[7px]">
+                            <span className="truncate text-sm font-bold">
+                              {tx.kind && KIND_ICON[tx.kind] ? tt(tx.kind) : tt(tx.type)}
+                              {tx.instrument?.symbol ? ` · ${tx.instrument.symbol}` : ""}
                             </span>
-                          )}
-                          {status === "draft" && (
-                            <Badge
-                              variant="outline"
-                              className="border-amber-400/50 text-amber-600 dark:text-amber-400"
-                            >
-                              {tm("status.badgeDraft")}
-                            </Badge>
-                          )}
-                          {status === "draft" && tx.needsReview && (
-                            <span
-                              className="inline-flex items-center"
-                              title={tm("status.needsReview")}
-                              aria-label={tm("status.needsReview")}
-                            >
-                              <AlertTriangle className="size-3.5 text-amber-500" />
-                            </span>
-                          )}
-                          {status === "archived" && (
-                            <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
-                          )}
-                          {status === "cash_neutral" && (
-                            <Badge variant="outline">{tm("status.badgeCashNeutral")}</Badge>
-                          )}
-                        </div>
-                        <div className="truncate text-xs font-medium text-text-2">
-                          {tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel")}
+                            {anomaly && (
+                              <span
+                                title={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                                aria-label={anomalyLabel(anomaly, ta as AnomalyTranslator, locale)}
+                              >
+                                {anomaly.severity === "error" ? (
+                                  <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                                ) : (
+                                  <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                                )}
+                              </span>
+                            )}
+                            {status === "draft" && (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-400/50 text-amber-600 dark:text-amber-400"
+                              >
+                                {tm("status.badgeDraft")}
+                              </Badge>
+                            )}
+                            {status === "draft" && tx.needsReview && (
+                              <span
+                                className="inline-flex items-center"
+                                title={tm("status.needsReview")}
+                                aria-label={tm("status.needsReview")}
+                              >
+                                <AlertTriangle className="size-3.5 text-amber-500" />
+                              </span>
+                            )}
+                            {status === "archived" && (
+                              <Badge variant="outline">{tm("status.badgeArchived")}</Badge>
+                            )}
+                            {status === "cash_neutral" && (
+                              <Badge variant="outline">{tm("status.badgeCashNeutral")}</Badge>
+                            )}
+                          </div>
+                          <div className="truncate text-xs font-medium text-text-2">
+                            {tx.instrument?.displayName ?? tx.instrument?.name ?? t("cashLabel")}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  {showPortfolio && (
-                    <TableCell className="text-xs font-medium text-text-2">
-                      {tx.portfolioName ?? "—"}
                     </TableCell>
-                  )}
-                  <TableCell className="tabular text-right text-[13px] font-semibold text-text-2">
-                    {Number(tx.quantity) || rowQuantityDisplay(tx) || "—"}
-                  </TableCell>
-                  <TableCell className="tabular text-right text-[13px] font-semibold">
-                    {Number(tx.quantity) > 0
-                      ? m(Number(tx.price), tx.currency)
-                      : (rowPerShareDisplay(tx, m) ?? "—")}
-                  </TableCell>
-                  <TableCell className="tabular hidden text-right text-[13px] font-semibold text-text-2 lg:table-cell">
-                    {tx.tax != null && Number(tx.tax) !== 0 ? m(Number(tx.tax), tx.currency) : "—"}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <div className="flex flex-wrap items-center gap-1">
-                      <SourceChips
-                        tx={tx}
-                        t={t}
-                        chipClassName="inline-flex items-center whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[9px] font-bold uppercase"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell
-                    className={`tabular text-right text-sm font-bold ${netAmount > 0 ? "text-success" : ""}`}
-                  >
-                    {m(netAmount, tx.currency)}
-                  </TableCell>
-                </TableRow>
+                    {showPortfolio && (
+                      <TableCell className="text-xs font-medium text-text-2">
+                        {tx.portfolioName ?? "—"}
+                      </TableCell>
+                    )}
+                    <TableCell className="tabular text-right text-[13px] font-semibold text-text-2">
+                      {Number(tx.quantity) || rowQuantityDisplay(tx) || "—"}
+                    </TableCell>
+                    <TableCell className="tabular text-right text-[13px] font-semibold">
+                      {Number(tx.quantity) > 0
+                        ? m(Number(tx.price), tx.currency)
+                        : (rowPerShareDisplay(tx, m) ?? "—")}
+                    </TableCell>
+                    <TableCell className="tabular hidden text-right text-[13px] font-semibold text-text-2 lg:table-cell">
+                      {tx.tax != null && Number(tx.tax) !== 0
+                        ? m(Number(tx.tax), tx.currency)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <SourceChips
+                          tx={tx}
+                          t={t}
+                          chipClassName="inline-flex items-center whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[9px] font-bold uppercase"
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell
+                      className={`tabular text-right text-sm font-bold ${netAmount > 0 ? "text-success" : ""}`}
+                    >
+                      {m(netAmount, tx.currency)}
+                    </TableCell>
+                  </TableRow>
                 </Fragment>
               );
             })}
@@ -1448,7 +1525,11 @@ export function TransactionsTable({
                         className="size-4 shrink-0 accent-primary"
                       />
                     )}
-                    <TypeIconChip type={tx.type} kind={tx.kind} className="size-10 rounded-[12px]" />
+                    <TypeIconChip
+                      type={tx.type}
+                      kind={tx.kind}
+                      className="size-10 rounded-[12px]"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-[7px]">
                         <span className="truncate text-sm font-bold">
@@ -1518,7 +1599,10 @@ export function TransactionsTable({
               if (accumulatedRows.length < (total ?? 0)) {
                 setLoadingMore(true);
                 try {
-                  const params = new URLSearchParams({ page: String(currentPage + 1), pageSize: "25" });
+                  const params = new URLSearchParams({
+                    page: String(currentPage + 1),
+                    pageSize: "25",
+                  });
                   if (typeFilter) params.set("type", typeFilter);
                   if (yearFilterProp) params.set("year", yearFilterProp);
                   if (searchQuery) params.set("q", searchQuery);
@@ -1540,21 +1624,35 @@ export function TransactionsTable({
             {tb("loadMore")}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {tb("showingCount", { shown: windowedRows.length, total: Math.max(sortedRows.length, total ?? 0) })}
+            {tb("showingCount", {
+              shown: windowedRows.length,
+              total: Math.max(sortedRows.length, total ?? 0),
+            })}
           </span>
         </div>
       )}
 
       <TransactionDetailSheet
         tx={detailTx}
-        anomaly={detailTx ? anomalyByTxId.get(detailTx.id) ?? null : null}
+        anomaly={detailTx ? (anomalyByTxId.get(detailTx.id) ?? null) : null}
         open={!!detailTx}
-        onOpenChange={(o) => { if (!o) setDetailTx(null); }}
-        onDeleted={() => { setDetailTx(null); router.refresh(); }}
+        onOpenChange={(o) => {
+          if (!o) setDetailTx(null);
+        }}
+        onDeleted={() => {
+          setDetailTx(null);
+          router.refresh();
+        }}
         portfolios={portfolios}
         scopeCurrency={scopeCurrency}
-        onEdit={(tx) => { setDetailTx(null); setEditTx(tx); }}
-        onReassign={(tx) => { setDetailTx(null); setReassignRows([tx]); }}
+        onEdit={(tx) => {
+          setDetailTx(null);
+          setEditTx(tx);
+        }}
+        onReassign={(tx) => {
+          setDetailTx(null);
+          setReassignRows([tx]);
+        }}
         onResolve={(tx, action) => onResolveOne(tx, action)}
         resolving={resolvingId === detailTx?.id}
       />
@@ -1562,7 +1660,9 @@ export function TransactionsTable({
       <EditTransactionSheet
         tx={editTx}
         open={!!editTx}
-        onOpenChange={(o) => { if (!o) setEditTx(null); }}
+        onOpenChange={(o) => {
+          if (!o) setEditTx(null);
+        }}
       />
     </div>
   );

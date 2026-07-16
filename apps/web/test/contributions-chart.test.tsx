@@ -19,28 +19,18 @@ vi.mock("@/components/charts/price-chart", () => ({
 // Also stub the recharts v3 hooks used by the OverlayTooltip (they read from the
 // recharts Redux store which is not available in jsdom without a full chart render).
 vi.mock("recharts", () => ({
-  ComposedChart: ({
-    children,
-    data,
-  }: {
-    children: React.ReactNode;
-    data: unknown[];
-  }) => (
+  ComposedChart: ({ children, data }: { children: React.ReactNode; data: unknown[] }) => (
     <div data-testid="overlay-chart" data-points={data.length}>
       {children}
     </div>
   ),
   Area: () => null,
-  Line: ({ dataKey }: { dataKey: string }) => (
-    <div data-testid={`line-${dataKey}`} />
-  ),
+  Line: ({ dataKey }: { dataKey: string }) => <div data-testid={`line-${dataKey}`} />,
   XAxis: () => null,
   YAxis: () => null,
   Tooltip: () => null,
   CartesianGrid: () => null,
-  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   useActiveTooltipDataPoints: () => [],
   useActiveTooltipLabel: () => undefined,
   useIsTooltipActive: () => false,
@@ -75,12 +65,7 @@ function renderChart(
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <ContributionsChart
-        series={s}
-        dailySeries={d}
-        valueHistory={v}
-        currency={currency}
-      />
+      <ContributionsChart series={s} dailySeries={d} valueHistory={v} currency={currency} />
     </NextIntlClientProvider>,
   );
 }
@@ -111,9 +96,7 @@ describe("ContributionsChart — overlay path", () => {
   // worth footer into ~80% of the width on mobile instead of spreading evenly.
   it("spreads the Invested/Gain/Now worth footer across an even 3-col grid on mobile", () => {
     renderChart(series, valueHistory);
-    const footer = screen
-      .getByText(messages.Savings.footerInvested)
-      .closest("div.grid");
+    const footer = screen.getByText(messages.Savings.footerInvested).closest("div.grid");
     expect(footer).toHaveClass("grid-cols-3");
   });
 });
@@ -130,9 +113,7 @@ describe("ContributionsChart — degraded path (no value history)", () => {
 
   it("shows the info note about missing value history", () => {
     renderChart(series, []);
-    expect(
-      screen.getByText(messages.Savings.chartValueUnavailable),
-    ).toBeInTheDocument();
+    expect(screen.getByText(messages.Savings.chartValueUnavailable)).toBeInTheDocument();
   });
 
   it("shows an empty state when there is too little contribution history to plot", () => {

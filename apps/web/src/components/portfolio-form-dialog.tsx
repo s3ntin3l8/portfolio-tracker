@@ -16,13 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { HolderTypeChips } from "@/components/holder-type-chips";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 import { deletePortfolioWithCleanup } from "@/lib/delete-portfolio";
@@ -37,7 +31,20 @@ const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
  * (derived from the holder) and only used to gate the TR connection section. */
 export type EditablePortfolio = Pick<
   Portfolio,
-  "id" | "name" | "baseCurrency" | "accountHolderId" | "portfolioType" | "brokerage" | "accountNumber" | "iban" | "includeInAggregate" | "cashCounted" | "allowNegativeCash" | "documentRetention" | "taxAllowanceAnnual" | "transactionCount"
+  | "id"
+  | "name"
+  | "baseCurrency"
+  | "accountHolderId"
+  | "portfolioType"
+  | "brokerage"
+  | "accountNumber"
+  | "iban"
+  | "includeInAggregate"
+  | "cashCounted"
+  | "allowNegativeCash"
+  | "documentRetention"
+  | "taxAllowanceAnnual"
+  | "transactionCount"
 >;
 
 // Sentinel select value for "create a new holder inline".
@@ -90,7 +97,9 @@ export function PortfolioFormDialog({
   const [brokerage, setBrokerage] = useState(portfolio?.brokerage ?? "");
   const [accountNumber, setAccountNumber] = useState(portfolio?.accountNumber ?? "");
   const [iban, setIban] = useState(portfolio?.iban ?? "");
-  const [includeInAggregate, setIncludeInAggregate] = useState(portfolio?.includeInAggregate ?? true);
+  const [includeInAggregate, setIncludeInAggregate] = useState(
+    portfolio?.includeInAggregate ?? true,
+  );
   const [cashCounted, setCashCounted] = useState(portfolio?.cashCounted ?? false);
   const [allowNegativeCash, setAllowNegativeCash] = useState(portfolio?.allowNegativeCash ?? false);
   const [documentRetention, setDocumentRetention] = useState(portfolio?.documentRetention ?? false);
@@ -120,9 +129,7 @@ export function PortfolioFormDialog({
   // holder: the inline new-holder's type, or an existing holder's type.
   const selectedHolder = holders.find((h) => h.id === accountHolderId) ?? null;
   const liveIsChild =
-    accountHolderId === NEW_HOLDER
-      ? newHolderType === "child"
-      : selectedHolder?.type === "child";
+    accountHolderId === NEW_HOLDER ? newHolderType === "child" : selectedHolder?.type === "child";
   // Trade Republic can't sync child accounts (Kinderdepot). Gate the connect section on the
   // *saved* type so the offer never disagrees with the backend guard that rejects such
   // bindings (#199); use the live child status only for the explanatory note, which is
@@ -342,12 +349,11 @@ export function PortfolioFormDialog({
     trConnection.portfolioId !== null &&
     trConnection.portfolioId !== effectivePortfolio.id;
 
-  const trInitForFlow: TrConnection | null =
-    !trConnection  // null (loading) or false (error)
-      ? null
-      : boundElsewhere
-        ? { ...trConnection, status: "disconnected", portfolioId: null }
-        : trConnection;
+  const trInitForFlow: TrConnection | null = !trConnection // null (loading) or false (error)
+    ? null
+    : boundElsewhere
+      ? { ...trConnection, status: "disconnected", portfolioId: null }
+      : trConnection;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} dismissible={false}>
@@ -547,7 +553,9 @@ export function PortfolioFormDialog({
               {showFsaHelper && fsaOverAllocated && (
                 <div className="flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-300">
                   <TriangleAlert className="size-3.5 mt-0.5 shrink-0" />
-                  <span>{t("taxAllowanceOverAllocated", { cap: holderAllowanceCap.toFixed(0) })}</span>
+                  <span>
+                    {t("taxAllowanceOverAllocated", { cap: holderAllowanceCap.toFixed(0) })}
+                  </span>
                 </div>
               )}
               {!showFsaHelper && (

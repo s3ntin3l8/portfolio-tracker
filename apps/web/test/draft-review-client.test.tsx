@@ -92,7 +92,10 @@ describe("DraftReviewClient", () => {
   it("surfaces a cross-source duplicate 409 and re-confirms with acknowledgement (#217)", async () => {
     confirmImport
       .mockRejectedValueOnce(
-        new ApiError(409, JSON.stringify({ error: "duplicate_transactions", count: 1, duplicates: [] })),
+        new ApiError(
+          409,
+          JSON.stringify({ error: "duplicate_transactions", count: 1, duplicates: [] }),
+        ),
       )
       .mockResolvedValueOnce({ confirmed: 1, transactions: [] });
     renderClient();
@@ -162,9 +165,7 @@ describe("DraftReviewClient", () => {
     expect(confirmImport).toHaveBeenCalledTimes(1); // only the original (failed) call
     // After enriching the sole draft the duplicate banner is cleared.
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: messages.Duplicates.enrichExisting }),
-      ).toBeNull(),
+      expect(screen.queryByRole("button", { name: messages.Duplicates.enrichExisting })).toBeNull(),
     );
   });
 });

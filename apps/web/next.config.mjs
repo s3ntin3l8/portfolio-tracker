@@ -9,9 +9,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 // The app's version label reads the *root* package.json (what Release Please bumps and
 // what the `v*` release tag matches) — not this workspace's own package.json, which isn't
 // tracked by Release Please and only coincidentally carries the same number.
-const rootPkg = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-);
+const rootPkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
 
 // Service worker: precaches the Next app shell so the PWA is installable + offline-
 // capable. Disabled in dev so `next dev` hot-reload isn't fighting a cache. The

@@ -95,7 +95,13 @@ describe("sparplan detection", () => {
 
     const [vwce] = await app.db
       .insert(instruments)
-      .values({ symbol: "VWCE", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Vanguard FTSE All-World" })
+      .values({
+        symbol: "VWCE",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Vanguard FTSE All-World",
+      })
       .returning();
 
     // 8 consecutive months ending this month: first 4 at €100, last 4 at €150 (step up).
@@ -177,7 +183,13 @@ describe("sparplan detection", () => {
 
     const [eimiA] = await app.db
       .insert(instruments)
-      .values({ symbol: "EIMI", market: "XETRA", assetClass: "equity", currency: "EUR", name: "iShares EM IMI" })
+      .values({
+        symbol: "EIMI",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "iShares EM IMI",
+      })
       .returning();
 
     // pfA: 5× €150/mo into EIMI

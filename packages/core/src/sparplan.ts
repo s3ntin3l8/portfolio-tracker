@@ -85,19 +85,14 @@ export interface SparplanStats {
 
 /** Whole-month count between two UTC dates (b − a, may be negative). */
 function monthsBetween(a: Date, b: Date): number {
-  return (
-    (b.getUTCFullYear() - a.getUTCFullYear()) * 12 +
-    (b.getUTCMonth() - a.getUTCMonth())
-  );
+  return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
 }
 
 /** Median of a non-empty array of numbers. */
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0
-    ? sorted[mid]
-    : (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 /**
@@ -172,7 +167,7 @@ function bucketLevels(
   // Minimum absolute deviation to open a new level (1 unit of the native currency;
   // avoids hair-trigger splits for e.g. € 74.50 vs € 75.00 rounding artefacts).
   const ABS_FLOOR = 1;
-  const REL = 0.10;
+  const REL = 0.1;
 
   interface LevelBuf {
     members: number[];
@@ -334,9 +329,7 @@ export function detectSparplans(input: SparplanInput): SparplanStats {
   }
 
   // Sort descending by display amount.
-  plans.sort(
-    (a, b) => Number(b.currentAmountDisplay) - Number(a.currentAmountDisplay),
-  );
+  plans.sort((a, b) => Number(b.currentAmountDisplay) - Number(a.currentAmountDisplay));
 
   // Active monthly total: normalize each plan to monthly (÷ cadenceMonths).
   let activeTotalDisplay = new Decimal(0);
@@ -369,10 +362,7 @@ export function detectSparplans(input: SparplanInput): SparplanStats {
  * history stays distinct. The list shows each (portfolio, instrument) plan
  * separately; the headline total is always Σ of per-portfolio active totals.
  */
-export function mergeSparplanStats(
-  stats: SparplanStats[],
-  displayCurrency: string,
-): SparplanStats {
+export function mergeSparplanStats(stats: SparplanStats[], displayCurrency: string): SparplanStats {
   const allPlans: DetectedPlan[] = stats.flatMap((s) => s.plans);
 
   // Headline total = Σ of per-portfolio active monthly totals (always correct regardless
@@ -385,9 +375,7 @@ export function mergeSparplanStats(
   }
 
   // Sort descending by current display amount.
-  allPlans.sort(
-    (a, b) => Number(b.currentAmountDisplay) - Number(a.currentAmountDisplay),
-  );
+  allPlans.sort((a, b) => Number(b.currentAmountDisplay) - Number(a.currentAmountDisplay));
 
   return {
     displayCurrency,

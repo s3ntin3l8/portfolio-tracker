@@ -20,13 +20,7 @@ function toNumber(v: string): number {
  * Compact inline drift hint: "+8pp over target · −5pp under target".
  * Shown below the allocation chart when the user has saved targets for the dimension.
  */
-function DriftHint({
-  drift,
-  dimensionLabel,
-}: {
-  drift: DriftRow[];
-  dimensionLabel: string;
-}) {
+function DriftHint({ drift, dimensionLabel }: { drift: DriftRow[]; dimensionLabel: string }) {
   const t = useTranslations("DriftBadge");
   const overs = drift.filter((d) => d.status === "over");
   const unders = drift.filter((d) => d.status === "under");
@@ -45,9 +39,7 @@ function DriftHint({
   if (topOver) parts.push(t("over", { pct: Math.abs(topOver.driftPct).toFixed(1) }));
   if (topUnder) parts.push(t("under", { pct: Math.abs(topUnder.driftPct).toFixed(1) }));
 
-  return (
-    <p className="text-xs text-center text-muted-foreground mt-2">{parts.join(" · ")}</p>
-  );
+  return <p className="text-xs text-center text-muted-foreground mt-2">{parts.join(" · ")}</p>;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +77,12 @@ function TabBody({
   return (
     <div>
       {slices.length > 0 ? (
-        <AllocationDonut data={slices} currency={currency} total={total} onSliceClick={onSliceClick} />
+        <AllocationDonut
+          data={slices}
+          currency={currency}
+          total={total}
+          onSliceClick={onSliceClick}
+        />
       ) : (
         <p className="text-center text-sm text-muted-foreground py-8">—</p>
       )}
@@ -319,7 +316,5 @@ export function ConcentrationBadge({
     concentrated: "concentrationConcentrated",
   } as const;
 
-  return (
-    <Badge variant={variant[label] ?? "secondary"}>{t(labelKey[label])}</Badge>
-  );
+  return <Badge variant={variant[label] ?? "secondary"}>{t(labelKey[label])}</Badge>;
 }

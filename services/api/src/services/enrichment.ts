@@ -107,9 +107,8 @@ export async function enrichTransactionFromDrafts(
   for (const draft of drafts) {
     const sourceType = draftSourceType(draft, importSource);
     const externalId = draft.externalId ?? null;
-    const documentId = externalId && documentsByExternalId
-      ? (documentsByExternalId.get(externalId) ?? null)
-      : null;
+    const documentId =
+      externalId && documentsByExternalId ? (documentsByExternalId.get(externalId) ?? null) : null;
 
     const taxComponents =
       draft.taxComponents && Object.keys(draft.taxComponents).length > 0
@@ -362,7 +361,10 @@ export async function enrichTransactionsFromStoredDocuments(
         "enrichment: tx enriched from stored settlement PDFs",
       );
     } catch (err) {
-      app.log.warn({ err, txId: tx.id }, "enrichment: enrichTransactionFromDrafts failed (non-fatal)");
+      app.log.warn(
+        { err, txId: tx.id },
+        "enrichment: enrichTransactionFromDrafts failed (non-fatal)",
+      );
     }
   }
 }
@@ -547,7 +549,8 @@ export async function sourcesForTransactions(
     const bucket = out.get(r.transactionId);
     if (bucket) bucket.push(entry);
     else out.set(r.transactionId, [entry]);
-    if (namingDoc) namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
+    if (namingDoc)
+      namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
   }
 
   // Every retained document stored for one of these transactions gets its own downloadable
@@ -682,10 +685,7 @@ export async function txIdsNeedingReview(
  * Returns the set of transaction ids that have at least one source row with
  * non-null taxComponents — i.e. a settlement PDF was parsed for this transaction.
  */
-export async function txIdsWithFullTaxDetail(
-  app: AppLike,
-  txIds: string[],
-): Promise<Set<string>> {
+export async function txIdsWithFullTaxDetail(app: AppLike, txIds: string[]): Promise<Set<string>> {
   if (txIds.length === 0) return new Set();
 
   // Filter in JS: taxComponents IS NOT NULL (Drizzle doesn't have isNotNull for jsonb easily).
@@ -764,7 +764,8 @@ export function sourcesFromPreFetched(
   if (sourcesRows.length === 0 && docsRows.length === 0) return new Map();
 
   const txById = new Map<string, { type: string; executedAt: Date; instrumentId: string | null }>();
-  for (const r of rows) txById.set(r.id, { type: r.type, executedAt: r.executedAt, instrumentId: r.instrumentId });
+  for (const r of rows)
+    txById.set(r.id, { type: r.type, executedAt: r.executedAt, instrumentId: r.instrumentId });
 
   const instrumentSymbolById = new Map<string, string>();
   for (const [id, m] of instrumentsMeta) instrumentSymbolById.set(id, m.symbol);
@@ -778,12 +779,19 @@ export function sourcesFromPreFetched(
 
   // Build doc lookup maps from pre-fetched docsRows
   const docById = new Map<string, { originalFilename: string | null; mimeType: string }>();
-  const importDocById = new Map<string, { id: string; originalFilename: string | null; mimeType: string }>();
+  const importDocById = new Map<
+    string,
+    { id: string; originalFilename: string | null; mimeType: string }
+  >();
   for (const d of docsRows) {
     if (d.status !== "retained") continue;
     docById.set(d.id, { originalFilename: d.originalFilename, mimeType: d.mimeType });
     if (d.importId && !d.transactionId && !importDocById.has(d.importId)) {
-      importDocById.set(d.importId, { id: d.id, originalFilename: d.originalFilename, mimeType: d.mimeType });
+      importDocById.set(d.importId, {
+        id: d.id,
+        originalFilename: d.originalFilename,
+        mimeType: d.mimeType,
+      });
     }
   }
 
@@ -803,12 +811,26 @@ export function sourcesFromPreFetched(
       const doc = docById.get(r.documentId)!;
       filename = doc.originalFilename;
       hasDocument = true;
-      namingDoc = { id: r.documentId, mimeType: doc.mimeType, source: null, storedAt: r.createdAt, importId: null, transactionId: null };
+      namingDoc = {
+        id: r.documentId,
+        mimeType: doc.mimeType,
+        source: null,
+        storedAt: r.createdAt,
+        importId: null,
+        transactionId: null,
+      };
     } else if (r.importId && importDocById.has(r.importId)) {
       const doc = importDocById.get(r.importId)!;
       filename = doc.originalFilename;
       hasDocument = true;
-      namingDoc = { id: doc.id, mimeType: doc.mimeType, source: null, storedAt: r.createdAt, importId: r.importId, transactionId: null };
+      namingDoc = {
+        id: doc.id,
+        mimeType: doc.mimeType,
+        source: null,
+        storedAt: r.createdAt,
+        importId: r.importId,
+        transactionId: null,
+      };
     }
 
     const entry: SourceSummary = {
@@ -825,7 +847,8 @@ export function sourcesFromPreFetched(
     const bucket = out.get(r.transactionId);
     if (bucket) bucket.push(entry);
     else out.set(r.transactionId, [entry]);
-    if (namingDoc) namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
+    if (namingDoc)
+      namingRequests.push({ entry, request: { doc: namingDoc, txId: r.transactionId } });
   }
 
   // Unclaimed retained documents → synthetic `pdf` entries.
@@ -848,7 +871,14 @@ export function sourcesFromPreFetched(
     namingRequests.push({
       entry,
       request: {
-        doc: { id: d.id, mimeType: d.mimeType, source: null, storedAt: d.storedAt, importId: null, transactionId: d.transactionId },
+        doc: {
+          id: d.id,
+          mimeType: d.mimeType,
+          source: null,
+          storedAt: d.storedAt,
+          importId: null,
+          transactionId: d.transactionId,
+        },
         txId: d.transactionId,
       },
     });

@@ -67,14 +67,17 @@ export function DuplicateConflictBanner({
                 </li>
               ))}
               {overflow > 0 && (
-                <li className="text-warning/70">
-                  {t("more", { count: overflow })}
-                </li>
+                <li className="text-warning/70">{t("more", { count: overflow })}</li>
               )}
             </ul>
           )}
         </div>
-        <Button size="sm" variant="ghost" className="shrink-0 text-warning/80 hover:text-warning" onClick={onImportAnyway}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="shrink-0 text-warning/80 hover:text-warning"
+          onClick={onImportAnyway}
+        >
           {t("importAnyway")}
         </Button>
       </div>

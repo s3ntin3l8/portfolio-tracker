@@ -58,7 +58,12 @@ async function main() {
 
   const patSecret = (await readFile(PAT_FILE, "utf8")).trim();
   const secure = WEB_URL.startsWith("https://");
-  const cookie = await mintSessionCookie({ patSecret, authSub: AUTH_SUB, secret: AUTH_SECRET, secure });
+  const cookie = await mintSessionCookie({
+    patSecret,
+    authSub: AUTH_SUB,
+    secret: AUTH_SECRET,
+    secure,
+  });
 
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -129,8 +134,7 @@ async function main() {
   return manifestEntries;
 }
 
-const invokedDirectly =
-  process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (invokedDirectly) {
   const entries = await main();
   console.log(`Done — ${entries.length} screenshots written to ${OUT_DIR}`);

@@ -8,9 +8,7 @@ describe("normalizeIsoDate", () => {
 
   it("leaves offset and Z dates untouched", () => {
     expect(normalizeIsoDate("2026-01-01T12:00:00Z")).toBe("2026-01-01T12:00:00Z");
-    expect(normalizeIsoDate("2026-01-01T12:00:00+02:00")).toBe(
-      "2026-01-01T12:00:00+02:00",
-    );
+    expect(normalizeIsoDate("2026-01-01T12:00:00+02:00")).toBe("2026-01-01T12:00:00+02:00");
   });
 
   it("passes through null and empty strings", () => {

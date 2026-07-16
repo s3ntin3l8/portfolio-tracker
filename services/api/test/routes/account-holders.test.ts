@@ -107,7 +107,11 @@ describe("account holders", () => {
     ).json();
 
     // Not listed for the intruder.
-    const list = await app.inject({ method: "GET", url: "/account-holders", headers: auth(intruder) });
+    const list = await app.inject({
+      method: "GET",
+      url: "/account-holders",
+      headers: auth(intruder),
+    });
     expect(list.json()).toHaveLength(0);
 
     // Cannot patch or delete it.
@@ -221,9 +225,9 @@ describe("account holders", () => {
         },
       });
       expect(put.statusCode).toBe(200);
-      const entries = put.json().entries.sort((a: { pot: string }, b: { pot: string }) =>
-        a.pot.localeCompare(b.pot),
-      );
+      const entries = put
+        .json()
+        .entries.sort((a: { pot: string }, b: { pot: string }) => a.pot.localeCompare(b.pot));
       expect(entries).toEqual([
         { pot: "general", amount: "120.50" },
         { pot: "stock", amount: "500" },

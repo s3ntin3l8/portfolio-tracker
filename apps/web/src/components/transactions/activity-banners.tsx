@@ -27,8 +27,19 @@ function StatBlock({
   return (
     <div className={cn("min-w-0", bordered && "border-l border-line pl-2.5 sm:pl-4 lg:pl-6")}>
       <p className="truncate text-[11px] font-semibold text-text-2 sm:text-xs">{label}</p>
-      <p className="tabular mt-1 truncate text-sm font-extrabold sm:text-xl lg:text-[26px]">{value}</p>
-      {sub && <p className={cn("tabular mt-0.5 truncate text-[11px] font-bold sm:text-xs", TONE_CLASS[tone])}>{sub}</p>}
+      <p className="tabular mt-1 truncate text-sm font-extrabold sm:text-xl lg:text-[26px]">
+        {value}
+      </p>
+      {sub && (
+        <p
+          className={cn(
+            "tabular mt-0.5 truncate text-[11px] font-bold sm:text-xs",
+            TONE_CLASS[tone],
+          )}
+        >
+          {sub}
+        </p>
+      )}
     </div>
   );
 }
@@ -36,7 +47,9 @@ function StatBlock({
 function Breakdown({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="col-span-full border-t border-line pt-4 lg:col-span-2 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[.04em] text-text-3">{label}</p>
+      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[.04em] text-text-3">
+        {label}
+      </p>
       <div className="flex flex-col gap-2.5">{children}</div>
     </div>
   );
@@ -56,7 +69,14 @@ export function AllFilterBanner({
           cash-flow-mix breakdown wraps to a full-width row below. */}
       <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-5 lg:items-center">
         {data.tiles.map((t, i) => (
-          <StatBlock key={i} label={t.label} value={t.value} sub={t.sub} tone={t.tone} bordered={i > 0} />
+          <StatBlock
+            key={i}
+            label={t.label}
+            value={t.value}
+            sub={t.sub}
+            tone={t.tone}
+            bordered={i > 0}
+          />
         ))}
         <Breakdown label={cashFlowMixLabel}>
           {data.mix.map((m, i) => (
@@ -83,8 +103,19 @@ export function IncomeFilterBanner({
   return (
     <div className={CARD}>
       <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
-        <StatBlock label={receivedLabel} value={data.ytd} sub={data.trendLabel} tone={data.trendTone} />
-        <StatBlock label={projectedLabel} value={data.projected} sub={data.projectedNote} tone="neutral" bordered />
+        <StatBlock
+          label={receivedLabel}
+          value={data.ytd}
+          sub={data.trendLabel}
+          tone={data.trendTone}
+        />
+        <StatBlock
+          label={projectedLabel}
+          value={data.projected}
+          sub={data.projectedNote}
+          tone="neutral"
+          bordered
+        />
         <Breakdown label={bySourceLabel}>
           {data.bySource.length > 0 ? (
             data.bySource.map((m, i) => <FlowBreakdownRow key={i} {...m} />)
@@ -117,7 +148,13 @@ export function TradeFilterBanner({
     <div className={CARD}>
       <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
         <StatBlock label={totalLabel} value={data.total} sub={ordersNote} tone="neutral" />
-        <StatBlock label={averageLabel} value={data.avg} sub={averageNote} tone="neutral" bordered />
+        <StatBlock
+          label={averageLabel}
+          value={data.avg}
+          sub={averageNote}
+          tone="neutral"
+          bordered
+        />
         <Breakdown label={headingLabel}>
           {data.bySymbol.map((m, i) => (
             <FlowBreakdownRow key={i} {...m} />

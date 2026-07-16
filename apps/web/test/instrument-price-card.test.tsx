@@ -82,9 +82,7 @@ describe("InstrumentPriceCard", () => {
   });
 
   it("refetches with the mapped API range token when a chip is clicked", async () => {
-    getInstrumentHistory.mockResolvedValue([
-      { date: "2020-01-01", close: "1", currency: "IDR" },
-    ]);
+    getInstrumentHistory.mockResolvedValue([{ date: "2020-01-01", close: "1", currency: "IDR" }]);
     renderCard();
     fireEvent.click(screen.getByRole("button", { name: "6M" }));
     await waitFor(() => expect(getInstrumentHistory).toHaveBeenCalledWith("i1", "6mo"));
@@ -106,7 +104,9 @@ describe("InstrumentPriceCard", () => {
     getInstrumentHistory.mockResolvedValue([]);
     renderCard();
     fireEvent.click(screen.getByRole("button", { name: "1M" }));
-    await waitFor(() => expect(screen.getByText(messages.Instrument.noHistory)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(messages.Instrument.noHistory)).toBeInTheDocument(),
+    );
   });
 
   it("does not refetch when clicking the already-active chip", () => {

@@ -70,11 +70,7 @@ export function AdminImportSettingsForm({
 
       <div className="space-y-2">
         <Label id="import-strategy-label">{t("importStrategyLabel")}</Label>
-        <div
-          role="radiogroup"
-          aria-labelledby="import-strategy-label"
-          className="space-y-2"
-        >
+        <div role="radiogroup" aria-labelledby="import-strategy-label" className="space-y-2">
           {STRATEGIES.map((s) => {
             const active = strategy === s;
             return (
@@ -104,9 +100,7 @@ export function AdminImportSettingsForm({
                   {active && <span className="size-2 rounded-full bg-primary" />}
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-bold">
-                    {t(`importStrategyOption_${s}`)}
-                  </span>
+                  <span className="block text-sm font-bold">{t(`importStrategyOption_${s}`)}</span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {t(`importStrategyHint_${s}`)}
                   </span>

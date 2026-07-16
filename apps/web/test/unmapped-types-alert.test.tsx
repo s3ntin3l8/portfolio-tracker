@@ -5,8 +5,9 @@ import type { UnmappedEventType } from "@portfolio/api-client";
 
 // Identity translator: returns the key, and for `title` echoes the count so we can assert it.
 vi.mock("next-intl/server", () => ({
-  getTranslations: vi.fn(async () => (key: string, vars?: Record<string, unknown>) =>
-    vars && "count" in vars ? `${key}:${vars.count}` : key,
+  getTranslations: vi.fn(
+    async () => (key: string, vars?: Record<string, unknown>) =>
+      vars && "count" in vars ? `${key}:${vars.count}` : key,
   ),
 }));
 

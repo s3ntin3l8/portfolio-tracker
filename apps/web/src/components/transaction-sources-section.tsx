@@ -52,10 +52,7 @@ export function TransactionSourcesSection({
   const locale = useLocale();
   const api = useApiClient();
   const [downloading, setDownloading] = useState<string | null>(null);
-  const df = useMemo(
-    () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
-    [locale],
-  );
+  const df = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }), [locale]);
 
   async function downloadSource(sourceId: string) {
     setDownloading(sourceId);
@@ -77,9 +74,7 @@ export function TransactionSourcesSection({
           const style = SRC_STYLE[src.sourceType] ?? DEFAULT_SRC;
           const Icon = style.icon;
           const tc = src.taxComponents;
-          const tcEntries = tc
-            ? Object.entries(tc).filter(([, v]) => v && Number(v) !== 0)
-            : [];
+          const tcEntries = tc ? Object.entries(tc).filter(([, v]) => v && Number(v) !== 0) : [];
           // Prefer the localized source name ("PDF", "Trade Republic"…); fall back to raw.
           let label = src.sourceType;
           try {
@@ -103,9 +98,7 @@ export function TransactionSourcesSection({
                 </p>
                 {showTaxBreakdown && tcEntries.length > 0 && (
                   <p className="mt-0.5 text-[11px] font-semibold text-[#0E9F6E]">
-                    {tcEntries
-                      .map(([k, v]) => `${TAX_COMPONENT_LABELS[k] ?? k}: ${v}`)
-                      .join(" · ")}
+                    {tcEntries.map(([k, v]) => `${TAX_COMPONENT_LABELS[k] ?? k}: ${v}`).join(" · ")}
                   </p>
                 )}
               </div>

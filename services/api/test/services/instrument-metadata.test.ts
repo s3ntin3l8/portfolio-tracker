@@ -167,10 +167,7 @@ describe("refreshInstrumentMetadata", () => {
     const id = await createHeld({ symbol: "SP500_ETF_TEST", assetClass: "etf" });
 
     const weights = { Technology: 0.29, Financials: 0.13, "Health Care": 0.12 };
-    const enriched = await refreshInstrumentMetadata(
-      db,
-      makeService({ sectorWeights: weights }),
-    );
+    const enriched = await refreshInstrumentMetadata(db, makeService({ sectorWeights: weights }));
 
     expect(enriched).toBeGreaterThanOrEqual(1);
 
@@ -288,10 +285,7 @@ describe("refreshInstrumentMetadata", () => {
     await db.update(instruments).set({ isin: "IE00BKM4GZ66" }).where(eq(instruments.id, id));
 
     const countryWeights = { "United States": 0.57, Germany: 0.05, Japan: 0.06 };
-    const enriched = await refreshInstrumentMetadata(
-      db,
-      makeService({ countryWeights }),
-    );
+    const enriched = await refreshInstrumentMetadata(db, makeService({ countryWeights }));
 
     expect(enriched).toBeGreaterThanOrEqual(1);
 
@@ -339,10 +333,13 @@ describe("refreshInstrumentMetadata", () => {
       assetClass: "etf",
       sectorCheckedAt: new Date(),
     });
-    await db.update(instruments).set({
-      isin: "IE0000000002",
-      countryCheckedAt: new Date(),
-    }).where(eq(instruments.id, id));
+    await db
+      .update(instruments)
+      .set({
+        isin: "IE0000000002",
+        countryCheckedAt: new Date(),
+      })
+      .where(eq(instruments.id, id));
 
     let calledWithIsin = false;
     const svc = {
@@ -365,7 +362,9 @@ describe("refreshInstrumentMetadata", () => {
     await db.update(instruments).set({ isin: "IE0000000003" }).where(eq(instruments.id, id));
 
     const svc = {
-      getProfile: async () => { throw new Error("network timeout"); },
+      getProfile: async () => {
+        throw new Error("network timeout");
+      },
     } as unknown as MarketDataService;
 
     await refreshInstrumentMetadata(db, svc);
@@ -378,11 +377,14 @@ describe("refreshInstrumentMetadata", () => {
   it("skips country enrichment for already-fresh countryCheckedAt", async () => {
     const db = getDb();
     const id = await createHeld({ symbol: "FRESH_COUNTRY_TEST", assetClass: "equity" });
-    await db.update(instruments).set({
-      isin: "IE0000000004",
-      countryCheckedAt: new Date(),
-      sectorCheckedAt: new Date(),
-    }).where(eq(instruments.id, id));
+    await db
+      .update(instruments)
+      .set({
+        isin: "IE0000000004",
+        countryCheckedAt: new Date(),
+        sectorCheckedAt: new Date(),
+      })
+      .where(eq(instruments.id, id));
 
     const calledSymbols: string[] = [];
     const svc = {
@@ -416,7 +418,9 @@ describe("needsNameEnrichment", () => {
 
   it("is true for an unnamed instrument with a stale attempt", () => {
     expect(
-      needsNameEnrichment([{ assetClass: "equity", displayName: null, displayNameCheckedAt: stale }]),
+      needsNameEnrichment([
+        { assetClass: "equity", displayName: null, displayNameCheckedAt: stale },
+      ]),
     ).toBe(true);
   });
 
@@ -426,7 +430,9 @@ describe("needsNameEnrichment", () => {
 
   it("is false for a recent unmatched attempt", () => {
     expect(
-      needsNameEnrichment([{ assetClass: "equity", displayName: null, displayNameCheckedAt: fresh }]),
+      needsNameEnrichment([
+        { assetClass: "equity", displayName: null, displayNameCheckedAt: fresh },
+      ]),
     ).toBe(false);
   });
 
@@ -522,7 +528,9 @@ describe("refreshInstrumentMetadata — displayName", () => {
     await refreshInstrumentMetadata(
       db,
       // Same ticker, different market, and no ISIN to disambiguate → not a confident match.
-      searchService([{ symbol: "TCKR_NM", market: "XETRA", name: "TCKR_NM", longName: "Wrong Co" }]),
+      searchService([
+        { symbol: "TCKR_NM", market: "XETRA", name: "TCKR_NM", longName: "Wrong Co" },
+      ]),
     );
     const [row] = await db.select().from(instruments).where(eq(instruments.id, id));
     expect(row.displayName).toBeNull();
@@ -542,7 +550,12 @@ describe("refreshInstrumentMetadata — displayName", () => {
     await refreshInstrumentMetadata(
       db,
       searchService([
-        { symbol: "IWDA", market: "LSE", name: "iShares Core MSCI World", longName: "iShares Core MSCI World UCITS ETF" },
+        {
+          symbol: "IWDA",
+          market: "LSE",
+          name: "iShares Core MSCI World",
+          longName: "iShares Core MSCI World UCITS ETF",
+        },
       ]),
     );
     const [row] = await db.select().from(instruments).where(eq(instruments.id, id));

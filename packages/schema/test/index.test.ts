@@ -56,8 +56,7 @@ describe("portfolioInputSchema", () => {
   it("trims an optional brokerage and leaves it undefined when omitted", () => {
     expect(portfolioInputSchema.parse({ name: "X" }).brokerage).toBeUndefined();
     expect(
-      portfolioInputSchema.parse({ name: "X", brokerage: "  Trade Republic  " })
-        .brokerage,
+      portfolioInputSchema.parse({ name: "X", brokerage: "  Trade Republic  " }).brokerage,
     ).toBe("Trade Republic");
   });
 });

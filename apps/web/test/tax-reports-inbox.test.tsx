@@ -8,7 +8,11 @@ import messages from "../messages/en.json";
 const refresh = vi.fn();
 const listDocuments = vi.fn(async () => [] as InboxDocument[]);
 const uploadDocument = vi.fn(async () => ({ id: "doc1", duplicate: false }));
-const getDocumentUrl = vi.fn(async () => ({ url: "https://x/doc.pdf", filename: "doc.pdf", mimeType: "application/pdf" }));
+const getDocumentUrl = vi.fn(async () => ({
+  url: "https://x/doc.pdf",
+  filename: "doc.pdf",
+  mimeType: "application/pdf",
+}));
 const deleteDocument = vi.fn(async () => undefined);
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));

@@ -127,7 +127,13 @@ describe("TWR: flat price keeps index at 100", () => {
     // Buy 100 shares at 100 IDR; price stays at 100 for 3 days.
     const INST = "inst-flat";
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "100", price: "100", executedAt: new Date("2026-01-01") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "100",
+        price: "100",
+        executedAt: new Date("2026-01-01"),
+      }),
     ];
     const priceMap = {
       [INST]: { "2026-01-01": "100", "2026-01-02": "100", "2026-01-03": "100" },
@@ -174,7 +180,13 @@ describe("TWR: 2:1 split does not dent or inflate the index", () => {
     ];
 
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "100", price: "1000", executedAt: new Date("2026-01-01") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "100",
+        price: "1000",
+        executedAt: new Date("2026-01-01"),
+      }),
     ];
 
     const dates = ["2026-01-01", "2026-01-02", "2026-01-03"];
@@ -217,8 +229,20 @@ describe("TWR: sell does not drop the performance index", () => {
      */
     const INST = "inst-sell";
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "100", price: "100", executedAt: new Date("2026-01-01") }),
-      tx({ instrumentId: INST, type: "sell", quantity: "100", price: "110", executedAt: new Date("2026-01-03") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "100",
+        price: "100",
+        executedAt: new Date("2026-01-01"),
+      }),
+      tx({
+        instrumentId: INST,
+        type: "sell",
+        quantity: "100",
+        price: "110",
+        executedAt: new Date("2026-01-03"),
+      }),
     ];
     const priceMap = {
       [INST]: { "2026-01-01": "100", "2026-01-02": "110" },
@@ -258,9 +282,21 @@ describe("TWR: dividend on ex-date keeps index flat for realSeries", () => {
      */
     const INST = "inst-dividend";
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "100", price: "1000", executedAt: new Date("2026-01-01") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "100",
+        price: "1000",
+        executedAt: new Date("2026-01-01"),
+      }),
       // Dividend of 1000 IDR total (10/share × 100 shares). executedAt = ex-date.
-      tx({ instrumentId: INST, type: "dividend", quantity: "0", price: "1000", executedAt: new Date("2026-01-02") }),
+      tx({
+        instrumentId: INST,
+        type: "dividend",
+        quantity: "0",
+        price: "1000",
+        executedAt: new Date("2026-01-02"),
+      }),
     ];
     const priceMap = {
       [INST]: { "2026-01-01": "1000", "2026-01-02": "990" },
@@ -298,8 +334,20 @@ describe("TWR: coupon on a flatProxy bond does not inflate the index", () => {
      */
     const INST = "inst-bond";
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "1", price: "1000000", executedAt: new Date("2026-01-01") }),
-      tx({ instrumentId: INST, type: "coupon", quantity: "0", price: "25000", executedAt: new Date("2026-01-02") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "1",
+        price: "1000000",
+        executedAt: new Date("2026-01-01"),
+      }),
+      tx({
+        instrumentId: INST,
+        type: "coupon",
+        quantity: "0",
+        price: "25000",
+        executedAt: new Date("2026-01-02"),
+      }),
     ];
     const priceMap = {
       [INST]: { "2026-01-01": "1000000", "2026-01-02": "1000000" },
@@ -337,7 +385,13 @@ describe("TWR: V_{t-1} = 0 carry-forward (no divide-by-zero)", () => {
      */
     const INST = "inst-zero";
     const txs = [
-      tx({ instrumentId: INST, type: "buy", quantity: "100", price: "100", executedAt: new Date("2026-01-01") }),
+      tx({
+        instrumentId: INST,
+        type: "buy",
+        quantity: "100",
+        price: "100",
+        executedAt: new Date("2026-01-01"),
+      }),
     ];
     const priceMap = {
       // Day 01: no price yet → priceAt returns null → MV=0
@@ -445,7 +499,7 @@ describe("TWR: aggregateValueFlows then chainIndex ≠ average of per-portfolio 
     // Per-portfolio day-2 indices
     const idxA2 = Number(indexA[1].index); // ≈ 110
     const idxB2 = Number(indexB[1].index); // ≈ 90
-    const arithmeticAvg = (idxA2 + idxB2) / 2;   // = 100
+    const arithmeticAvg = (idxA2 + idxB2) / 2; // = 100
 
     // Aggregate path
     const aggregated = aggregateValueFlows([seriesA, seriesB]);

@@ -4,8 +4,10 @@ import { mapPool } from "../../src/lib/promise-pool.js";
 describe("mapPool", () => {
   it("preserves input order regardless of completion order", async () => {
     // Later items resolve first; results must still be in input order.
-    const out = await mapPool([0, 1, 2, 3], 2, (n) =>
-      new Promise<number>((resolve) => setTimeout(() => resolve(n * 10), (4 - n) * 5)),
+    const out = await mapPool(
+      [0, 1, 2, 3],
+      2,
+      (n) => new Promise<number>((resolve) => setTimeout(() => resolve(n * 10), (4 - n) * 5)),
     );
     expect(out).toEqual([0, 10, 20, 30]);
   });
@@ -13,12 +15,16 @@ describe("mapPool", () => {
   it("never exceeds the concurrency limit", async () => {
     let inFlight = 0;
     let maxInFlight = 0;
-    await mapPool(Array.from({ length: 12 }, (_, i) => i), 3, async () => {
-      inFlight++;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      await new Promise((r) => setTimeout(r, 5));
-      inFlight--;
-    });
+    await mapPool(
+      Array.from({ length: 12 }, (_, i) => i),
+      3,
+      async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+      },
+    );
     expect(maxInFlight).toBeLessThanOrEqual(3);
     expect(maxInFlight).toBeGreaterThan(1); // actually ran concurrently
   });

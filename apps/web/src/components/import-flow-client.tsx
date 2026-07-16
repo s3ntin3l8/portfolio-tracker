@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  ImportFlow,
-  type ImportTargetPortfolio,
-} from "@/components/import-flow";
+import { ImportFlow, type ImportTargetPortfolio } from "@/components/import-flow";
 import { useImportClient } from "@/lib/use-import-client";
 import { useImportTasks } from "@/components/import-tasks-provider";
 import { useRouter, usePathname } from "@/i18n/navigation";

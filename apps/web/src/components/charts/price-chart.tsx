@@ -39,9 +39,7 @@ export function PriceChart({
   const lineColor = theme === "inverse" ? "#ffffff" : "var(--color-primary)";
 
   const formatValue = (v: number) =>
-    unit === "percent"
-      ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`
-      : formatMoney(v, currency, locale);
+    unit === "percent" ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}%` : formatMoney(v, currency, locale);
 
   const dateLabelFmt = new Intl.DateTimeFormat(locale, {
     day: "numeric",
@@ -64,20 +62,22 @@ export function PriceChart({
 
   return (
     <div style={{ height }} className="w-full">
-      <ResponsiveContainer
-        width="100%"
-        height="100%"
-        initialDimension={{ width: 1, height }}
-      >
+      <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height }}>
         <AreaChart
           data={points}
           margin={
-            minimal ? { top: 4, right: 0, left: 0, bottom: 0 } : { top: 8, right: 8, left: 0, bottom: 0 }
+            minimal
+              ? { top: 4, right: 0, left: 0, bottom: 0 }
+              : { top: 8, right: 8, left: 0, bottom: 0 }
           }
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={lineColor} stopOpacity={theme === "inverse" ? 0.42 : 0.35} />
+              <stop
+                offset="0%"
+                stopColor={lineColor}
+                stopOpacity={theme === "inverse" ? 0.42 : 0.35}
+              />
               <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
             </linearGradient>
           </defs>

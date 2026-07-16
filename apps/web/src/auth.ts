@@ -24,9 +24,7 @@ function tokenEndpoint(): Promise<string> {
   if (!tokenEndpointPromise) {
     const issuer = process.env.AUTHENTIK_ISSUER ?? "";
     const base = issuer.endsWith("/") ? issuer : `${issuer}/`;
-    tokenEndpointPromise = fetch(
-      new URL(".well-known/openid-configuration", base),
-    )
+    tokenEndpointPromise = fetch(new URL(".well-known/openid-configuration", base))
       .then((r) => r.json() as Promise<{ token_endpoint: string }>)
       .then((d) => d.token_endpoint);
   }
@@ -86,9 +84,7 @@ export const authConfig: NextAuthConfig = {
       const refreshToken = token.refreshToken as string | undefined;
       if (!refreshToken) {
         token.error = "RefreshTokenMissing";
-        console.warn(
-          "[auth] access token expired with no refresh token — re-login required.",
-        );
+        console.warn("[auth] access token expired with no refresh token — re-login required.");
         return token;
       }
 
@@ -134,8 +130,7 @@ export const authConfig: NextAuthConfig = {
         }
 
         token.accessToken = refreshed.access_token;
-        token.expiresAt =
-          Math.floor(Date.now() / 1000) + (refreshed.expires_in ?? 0);
+        token.expiresAt = Math.floor(Date.now() / 1000) + (refreshed.expires_in ?? 0);
         // Authentik rotates refresh tokens — keep the new one when provided.
         if (refreshed.refresh_token) token.refreshToken = refreshed.refresh_token;
         delete token.error;

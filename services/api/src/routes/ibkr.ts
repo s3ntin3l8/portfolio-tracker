@@ -77,7 +77,10 @@ export async function ibkrRoute(app: FastifyInstance) {
       if (err instanceof IbkrFlexError) {
         return reply
           .code(422)
-          .send({ error: err.code === "expired" ? "token_expired" : "token_invalid", detail: err.message });
+          .send({
+            error: err.code === "expired" ? "token_expired" : "token_invalid",
+            detail: err.message,
+          });
       }
       // Network / unexpected error — don't block the connection, just log it.
       request.log.warn({ err }, "ibkr test-fetch failed (non-fatal)");
@@ -119,106 +122,110 @@ export async function ibkrRoute(app: FastifyInstance) {
   });
 
   // Sync now: enqueue a background pg-boss job, with inline fallback.
+  app.post("/ibkr/connection/sync", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const conn = await getConnection(id);
+    if (!conn || conn.status !== "connected") {
+      return reply.code(409).send({ error: "not_connected" });
+    }
+    // Atomically claim the sync: flip `syncing` false→true in a single statement so two
+    // concurrent requests can't both pass the check (mirrors routes/tr.ts). A claim older
+    // than the lease can always be re-taken — it means a prior worker was killed
+    // (process restart mid-sync) and left the flag set with no writer left to clear it;
+    // the scheduler's startup reaper handles the common case, this is the backstop.
+    const [claimed] = await app.db
+      .update(ibkrConnections)
+      .set({ syncing: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(ibkrConnections.id, conn.id),
+          or(
+            eq(ibkrConnections.syncing, false),
+            lt(ibkrConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS)),
+          ),
+        ),
+      )
+      .returning({ id: ibkrConnections.id });
+    if (!claimed) {
+      return reply.code(409).send({ error: "sync_in_progress" });
+    }
+    const releaseClaim = () =>
+      app.db
+        .update(ibkrConnections)
+        .set({ syncing: false, updatedAt: new Date() })
+        .where(eq(ibkrConnections.id, conn.id));
+
+    let queued: boolean;
+    try {
+      ({ queued } = await enqueueIbkrSync(conn.id));
+    } catch (err) {
+      await releaseClaim();
+      request.log.error({ err }, "ibkr sync enqueue failed");
+      return reply.code(502).send({ error: "ibkr_sync_failed" });
+    }
+    if (queued) {
+      // The worker clears `syncing` when it finishes; the poller already sees it set.
+      reply.code(202);
+      return { queued: true };
+    }
+    // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
+    try {
+      const result = await syncIbkrConnection(
+        app.db,
+        app.encryption,
+        app.ibkrFlex,
+        conn,
+        request.log,
+      );
+      request.log.info(
+        { userId: id, status: result.status, importId: result.importId, drafts: result.drafts },
+        "ibkr manual sync done",
+      );
+      return result;
+    } catch (err) {
+      // syncIbkrConnection clears `syncing` on most failure paths, but a later throw would
+      // leave our claim set — release it so the next sync isn't blocked.
+      await releaseClaim();
+      request.log.error({ err }, "ibkr sync failed");
+      return reply.code(502).send({ error: "ibkr_sync_failed" });
+    }
+  });
+
+  // Re-import: wipe ibkr transactions, clear the ibkr resolved-events ledger, discard draft.
   app.post(
-    "/ibkr/connection/sync",
+    "/ibkr/connection/reimport",
     { preHandler: app.authenticate },
     async (request, reply) => {
       const { id } = requireUser(request);
       const conn = await getConnection(id);
-      if (!conn || conn.status !== "connected") {
+      if (!conn || !conn.portfolioId) {
         return reply.code(409).send({ error: "not_connected" });
       }
-      // Atomically claim the sync: flip `syncing` false→true in a single statement so two
-      // concurrent requests can't both pass the check (mirrors routes/tr.ts). A claim older
-      // than the lease can always be re-taken — it means a prior worker was killed
-      // (process restart mid-sync) and left the flag set with no writer left to clear it;
-      // the scheduler's startup reaper handles the common case, this is the backstop.
-      const [claimed] = await app.db
-        .update(ibkrConnections)
-        .set({ syncing: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(ibkrConnections.id, conn.id),
-            or(eq(ibkrConnections.syncing, false), lt(ibkrConnections.updatedAt, new Date(Date.now() - SYNC_CLAIM_LEASE_MS))),
-          ),
-        )
-        .returning({ id: ibkrConnections.id });
-      if (!claimed) {
-        return reply.code(409).send({ error: "sync_in_progress" });
-      }
-      const releaseClaim = () =>
-        app.db
-          .update(ibkrConnections)
-          .set({ syncing: false, updatedAt: new Date() })
-          .where(eq(ibkrConnections.id, conn.id));
-
-      let queued: boolean;
-      try {
-        ({ queued } = await enqueueIbkrSync(conn.id));
-      } catch (err) {
-        await releaseClaim();
-        request.log.error({ err }, "ibkr sync enqueue failed");
-        return reply.code(502).send({ error: "ibkr_sync_failed" });
-      }
-      if (queued) {
-        // The worker clears `syncing` when it finishes; the poller already sees it set.
-        reply.code(202);
-        return { queued: true };
-      }
-      // pg-boss unavailable (PGlite / tests) — fall back to inline sync.
-      try {
-        const result = await syncIbkrConnection(
-          app.db, app.encryption, app.ibkrFlex, conn, request.log,
-        );
-        request.log.info(
-          { userId: id, status: result.status, importId: result.importId, drafts: result.drafts },
-          "ibkr manual sync done",
-        );
-        return result;
-      } catch (err) {
-        // syncIbkrConnection clears `syncing` on most failure paths, but a later throw would
-        // leave our claim set — release it so the next sync isn't blocked.
-        await releaseClaim();
-        request.log.error({ err }, "ibkr sync failed");
-        return reply.code(502).send({ error: "ibkr_sync_failed" });
-      }
+      const portfolioId = conn.portfolioId;
+      return app.db.transaction(async (tx) => {
+        const removed = await tx
+          .delete(transactions)
+          .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "ibkr")))
+          .returning({ id: transactions.id });
+        await tx
+          .delete(trResolvedEvents)
+          .where(
+            and(eq(trResolvedEvents.portfolioId, portfolioId), eq(trResolvedEvents.source, "ibkr")),
+          );
+        await tx
+          .update(screenshotImports)
+          .set({ status: "discarded" })
+          .where(
+            and(
+              eq(screenshotImports.userId, id),
+              eq(screenshotImports.portfolioId, portfolioId),
+              eq(screenshotImports.parser, "ibkr"),
+              eq(screenshotImports.status, "draft"),
+            ),
+          );
+        request.log.info({ userId: id, portfolioId, removed: removed.length }, "ibkr reimport");
+        return { removed: removed.length };
+      });
     },
   );
-
-  // Re-import: wipe ibkr transactions, clear the ibkr resolved-events ledger, discard draft.
-  app.post("/ibkr/connection/reimport", { preHandler: app.authenticate }, async (request, reply) => {
-    const { id } = requireUser(request);
-    const conn = await getConnection(id);
-    if (!conn || !conn.portfolioId) {
-      return reply.code(409).send({ error: "not_connected" });
-    }
-    const portfolioId = conn.portfolioId;
-    return app.db.transaction(async (tx) => {
-      const removed = await tx
-        .delete(transactions)
-        .where(and(eq(transactions.portfolioId, portfolioId), eq(transactions.source, "ibkr")))
-        .returning({ id: transactions.id });
-      await tx
-        .delete(trResolvedEvents)
-        .where(
-          and(
-            eq(trResolvedEvents.portfolioId, portfolioId),
-            eq(trResolvedEvents.source, "ibkr"),
-          ),
-        );
-      await tx
-        .update(screenshotImports)
-        .set({ status: "discarded" })
-        .where(
-          and(
-            eq(screenshotImports.userId, id),
-            eq(screenshotImports.portfolioId, portfolioId),
-            eq(screenshotImports.parser, "ibkr"),
-            eq(screenshotImports.status, "draft"),
-          ),
-        );
-      request.log.info({ userId: id, portfolioId, removed: removed.length }, "ibkr reimport");
-      return { removed: removed.length };
-    });
-  });
 }

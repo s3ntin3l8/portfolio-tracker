@@ -41,9 +41,7 @@ function isFundableBuy(t: ParsedTransaction): boolean {
  * carries no instrument at all → empty, so it pairs on amount + day alone.
  */
 function identityTokens(t: ParsedTransaction): string[] {
-  return [t.isin, t.ticker, t.wkn, t.name].filter(
-    (x): x is string => x != null && x !== "",
-  );
+  return [t.isin, t.ticker, t.wkn, t.name].filter((x): x is string => x != null && x !== "");
 }
 
 const DAY_MS = 86_400_000;
@@ -77,9 +75,7 @@ function amountsMatch(buyNotional: number, perkAmount: number): boolean {
   return diff <= MONEY_ABS_TOL || diff <= MONEY_REL_TOL * Math.max(buyNotional, perkAmount);
 }
 
-export function collapsePerkFundedAcquisitions(
-  drafts: ParsedTransaction[],
-): ParsedTransaction[] {
+export function collapsePerkFundedAcquisitions(drafts: ParsedTransaction[]): ParsedTransaction[] {
   // Index fundable buys not yet consumed, in a stable order so matching is deterministic.
   const buyIdx = drafts
     .map((d, i) => ({ d, i }))
@@ -140,7 +136,5 @@ export function collapsePerkFundedAcquisitions(
   }
 
   if (merged.size === 0 && droppedPerk.size === 0) return drafts;
-  return drafts
-    .map((d, i) => merged.get(i) ?? d)
-    .filter((_, i) => !droppedPerk.has(i));
+  return drafts.map((d, i) => merged.get(i) ?? d).filter((_, i) => !droppedPerk.has(i));
 }

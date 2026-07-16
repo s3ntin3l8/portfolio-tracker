@@ -53,7 +53,9 @@ export async function applyCancellations(opts: {
   // Clean up any linked documents (#231). Best-effort — no-op in phase 1 since
   // TR per-tx docs aren't stored yet; forward-compatible for phase 2.
   if (storage && removed.length > 0) {
-    const storageApp = { storage, db, log: log ?? console } as Parameters<typeof deleteReceiptsForTransactions>[0];
+    const storageApp = { storage, db, log: log ?? console } as Parameters<
+      typeof deleteReceiptsForTransactions
+    >[0];
     try {
       await deleteReceiptsForTransactions(
         storageApp,

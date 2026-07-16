@@ -55,7 +55,9 @@ export class S3Provider implements StorageProvider {
     body: Buffer | Readable,
     meta: { mimeType: string; originalFilename?: string },
   ): Promise<void> {
-    const safeFilename = meta.originalFilename ? sanitiseHeaderFilename(meta.originalFilename) : undefined;
+    const safeFilename = meta.originalFilename
+      ? sanitiseHeaderFilename(meta.originalFilename)
+      : undefined;
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -76,7 +78,9 @@ export class S3Provider implements StorageProvider {
     expiresInSeconds?: number,
     opts?: { downloadName?: string },
   ): Promise<string> {
-    const safeDownloadName = opts?.downloadName ? sanitiseHeaderFilename(opts.downloadName) : undefined;
+    const safeDownloadName = opts?.downloadName
+      ? sanitiseHeaderFilename(opts.downloadName)
+      : undefined;
     return s3GetSignedUrl(
       this.client,
       new GetObjectCommand({
@@ -109,22 +113,16 @@ export class S3Provider implements StorageProvider {
       }),
     );
     // Copy succeeded — delete the source.
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: srcKey }),
-    );
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: srcKey }));
   }
 
   async delete(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async exists(key: string): Promise<boolean> {
     try {
-      await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
       return true;
     } catch (err: unknown) {
       // S3 / MinIO throw a 404-shaped error under several names depending on SDK version
@@ -136,9 +134,7 @@ export class S3Provider implements StorageProvider {
 
   async get(key: string): Promise<Buffer | null> {
     try {
-      const resp = await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      );
+      const resp = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
       if (!resp.Body) return null;
       // ReadableStream from AWS SDK v3 — collect into Buffer.
       const chunks: Uint8Array[] = [];
@@ -185,15 +181,11 @@ export class S3Provider implements StorageProvider {
    */
   async ensureBucket(): Promise<boolean> {
     try {
-      await this.client.send(
-        new HeadBucketCommand({ Bucket: this.bucket }),
-      );
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
       return false; // already exists
     } catch (err: unknown) {
       if (isNotFound(err) || isNoSuchBucket(err)) {
-        await this.client.send(
-          new CreateBucketCommand({ Bucket: this.bucket }),
-        );
+        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
         return true; // created
       }
       throw err;
@@ -224,6 +216,9 @@ function isNoSuchBucket(err: unknown): boolean {
 
 function sanitiseHeaderFilename(name: string): string {
   const base = path.basename(name);
-  const safe = base.replace(/[^A-Za-z0-9\s.-]/g, "_").trim().slice(0, 200);
+  const safe = base
+    .replace(/[^A-Za-z0-9\s.-]/g, "_")
+    .trim()
+    .slice(0, 200);
   return safe || "document";
 }

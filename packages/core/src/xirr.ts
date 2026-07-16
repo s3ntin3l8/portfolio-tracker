@@ -15,10 +15,7 @@ function npv(rate: number, flows: NormFlow[]): number {
 }
 
 function dNpv(rate: number, flows: NormFlow[]): number {
-  return flows.reduce(
-    (acc, f) => acc - (f.years * f.amount) / Math.pow(1 + rate, f.years + 1),
-    0,
-  );
+  return flows.reduce((acc, f) => acc - (f.years * f.amount) / Math.pow(1 + rate, f.years + 1), 0);
 }
 
 /**

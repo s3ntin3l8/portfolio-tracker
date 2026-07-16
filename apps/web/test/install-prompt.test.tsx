@@ -86,17 +86,13 @@ describe("InstallPrompt", () => {
     renderPrompt();
 
     expect(await screen.findByText(messages.Install.iosHint)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: messages.Install.cta }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: messages.Install.cta })).not.toBeInTheDocument();
   });
 
   it("stays dismissed across renders once dismissed", async () => {
     const first = renderPrompt();
     fireBeforeInstallPrompt();
-    fireEvent.click(
-      await screen.findByRole("button", { name: messages.Install.dismiss }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: messages.Install.dismiss }));
     expect(screen.queryByText(messages.Install.title)).not.toBeInTheDocument();
     expect(localStorage.getItem("pwa-install-dismissed")).toBe("1");
     first.unmount();

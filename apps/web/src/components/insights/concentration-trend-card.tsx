@@ -28,11 +28,7 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   );
 }
 
-export function ConcentrationTrendCard({
-  trend,
-}: {
-  trend: ConcentrationPoint[];
-}) {
+export function ConcentrationTrendCard({ trend }: { trend: ConcentrationPoint[] }) {
   const t = useTranslations("Insights.concentrationTrend");
   const latest = trend.length > 0 ? trend[trend.length - 1] : null;
   const first = trend.length > 0 ? trend[0] : null;
@@ -51,7 +47,9 @@ export function ConcentrationTrendCard({
             {t("topHolding", { hhi: (latest.hhi * 100).toFixed(1) })}
             {first && first.hhi !== latest.hhi && (
               <span className={latest.hhi < first.hhi ? " text-success" : " text-destructive"}>
-                {" "}({latest.hhi > first.hhi ? "+" : ""}{((latest.hhi - first.hhi) * 100).toFixed(2)} since {first.date})
+                {" "}
+                ({latest.hhi > first.hhi ? "+" : ""}
+                {((latest.hhi - first.hhi) * 100).toFixed(2)} since {first.date})
               </span>
             )}
           </p>

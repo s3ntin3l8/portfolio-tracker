@@ -202,9 +202,8 @@ describe("AdminJobs", () => {
       fireEvent.click(table.getByRole("button", { name: messages.Admin.jobForce }));
     });
 
-    expect(mockTriggerAdminJob).toHaveBeenCalledWith(
-      "refresh-instrument-metadata",
-      { force: true },
-    );
+    expect(mockTriggerAdminJob).toHaveBeenCalledWith("refresh-instrument-metadata", {
+      force: true,
+    });
   });
 });

@@ -9,7 +9,9 @@ const refresh = vi.fn();
 const putPreferences = vi.fn();
 
 vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("@/lib/api", () => ({ useApiClient: () => ({ putPreferences, lookupInstruments: vi.fn(async () => []) }) }));
+vi.mock("@/lib/api", () => ({
+  useApiClient: () => ({ putPreferences, lookupInstruments: vi.fn(async () => []) }),
+}));
 
 function renderCard(benchmark: InsightsBenchmark | null) {
   return render(
@@ -25,7 +27,12 @@ describe("BenchmarkCard", () => {
   });
 
   it("renders a friendly benchmark name and a single-signed percentage (regression: no doubled '+')", () => {
-    renderCard({ symbol: "^GSPC", activeReturn: "0.032", trackingError: "0.021", correlation: "0.85" });
+    renderCard({
+      symbol: "^GSPC",
+      activeReturn: "0.032",
+      trackingError: "0.021",
+      correlation: "0.85",
+    });
 
     expect(screen.getByText("vs S&P 500")).toBeInTheDocument();
     expect(screen.getByText("+3.20%")).toBeInTheDocument();
@@ -35,7 +42,12 @@ describe("BenchmarkCard", () => {
   });
 
   it("falls back to the raw ticker for an unrecognized benchmark symbol", () => {
-    renderCard({ symbol: "^WEIRD123", activeReturn: "-0.05", trackingError: "0.01", correlation: "0.5" });
+    renderCard({
+      symbol: "^WEIRD123",
+      activeReturn: "-0.05",
+      trackingError: "0.01",
+      correlation: "0.5",
+    });
 
     expect(screen.getByText("vs ^WEIRD123")).toBeInTheDocument();
     expect(screen.getByText("-5.00%")).toBeInTheDocument();
@@ -50,13 +62,23 @@ describe("BenchmarkCard", () => {
   });
 
   it("shows an edit button when a benchmark is configured", () => {
-    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    renderCard({
+      symbol: "^GSPC",
+      activeReturn: "0.01",
+      trackingError: "0.02",
+      correlation: "0.9",
+    });
 
     expect(screen.getByRole("button", { name: /Edit/i })).toBeInTheDocument();
   });
 
   it("opens a dialog when the edit button is clicked", async () => {
-    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    renderCard({
+      symbol: "^GSPC",
+      activeReturn: "0.01",
+      trackingError: "0.02",
+      correlation: "0.9",
+    });
     fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
 
     await waitFor(() => {
@@ -67,7 +89,12 @@ describe("BenchmarkCard", () => {
 
   it("saves a new benchmark symbol via putPreferences when a suggested benchmark is picked", async () => {
     putPreferences.mockResolvedValue({ benchmarkSymbol: "^GDAXI", riskFreeRate: null });
-    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    renderCard({
+      symbol: "^GSPC",
+      activeReturn: "0.01",
+      trackingError: "0.02",
+      correlation: "0.9",
+    });
     fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
 
     await waitFor(() => {
@@ -83,7 +110,12 @@ describe("BenchmarkCard", () => {
 
   it("allows removing the benchmark", async () => {
     putPreferences.mockResolvedValue({ benchmarkSymbol: null, riskFreeRate: null });
-    renderCard({ symbol: "^GSPC", activeReturn: "0.01", trackingError: "0.02", correlation: "0.9" });
+    renderCard({
+      symbol: "^GSPC",
+      activeReturn: "0.01",
+      trackingError: "0.02",
+      correlation: "0.9",
+    });
     fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
 
     await waitFor(() => {

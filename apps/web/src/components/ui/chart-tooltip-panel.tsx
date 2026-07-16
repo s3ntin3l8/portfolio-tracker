@@ -87,9 +87,7 @@ export function ChartTooltipPanel({
         minWidth: 168,
       }}
     >
-      {title && (
-        <p style={{ marginBottom: 6, fontWeight: 700 }}>{title}</p>
-      )}
+      {title && <p style={{ marginBottom: 6, fontWeight: 700 }}>{title}</p>}
       {rows.map((row, i) => (
         <div
           key={row.label}

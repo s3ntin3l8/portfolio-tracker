@@ -63,8 +63,7 @@ export interface StoreInboxDocumentOptions {
 }
 
 export type StoreInboxDocumentResult =
-  | { ok: true; documentId: string; duplicate?: boolean }
-  | { ok: false; error: string };
+  { ok: true; documentId: string; duplicate?: boolean } | { ok: false; error: string };
 
 export interface InboxDocumentMeta {
   id: string;
@@ -93,8 +92,17 @@ export async function storeInboxDocument(
   app: AppLike,
   opts: StoreInboxDocumentOptions,
 ): Promise<StoreInboxDocumentResult> {
-  const { userId, portfolioId, category, taxYear, buf, mimeType, originalFilename, source, sourceEventId } =
-    opts;
+  const {
+    userId,
+    portfolioId,
+    category,
+    taxYear,
+    buf,
+    mimeType,
+    originalFilename,
+    source,
+    sourceEventId,
+  } = opts;
 
   if (sourceEventId) {
     const existingId = await _findBySourceEvent(app, userId, sourceEventId);
@@ -148,7 +156,10 @@ export async function storeInboxDocument(
     return { ok: false, error: "insert conflicted but no existing row found" };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    app.log.error({ err, userId, key }, "storeInboxDocument: db insert failed after successful put");
+    app.log.error(
+      { err, userId, key },
+      "storeInboxDocument: db insert failed after successful put",
+    );
     return { ok: false, error: `db insert failed: ${error}` };
   }
 }
@@ -185,9 +196,7 @@ export async function listInboxDocuments(
     .select()
     .from(documents)
     .where(and(...conditions));
-  return (rows as InboxDocumentMeta[]).sort(
-    (a, b) => b.storedAt.getTime() - a.storedAt.getTime(),
-  );
+  return (rows as InboxDocumentMeta[]).sort((a, b) => b.storedAt.getTime() - a.storedAt.getTime());
 }
 
 /** Fetch a single inbox document by id. IDOR guard is the caller's responsibility. */

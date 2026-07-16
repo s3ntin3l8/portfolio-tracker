@@ -146,7 +146,7 @@ describe("computeActiveReturn", () => {
     // correct 3% (its base already sits at 01-05). Active return is the small,
     // correct difference — not "8 - 3 = 5" (0.05 as a fraction), which is what the
     // pre-fix, unrebased subtraction of each series' raw final pct would have given.
-    const expectedActiveReturn = (108 / 105 - 1) - 0.03;
+    const expectedActiveReturn = 108 / 105 - 1 - 0.03;
     expect(Number(result!.activeReturn)).toBeCloseTo(expectedActiveReturn, 6);
     expect(Number(result!.activeReturn)).not.toBeCloseTo(0.05, 3);
   });
@@ -161,9 +161,13 @@ describe("computeActiveReturn", () => {
 
 describe("getUserBenchmarkConfig", () => {
   async function seedUser(app: Awaited<ReturnType<typeof buildApp>>, symbol?: string) {
-    const [u] = await app.db.insert(users).values({
-      authSub: crypto.randomUUID(), email: "bm@example.com",
-    }).returning();
+    const [u] = await app.db
+      .insert(users)
+      .values({
+        authSub: crypto.randomUUID(),
+        email: "bm@example.com",
+      })
+      .returning();
     if (symbol) {
       await app.db.insert(userPreferences).values({ userId: u.id, benchmarkSymbol: symbol });
     }
@@ -198,10 +202,20 @@ describe("getUserBenchmarkConfig", () => {
     try {
       const u = await seedUser(app, "^N225");
       await app.db.insert(benchmarkPrices).values({
-        userId: u.id, symbol: "^N225", date: "2026-01-14", close: "38500", currency: "JPY", source: "yahoo",
+        userId: u.id,
+        symbol: "^N225",
+        date: "2026-01-14",
+        close: "38500",
+        currency: "JPY",
+        source: "yahoo",
       });
       await app.db.insert(benchmarkPrices).values({
-        userId: u.id, symbol: "^N225", date: "2026-01-15", close: "39000", currency: "JPY", source: "yahoo",
+        userId: u.id,
+        symbol: "^N225",
+        date: "2026-01-15",
+        close: "39000",
+        currency: "JPY",
+        source: "yahoo",
       });
       const config = await getUserBenchmarkConfig(app.db, u.id, "JPY");
       expect(config.symbol).toBe("^N225");
@@ -217,10 +231,20 @@ describe("getUserBenchmarkConfig", () => {
       const uA = await seedUser(app, "^GDAXI");
       const uB = await seedUser(app, "^GDAXI");
       await app.db.insert(benchmarkPrices).values({
-        userId: uA.id, symbol: "^GDAXI", date: "2026-01-15", close: "20000", currency: "EUR", source: "yahoo",
+        userId: uA.id,
+        symbol: "^GDAXI",
+        date: "2026-01-15",
+        close: "20000",
+        currency: "EUR",
+        source: "yahoo",
       });
       await app.db.insert(benchmarkPrices).values({
-        userId: uB.id, symbol: "^GDAXI", date: "2026-01-15", close: "20000", currency: "EUR", source: "yahoo",
+        userId: uB.id,
+        symbol: "^GDAXI",
+        date: "2026-01-15",
+        close: "20000",
+        currency: "EUR",
+        source: "yahoo",
       });
       const [configA, configB] = await Promise.all([
         getUserBenchmarkConfig(app.db, uA.id, "JPY"),

@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  indonesianFinalTax,
-  ID_SALES_TAX_RATE,
-  ID_DIVIDEND_TAX_RATE,
-} from "../src/tax-id.js";
+import { indonesianFinalTax, ID_SALES_TAX_RATE, ID_DIVIDEND_TAX_RATE } from "../src/tax-id.js";
 
 describe("indonesianFinalTax", () => {
   it("has the expected flat rates", () => {
@@ -128,9 +124,7 @@ describe("indonesianFinalTax", () => {
     const result = indonesianFinalTax({
       disposals: [{ symbol: "A", when: "2026-01-01", proceeds: "100000" }],
       dividends: [],
-      byYear: [
-        { year: 2025, proceeds: "9999999", dividendGross: "9999999", realized: "0" },
-      ],
+      byYear: [{ year: 2025, proceeds: "9999999", dividendGross: "9999999", realized: "0" }],
     });
     // estimatedTax must come only from the selected-year disposals/dividends inputs,
     // not from unrelated byYear totals for other years.

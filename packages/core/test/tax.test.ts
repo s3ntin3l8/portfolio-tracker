@@ -148,9 +148,7 @@ describe("allowanceUsageYTD", () => {
 
   it("counts dividend income against the allowance", () => {
     const log = makeTradeLog({
-      dividendsByYear: [
-        { year: 2025, amount: "200", tax: "0" },
-      ],
+      dividendsByYear: [{ year: 2025, amount: "200", tax: "0" }],
     });
 
     const result = allowanceUsageYTD({
@@ -474,9 +472,7 @@ describe("allowanceUsageYTD — Vorabpauschale netting", () => {
 
   it("subtracts the tf-adjusted disposal credit from usedYtd", () => {
     const log = makeTradeLog({
-      trades: [
-        vorabTrade({ instrumentId: "etf-1", vorabCredit: "4.12", taxYear: 2026 }),
-      ],
+      trades: [vorabTrade({ instrumentId: "etf-1", vorabCredit: "4.12", taxYear: 2026 })],
     });
     const result = allowanceUsageYTD({
       tradeLog: log,
@@ -524,9 +520,7 @@ describe("allowanceUsageYTD — Vorabpauschale netting", () => {
     // before combining with other income).
     const log = makeTradeLog({
       dividendsByYear: [{ year: 2026, amount: "100", tax: "0" }],
-      trades: [
-        vorabTrade({ instrumentId: "etf-1", vorabCredit: "50", taxYear: 2026 }),
-      ],
+      trades: [vorabTrade({ instrumentId: "etf-1", vorabCredit: "50", taxYear: 2026 })],
     });
     const result = allowanceUsageYTD({
       tradeLog: log,
@@ -662,7 +656,11 @@ describe("allowanceUsageYTD — two-pot Verlustverrechnung", () => {
 
   it("excludes gold and crypto trades from both pots entirely (§23 EStG regime)", () => {
     const log = makeTradeLog({
-      trades: [gainTrade("gold-a", "5000"), gainTrade("crypto-a", "5000"), gainTrade("stock-a", "100")],
+      trades: [
+        gainTrade("gold-a", "5000"),
+        gainTrade("crypto-a", "5000"),
+        gainTrade("stock-a", "100"),
+      ],
     });
     const result = allowanceUsageYTD({
       tradeLog: log,
@@ -932,7 +930,7 @@ describe("harvestSuggestions", () => {
 
     expect(result).toHaveLength(1);
     const s = result[0];
-    expect(parseFloat(s.tfRate)).toBeCloseTo(0.30);
+    expect(parseFloat(s.tfRate)).toBeCloseTo(0.3);
     expect(s.unrealizedGross).toBe("1000.00");
     expect(s.unrealizedAdjusted).toBe("700.00");
     // harvestableGross = 500 / 0.70 ≈ 714.2857...
@@ -1169,7 +1167,7 @@ describe("allowanceUsageYTD with forecastIncomeRestOfYear", () => {
     // realized: 200 used, remaining: 800.
     // forecast: 310 → projectedUsed = min(200 + 310, 1000) = 510.
     expect(result.incomeYtd).toBe("200.00"); // realized stays
-    expect(result.remaining).toBe("800.00");   // realized stays
+    expect(result.remaining).toBe("800.00"); // realized stays
     expect(result.forecastIncomeRestOfYear).toBe("310.00");
     expect(result.projectedUsedFullYear).toBe("510.00");
     expect(result.projectedRemaining).toBe("490.00");
@@ -1309,9 +1307,7 @@ describe("harvestSummary", () => {
     // 10 positions, each individually harvestable up to the full €322 remaining
     // (per-row semantics). The OLD (buggy) web code summed each row's independently-
     // capped harvestableGross/taxSaving, so it would report ~10× the true ceiling.
-    const suggestions = Array.from({ length: 10 }, (_, i) =>
-      equitySuggestion(`stock-${i}`, "500"),
-    );
+    const suggestions = Array.from({ length: 10 }, (_, i) => equitySuggestion(`stock-${i}`, "500"));
     const remaining = "322";
     const taxRate = "0.25";
 

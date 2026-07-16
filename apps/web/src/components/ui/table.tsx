@@ -4,10 +4,7 @@ import { cn } from "@/lib/utils";
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div className="relative w-full overflow-x-auto">
-      <table
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
+      <table className={cn("w-full caption-bottom text-sm", className)} {...props} />
     </div>
   );
 }
@@ -17,9 +14,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
-  return (
-    <tbody className={cn("[&_tr:last-child]:border-0", className)} {...props} />
-  );
+  return <tbody className={cn("[&_tr:last-child]:border-0", className)} {...props} />;
 }
 
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
@@ -76,12 +71,4 @@ export const TABLE_VALUE = "tabular text-right text-[13px] font-medium";
 export const TABLE_VALUE_STRONG = "tabular text-right text-[13px] font-bold";
 export const TABLE_SUBVALUE = "text-[11px] font-semibold";
 
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableRow,
-  TableHead,
-  TableCell,
-};
+export { Table, TableHeader, TableBody, TableFooter, TableRow, TableHead, TableCell };

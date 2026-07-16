@@ -33,7 +33,7 @@ export async function targetsRoute(app: FastifyInstance) {
   }
 
   /** Map DB rows to the API response shape. */
-  function toTargetWeights(rows: typeof allocationTargets.$inferSelect[]) {
+  function toTargetWeights(rows: (typeof allocationTargets.$inferSelect)[]) {
     return rows.map((r) => ({
       key: r.targetKey,
       targetPct: Number(r.targetPct),
@@ -67,45 +67,18 @@ export async function targetsRoute(app: FastifyInstance) {
     },
   );
 
-  app.put(
-    "/networth/targets",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const { id } = requireUser(request);
-      const parsed = allocationTargetSetSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: "invalid_input", issues: parsed.error.issues });
-      }
-      const { dimension, targets } = parsed.data;
+  app.put("/networth/targets", { preHandler: app.authenticate }, async (request, reply) => {
+    const { id } = requireUser(request);
+    const parsed = allocationTargetSetSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "invalid_input", issues: parsed.error.issues });
+    }
+    const { dimension, targets } = parsed.data;
 
-      await app.db.transaction(async (tx) => {
-        // Delete existing targets for this (user, null-portfolio, dimension).
-        await tx
-          .delete(allocationTargets)
-          .where(
-            and(
-              eq(allocationTargets.userId, id),
-              isNull(allocationTargets.portfolioId),
-              eq(allocationTargets.dimension, dimension),
-            ),
-          );
-        if (targets.length > 0) {
-          await tx.insert(allocationTargets).values(
-            targets.map((t) => ({
-              userId: id,
-              portfolioId: null,
-              dimension,
-              targetKey: t.key,
-              targetPct: String(t.targetPct),
-            })),
-          );
-        }
-      });
-
-      // Return the newly saved set.
-      const rows = await app.db
-        .select()
-        .from(allocationTargets)
+    await app.db.transaction(async (tx) => {
+      // Delete existing targets for this (user, null-portfolio, dimension).
+      await tx
+        .delete(allocationTargets)
         .where(
           and(
             eq(allocationTargets.userId, id),
@@ -113,9 +86,32 @@ export async function targetsRoute(app: FastifyInstance) {
             eq(allocationTargets.dimension, dimension),
           ),
         );
-      return toTargetWeights(rows);
-    },
-  );
+      if (targets.length > 0) {
+        await tx.insert(allocationTargets).values(
+          targets.map((t) => ({
+            userId: id,
+            portfolioId: null,
+            dimension,
+            targetKey: t.key,
+            targetPct: String(t.targetPct),
+          })),
+        );
+      }
+    });
+
+    // Return the newly saved set.
+    const rows = await app.db
+      .select()
+      .from(allocationTargets)
+      .where(
+        and(
+          eq(allocationTargets.userId, id),
+          isNull(allocationTargets.portfolioId),
+          eq(allocationTargets.dimension, dimension),
+        ),
+      );
+    return toTargetWeights(rows);
+  });
 
   // ---------------------------------------------------------------------------
   // Per-portfolio targets

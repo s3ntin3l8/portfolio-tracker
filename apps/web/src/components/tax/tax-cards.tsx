@@ -37,7 +37,9 @@ export function EstimatedTaxHero({
       }}
     >
       <p className="truncate text-xs font-semibold text-white/80">{label}</p>
-      <p className="tabular mt-1 truncate text-lg font-extrabold sm:text-2xl lg:text-[28px]">{value}</p>
+      <p className="tabular mt-1 truncate text-lg font-extrabold sm:text-2xl lg:text-[28px]">
+        {value}
+      </p>
       <p className="mt-1 text-xs font-medium text-white/80">{description}</p>
     </div>
   );
@@ -75,9 +77,7 @@ export function AllowanceSummaryBoxes({
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-[14px] border bg-card-2 px-[15px] py-[13px]">
         <div className="flex items-baseline justify-between">
-          <span className="text-[11px] font-semibold text-text-2">
-            {t("allowanceBoxes.left")}
-          </span>
+          <span className="text-[11px] font-semibold text-text-2">{t("allowanceBoxes.left")}</span>
           <span className="tabular text-[15px] font-extrabold">{money(remaining)}</span>
         </div>
         {/* Reference: 7px track, purple allowance fill (#7C5CFC is the tax screen's accent). */}
@@ -116,9 +116,10 @@ export function DistributionCard({
   money: (n: string | number) => string;
   t: TaxTranslator;
 }) {
-  const allocPct = Number(d.holderAllowanceCap) > 0
-    ? Math.round((Number(d.totalAllocated) / Number(d.holderAllowanceCap)) * 100)
-    : 0;
+  const allocPct =
+    Number(d.holderAllowanceCap) > 0
+      ? Math.round((Number(d.totalAllocated) / Number(d.holderAllowanceCap)) * 100)
+      : 0;
 
   return (
     <Card>
@@ -242,7 +243,13 @@ export function HarvestRow({
         <p className="truncate text-[13px] font-bold">{s.instrument?.name ?? label}</p>
         <p className="truncate text-[11px] font-medium text-text-2">
           {t("harvest.metaLine", { offset: money(s.harvestableGross), saving: money(s.taxSaving) })}
-          {tfPct > 0 && <> {" · "}{t("harvest.tfApplied", { pct: tfPct })}</>}
+          {tfPct > 0 && (
+            <>
+              {" "}
+              {" · "}
+              {t("harvest.tfApplied", { pct: tfPct })}
+            </>
+          )}
         </p>
       </div>
       <div className="shrink-0 text-right">

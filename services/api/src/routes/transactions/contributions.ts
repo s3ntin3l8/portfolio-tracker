@@ -11,8 +11,7 @@ import {
   contributionStats,
   type CashFlowPoint,
 } from "@portfolio/core";
-import type {
-  PortfolioParams} from "./shared.js";
+import type { PortfolioParams } from "./shared.js";
 import {
   ownedPortfolio,
   buildContributions,
@@ -20,7 +19,7 @@ import {
   loadValuation,
   networthContributionsCache,
   enrichContributions,
-  PORTFOLIO_VALUATION_CONCURRENCY
+  PORTFOLIO_VALUATION_CONCURRENCY,
 } from "./shared.js";
 import { logTiming } from "../../lib/timing.js";
 import { mapPool } from "../../lib/promise-pool.js";
@@ -107,14 +106,27 @@ export function registerContributionsRoutes(app: FastifyInstance) {
         networthContributionsCache,
         `${id}:${display}:${holderId ?? ""}`,
         async () => {
-          const perPortfolioLoad = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, async (p) => {
-            const { coreTxns, summary } = await loadValuation(app, p.id, display, undefined, p.cashCounted);
-            return { summary, txns: coreTxns, boundary: p.cashCounted ? ("inside" as const) : ("outside" as const) };
-          });
-          const summaries: PortfolioSummary[] = perPortfolioLoad.map((r) => r.summary);
-          const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] = perPortfolioLoad.map(
-            (r) => ({ txns: r.txns, boundary: r.boundary }),
+          const perPortfolioLoad = await mapPool(
+            pfs,
+            PORTFOLIO_VALUATION_CONCURRENCY,
+            async (p) => {
+              const { coreTxns, summary } = await loadValuation(
+                app,
+                p.id,
+                display,
+                undefined,
+                p.cashCounted,
+              );
+              return {
+                summary,
+                txns: coreTxns,
+                boundary: p.cashCounted ? ("inside" as const) : ("outside" as const),
+              };
+            },
           );
+          const summaries: PortfolioSummary[] = perPortfolioLoad.map((r) => r.summary);
+          const loaded: { txns: CoreTransaction[]; boundary: "inside" | "outside" }[] =
+            perPortfolioLoad.map((r) => ({ txns: r.txns, boundary: r.boundary }));
           const allTxns: CoreTransaction[] = perPortfolioLoad.flatMap((r) => r.txns);
           const fx = makeFxRateFn(
             await getFxRates(app.db, [...new Set(allTxns.map((t) => t.currency))], display),
@@ -123,8 +135,10 @@ export function registerContributionsRoutes(app: FastifyInstance) {
           const perPortfolio = loaded.map(({ txns, boundary }) =>
             contributionStats({ txns, displayCurrency: display, fx, boundary }),
           );
-          const flowsByPortfolio = await mapPool(loaded, PORTFOLIO_VALUATION_CONCURRENCY, ({ txns, boundary }) =>
-            boundaryFlows(app, txns, boundary, display),
+          const flowsByPortfolio = await mapPool(
+            loaded,
+            PORTFOLIO_VALUATION_CONCURRENCY,
+            ({ txns, boundary }) => boundaryFlows(app, txns, boundary, display),
           );
           const flows: CashFlowPoint[] = flowsByPortfolio.flat();
           const aggregated = aggregatePortfolios(summaries, display);

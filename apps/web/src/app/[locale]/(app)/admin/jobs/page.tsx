@@ -6,11 +6,7 @@ import { UnmappedTypesAlert } from "@/components/unmapped-types-alert";
 import { SectionHeader } from "@/components/section-header";
 import { loadMe, loadAdminJobs, loadUnmappedEventTypes } from "@/lib/server-api";
 
-export default async function AdminJobsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function AdminJobsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("Admin");
@@ -30,10 +26,7 @@ export default async function AdminJobsPage({
       <Card className="mt-4">
         <CardContent className="p-5">
           {result.status === "ok" ? (
-            <AdminJobs
-              initialJobs={result.jobs}
-              schedulerAvailable={result.schedulerAvailable}
-            />
+            <AdminJobs initialJobs={result.jobs} schedulerAvailable={result.schedulerAvailable} />
           ) : (
             <p className="text-sm text-muted-foreground">{t("unavailable")}</p>
           )}

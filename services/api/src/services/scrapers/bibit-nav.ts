@@ -21,8 +21,7 @@ export const BIBIT_SOURCE = "bibit";
 // Bibit rejects obvious bots; mirror the headers the community proxy uses.
 const BIBIT_HEADERS: Record<string, string> = {
   Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0",
+  "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:47.0) Gecko/20100101 Firefox/47.0",
   Origin: "https://bibit.id",
 };
 
@@ -46,10 +45,7 @@ export function decryptBibitEnvelope(envelope: string): unknown {
   return JSON.parse(plain.toString("utf8"));
 }
 
-async function fetchPage(
-  doFetch: typeof fetch,
-  page: number,
-): Promise<BibitFund[]> {
+async function fetchPage(doFetch: typeof fetch, page: number): Promise<BibitFund[]> {
   const url = `${BIBIT_LIST_URL}?page=${page}&limit=${PAGE_LIMIT}&sort=asc&sort_by=7`;
   const res = await doFetch(url, { headers: BIBIT_HEADERS });
   if (!res.ok) return [];

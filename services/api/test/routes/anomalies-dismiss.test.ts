@@ -37,7 +37,13 @@ describe("anomaly dismissal + negative-cash guard", () => {
     app = await buildApp({ authKey: kp.publicKey });
     const [acme] = await app.db
       .insert(instruments)
-      .values({ symbol: "ACME", market: "XETRA", assetClass: "equity", currency: "EUR", name: "Acme" })
+      .values({
+        symbol: "ACME",
+        market: "XETRA",
+        assetClass: "equity",
+        currency: "EUR",
+        name: "Acme",
+      })
       .returning();
     acmeId = acme.id;
   });
@@ -66,7 +72,13 @@ describe("anomaly dismissal + negative-cash guard", () => {
       method: "POST",
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
-      payload: { type: "deposit", quantity: "0", price: "100", currency: "EUR", executedAt: "2024-01-01T00:00:00.000Z" },
+      payload: {
+        type: "deposit",
+        quantity: "0",
+        price: "100",
+        currency: "EUR",
+        executedAt: "2024-01-01T00:00:00.000Z",
+      },
     });
     const buy = await app.inject({
       method: "POST",
@@ -91,7 +103,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
   it("surfaces a negative_cash anomaly, then hides it once dismissed", async () => {
     const { t, portfolioId, buyId } = await setupWithNegativeCash("dismiss-user");
 
-    const before = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const before = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     const negs = negativeCash(before.json());
     expect(negs).toHaveLength(1);
     expect(negs[0].transactionId).toBe(buyId);
@@ -113,7 +129,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
     });
     expect(again.statusCode).toBe(204);
 
-    const after = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const after = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(negativeCash(after.json())).toHaveLength(0);
   });
 
@@ -125,7 +145,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
       headers: auth(t),
       payload: { transactionId: buyId, code: "negative_cash" },
     });
-    const gone = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const gone = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(negativeCash(gone.json())).toHaveLength(0);
 
     const undo = await app.inject({
@@ -136,7 +160,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
     });
     expect(undo.statusCode).toBe(204);
 
-    const back = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const back = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(negativeCash(back.json())).toHaveLength(1);
   });
 
@@ -155,7 +183,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
 
   it("allowNegativeCash=true suppresses the negative_cash guard entirely", async () => {
     const { t, portfolioId } = await setupWithNegativeCash("allow-user", true);
-    const holdings = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const holdings = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(negativeCash(holdings.json())).toHaveLength(0);
   });
 
@@ -164,7 +196,9 @@ describe("anomaly dismissal + negative-cash guard", () => {
   // .claude/plans/can-we-investigate-my-warm-honey.md). reconcileCash only ever reads the
   // raw feed, so without netManualAdjustments folding stored adjustments in at read time,
   // booking the true-up would move holdings cash but leave reconciliation_gap firing forever.
-  function reconciliationGap(holdingsBody: { anomalies: { code: string; meta?: Record<string, unknown> }[] }) {
+  function reconciliationGap(holdingsBody: {
+    anomalies: { code: string; meta?: Record<string, unknown> }[];
+  }) {
     return holdingsBody.anomalies.filter((a) => a.code === "reconciliation_gap");
   }
 
@@ -183,7 +217,13 @@ describe("anomaly dismissal + negative-cash guard", () => {
       method: "POST",
       url: `/portfolios/${portfolioId}/transactions`,
       headers: auth(t),
-      payload: { type: "deposit", quantity: "0", price: "1000", currency: "EUR", executedAt: "2026-01-01T00:00:00.000Z" },
+      payload: {
+        type: "deposit",
+        quantity: "0",
+        price: "1000",
+        currency: "EUR",
+        executedAt: "2026-01-01T00:00:00.000Z",
+      },
     });
 
     const db = getDb();
@@ -202,7 +242,11 @@ describe("anomaly dismissal + negative-cash guard", () => {
       },
     });
 
-    const before = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const before = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(reconciliationGap(before.json())).toHaveLength(1);
 
     await app.inject({
@@ -219,10 +263,18 @@ describe("anomaly dismissal + negative-cash guard", () => {
       },
     });
 
-    const after = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/holdings`, headers: auth(t) });
+    const after = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/holdings`,
+      headers: auth(t),
+    });
     expect(reconciliationGap(after.json())).toHaveLength(0);
     // The adjustment also moved actual holdings cash (via /summary), not just the warning.
-    const summary = await app.inject({ method: "GET", url: `/portfolios/${portfolioId}/summary`, headers: auth(t) });
+    const summary = await app.inject({
+      method: "GET",
+      url: `/portfolios/${portfolioId}/summary`,
+      headers: auth(t),
+    });
     expect(summary.json().cash.EUR).toBe("973.3");
   });
 });

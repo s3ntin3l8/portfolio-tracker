@@ -16,7 +16,10 @@ vi.mock("@/lib/api", () => ({
   useApiClient: () => ({ getNetworthTargets, putNetworthTargets }),
 }));
 
-import { RebalancingCard, type RebalancingSlice } from "../src/components/insights/rebalancing-card";
+import {
+  RebalancingCard,
+  type RebalancingSlice,
+} from "../src/components/insights/rebalancing-card";
 
 const SLICES: RebalancingSlice[] = [
   { key: "equity", label: "Stocks", actualPct: 62 },
@@ -86,11 +89,13 @@ describe("RebalancingCard", () => {
     const saveButton = await screen.findByRole("button", { name: "Save targets" });
     fireEvent.click(saveButton);
 
-    await waitFor(() => expect(putNetworthTargets).toHaveBeenCalledWith("asset_class", [
-      { key: "equity", targetPct: 55 },
-      { key: "gold", targetPct: 20 },
-      { key: "bond", targetPct: 25 },
-    ]));
+    await waitFor(() =>
+      expect(putNetworthTargets).toHaveBeenCalledWith("asset_class", [
+        { key: "equity", targetPct: 55 },
+        { key: "gold", targetPct: 20 },
+        { key: "bond", targetPct: 25 },
+      ]),
+    );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 });

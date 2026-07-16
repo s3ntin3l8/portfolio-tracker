@@ -1,11 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Coins } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/stat-card";
 import { EmptyState } from "@/components/empty-state";
 import { AllocationDonut } from "@/components/charts/allocation-donut";
@@ -14,11 +9,7 @@ import { IncomeHeatmap } from "@/components/charts/income-heatmap";
 import { ReportHeader } from "@/components/report-header";
 import { YieldsTable } from "@/components/income/yields-table";
 import { ByCurrencyTable } from "@/components/income/by-currency-table";
-import {
-  TABLE_LABEL,
-  TABLE_SUBLABEL,
-  TABLE_VALUE_STRONG,
-} from "@/components/ui/table";
+import { TABLE_LABEL, TABLE_SUBLABEL, TABLE_VALUE_STRONG } from "@/components/ui/table";
 import { IncomeTimeline } from "@/components/income/income-timeline";
 import { CashInterestLine } from "@/components/income/cash-interest-line";
 import type { IncomeEventRow } from "@/components/income/income-events-table";
@@ -27,11 +18,7 @@ import { formatMoney, formatPercent, cn } from "@/lib/utils";
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
 
-export default async function IncomePage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function IncomePage({ params }: { params: Promise<{ locale: string }> }) {
   // eslint-disable-next-line react-hooks/purity
   const t0 = TIMING ? performance.now() : 0;
   const { locale } = await params;
@@ -64,15 +51,9 @@ export default async function IncomePage({
         {heading}
         <EmptyState
           icon={Coins}
-          title={
-            result.status === "unavailable"
-              ? te("unavailableTitle")
-              : te("noPortfolioTitle")
-          }
+          title={result.status === "unavailable" ? te("unavailableTitle") : te("noPortfolioTitle")}
           description={
-            result.status === "unavailable"
-              ? te("unavailableBody")
-              : te("noPortfolioBody")
+            result.status === "unavailable" ? te("unavailableBody") : te("noPortfolioBody")
           }
         />
       </div>
@@ -82,18 +63,13 @@ export default async function IncomePage({
   const s = result.data;
   const currency = s.displayCurrency;
   const m = (n: number) => formatMoney(n, currency, locale);
-  const hasIncome =
-    s.events.length > 0 || s.yields.length > 0 || s.upcoming.length > 0;
+  const hasIncome = s.events.length > 0 || s.yields.length > 0 || s.upcoming.length > 0;
 
   if (!hasIncome) {
     return (
       <div className="space-y-5">
         {heading}
-        <EmptyState
-          icon={Coins}
-          title={t("emptyTitle")}
-          description={t("emptyBody")}
-        />
+        <EmptyState icon={Coins} title={t("emptyTitle")} description={t("emptyBody")} />
       </div>
     );
   }
@@ -239,9 +215,7 @@ export default async function IncomePage({
                     </div>
                     <span className={cn("shrink-0", TABLE_VALUE_STRONG)}>
                       {m(Number(c.total))}{" "}
-                      <span className="text-text-mute">
-                        ({formatPercent(c.pct, locale)})
-                      </span>
+                      <span className="text-text-mute">({formatPercent(c.pct, locale)})</span>
                     </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

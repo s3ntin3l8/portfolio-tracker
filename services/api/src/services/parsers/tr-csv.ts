@@ -183,7 +183,8 @@ export function parseTrCsv(content: string): CsvParseResult {
       // CSV sell `tax` column: negative = capital-gains tax withheld. Captured so
       // cashFlow (sell) = qty·price − fees − tax matches the invariant Σ(amount+fee+tax).
       // Buy rows don't carry tax (German KapSt only applies to proceeds, not purchases).
-      const sellTax = type === "SELL" && tax != null && tax !== 0 ? formatDecimal(Math.abs(tax)) : undefined;
+      const sellTax =
+        type === "SELL" && tax != null && tax !== 0 ? formatDecimal(Math.abs(tax)) : undefined;
       candidate = {
         ...base,
         ...instrument,
@@ -269,16 +270,34 @@ export function parseTrCsv(content: string): CsvParseResult {
         fail(`${type} row missing amount`);
         continue;
       }
-      candidate = { ...base, action: "deposit", quantity: "0", price: formatDecimal(Math.abs(amount)), fees: "0" };
+      candidate = {
+        ...base,
+        action: "deposit",
+        quantity: "0",
+        price: formatDecimal(Math.abs(amount)),
+        fees: "0",
+      };
     } else if (WITHDRAWAL_TYPES.has(type) || CARD_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
         continue;
       }
-      candidate = { ...base, action: "withdrawal", quantity: "0", price: formatDecimal(Math.abs(amount)), fees: "0" };
+      candidate = {
+        ...base,
+        action: "withdrawal",
+        quantity: "0",
+        price: formatDecimal(Math.abs(amount)),
+        fees: "0",
+      };
     } else if (type === "CARD_ORDERING_FEE") {
       const charge = fee ?? amount ?? 0;
-      candidate = { ...base, action: "withdrawal", quantity: "0", price: formatDecimal(Math.abs(charge)), fees: "0" };
+      candidate = {
+        ...base,
+        action: "withdrawal",
+        quantity: "0",
+        price: formatDecimal(Math.abs(charge)),
+        fees: "0",
+      };
     } else if (CASH_BONUS_TYPES.has(type)) {
       if (amount == null) {
         fail(`${type} row missing amount`);
