@@ -82,3 +82,38 @@ Header,Title}`, `Table{Header,Body,Footer,Row,Head,Cell}`,
   fonts.googleapis.com stays reachable at design-render time.
 - `cfg.componentSrcMap`'s subcomponent null-list is hand-maintained (see above) — it
   will drift if `ui/` grows new compound components.
+
+## App-side token count (Tailwind internals) — expected, not a bug
+
+After the first sync landed, claude.ai/design's ingestion reported ~42 "unclassified"
+tokens (`:root`-level) and ~38 "props under component selectors" — both are Tailwind
+compiler internals (`--tw-translate-x`, `--tw-pan-y`, `--animate-spin`,
+`--default-transition-duration`, …), not real design tokens. This is **expected and
+irreducible**, confirmed by reading the design-sync skill source directly:
+
+- The counts come from claude.ai/design's own server-side scope filter, not this
+  repo's tooling — the skill emits no such warning locally, and token "kinds" there
+  are only a cosmetic README grouping (`lib/emit.mjs`'s color/spacing/typography/
+  radius/shadow/`other` name-regex).
+- **There is no `@kind` annotation convention, no config token-filter field, and no
+  ignore-list for `--tw-*`** — config keys are strictly validated and unknown keys are
+  rejected. (An earlier note here suggested adding `/* @kind other */` comments to fix
+  this — that convention does not exist anywhere in the skill; disregard it.)
+- The app scrapes the whole `styles.css` `@import` closure, which **unconditionally**
+  includes `_ds_bundle.css` (`emit.mjs`'s `writeStylesCss`). `cfg.tokensPkg`/
+  `cfg.tokensGlob` only affect the **README** token inventory (a separate, cosmetic
+  list) — they never touch `_ds_bundle.css` or what the app ingests.
+  `_ds_bundle.css` ships the compiled Tailwind CSS **verbatim** (only `@font-face
+url()`s get rewritten), so whatever custom properties Tailwind emits are in there.
+- The `--tw-*` declarations are **functionally required**: e.g.
+  `.-translate-x-1\/2 { --tw-translate-x: 50% }` is the payload a composed
+  `translate: var(--tw-translate-x) …` reads — stripping it breaks the utility.
+  Tailwind only emits a `--tw-*` var when something in the shipped CSS actually
+  references it, so every one present is load-bearing (concretely: Dialog/Sheet
+  centering and the Spinner animation in these previews depend on this).
+
+**Net: don't chase this on a future re-sync.** The only way to zero the app-side count
+would be a custom PostCSS pass that inlines every `var(--tw-*)` and deletes the
+declarations from the shipped bundle — Tailwind-version-coupled, fragile, and risks
+silently breaking overlay/animation previews, all to clean up a cosmetic counter that
+doesn't affect anything a design consumer sees or uses.
