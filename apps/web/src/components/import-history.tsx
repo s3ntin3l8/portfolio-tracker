@@ -82,7 +82,7 @@ export function ImportHistory({
     showCompleted ? items : items.filter((i) => i.status !== "confirmed")
   ).filter((i) => !isDeadSyncAnchor(i));
 
-  const { batchGroups, batchedIds, looseItems } = useBatchGroups(visibleItems);
+  const { batchGroups, looseItems } = useBatchGroups(visibleItems);
 
   const {
     selected,
