@@ -7,6 +7,19 @@ import { parsePagination, cacheKey } from "../helpers.js";
 import { yearRange, transactionsCache, networthTransactionsCache } from "./shared.js";
 import { enrichRows, enrichAggregateRows } from "./list-enrichment.js";
 
+// Fetch-by-id support for the "Show flagged only" / "Needs review" filter (#562): the
+// client already knows every flagged transaction's id (from the anomalies endpoint) but
+// those rows may sit past the current page. `ids` lets it fetch exactly those rows,
+// regardless of pagination, instead of filtering only what's already loaded client-side.
+function parseIdsParam(raw: string | undefined): string[] | null {
+  if (!raw) return null;
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? ids : null;
+}
+
 export function registerListRoutes(app: FastifyInstance) {
   app.get<{
     Params: { portfolioId: string };
@@ -17,6 +30,7 @@ export function registerListRoutes(app: FastifyInstance) {
       type?: string;
       year?: string;
       q?: string;
+      ids?: string;
     };
   }>(
     "/portfolios/:portfolioId/transactions",
@@ -34,8 +48,10 @@ export function registerListRoutes(app: FastifyInstance) {
       const typeFilter = request.query.type;
       const yearFilter = request.query.year;
       const searchQuery = request.query.q;
+      const idsFilter = parseIdsParam(request.query.ids);
 
       const conditions = [eq(transactions.portfolioId, request.params.portfolioId)];
+      if (idsFilter) conditions.push(inArray(transactions.id, idsFilter));
       if (typeFilter === "buy") conditions.push(inArray(transactions.type, ACQUISITION_TYPES));
       if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
       if (typeFilter === "income") conditions.push(inArray(transactions.type, INCOME_TYPES));
@@ -162,7 +178,14 @@ export function registerListRoutes(app: FastifyInstance) {
   );
 
   app.get<{
-    Querystring: { page?: string; pageSize?: string; type?: string; year?: string; q?: string };
+    Querystring: {
+      page?: string;
+      pageSize?: string;
+      type?: string;
+      year?: string;
+      q?: string;
+      ids?: string;
+    };
   }>("/networth/transactions", { preHandler: app.authenticate }, async (request, _reply) => {
     request.timingName = "GET /networth/transactions";
     const id = request.userId;
@@ -174,6 +197,7 @@ export function registerListRoutes(app: FastifyInstance) {
     const typeFilter = request.query.type;
     const yearFilter = request.query.year;
     const searchQuery = request.query.q;
+    const idsFilter = parseIdsParam(request.query.ids);
 
     const pfs = await app.db
       .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
@@ -185,6 +209,7 @@ export function registerListRoutes(app: FastifyInstance) {
     const nameById = new Map(pfs.map((p) => [p.id, p.name]));
 
     const conditions = [inArray(transactions.portfolioId, pfIds)];
+    if (idsFilter) conditions.push(inArray(transactions.id, idsFilter));
     if (typeFilter === "buy") conditions.push(inArray(transactions.type, ACQUISITION_TYPES));
     if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
     if (typeFilter === "income") conditions.push(inArray(transactions.type, INCOME_TYPES));

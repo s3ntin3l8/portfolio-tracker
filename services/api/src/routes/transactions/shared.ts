@@ -1,7 +1,14 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { allocationTargets, corporateActions, instruments } from "@portfolio/db";
+import {
+  allocationTargets,
+  corporateActions,
+  instruments,
+  transactions,
+  dismissedAnomalies,
+  trConnections,
+} from "@portfolio/db";
 import {
   isAcquisitionType,
   isTransferType,
@@ -12,11 +19,13 @@ import {
   type CashFlowPoint,
   type ContributionStats,
   type PortfolioSummary,
+  type ReconciliationGap,
   type TradeLog,
   type TradeMethod,
   type DriftRow,
   type SparplanStats,
   computeTrades,
+  detectAnomalies,
   rebalancingDrift,
   cashFlow,
   xirr,
@@ -27,7 +36,9 @@ import {
 import { getMarketData } from "../../services/market-data.js";
 import { valuePortfolioCached, type InstrumentMeta } from "../../services/valuation.js";
 import { getFxRates, makeFxRateFn } from "../../services/fx.js";
-import { createStore, type CacheEntry } from "../../lib/derivation-cache.js";
+import { toCoreTxns } from "../../services/tx-core.js";
+import { netManualAdjustments } from "../../services/pytr/reconcile.js";
+import { withDerivationCache, createStore, type CacheEntry } from "../../lib/derivation-cache.js";
 
 export type { CacheEntry };
 
@@ -96,6 +107,56 @@ export async function corporateActionsFor(
     ratio: r.ratio,
     exDate: new Date(r.exDate),
   }));
+}
+
+/**
+ * The `GET /portfolios/:id/anomalies` computation, extracted so `/networth/anomalies`
+ * (#562) can run it per portfolio and merge the results — same cache (`anomaliesCache`,
+ * keyed by portfolioId), same dismissed-anomaly filtering, same TR reconciliation-gap
+ * netting as the single-portfolio route.
+ */
+export async function computePortfolioAnomalies(
+  app: FastifyInstance,
+  portfolio: { id: string; cashCounted: boolean; allowNegativeCash: boolean },
+): Promise<Anomaly[]> {
+  const { filtered } = await withDerivationCache(anomaliesCache, portfolio.id, async () => {
+    const [rows, trConn, dismissed] = await Promise.all([
+      app.db.select().from(transactions).where(eq(transactions.portfolioId, portfolio.id)),
+      app.db
+        .select({ lastReconciliation: trConnections.lastReconciliation })
+        .from(trConnections)
+        .where(eq(trConnections.portfolioId, portfolio.id))
+        .limit(1)
+        .then((r) => r[0] ?? null),
+      app.db
+        .select({
+          transactionId: dismissedAnomalies.transactionId,
+          code: dismissedAnomalies.code,
+        })
+        .from(dismissedAnomalies)
+        .where(eq(dismissedAnomalies.portfolioId, portfolio.id)),
+    ]);
+    const coreTxns: CoreTransaction[] = toCoreTxns(rows);
+    const cas = await corporateActionsFor(
+      app,
+      rows.map((r) => r.instrumentId),
+    );
+    const rawReconciliation = trConn?.lastReconciliation as ReconciliationGap | null | undefined;
+    const reconciliation = rawReconciliation
+      ? netManualAdjustments(rawReconciliation, coreTxns)
+      : rawReconciliation;
+    const anomalies = detectAnomalies(coreTxns, cas, {
+      cashCounted: portfolio.cashCounted,
+      allowNegativeCash: portfolio.allowNegativeCash,
+      reconciliationGap: reconciliation ?? null,
+    });
+    const dismissedSet = new Set(dismissed.map((d) => `${d.transactionId}:${d.code}`));
+    const filtered = anomalies.filter(
+      (a) => !(a.transactionId && dismissedSet.has(`${a.transactionId}:${a.code}`)),
+    );
+    return { filtered };
+  });
+  return filtered;
 }
 
 export async function instrumentMeta(

@@ -7,7 +7,6 @@ import { loadSparklines } from "../../services/sparklines.js";
 import type { InstrumentMeta } from "../../services/valuation.js";
 import { needsSectorEnrichment, needsNameEnrichment } from "../../services/instrument-metadata.js";
 import { enqueueInstrumentMetadata } from "../../services/scheduler.js";
-import { withDerivationCache } from "../../lib/derivation-cache.js";
 import {
   computeHoldings,
   detectAnomalies,
@@ -22,7 +21,7 @@ import {
   corporateActionsFor,
   loadValuation,
   loadDrift,
-  anomaliesCache,
+  computePortfolioAnomalies,
   costBasisFromQuery,
 } from "./shared.js";
 
@@ -84,44 +83,7 @@ export function registerHoldingsRoutes(app: FastifyInstance) {
     async (request) => {
       const { portfolioId } = request.params;
       const portfolio = request.portfolio;
-      const { filtered } = await withDerivationCache(anomaliesCache, portfolioId, async () => {
-        const [rows, trConn, dismissed] = await Promise.all([
-          app.db.select().from(transactions).where(eq(transactions.portfolioId, portfolioId)),
-          app.db
-            .select({ lastReconciliation: trConnections.lastReconciliation })
-            .from(trConnections)
-            .where(eq(trConnections.portfolioId, portfolioId))
-            .limit(1)
-            .then((r) => r[0] ?? null),
-          app.db
-            .select({
-              transactionId: dismissedAnomalies.transactionId,
-              code: dismissedAnomalies.code,
-            })
-            .from(dismissedAnomalies)
-            .where(eq(dismissedAnomalies.portfolioId, portfolioId)),
-        ]);
-        const coreTxns: CoreTransaction[] = toCoreTxns(rows);
-        const cas = await corporateActionsFor(
-          app,
-          rows.map((r) => r.instrumentId),
-        );
-        const rawReconciliation = trConn?.lastReconciliation as
-          ReconciliationGap | null | undefined;
-        const reconciliation = rawReconciliation
-          ? netManualAdjustments(rawReconciliation, coreTxns)
-          : rawReconciliation;
-        const anomalies = detectAnomalies(coreTxns, cas, {
-          cashCounted: portfolio.cashCounted,
-          allowNegativeCash: portfolio.allowNegativeCash,
-          reconciliationGap: reconciliation ?? null,
-        });
-        const dismissedSet = new Set(dismissed.map((d) => `${d.transactionId}:${d.code}`));
-        const filtered = anomalies.filter(
-          (a) => !(a.transactionId && dismissedSet.has(`${a.transactionId}:${a.code}`)),
-        );
-        return { filtered };
-      });
+      const filtered = await computePortfolioAnomalies(app, portfolio);
       request.timingName = "GET /portfolios/:id/anomalies";
       request.timingMeta = { portfolioId, anomalyCount: filtered.length };
       return { anomalies: filtered };

@@ -2176,6 +2176,20 @@ export function createApiClient(config: ApiClientConfig) {
         `/networth/transactions?${params}`,
       );
     },
+    /** Fetch exactly the given transaction ids, enriched the same way as a normal page —
+     *  regardless of pagination/type/year/search scope. Used by "Show flagged only" (#562)
+     *  so flagged rows past the currently-loaded page still surface. */
+    listTransactionsByIds: (portfolioId: string, ids: string[], convertTo?: string) => {
+      const params = new URLSearchParams({ ids: ids.join(",") });
+      if (convertTo) params.set("convertTo", convertTo);
+      return request<Transaction[]>("GET", `/portfolios/${portfolioId}/transactions?${params}`);
+    },
+    /** Aggregate variant of {@link listTransactionsByIds} across all portfolios. */
+    listNetworthTransactionsByIds: (ids: string[]) =>
+      request<Transaction[]>(
+        "GET",
+        `/networth/transactions?${new URLSearchParams({ ids: ids.join(",") })}`,
+      ),
     /** List income-only rows for a portfolio in the given tax year (lightweight, no instrument/sources enrichment). */
     listIncomeByYear: (portfolioId: string, year: number) =>
       request<Transaction[]>("GET", `/portfolios/${portfolioId}/income-year?year=${year}`),
@@ -2338,6 +2352,9 @@ export function createApiClient(config: ApiClientConfig) {
       request<HoldingsResult>("GET", `/portfolios/${portfolioId}/holdings`),
     getAnomalies: (portfolioId: string) =>
       request<AnomaliesResult>("GET", `/portfolios/${portfolioId}/anomalies`),
+    /** Aggregate variant of {@link getAnomalies} across all of the user's portfolios — backs
+     *  the "Needs review" banner/chip in the all-portfolios Activity view (#562). */
+    getNetworthAnomalies: () => request<AnomaliesResult>("GET", "/networth/anomalies"),
     /** Persistently dismiss a transaction-scoped anomaly (e.g. an accepted negative_cash). */
     dismissAnomaly: (portfolioId: string, transactionId: string, code: string) =>
       request<void>("POST", `/portfolios/${portfolioId}/anomalies/dismiss`, {

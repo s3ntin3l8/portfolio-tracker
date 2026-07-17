@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import { useApiClient } from "@/lib/api";
+import { Spinner } from "@/components/ui/spinner";
 import { formatMoneyCompact, bannerAnomalies } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import { useLongPressSelect } from "@/lib/use-long-press-select";
@@ -108,6 +109,40 @@ export function TransactionsTable({
   const [busy, setBusy] = useState(false);
   const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
   const [showFlagged, setShowFlagged] = useState(false);
+
+  // "Show flagged only" / "Needs review" (#562): the count comes from a whole-scope
+  // anomalies fetch (unpaginated, unfiltered), so a flagged transaction can sit well past
+  // whatever page is currently loaded into `accumulatedRows`. Rather than filtering only
+  // what's already loaded, fetch exactly the flagged transactions by id — the ids are
+  // already known from `anomalyByTxId` — so the toggle surfaces every flagged row
+  // regardless of pagination/type/year/search scope.
+  const flaggedIds = useMemo(() => [...anomalyByTxId.keys()], [anomalyByTxId]);
+  const flaggedIdsKey = flaggedIds.join(",");
+  const [flaggedRows, setFlaggedRows] = useState<TxRow[] | null>(null);
+  const [flaggedLoading, setFlaggedLoading] = useState(false);
+  const [loadedFlaggedKey, setLoadedFlaggedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showFlagged || flaggedIds.length === 0 || loadedFlaggedKey === flaggedIdsKey) return;
+    let cancelled = false;
+    (async () => {
+      setFlaggedLoading(true);
+      try {
+        const fetched = portfolioId
+          ? await api.listTransactionsByIds(portfolioId, flaggedIds)
+          : await api.listNetworthTransactionsByIds(flaggedIds);
+        if (cancelled) return;
+        setFlaggedRows(fetched);
+        setLoadedFlaggedKey(flaggedIdsKey);
+      } finally {
+        if (!cancelled) setFlaggedLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showFlagged, flaggedIds, flaggedIdsKey, loadedFlaggedKey, portfolioId, api]);
+
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [detailTx, setDetailTx] = useState<TxRow | null>(null);
   const [editTx, setEditTx] = useState<TxRow | null>(null);
@@ -176,12 +211,13 @@ export function TransactionsTable({
   );
 
   const visibleRows = useMemo(() => {
-    return accumulatedRows.filter(
+    const source = showFlagged ? (flaggedRows ?? []) : accumulatedRows;
+    return source.filter(
       (r) =>
         (!showFlagged || anomalyByTxId.has(r.id)) &&
         (draftFilter === "all" || r.status === "draft"),
     );
-  }, [accumulatedRows, showFlagged, anomalyByTxId, draftFilter]);
+  }, [accumulatedRows, showFlagged, anomalyByTxId, draftFilter, flaggedRows]);
 
   const hasActiveFilter =
     (searchQuery != null && searchQuery.length > 0) ||
@@ -406,7 +442,13 @@ export function TransactionsTable({
 
   const sortedRows = sort(visibleRows);
   const windowedRows = useMemo(() => sortedRows.slice(0, visibleCount), [sortedRows, visibleCount]);
-  const hasMore = sortedRows.length > windowedRows.length || accumulatedRows.length < (total ?? 0);
+  // In flagged mode every matching row is already fetched (see the effect above), so
+  // "more" only ever means revealing more of that already-loaded set — never a further
+  // server page (`total` here is the whole-scope pagination total, unrelated to the
+  // flagged count, so it must not drive the flagged view's "Load more").
+  const hasMore = showFlagged
+    ? sortedRows.length > windowedRows.length
+    : sortedRows.length > windowedRows.length || accumulatedRows.length < (total ?? 0);
   const groupByMonth = sortKey === null || sortKey === "date";
 
   const dayFmt = useMemo(
@@ -435,6 +477,10 @@ export function TransactionsTable({
       setVisibleCount((n) => n + PAGE_SIZE);
       return;
     }
+    // Flagged mode has no further server page to fetch — every flagged row is already in
+    // `flaggedRows` (see the fetch effect above); `hasMore` already reflects this, but
+    // guard here too since this callback is also reachable directly.
+    if (showFlagged) return;
     if (accumulatedRows.length < (total ?? 0)) {
       setLoadingMore(true);
       try {
@@ -467,6 +513,7 @@ export function TransactionsTable({
     yearFilterProp,
     searchQuery,
     portfolioId,
+    showFlagged,
   ]);
 
   const showEmpty = visibleRows.length === 0;
@@ -571,38 +618,46 @@ export function TransactionsTable({
         }}
       />
 
-      <DesktopTable
-        rows={windowedRows}
-        selectionMode={selectionMode}
-        selected={selected}
-        anomalyByTxId={anomalyByTxId}
-        sortKey={sortKey}
-        sortDir={sortDir}
-        onToggleSort={toggleSort}
-        showPortfolio={showPortfolio}
-        groupByMonth={groupByMonth}
-        colSpan={colSpan}
-        monthFmt={monthFmt}
-        longPressHandlers={longPressHandlers}
-        onRowActivate={onRowActivate}
-        onToggle={toggle}
-        onToggleAll={toggleAll}
-        allSelected={allSelected}
-        onEnterSelectionMode={() => setSelectionMode(true)}
-        hasActiveFilter={hasActiveFilter}
-        showEmpty={showEmpty}
-      />
+      {showFlagged && flaggedLoading ? (
+        <div className="flex justify-center py-10">
+          <Spinner size="md" />
+        </div>
+      ) : (
+        <>
+          <DesktopTable
+            rows={windowedRows}
+            selectionMode={selectionMode}
+            selected={selected}
+            anomalyByTxId={anomalyByTxId}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onToggleSort={toggleSort}
+            showPortfolio={showPortfolio}
+            groupByMonth={groupByMonth}
+            colSpan={colSpan}
+            monthFmt={monthFmt}
+            longPressHandlers={longPressHandlers}
+            onRowActivate={onRowActivate}
+            onToggle={toggle}
+            onToggleAll={toggleAll}
+            allSelected={allSelected}
+            onEnterSelectionMode={() => setSelectionMode(true)}
+            hasActiveFilter={hasActiveFilter}
+            showEmpty={showEmpty}
+          />
 
-      <MobileView
-        dayGroups={dayGroups}
-        selectionMode={selectionMode}
-        selected={selected}
-        anomalyByTxId={anomalyByTxId}
-        longPressHandlers={longPressHandlers}
-        onRowActivate={onRowActivate}
-        hasActiveFilter={hasActiveFilter}
-        showEmpty={showEmpty}
-      />
+          <MobileView
+            dayGroups={dayGroups}
+            selectionMode={selectionMode}
+            selected={selected}
+            anomalyByTxId={anomalyByTxId}
+            longPressHandlers={longPressHandlers}
+            onRowActivate={onRowActivate}
+            hasActiveFilter={hasActiveFilter}
+            showEmpty={showEmpty}
+          />
+        </>
+      )}
 
       <LoadMoreSection
         hasVisibleRows={visibleRows.length > 0}
