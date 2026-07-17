@@ -64,6 +64,19 @@ export async function loadAnomalies(portfolioOverride?: string): Promise<Anomaly
   }
 }
 
+/** Aggregate variant of {@link loadAnomalies} for the all-portfolios Activity view (#562) —
+ *  backs the "Needs review" banner/chip when no single portfolio is selected. */
+export async function loadNetworthAnomalies(): Promise<Anomaly[] | null> {
+  const api = await getServerApi();
+  if (!api) return null;
+  try {
+    const { anomalies } = await api.getNetworthAnomalies();
+    return anomalies;
+  } catch {
+    return null;
+  }
+}
+
 export type ContributionsView =
   | { status: "ok"; data: ContributionStats; valueHistory: PerformancePoint[] }
   | { status: "empty" }

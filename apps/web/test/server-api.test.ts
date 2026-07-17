@@ -253,6 +253,32 @@ describe("loadAnomalies", () => {
   });
 });
 
+describe("loadNetworthAnomalies", () => {
+  it("fetches merged anomalies across all portfolios", async () => {
+    const getNetworthAnomalies = vi.fn(async () => ({
+      anomalies: [{ id: "a1", severity: "warning", message: "test" }],
+    }));
+    h.client.getNetworthAnomalies = getNetworthAnomalies;
+
+    const res = await api.loadNetworthAnomalies();
+    expect(getNetworthAnomalies).toHaveBeenCalledWith();
+    expect(Array.isArray(res)).toBe(true);
+    expect(res).toHaveLength(1);
+  });
+
+  it("returns null on error", async () => {
+    h.client.getNetworthAnomalies = async () => {
+      throw new Error("x");
+    };
+    expect(await api.loadNetworthAnomalies()).toBeNull();
+  });
+
+  it("returns null when not signed in", async () => {
+    h.accessToken = null;
+    expect(await api.loadNetworthAnomalies()).toBeNull();
+  });
+});
+
 describe("loadTransactionsAcrossPortfolios", () => {
   it("merges every portfolio's transactions and tags the portfolio name", async () => {
     h.client.listPortfolios = async () => PF;

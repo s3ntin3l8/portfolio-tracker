@@ -30,6 +30,11 @@ const previewMergeTransactions = vi.fn(async () => ({
   },
 }));
 const mergeTransactions = vi.fn(async () => ({ survivorId: "m1" }));
+// "Show flagged only" fetches the flagged rows by id (#562) instead of filtering only
+// already-rendered rows — each test in the flagged-filter suite below points these at
+// its own fixture via `.mockImplementation`.
+const listTransactionsByIds = vi.fn(async (_portfolioId: string, _ids: string[]) => [] as TxRow[]);
+const listNetworthTransactionsByIds = vi.fn(async (_ids: string[]) => [] as TxRow[]);
 
 vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh }),
@@ -45,6 +50,8 @@ const apiMock = {
   reassignTransactions,
   previewMergeTransactions,
   mergeTransactions,
+  listTransactionsByIds,
+  listNetworthTransactionsByIds,
   // Needed once the in-place EditTransactionSheet mounts its AddTransactionForm.
   getGoldSources: vi.fn(async () => []),
   searchInstruments: vi.fn(async () => []),
@@ -1091,6 +1098,14 @@ describe("TransactionsTable", () => {
       },
     ];
 
+    beforeEach(() => {
+      // No `portfolioId` prop is passed in this suite (aggregate mode), so "Show flagged
+      // only" fetches via `listNetworthTransactionsByIds`.
+      listNetworthTransactionsByIds.mockImplementation(async (ids: string[]) =>
+        ANOMALY_ROWS.filter((r) => ids.includes(r.id)),
+      );
+    });
+
     it("renders the anomaly banner when transaction-scoped anomalies are present", () => {
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
@@ -1112,7 +1127,7 @@ describe("TransactionsTable", () => {
       ).toBeInTheDocument();
     });
 
-    it("clicking the toggle shows only flagged rows; clicking again restores all", () => {
+    it("clicking the toggle shows only flagged rows; clicking again restores all", async () => {
       render(
         <NextIntlClientProvider locale="en" messages={messages}>
           <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
@@ -1124,28 +1139,83 @@ describe("TransactionsTable", () => {
       expect(screen.getAllByRole("row").slice(1).length).toBe(3);
 
       fireEvent.click(toggle);
-      // After toggling: only a1 (error) and a3 (warning) — a2 (clean) hidden.
+      // Flagged rows are fetched by id (#562), not filtered from what's already rendered —
+      // wait for that fetch to resolve. After toggling: only a1 (error) and a3 (warning) —
+      // a2 (clean) hidden.
+      await waitFor(() => expect(screen.getAllByRole("row").slice(1).length).toBe(2));
       const filtered = screen.getAllByRole("row").slice(1);
-      expect(filtered.length).toBe(2);
       expect(filtered.some((r) => r.textContent?.includes("BBCA"))).toBe(true);
       expect(filtered.some((r) => r.textContent?.includes("AAPL"))).toBe(true);
       expect(filtered.every((r) => !r.textContent?.includes("TLKM"))).toBe(true);
+      expect(listNetworthTransactionsByIds).toHaveBeenCalledWith(
+        expect.arrayContaining(["a1", "a3"]),
+      );
 
       // Toggle off: all restored.
       fireEvent.click(toggle);
       expect(screen.getAllByRole("row").slice(1).length).toBe(3);
     });
 
-    it("auto-clears the flagged filter when the last flagged transaction is dismissed", () => {
+    it("surfaces a flagged row that isn't in the currently-loaded page (regression #562: banner said 2, 'Show flagged only' rendered nothing because the flagged rows sat past the loaded/paginated page)", async () => {
+      // `rows` is the currently-loaded page — it does NOT contain the flagged transaction,
+      // simulating a flagged row sitting on a later server page. The whole-scope anomalies
+      // count still reports it, and the fix fetches it directly by id instead of filtering
+      // only what's already loaded.
+      const offPageId = "off-page-flagged";
+      const offPageRow: TxRow = {
+        id: offPageId,
+        portfolioId: "p1",
+        type: "transfer_in",
+        quantity: "1",
+        price: "0",
+        fees: "0",
+        tax: null,
+        fxRate: null,
+        currency: "IDR",
+        executedAt: "2020-01-01T00:00:00.000Z",
+        source: "manual",
+        instrument: { symbol: "OFFPAGE", name: "Off Page Co" },
+      };
+      listNetworthTransactionsByIds.mockImplementation(async (ids: string[]) =>
+        [offPageRow].filter((r) => ids.includes(r.id)),
+      );
+
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable
+            rows={ANOMALY_ROWS}
+            anomalies={[
+              {
+                code: "missing_transfer_basis" as const,
+                severity: "warning" as const,
+                scope: "transaction" as const,
+                transactionId: offPageId,
+              },
+            ]}
+          />
+        </NextIntlClientProvider>,
+      );
+
+      // Before toggling: the loaded page (none of it flagged) is what's shown.
+      expect(screen.queryByText("Off Page Co")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
+
+      // The previously-invisible off-page flagged row now renders instead of an empty list.
+      await waitFor(() => expect(screen.getByText("Off Page Co")).toBeInTheDocument());
+      expect(listNetworthTransactionsByIds).toHaveBeenCalledWith([offPageId]);
+    });
+
+    it("auto-clears the flagged filter when the last flagged transaction is dismissed", async () => {
       const { rerender } = render(
         <NextIntlClientProvider locale="en" messages={messages}>
           <TransactionsTable rows={ANOMALY_ROWS} anomalies={MIXED_ANOMALIES} />
         </NextIntlClientProvider>,
       );
 
-      // Turn the filter on: only the 2 flagged rows are visible.
+      // Turn the filter on: only the 2 flagged rows are visible (fetched by id, #562).
       fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
-      expect(screen.getAllByRole("row").slice(1).length).toBe(2);
+      await waitFor(() => expect(screen.getAllByRole("row").slice(1).length).toBe(2));
 
       // Dismissing the last warning → router.refresh re-feeds an empty anomalies list.
       rerender(
@@ -1242,7 +1312,7 @@ describe("TransactionsTable", () => {
       expect(screen.queryByRole("button", { name: messages.Anomalies.showFlagged })).toBeNull();
     });
 
-    it("headline counts only row-flaggable anomalies, excluding portfolio-scoped ones which render as their own banners instead (regression: banner said 7 warnings, 'Show flagged only' showed only 4)", () => {
+    it("headline counts only row-flaggable anomalies, excluding portfolio-scoped ones which render as their own banners instead (regression: banner said 7 warnings, 'Show flagged only' showed only 4)", async () => {
       const mixedWithPortfolio = [
         ...MIXED_ANOMALIES, // a1: 1 error, a3: 1 warning — both row-flaggable
         {
@@ -1275,7 +1345,7 @@ describe("TransactionsTable", () => {
       expect(screen.getByText("1 error and 1 warning found in your data")).toBeInTheDocument();
       expect(screen.getAllByText("Cash doesn't reconcile").length).toBe(3);
       fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
-      expect(screen.getAllByRole("row").slice(1).length).toBe(2);
+      await waitFor(() => expect(screen.getAllByRole("row").slice(1).length).toBe(2));
     });
 
     it("collapses two anomalies on the same transaction to one worst-severity row instead of double-counting", () => {

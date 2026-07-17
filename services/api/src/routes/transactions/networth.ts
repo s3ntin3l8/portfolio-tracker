@@ -21,6 +21,7 @@ import {
   costBasisFromQuery,
   loadDrift,
   boundaryFlows,
+  computePortfolioAnomalies,
   PORTFOLIO_VALUATION_CONCURRENCY,
 } from "./shared.js";
 
@@ -224,4 +225,24 @@ export function registerNetworthRoutes(app: FastifyInstance) {
       };
     },
   );
+
+  // Aggregate anomalies across all of the user's portfolios (#562): the all-portfolios
+  // "Activity" view (no portfolio selected) previously never fetched anomalies at all, so
+  // its "Needs review" banner/chip never appeared. Runs the same per-portfolio computation
+  // as `GET /portfolios/:id/anomalies` (same cache, same dismissed-anomaly filtering) and
+  // merges the results — `transactionId`s are globally-unique, so they map cleanly onto
+  // aggregate transaction rows (which carry `portfolioId`).
+  app.get("/networth/anomalies", { preHandler: app.authenticate }, async (request) => {
+    const id = request.userId;
+    const pfs = await app.db.select().from(portfolios).where(eq(portfolios.userId, id));
+
+    const perPortfolio = await mapPool(pfs, PORTFOLIO_VALUATION_CONCURRENCY, (p) =>
+      computePortfolioAnomalies(app, p),
+    );
+    const anomalies = perPortfolio.flat();
+
+    request.timingName = "GET /networth/anomalies";
+    request.timingMeta = { portfolioCount: pfs.length, anomalyCount: anomalies.length };
+    return { anomalies };
+  });
 }

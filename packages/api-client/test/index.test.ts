@@ -523,6 +523,30 @@ describe("createApiClient request methods", () => {
       },
     },
     { name: "getImport", call: (c) => c.getImport("imp1"), method: "GET", url: "/imports/imp1" },
+    {
+      name: "listTransactionsByIds",
+      call: (c) => c.listTransactionsByIds("p1", ["t1", "t2"]),
+      method: "GET",
+      url: "/portfolios/p1/transactions?ids=t1%2Ct2",
+    },
+    {
+      name: "listTransactionsByIds with convertTo",
+      call: (c) => c.listTransactionsByIds("p1", ["t1"], "IDR"),
+      method: "GET",
+      url: "/portfolios/p1/transactions?ids=t1&convertTo=IDR",
+    },
+    {
+      name: "listNetworthTransactionsByIds",
+      call: (c) => c.listNetworthTransactionsByIds(["t1", "t2"]),
+      method: "GET",
+      url: "/networth/transactions?ids=t1%2Ct2",
+    },
+    {
+      name: "getNetworthAnomalies",
+      call: (c) => c.getNetworthAnomalies(),
+      method: "GET",
+      url: "/networth/anomalies",
+    },
   ];
 
   it.each(cases)("$name → $method $url", async ({ call, method, url, body }) => {

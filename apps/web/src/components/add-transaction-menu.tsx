@@ -199,7 +199,7 @@ export function AddTransactionMenu({
         mounted &&
         createPortal(
           <Button
-            className="fixed bottom-[calc(7rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-full shadow-lg md:hidden"
+            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-[18px] shadow-lg md:hidden"
             aria-label={tm("addTransaction")}
             onClick={() => onAddOpenChange(true)}
           >

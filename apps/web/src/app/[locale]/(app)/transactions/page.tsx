@@ -13,6 +13,7 @@ import {
   loadNetworthTransactionsPaginated,
   loadTransactionsPaginated,
   loadAnomalies,
+  loadNetworthAnomalies,
   loadMe,
 } from "@/lib/server-api";
 import type { Anomaly } from "@portfolio/api-client";
@@ -61,18 +62,16 @@ export default async function TransactionsPage({
   const isAdmin = Boolean(me?.isAdmin);
 
   if (aggregate) {
-    const result = await loadNetworthTransactionsPaginated(
-      page,
-      PAGE_SIZE,
-      typeFilter,
-      yearFilter,
-      searchQuery,
-    );
+    const [result, anomalyResult] = await Promise.all([
+      loadNetworthTransactionsPaginated(page, PAGE_SIZE, typeFilter, yearFilter, searchQuery),
+      loadNetworthAnomalies(),
+    ]);
     status = result.status;
     rows = result.rows;
     total = result.total;
     if (result.status === "ok") txYears = result.years ?? [];
     scopeCurrency = me?.displayCurrency ?? "IDR";
+    anomalies = anomalyResult;
   } else {
     const [txResult, anomalyResult] = await Promise.all([
       loadTransactionsPaginated(
