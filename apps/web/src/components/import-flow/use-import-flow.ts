@@ -2,15 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
 import { useRouter } from "@/i18n/navigation";
-import { classifyImportError, importErrorDetail } from "@/lib/import-errors";
+import { toast } from "sonner";
+import { classifyImportError } from "@/lib/import-errors";
 import { mapPool, IMPORT_CONCURRENCY } from "@/lib/promise-pool";
+import { errorMessage, taskLabel, notifyMaterialized } from "./use-import-flow/helpers";
 import { type AccountMismatch, type DocumentCategory } from "@portfolio/api-client";
 import {
-  type ImportDraft,
   type ImportContract,
-  type ImportResult,
   type ReviewDraft,
   type ImportClient,
   type MaterializeUnit,
@@ -132,28 +131,8 @@ export function useImportFlow({
 
   const activeIndex = step === "parsing" || step === "report" ? 0 : STEPS.indexOf(step);
 
-  function errorMessage(err: unknown): string {
-    const info = classifyImportError(err);
-    const detail = info.reason === "generic" ? importErrorDetail(info) : null;
-    return detail
-      ? t("errors.genericDetailed", { detail })
-      : t(`errors.${info.reason}`, { provider: info.provider ?? "" });
-  }
-
-  function taskLabel(): string {
-    const names = Array.from(groups.values());
-    if (names.length === 1) return names[0] ?? "";
-    return t("toast.filesLabel", { count: names.length });
-  }
-
-  function notifyMaterialized(count: number) {
-    router.refresh();
-    toast.success(t("toast.success", { count }), {
-      action: {
-        label: t("toast.viewTransactions"),
-        onClick: () => router.push("/transactions"),
-      },
-    });
+  function notifyMaterializedFn(count: number) {
+    notifyMaterialized(count, router, t);
   }
 
   async function handleSaveReport() {
@@ -174,7 +153,7 @@ export function useImportFlow({
       });
       onClose?.();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSavingReport(false);
     }
@@ -230,7 +209,7 @@ export function useImportFlow({
           return;
         }
         if (result.materialized) {
-          notifyMaterialized(result.materializedCount ?? 0);
+          notifyMaterializedFn(result.materializedCount ?? 0);
           onClose?.();
           return;
         }
@@ -252,7 +231,7 @@ export function useImportFlow({
         setAccountMismatch(result.accountMismatch ?? null);
         setStep("review");
       } catch (err) {
-        setError(errorMessage(err));
+        setError(errorMessage(err, t));
         setStep("upload");
       }
       return;
@@ -360,7 +339,7 @@ export function useImportFlow({
       pickedContracts.length === 0 &&
       (materializedTotal > 0 || newSavedReports.length > 0)
     ) {
-      if (materializedTotal > 0) notifyMaterialized(materializedTotal);
+      if (materializedTotal > 0) notifyMaterializedFn(materializedTotal);
       if (newSavedReports.length > 0) {
         router.refresh();
         toast.success(t("report.savedMulti", { count: newSavedReports.length }));
@@ -437,7 +416,7 @@ export function useImportFlow({
     }
     onSubmit?.({
       kind: "confirm",
-      label: taskLabel(),
+      label: taskLabel(groups, t),
       acknowledge,
       importId,
       drafts: drafts.map(stripUid),
@@ -470,7 +449,7 @@ export function useImportFlow({
     }
     onSubmit?.({
       kind: "materialize",
-      label: taskLabel(),
+      label: taskLabel(groups, t),
       acknowledge,
       expectedCount: drafts.length,
       units,
