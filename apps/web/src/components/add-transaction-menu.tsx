@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, forwardRef } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -69,6 +70,15 @@ export function AddTransactionMenu({
   const [entryNonce, setEntryNonce] = useState(0);
   // Whether at least one account holder exists — gates the "Add account holder" card.
   const [hasHolders, setHasHolders] = useState(true);
+  // The mobile FAB below is portaled to `document.body` (see its render site) so its
+  // `fixed` positioning isn't hijacked by the shell header's `will-change-transform`
+  // (that property establishes a containing block for fixed descendants, same as an
+  // actual `transform` would — it silently pinned the FAB ~112px above the header's
+  // bottom edge, off the top of the viewport, ever since #532 landed). `document` is
+  // unavailable during SSR, so the portal only renders once mounted client-side.
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setMounted(true), []);
 
   // A screenshot shared into the app lands on /transactions?shared=1 (see sw.ts); the
   // "Import screenshot" PWA shortcut lands on ?import=1. Either auto-opens the import sheet
@@ -185,15 +195,18 @@ export function AddTransactionMenu({
         <Plus className="size-4" />
         <span className="hidden sm:inline">{tm("addMenu.add")}</span>
       </Button>
-      {autoOpenFromParams && (
-        <Button
-          className="fixed bottom-[calc(7rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-full shadow-lg md:hidden"
-          aria-label={tm("addTransaction")}
-          onClick={() => onAddOpenChange(true)}
-        >
-          <Plus className="size-6" />
-        </Button>
-      )}
+      {autoOpenFromParams &&
+        mounted &&
+        createPortal(
+          <Button
+            className="fixed bottom-[calc(7rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-full shadow-lg md:hidden"
+            aria-label={tm("addTransaction")}
+            onClick={() => onAddOpenChange(true)}
+          >
+            <Plus className="size-6" />
+          </Button>,
+          document.body,
+        )}
 
       {/* One sheet, three steps (choose/manual/import) swapped via `step` — swapping content
           in place (rather than closing this sheet and opening a second `Drawer.Root`) avoids

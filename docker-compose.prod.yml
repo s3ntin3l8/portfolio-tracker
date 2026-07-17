@@ -82,6 +82,11 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      # Publishable logo.dev key (instrument-logo.tsx) — must be supplied as a build arg,
+      # not just runtime `environment:` below, because NEXT_PUBLIC_* vars are inlined into
+      # the client bundle at `next build` time, not read at container-start time.
+      args:
+        NEXT_PUBLIC_LOGODEV_TOKEN: ${NEXT_PUBLIC_LOGODEV_TOKEN}
     restart: unless-stopped
     networks:
       - backend

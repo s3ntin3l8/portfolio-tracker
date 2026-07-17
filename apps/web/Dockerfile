@@ -13,9 +13,17 @@ ENV NPM_CONFIG_FETCH_RETRIES=5 \
 COPY . .
 RUN npm ci
 # No runtime secrets needed at build time — the API URL is server-only, resolved at request
-# time (see app/api/backend/[...path]/route.ts). The one NEXT_PUBLIC_* var, the app version
-# label, is non-secret and inlined by next.config.mjs from the root package.json (already
-# present via the `COPY . .` above) — no build arg needed.
+# time (see app/api/backend/[...path]/route.ts). The app-version NEXT_PUBLIC_* var is
+# non-secret and inlined by next.config.mjs from the root package.json (already present via
+# the `COPY . .` above) — no build arg needed for that one.
+#
+# NEXT_PUBLIC_LOGODEV_TOKEN (instrument-logo.tsx) DOES need a build arg: it's a publishable
+# logo.dev key (safe client-side, endpoint-restricted), but like all NEXT_PUBLIC_* vars it's
+# inlined into the client bundle at build time, not read at runtime — and `.env*` is
+# .dockerignore'd out of this build's context, so without this arg the prod bundle silently
+# ships `token === undefined` and every instrument falls back to the monogram (#543 follow-up).
+ARG NEXT_PUBLIC_LOGODEV_TOKEN
+ENV NEXT_PUBLIC_LOGODEV_TOKEN=$NEXT_PUBLIC_LOGODEV_TOKEN
 RUN npx turbo run build --filter=@portfolio/web...
 
 # --- Minimal runtime image ---
