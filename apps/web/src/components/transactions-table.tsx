@@ -35,7 +35,7 @@ import { ReassignMergeDialogs } from "./transactions-table/reassign-merge";
 import { DesktopTable } from "./transactions-table/desktop";
 import { MobileView } from "./transactions-table/mobile";
 import { LoadMoreSection } from "./transactions-table/load-more";
-import { useAnomalyMap, useTransactionUrlNav } from "./transactions-table/hooks";
+import { useAnomalyMap } from "./transactions-table/hooks";
 import {
   computeAllBanner,
   computeIncomeBanner,

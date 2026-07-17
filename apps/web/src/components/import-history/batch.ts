@@ -33,5 +33,5 @@ export function useBatchGroups(visibleItems: ImportRecord[]) {
     [visibleItems, batchedIds],
   );
 
-  return { batchGroups, batchedIds, looseItems };
+  return { batchGroups, looseItems };
 }
