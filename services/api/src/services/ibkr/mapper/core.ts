@@ -2,7 +2,6 @@ import type { z } from "zod";
 import { Decimal } from "decimal.js";
 import {
   parsedTransactionSchema,
-  type AssetClass,
   type ParsedAction,
   type ParsedTransaction,
 } from "@portfolio/schema";
