@@ -14,6 +14,7 @@ export function useImportSelection(
   router: { refresh: () => void },
   onError?: () => void,
   onClearBusy?: (busy: boolean) => void,
+  onClearError?: () => void,
 ) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -80,6 +81,7 @@ export function useImportSelection(
   }
 
   async function bulkDelete() {
+    onClearError?.();
     if (selectedConfirmedTx > 0 && !confirmingBulk) {
       setConfirmingBulk(true);
       return;
@@ -100,6 +102,7 @@ export function useImportSelection(
   }
 
   async function clearAllDiscarded() {
+    onClearError?.();
     onClearBusy?.(true);
     try {
       await api.bulkClearImports(discardedIds);

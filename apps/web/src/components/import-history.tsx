@@ -114,6 +114,7 @@ export function ImportHistory({
       setActionError(t("actionError"));
     },
     (busy: boolean) => setClearingAll(busy),
+    () => setActionError(null),
   );
 
   const canReassign = portfolios.length > 1;
