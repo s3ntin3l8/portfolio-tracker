@@ -35,24 +35,32 @@ export function AdvancedSection({
       </summary>
       <div className="mt-1">
         <ToggleRow
+          id="cashCounted"
           label={t("cashCounted")}
+          hint={t("cashCountedHint")}
           checked={cashCounted}
           onCheckedChange={onCashCountedChange}
         />
         {cashCounted && (
           <ToggleRow
+            id="allowNegativeCash"
             label={t("allowNegativeCash")}
+            hint={t("allowNegativeCashHint")}
             checked={allowNegativeCash}
             onCheckedChange={onAllowNegativeCashChange}
           />
         )}
         <ToggleRow
+          id="documentRetention"
           label={t("documentRetention")}
+          hint={t("documentRetentionHint")}
           checked={documentRetention}
           onCheckedChange={onDocumentRetentionChange}
         />
         <ToggleRow
+          id="includeInAggregate"
           label={t("includeInAggregate")}
+          hint={t("includeInAggregateHint")}
           checked={includeInAggregate}
           onCheckedChange={onIncludeInAggregateChange}
         />

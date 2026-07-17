@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { AccountHolder, Portfolio } from "@portfolio/api-client";
+import { NEW_HOLDER } from "./constants";
 
 export function useFsaAllocation(
   accountHolderId: string,
@@ -9,7 +10,7 @@ export function useFsaAllocation(
   currentPortfolioId?: string,
 ) {
   const effectiveHolderId =
-    accountHolderId !== "__new__" && accountHolderId !== "" ? accountHolderId : null;
+    accountHolderId !== NEW_HOLDER && accountHolderId !== "" ? accountHolderId : null;
   const selectedHolderObj = holders.find((h) => h.id === effectiveHolderId) ?? null;
   const holderAllowanceCap = Number(selectedHolderObj?.taxAllowanceAnnual ?? 1000);
   const siblingsTotal = siblingPortfolios

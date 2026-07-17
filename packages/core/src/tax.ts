@@ -34,6 +34,7 @@
 import { Decimal } from "decimal.js";
 import { D, ZERO } from "./decimal.js";
 import type { TradeLog, Trade, YearTax } from "./trade-log.js";
+import { effectiveMultiplier, computePotUsage, positionHarvestMath } from "./tax-helpers.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -292,9 +293,7 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
     if (assetClass === "gold" || assetClass === "crypto") continue;
     const isStock = assetClass === "equity";
 
-    const tfRaw = input.tfRates[trade.instrumentId];
-    const tfRate = tfRaw !== undefined ? D(tfRaw) : ZERO;
-    const multiplier = Decimal.max(ZERO, D(1).minus(tfRate));
+    const multiplier = effectiveMultiplier(input.tfRates[trade.instrumentId] ?? "0");
 
     for (const leg of trade.legs) {
       if (leg.taxYear !== year) continue;
@@ -346,9 +345,15 @@ export function allowanceUsageYTD(input: AllowanceUsageInput): AllowanceUsage {
   // the underlying loss was originally booked; subtracted RAW, never re-multiplied by tf.
   const stockCF = Decimal.max(ZERO, D(input.lossCarryForward?.stock ?? "0"));
   const generalCF = Decimal.max(ZERO, D(input.lossCarryForward?.general ?? "0"));
-  const stockUsed = Decimal.max(ZERO, stockSubtotal.minus(stockCF));
-  const generalUsedYtd = Decimal.max(ZERO, generalSubtotalNoForecast.minus(generalCF));
-  const generalUsedProjected = Decimal.max(ZERO, generalSubtotalWithForecast.minus(generalCF));
+  const stockUsed = computePotUsage(stockSubtotal, input.lossCarryForward?.stock);
+  const generalUsedYtd = computePotUsage(
+    generalSubtotalNoForecast,
+    input.lossCarryForward?.general,
+  );
+  const generalUsedProjected = computePotUsage(
+    generalSubtotalWithForecast,
+    input.lossCarryForward?.general,
+  );
 
   // Step 5: sum the (already ≥0) pot usages, clamp to the annual allowance.
   const rawUsed = stockUsed.plus(generalUsedYtd);
@@ -431,32 +436,18 @@ export function harvestSuggestions(input: HarvestSuggestionsInput): HarvestSugge
     if (grossGain.lte(ZERO)) continue; // only harvestable when in profit
 
     const tfRaw = input.tfRates[trade.instrumentId];
-    const tfRate = tfRaw !== undefined ? D(tfRaw) : ZERO;
 
-    // Guard against degenerate tfRate = 1 (full exemption — not currently in scope but
-    // let's be safe). If tfRate were 1, the adjusted gain would be 0 and harvestable
-    // would be the full position.
-    const ONE = D(1);
-    const exemptFraction = Decimal.min(ONE, Decimal.max(ZERO, tfRate));
-    const multiplier = ONE.minus(exemptFraction);
+    const { adjustedGain, harvestableGross, taxSaving } = positionHarvestMath(
+      grossGain,
+      tfRaw,
+      remaining,
+      taxRate,
+    );
 
-    let adjustedGain: Decimal;
-    let harvestableGross: Decimal;
-
-    if (multiplier.isZero()) {
-      // Full exemption: entire position is tax-free.
-      adjustedGain = ZERO;
-      harvestableGross = grossGain;
-    } else {
-      adjustedGain = grossGain.times(multiplier);
-      // harvestableGross = min(grossGain, remaining / multiplier)
-      const maxGross = remaining.div(multiplier);
-      harvestableGross = Decimal.min(grossGain, maxGross);
-    }
-
-    // Tax saving = min(adjustedGain, remaining) × taxRate
-    const adjustedCapped = Decimal.min(adjustedGain, remaining);
-    const taxSaving = adjustedCapped.times(taxRate);
+    const exemptFraction = Decimal.min(
+      D(1),
+      Decimal.max(ZERO, tfRaw !== undefined ? D(tfRaw) : ZERO),
+    );
 
     suggestions.push({
       instrumentId: trade.instrumentId,

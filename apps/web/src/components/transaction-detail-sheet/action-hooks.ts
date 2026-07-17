@@ -10,7 +10,6 @@ export function useTransactionActions(
   tx: TxRow | null,
 ) {
   const [dismissing, setDismissing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
 
@@ -28,7 +27,11 @@ export function useTransactionActions(
     }
   }
 
-  async function onDelete(onDeleted: () => void, onOpenChange: (open: boolean) => void) {
+  async function onDelete(
+    onDeleted: () => void,
+    onOpenChange: (open: boolean) => void,
+    resetConfirm: () => void,
+  ) {
     if (!tx) return;
     setDeleting(true);
     try {
@@ -38,7 +41,7 @@ export function useTransactionActions(
       onOpenChange(false);
     } finally {
       setDeleting(false);
-      setConfirmingDelete(false);
+      resetConfirm();
     }
   }
 
@@ -65,10 +68,8 @@ export function useTransactionActions(
 
   return {
     dismissing,
-    confirmingDelete,
     deleting,
     statusBusy,
-    setConfirmingDelete,
     dismissAnomaly,
     onDelete,
     downloadReceipt,

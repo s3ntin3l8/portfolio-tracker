@@ -8,7 +8,9 @@ export function Eyebrow({
   className?: string;
 }) {
   return (
-    <span className={cn("text-xs uppercase tracking-wider text-muted-foreground", className)}>
+    <span
+      className={cn("text-[11px] font-bold uppercase tracking-[0.06em] text-text-3", className)}
+    >
       {children}
     </span>
   );

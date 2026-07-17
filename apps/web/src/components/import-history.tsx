@@ -70,6 +70,7 @@ export function ImportHistory({
     reassignId,
     setConfirmId,
     setReassignId,
+    setClearingAll,
     setActionError,
     discard,
     undo,
@@ -103,7 +104,17 @@ export function ImportHistory({
     toggleAllVisible,
     bulkDelete,
     clearAllDiscarded,
-  } = useImportSelection(items, visibleItems, api, router, () => setActionError(t("actionError")));
+  } = useImportSelection(
+    items,
+    visibleItems,
+    api,
+    router,
+    () => {
+      setActionError(null);
+      setActionError(t("actionError"));
+    },
+    (busy: boolean) => setClearingAll(busy),
+  );
 
   const canReassign = portfolios.length > 1;
 

@@ -260,6 +260,7 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
             targetPortfolioId,
             importId: imp.id,
             source,
+            requestLog: request.log,
           });
           written.push(...goldResult.written);
           attempted += goldResult.attempted;

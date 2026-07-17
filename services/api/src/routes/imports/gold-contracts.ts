@@ -15,9 +15,10 @@ export async function writeGoldContracts(
     targetPortfolioId: string;
     importId: string;
     source: string;
+    requestLog?: { debug: (...args: unknown[]) => void };
   },
 ): Promise<{ written: (typeof transactions.$inferSelect)[]; attempted: number }> {
-  const { contracts, targetPortfolioId, importId, source } = opts;
+  const { contracts, targetPortfolioId, importId, source, requestLog } = opts;
   const written: (typeof transactions.$inferSelect)[] = [];
   let attempted = 0;
   const now = new Date();
@@ -97,6 +98,7 @@ export async function writeGoldContracts(
         .onConflictDoNothing()
         .returning();
       if (row) written.push(row);
+      else requestLog?.debug({ externalId }, "duplicate skipped");
     }
   }
 

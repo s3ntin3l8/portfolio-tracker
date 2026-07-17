@@ -77,6 +77,9 @@ export function TransactionDetailSheet({
   const { dismissing, deleting, statusBusy, dismissAnomaly, onDelete, downloadReceipt, setStatus } =
     useTransactionActions(api, router, tx);
 
+  const resetConfirmDelete = () => setConfirmingDelete(false);
+  const handleDelete = () => onDelete(onDeleted, onOpenChange, resetConfirmDelete);
+
   const m = (n: number, currency: string) => formatMoney(n, currency, locale);
   const df = useMemo(() => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }), [locale]);
   const numFmt = useMemo(() => new Intl.NumberFormat(locale), [locale]);
@@ -300,7 +303,7 @@ export function TransactionDetailSheet({
                 variant="destructive"
                 className="flex-1"
                 disabled={deleting}
-                onClick={() => onDelete(onDeleted, onOpenChange)}
+                onClick={handleDelete}
               >
                 {deleting && <Spinner size="sm" />}
                 {td("confirm")}

@@ -13,6 +13,7 @@ export function useImportSelection(
   api: ApiClient,
   router: { refresh: () => void },
   onError?: () => void,
+  onClearBusy?: (busy: boolean) => void,
 ) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -99,14 +100,14 @@ export function useImportSelection(
   }
 
   async function clearAllDiscarded() {
-    setBulkBusy(true);
+    onClearBusy?.(true);
     try {
       await api.bulkClearImports(discardedIds);
       router.refresh();
     } catch {
       onError?.();
     } finally {
-      setBulkBusy(false);
+      onClearBusy?.(false);
     }
   }
 
