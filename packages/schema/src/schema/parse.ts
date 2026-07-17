@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assetClassSchema, unitSchema, costBasisModeSchema } from "./enums.js";
+import { assetClassSchema, unitSchema } from "./enums.js";
 import { decimalString, currencyCode } from "./primitives.js";
 
 export const taxComponentsSchema = z.object({
