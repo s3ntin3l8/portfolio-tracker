@@ -1,15 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
-import {
-  loans,
-  portfolios,
-  screenshotImports,
-  transactionSources,
-  transactions,
-} from "@portfolio/db";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { loans, portfolios, screenshotImports, transactions } from "@portfolio/db";
 import type { ParsedTransaction } from "@portfolio/schema";
-import { parsedTransactionSchema } from "@portfolio/schema";
 import { parseCsv } from "../../services/parsers/csv.js";
 import { parseDkb } from "../../services/parsers/dkb.js";
 import { detectDkbPdf, parseDkbPdf } from "../../services/parsers/dkb-pdf.js";
@@ -23,39 +16,16 @@ import { parseFlexXml } from "../../services/ibkr/flex-parse.js";
 import { mapFlexToDrafts } from "../../services/ibkr/mapper.js";
 import { detectCsvFormat } from "../../services/parsers/detect.js";
 import { assignContentExternalIds, shortHash } from "../../services/parsers/hash.js";
-import { classifyMatch, parserToTxSource, isEuParser } from "../../services/parsers/dedup.js";
+import { classifyMatch, parserToTxSource } from "../../services/parsers/dedup.js";
 import { findCommittedDuplicates } from "../../services/parsers/likely-duplicates.js";
 import { getImportStrategy } from "../../services/import-settings.js";
-import {
-  storeReceipt,
-  finalizeReceipts,
-  retainDocumentForTransaction,
-  getDocumentForImport,
-} from "../../storage/receipts.js";
-import { materializeDrafts } from "../../services/materialize-drafts.js";
-import { isCashMovementAction } from "../../services/pytr/mapper.js";
+import { storeReceipt } from "../../storage/receipts.js";
 import {
   accountMismatchVerdict,
   normalizeAccountNumber,
   portfolioMatchesAccount,
 } from "./helpers.js";
-import { ownedPortfolio } from "../helpers.js";
-
-const materializeBodySchema = z.object({
-  // Target portfolio the user picked/confirmed in the upload modal.
-  portfolioId: z.string().uuid(),
-  // Proceed past the account-mismatch guard (the file's detected account looks like it
-  // belongs to a different portfolio than the one chosen). The web flow surfaces this as
-  // an inline "Import anyway" re-confirm.
-  acknowledgeAccountMismatch: z.boolean().default(false),
-});
-
-// Read-only pre-flight: the upload modal asks, at confirm time, whether the detected account
-// on each staged import conflicts with the portfolio the user actually selected — so the
-// account-mismatch warning surfaces in the still-open modal instead of as a post-close toast.
-const accountCheckBodySchema = z.object({
-  units: z.array(z.object({ importId: z.string().uuid(), portfolioId: z.string().uuid() })).max(50),
-});
+import { registerMaterializeRoutes } from "./materialize.js";
 
 const csvBodySchema = z.object({
   content: z.string().min(1),
@@ -297,124 +267,6 @@ export function registerParseImportRoutes(app: FastifyInstance) {
         matchedTransactionId: matched.id,
       };
     }
-  }
-
-  /**
-   * Phase 2 unification: when a *deterministic* parser (CSV/DKB-PDF/TR-PDF/IBKR) resolves an
-   * unambiguous target portfolio at upload, write the drafts straight into the transactions
-   * table as `status='draft'` rows (the same pipeline sync uses) instead of staging them for
-   * the review screen. The import row becomes a provenance/document anchor (status confirmed).
-   * Mirrors the confirm route's source/isEu/cash-boundary handling so behavior is identical
-   * to "upload → confirm", minus the review click. Returns the materialized count.
-   */
-  async function materializeResolvedDrafts(opts: {
-    imp: { id: string };
-    drafts: ParsedTransaction[];
-    parserTag: string;
-    targetPortfolioId: string;
-  }): Promise<{ materialized: number; excludedCashMovements: number; enriched: number }> {
-    const { imp, drafts, parserTag, targetPortfolioId } = opts;
-    const [pf] = await app.db
-      .select({
-        cashCounted: portfolios.cashCounted,
-        documentRetention: portfolios.documentRetention,
-      })
-      .from(portfolios)
-      .where(eq(portfolios.id, targetPortfolioId))
-      .limit(1);
-
-    // Cash-boundary filter (#326), same as confirm: a cash-outside portfolio drops genuine
-    // cash movements from a TR settlement PDF so they don't manufacture phantom flows.
-    let toWrite = drafts;
-    let excludedCashMovements = 0;
-    if (parserTag === "tr-pdf" && pf && !pf.cashCounted) {
-      const before = toWrite.length;
-      toWrite = toWrite.filter((d) => !isCashMovementAction(d.action));
-      excludedCashMovements = before - toWrite.length;
-    }
-
-    const res = await materializeDrafts(app, {
-      drafts: toWrite,
-      targetPortfolioId,
-      source: parserToTxSource(parserTag) as "csv" | "pdf" | "ibkr" | "screenshot",
-      importId: imp.id,
-      status: "draft",
-      isEu: isEuParser(parserTag),
-    });
-
-    // The import has produced its transactions — close it (anchor, not a review item)
-    // BEFORE finalizing receipts. Receipt finalization (storage re-key) is best-effort and
-    // non-transactional, so a hiccup there must not leave a completed import stuck in 'draft'
-    // while its drafts already exist in the table.
-    await app.db
-      .update(screenshotImports)
-      .set({ portfolioId: targetPortfolioId, status: "confirmed" })
-      .where(eq(screenshotImports.id, imp.id));
-
-    const retain = pf?.documentRetention ?? false;
-
-    // Link the staged PDF to every matched pre-existing transaction (dedup/enrichment case)
-    // BEFORE finalizing receipts — mirrors the interactive /confirm route's auto-enrich step
-    // (#259 orphan fix), which this deterministic-parser path otherwise skips: without this,
-    // a PDF that matches an already-existing transaction gets its tax/fee detail folded in
-    // (materializeDrafts always does that) but the document itself never surfaces on that
-    // transaction, since it's outside the current import. Best-effort, same as confirm.ts.
-    if (retain && res.matchedTransactionIds.length > 0) {
-      for (const matchedTransactionId of res.matchedTransactionIds) {
-        try {
-          await retainDocumentForTransaction(app, {
-            importId: imp.id,
-            transactionId: matchedTransactionId,
-            portfolioId: targetPortfolioId,
-          });
-        } catch (err) {
-          app.log.warn(
-            { err, importId: imp.id, matchedTransactionId },
-            "retainDocumentForTransaction failed after materialize (non-fatal)",
-          );
-        }
-      }
-    }
-
-    // Finalize the staged receipt now (retain per portfolio setting) — the old confirm-time
-    // finalization no longer runs for this path. Best-effort: per-doc failures already log
-    // inside finalizeReceipts; guard the bulk path too so it can't unwind a confirmed import.
-    try {
-      await finalizeReceipts(app, {
-        importId: imp.id,
-        portfolioId: targetPortfolioId,
-        retain,
-      });
-    } catch (err) {
-      app.log.warn(
-        { err, importId: imp.id },
-        "finalizeReceipts failed after materialize (non-fatal) — import stays confirmed",
-      );
-    }
-
-    // For DKB/TR-PDF imports: link every source row (both newly-written and enrichment
-    // matches) to the retained document so the per-source download button works — mirrors
-    // /confirm's equivalent backfill. The document is always a single file per import.
-    if ((parserTag === "dkb-pdf" || parserTag === "tr-pdf") && retain) {
-      try {
-        const retainedDoc = await getDocumentForImport(app, imp.id);
-        if (retainedDoc) {
-          await app.db
-            .update(transactionSources)
-            .set({ documentId: retainedDoc.id })
-            .where(
-              and(eq(transactionSources.importId, imp.id), isNull(transactionSources.documentId)),
-            );
-        }
-      } catch (err) {
-        app.log.warn(
-          { err, importId: imp.id },
-          "materialize: failed to link PDF source rows to document (non-fatal)",
-        );
-      }
-    }
-
-    return { materialized: res.written.length, excludedCashMovements, enriched: res.enriched };
   }
 
   // Parse a CSV into draft transactions and store them as a draft import.
@@ -857,117 +709,5 @@ export function registerParseImportRoutes(app: FastifyInstance) {
     };
   });
 
-  // Materialize a staged import's drafts into the chosen portfolio as `status='draft'` rows.
-  // This is the "confirm portfolio" step of the upload flow: parse staged the drafts (+ the
-  // detected account number); the user picked a portfolio; we write the drafts here. Reads
-  // the stored `parsedJson.drafts` — it NEVER re-parses (so a vision screenshot's LLM call is
-  // not repeated on an account-mismatch acknowledge). Gold contracts keep the confirm path.
-  app.post<{ Params: { importId: string } }>(
-    "/imports/:importId/materialize",
-    { preHandler: app.authenticate },
-    async (request, reply) => {
-      const id = request.userId;
-      const { portfolioId, acknowledgeAccountMismatch } = materializeBodySchema.parse(request.body);
-
-      const [imp] = await app.db
-        .select()
-        .from(screenshotImports)
-        .where(
-          and(eq(screenshotImports.id, request.params.importId), eq(screenshotImports.userId, id)),
-        )
-        .limit(1);
-      if (!imp) return reply.code(404).send({ error: "import_not_found" });
-      if (imp.status === "confirmed") {
-        return reply.code(409).send({ error: "already_confirmed" });
-      }
-
-      const parsed = (imp.parsedJson ?? {}) as {
-        drafts?: unknown[];
-        contracts?: unknown[];
-        accountNumber?: string | null;
-      };
-      // Coerce the stored drafts through the schema — JSON round-trips `executedAt` as a
-      // string, but the writer needs a Date (same coercion the confirm route's body does).
-      const drafts = z
-        .array(parsedTransactionSchema)
-        .parse(Array.isArray(parsed.drafts) ? parsed.drafts : []);
-      const contracts = Array.isArray(parsed.contracts) ? parsed.contracts : [];
-      // Gold cicilan contracts become loans, not draft transactions — they stay on the
-      // confirm path (POST /imports/:id/confirm), which owns the loan + leg machinery.
-      if (contracts.length > 0) {
-        return reply.code(400).send({ error: "use_confirm_for_contracts" });
-      }
-      if (drafts.length === 0) {
-        return reply.code(400).send({ error: "nothing_to_materialize" });
-      }
-
-      const targetPortfolio = await ownedPortfolio(app, id, portfolioId);
-      if (!targetPortfolio) return reply.code(404).send({ error: "portfolio_not_found" });
-
-      // Account-mismatch guard (#197): if the file's detected account looks like it belongs to
-      // a different portfolio than the chosen one, refuse until acknowledged. pytr is exempt
-      // (sync is always bound to its connection's portfolio) but never reaches this route.
-      if (!acknowledgeAccountMismatch && imp.parser !== "pytr") {
-        const mismatch = await accountMismatchVerdict(app, id, parsed.accountNumber, portfolioId);
-        if (mismatch) {
-          request.log.info(
-            { importId: imp.id, kind: mismatch.kind },
-            "materialize blocked: account mismatch",
-          );
-          return reply.code(409).send({ error: "account_mismatch", ...mismatch });
-        }
-      }
-
-      const mat = await materializeResolvedDrafts({
-        imp,
-        drafts,
-        parserTag: imp.parser ?? "csv",
-        targetPortfolioId: portfolioId,
-      });
-      request.log.info(
-        { importId: imp.id, materialized: mat.materialized, portfolioId },
-        "import materialized as drafts",
-      );
-      reply.code(201);
-      return {
-        importId: imp.id,
-        materialized: true,
-        portfolioId,
-        materializedCount: mat.materialized,
-        excludedCashMovements: mat.excludedCashMovements,
-        enrichedCount: mat.enriched,
-      };
-    },
-  );
-
-  // Read-only account-mismatch pre-flight for the upload modal. For each (importId, portfolioId)
-  // unit the user is about to confirm, re-run the same verdict the materialize/confirm guards
-  // use (against the *selected* portfolio) and return only the units that conflict — so the modal
-  // can keep itself open and show the warning before handing the write to the background runner.
-  // Writes nothing. pytr imports are exempt (sync is always bound to its connection's portfolio).
-  app.post("/imports/account-check", { preHandler: app.authenticate }, async (request) => {
-    const id = request.userId;
-    const { units } = accountCheckBodySchema.parse(request.body);
-
-    const mismatches: Array<
-      { importId: string } & NonNullable<Awaited<ReturnType<typeof accountMismatchVerdict>>>
-    > = [];
-
-    for (const unit of units) {
-      const [imp] = await app.db
-        .select()
-        .from(screenshotImports)
-        .where(and(eq(screenshotImports.id, unit.importId), eq(screenshotImports.userId, id)))
-        .limit(1);
-      // Skip silently: a missing/confirmed/pytr import simply has no warning to surface;
-      // the real write guard still re-checks, so this never gates correctness.
-      if (!imp || imp.status === "confirmed" || imp.parser === "pytr") continue;
-
-      const parsed = (imp.parsedJson ?? {}) as { accountNumber?: string | null };
-      const verdict = await accountMismatchVerdict(app, id, parsed.accountNumber, unit.portfolioId);
-      if (verdict) mismatches.push({ importId: imp.id, ...verdict });
-    }
-
-    return { mismatches };
-  });
+  registerMaterializeRoutes(app);
 }

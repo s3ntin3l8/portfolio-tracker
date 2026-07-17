@@ -30,9 +30,8 @@ import { financingByInstrument } from "./loans.js";
 import { convert, type FxRateFn } from "./networth.js";
 import { xirr, type CashFlowPoint } from "./xirr.js";
 import type { CoreTransaction, CorporateAction } from "./types.js";
-import { toDateKey } from "./date-utils.js";
+import { toDateKey, daysBetween, MS_PER_DAY } from "./date-utils.js";
 import type { CostBasisMode } from "./valuation.js";
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
 /** Default §23-EStG-style threshold: gold/other private-sale gains are tax-free after a 1-year hold. */
 const LONG_TERM_DAYS = 365;
 /** Quantity residual below which a position counts as fully closed (import rounding dust). */
@@ -137,8 +136,27 @@ export interface ComputeTradesInput {
   instruments?: Map<string, { assetClass: string }> | Record<string, { assetClass: string }>;
 }
 
-function daysBetween(from: Date, to: Date): number {
-  return Math.max(0, Math.floor((to.getTime() - from.getTime()) / MS_PER_DAY));
+export function calcAvgHoldingDays(flows: CashFlowPoint[], holdingDays: number): number {
+  if (flows.length < 2) return holdingDays;
+  const MS_PER_YEAR = MS_PER_DAY * 365;
+  const t0 = Math.min(...flows.map((f) => f.date.getTime()));
+  const outflows = flows.filter((f) => Number(f.amount) < 0);
+  const inflows = flows.filter((f) => Number(f.amount) > 0);
+  const wavg = (side: typeof flows) => {
+    const totalAmt = side.reduce((s, f) => s + Math.abs(Number(f.amount)), 0);
+    if (totalAmt === 0) return 0;
+    return (
+      side.reduce(
+        (s, f) => s + Math.abs(Number(f.amount)) * ((f.date.getTime() - t0) / MS_PER_YEAR),
+        0,
+      ) / totalAmt
+    );
+  };
+  const avgHoldingYears = wavg(inflows) - wavg(outflows);
+  if (avgHoldingYears > 0) {
+    return Math.round(avgHoldingYears * 365);
+  }
+  return holdingDays;
 }
 
 /** A FIFO lot: shares acquired together at a per-unit cost (fees included). */
@@ -313,27 +331,7 @@ export function computeTrades(input: ComputeTradesInput): TradeLog {
       // For a savings plan: shorter, because later tranches were invested less time.
       // Falls back to holdingDays when avgHoldingYears ≤ 0 (e.g. open position with
       // no price quote, so the only inflow is dividends-only or the side is empty).
-      let avgHoldingDays = holdingDays;
-      if (flows.length >= 2) {
-        const MS_PER_YEAR = MS_PER_DAY * 365;
-        const t0 = Math.min(...flows.map((f) => f.date.getTime()));
-        const outflows = flows.filter((f) => Number(f.amount) < 0);
-        const inflows = flows.filter((f) => Number(f.amount) > 0);
-        const wavg = (side: typeof flows) => {
-          const totalAmt = side.reduce((s, f) => s + Math.abs(Number(f.amount)), 0);
-          if (totalAmt === 0) return 0;
-          return (
-            side.reduce(
-              (s, f) => s + Math.abs(Number(f.amount)) * ((f.date.getTime() - t0) / MS_PER_YEAR),
-              0,
-            ) / totalAmt
-          );
-        };
-        const avgHoldingYears = wavg(inflows) - wavg(outflows);
-        if (avgHoldingYears > 0) {
-          avgHoldingDays = Math.round(avgHoldingYears * 365);
-        }
-      }
+      const avgHoldingDays = calcAvgHoldingDays(flows, holdingDays);
 
       const qtyShown = status === "open" ? currentQty : ep.acqQty;
       const avgEntryPrice = ep.acqQty.gt(0) ? ep.acqQtyPrice.div(ep.acqQty).toString() : "0";

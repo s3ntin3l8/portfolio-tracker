@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useId } from "react";
 import { useTranslations } from "next-intl";
-import { AlertCircle, ChevronDown, TriangleAlert } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import type {
   AccountHolder,
@@ -14,42 +14,23 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { HolderTypeChips } from "@/components/holder-type-chips";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useApiClient } from "@/lib/api";
 import { useRouter } from "@/i18n/navigation";
 import { deletePortfolioWithCleanup } from "@/lib/delete-portfolio";
 import { KNOWN_BROKERAGES, resolveBrokerage } from "@/lib/brokerages";
 import { BrokerageIcon } from "@/components/brokerage-icon";
-import { TrConnectFlow } from "@/components/tr-connect-flow";
-import { IbkrConnectFlow } from "@/components/ibkr-connect-flow";
-
-const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
-
-/** The portfolio fields the edit form pre-fills. `portfolioType` is read-only here
- * (derived from the holder) and only used to gate the TR connection section. */
-export type EditablePortfolio = Pick<
-  Portfolio,
-  | "id"
-  | "name"
-  | "baseCurrency"
-  | "accountHolderId"
-  | "portfolioType"
-  | "brokerage"
-  | "accountNumber"
-  | "iban"
-  | "includeInAggregate"
-  | "cashCounted"
-  | "allowNegativeCash"
-  | "documentRetention"
-  | "taxAllowanceAnnual"
-  | "transactionCount"
->;
-
-// Sentinel select value for "create a new holder inline".
-const NEW_HOLDER = "__new__";
+import { NEW_HOLDER, type EditablePortfolio } from "./portfolio-form-dialog/constants";
+export type { EditablePortfolio } from "./portfolio-form-dialog/constants";
+import { OwnershipSection } from "./portfolio-form-dialog/sections/ownership-section";
+import { AccountSection } from "./portfolio-form-dialog/sections/account-section";
+import { AdvancedSection } from "./portfolio-form-dialog/sections/advanced-section";
+import {
+  TrConnectionSection,
+  IbkrConnectionSection,
+} from "./portfolio-form-dialog/sections/connection-section";
+import { useFsaAllocation } from "./portfolio-form-dialog/fsa-utils";
 
 /**
  * Create/edit a portfolio in a modal. One form serves both flows: in "create" mode
@@ -323,21 +304,20 @@ export function PortfolioFormDialog({
     }
   }
 
-  // FSA allocation helper: sum all sibling portfolios' allocations for the selected
-  // holder (excluding the current portfolio to avoid double-counting), then add the
-  // current input value. Used to show "€X of €cap allocated — €Y left" in the form.
-  const effectiveHolderId =
-    accountHolderId !== NEW_HOLDER && accountHolderId !== "" ? accountHolderId : null;
-  const selectedHolderObj = holders.find((h) => h.id === effectiveHolderId) ?? null;
-  const holderAllowanceCap = Number(selectedHolderObj?.taxAllowanceAnnual ?? 1000);
-  const siblingsTotal = siblingPortfolios
-    .filter((p) => p.accountHolderId === effectiveHolderId && p.id !== portfolio?.id)
-    .reduce((sum, p) => sum + Number(p.taxAllowanceAnnual ?? 0), 0);
-  const currentFsaNum = Number(taxAllowanceAnnual) || 0;
-  const totalAllocated = siblingsTotal + currentFsaNum;
-  const fsaRemainingForHolder = Math.max(0, holderAllowanceCap - totalAllocated);
-  const fsaOverAllocated = effectiveHolderId != null && totalAllocated > holderAllowanceCap;
-  const showFsaHelper = effectiveHolderId != null && siblingPortfolios.length > 0;
+  const {
+    selectedHolderObj,
+    holderAllowanceCap,
+    totalAllocated,
+    fsaRemainingForHolder,
+    fsaOverAllocated,
+    showFsaHelper,
+  } = useFsaAllocation(
+    accountHolderId,
+    taxAllowanceAnnual,
+    holders,
+    siblingPortfolios,
+    portfolio?.id,
+  );
 
   // Derive the initial state for TrConnectFlow. The connection is one-per-user: if it's
   // actively bound to a different portfolio, force the connect form so the user can
@@ -434,179 +414,47 @@ export function PortfolioFormDialog({
 
           <Eyebrow>{t("sectionOwnership")}</Eyebrow>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-account-holder">{t("accountHolder")}</Label>
-            <Select
-              id="portfolio-account-holder"
-              value={accountHolderId}
-              onChange={(e) => setAccountHolderId(e.target.value)}
-            >
-              <option value="">{t("holderNone")}</option>
-              {holders.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}
-                  {h.type === "child" ? ` · ${t("holderTypeChild")}` : ""}
-                  {h.birthYear != null ? ` (${h.birthYear})` : ""}
-                </option>
-              ))}
-              <option value={NEW_HOLDER}>{t("holderNew")}</option>
-            </Select>
-            <p className="text-xs text-muted-foreground">{t("accountHolderHint")}</p>
-
-            {accountHolderId === NEW_HOLDER && (
-              <div className="mt-2 space-y-3 rounded-md border border-border/60 p-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="new-holder-name">{t("holderName")}</Label>
-                  <Input
-                    id="new-holder-name"
-                    value={newHolderName}
-                    onChange={(e) => setNewHolderName(e.target.value)}
-                    placeholder={t("accountHolderPlaceholder")}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label id="new-holder-type-label">{t("holderType")}</Label>
-                  <HolderTypeChips
-                    value={newHolderType}
-                    onChange={setNewHolderType}
-                    labelledBy="new-holder-type-label"
-                  />
-                </div>
-                {newHolderType === "child" && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-holder-birth-year">{t("birthYear")}</Label>
-                    <Input
-                      id="new-holder-birth-year"
-                      type="number"
-                      inputMode="numeric"
-                      placeholder={t("birthYearPlaceholder")}
-                      value={newHolderBirthYear}
-                      onChange={(e) => setNewHolderBirthYear(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">{t("birthYearHint")}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <OwnershipSection
+            holders={holders}
+            accountHolderId={accountHolderId}
+            newHolderName={newHolderName}
+            newHolderType={newHolderType}
+            newHolderBirthYear={newHolderBirthYear}
+            onAccountHolderChange={setAccountHolderId}
+            onNewHolderNameChange={setNewHolderName}
+            onNewHolderTypeChange={setNewHolderType}
+            onNewHolderBirthYearChange={setNewHolderBirthYear}
+          />
 
           <Eyebrow>{t("sectionAccount")}</Eyebrow>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-account-number">{t("accountNumber")}</Label>
-            <Input
-              id="portfolio-account-number"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              placeholder={t("accountNumberPlaceholder")}
-            />
-          </div>
+          <AccountSection
+            accountNumber={accountNumber}
+            iban={iban}
+            currency={currency}
+            taxAllowanceAnnual={taxAllowanceAnnual}
+            showFsaHelper={showFsaHelper}
+            fsaOverAllocated={fsaOverAllocated}
+            totalAllocated={totalAllocated}
+            holderAllowanceCap={holderAllowanceCap}
+            fsaRemainingForHolder={fsaRemainingForHolder}
+            selectedHolderName={selectedHolderObj?.name ?? null}
+            onAccountNumberChange={setAccountNumber}
+            onIbanChange={setIban}
+            onCurrencyChange={setCurrency}
+            onTaxAllowanceChange={setTaxAllowanceAnnual}
+          />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="portfolio-iban">{t("iban")}</Label>
-            <Input
-              id="portfolio-iban"
-              value={iban}
-              onChange={(e) => setIban(e.target.value)}
-              placeholder={t("ibanPlaceholder")}
-            />
-          </div>
-
-          {/* Base currency + per-depot Freistellungsauftrag (FSA) allocation share one row. */}
-          <div className="flex items-start gap-3">
-            <div className="w-[130px] shrink-0 space-y-1.5">
-              <Label htmlFor="portfolio-currency">{t("currency")}</Label>
-              <Select
-                id="portfolio-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="portfolio-fsa">{t("taxAllowanceAnnual")}</Label>
-              <Input
-                id="portfolio-fsa"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step={1}
-                value={taxAllowanceAnnual}
-                onChange={(e) => setTaxAllowanceAnnual(e.target.value)}
-                placeholder={t("taxAllowanceAnnualPlaceholder")}
-              />
-              {showFsaHelper && !fsaOverAllocated && (
-                <p className="text-xs text-muted-foreground">
-                  {t("taxAllowanceHelper", {
-                    allocated: totalAllocated.toFixed(0),
-                    cap: holderAllowanceCap.toFixed(0),
-                    remaining: fsaRemainingForHolder.toFixed(0),
-                    holder: selectedHolderObj?.name ?? "",
-                  })}
-                </p>
-              )}
-              {showFsaHelper && fsaOverAllocated && (
-                <div className="flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-300">
-                  <TriangleAlert className="size-3.5 mt-0.5 shrink-0" />
-                  <span>
-                    {t("taxAllowanceOverAllocated", { cap: holderAllowanceCap.toFixed(0) })}
-                  </span>
-                </div>
-              )}
-              {!showFsaHelper && (
-                <p className="text-xs text-muted-foreground">{t("taxAllowanceAnnualHint")}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Advanced accounting options — collapsed by default to keep the sheet short. */}
-          <details className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-0.5 py-1 [&::-webkit-details-marker]:hidden">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-text-3">
-                {t("sectionAccounting")}
-              </span>
-              <ChevronDown className="size-4 shrink-0 text-text-3 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="mt-1">
-              <ToggleRow
-                id="portfolio-cash-counted"
-                checked={cashCounted}
-                onCheckedChange={setCashCounted}
-                title={t("cashCounted")}
-                hint={t("cashCountedHint")}
-              />
-              {/* Only meaningful when cash is inside the boundary — the guard runs only then. */}
-              {cashCounted && (
-                <ToggleRow
-                  id="portfolio-allow-negative-cash"
-                  checked={allowNegativeCash}
-                  onCheckedChange={setAllowNegativeCash}
-                  title={t("allowNegativeCash")}
-                  hint={t("allowNegativeCashHint")}
-                />
-              )}
-              <ToggleRow
-                id="portfolio-document-retention"
-                checked={documentRetention}
-                onCheckedChange={setDocumentRetention}
-                title={t("documentRetention")}
-                hint={t("documentRetentionHint")}
-              />
-              <ToggleRow
-                id="portfolio-include-in-aggregate"
-                checked={includeInAggregate}
-                onCheckedChange={setIncludeInAggregate}
-                title={t("includeInAggregate")}
-                hint={t("includeInAggregateHint")}
-              />
-            </div>
-          </details>
+          <AdvancedSection
+            cashCounted={cashCounted}
+            allowNegativeCash={allowNegativeCash}
+            documentRetention={documentRetention}
+            includeInAggregate={includeInAggregate}
+            onCashCountedChange={setCashCounted}
+            onAllowNegativeCashChange={setAllowNegativeCash}
+            onDocumentRetentionChange={setDocumentRetention}
+            onIncludeInAggregateChange={setIncludeInAggregate}
+          />
 
           <div className="sticky bottom-0 -mx-6 bg-background border-t border-border px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] z-[2]">
             {/* After a TR/IBKR create the portfolio is saved; swap the create button for Done. */}
@@ -667,105 +515,29 @@ export function PortfolioFormDialog({
           </div>
         </form>
 
-        {/* TR connection section — rendered outside the form to avoid nested <form> issues.
-            Appears after the portfolio exists (edit always, create after first save). */}
         {showTrSection && (
-          <div className="border-t border-line px-6 pb-6 pt-4">
-            <p className="mb-3 text-sm font-medium">{t("trSectionTitle")}</p>
-            {trConnection === null ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner size="sm" />
-                <span>{t("trLoading")}</span>
-              </div>
-            ) : trConnection === false ? (
-              <p className="text-sm text-muted-foreground">{te("unavailableBody")}</p>
-            ) : (
-              <>
-                {boundElsewhere && (
-                  <div
-                    role="note"
-                    className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
-                  >
-                    {ttr("boundElsewhere")}
-                  </div>
-                )}
-                <TrConnectFlow
-                  client={api}
-                  portfolioId={effectivePortfolio.id}
-                  cashCounted={cashCounted}
-                  initial={trInitForFlow!}
-                  onChanged={() => {
-                    router.refresh();
-                    setTrFetchSeq((s) => s + 1);
-                  }}
-                />
-              </>
-            )}
-          </div>
+          <TrConnectionSection
+            trConnection={trConnection}
+            effectivePortfolio={{ id: effectivePortfolio!.id }}
+            cashCounted={cashCounted}
+            boundElsewhere={boundElsewhere}
+            trInitForFlow={trInitForFlow}
+            client={api}
+            onRefresh={() => router.refresh()}
+            onFetchTrigger={() => setTrFetchSeq((s) => s + 1)}
+          />
         )}
 
-        {/* IBKR connection section — same pattern as TR but simpler (no 2FA phase). */}
         {showIbkrSection && (
-          <div className="border-t border-line px-6 pb-6 pt-4">
-            <p className="mb-3 text-sm font-medium">{tibkr("sectionTitle")}</p>
-            {ibkrConnection === null ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner size="sm" />
-                <span>{t("trLoading")}</span>
-              </div>
-            ) : ibkrConnection === false ? (
-              <p className="text-sm text-muted-foreground">{te("unavailableBody")}</p>
-            ) : (
-              <IbkrConnectFlow
-                client={api}
-                portfolioId={effectivePortfolio!.id}
-                initial={ibkrConnection}
-                onChanged={() => {
-                  router.refresh();
-                  setIbkrFetchSeq((s) => s + 1);
-                }}
-              />
-            )}
-          </div>
+          <IbkrConnectionSection
+            ibkrConnection={ibkrConnection}
+            effectivePortfolio={{ id: effectivePortfolio!.id }}
+            client={api}
+            onRefresh={() => router.refresh()}
+            onFetchTrigger={() => setIbkrFetchSeq((s) => s + 1)}
+          />
         )}
       </SheetContent>
     </Sheet>
-  );
-}
-
-/** Uppercase section eyebrow used to group the sheet's fields (reference: 11px/700/upper). */
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-text-3">
-      {children}
-    </p>
-  );
-}
-
-/** A settings toggle row (label + hint on the left, Switch on the right), stacked with
- *  hairline dividers between rows — the reference "Accounting options" list. */
-function ToggleRow({
-  id,
-  checked,
-  onCheckedChange,
-  title,
-  hint,
-}: {
-  id: string;
-  checked: boolean;
-  onCheckedChange: (v: boolean) => void;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 border-t border-line py-3 first:border-t-0">
-      <div className="min-w-0">
-        <Label htmlFor={id} className="text-[13px] font-semibold text-foreground">
-          {title}
-        </Label>
-        <p className="mt-0.5 text-[11px] font-medium text-text-3">{hint}</p>
-      </div>
-      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} className="shrink-0" />
-    </div>
   );
 }

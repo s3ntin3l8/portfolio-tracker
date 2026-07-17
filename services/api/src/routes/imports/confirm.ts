@@ -1,38 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
-import {
-  loans,
-  screenshotImports,
-  transactions,
-  transactionSources,
-  trResolvedEvents,
-} from "@portfolio/db";
-import { toDateKey } from "@portfolio/core";
+import { and, eq } from "drizzle-orm";
+import { screenshotImports, trResolvedEvents } from "@portfolio/db";
 import { parsedGoldContractSchema, parsedTransactionSchema } from "@portfolio/schema";
 import { accountMismatchVerdict } from "./helpers.js";
 import { ownedPortfolio } from "../helpers.js";
-import {
-  buildContractLegs,
-  goldInstrumentForContract,
-} from "../../services/parsers/gold-contract.js";
 import { isCashMovementAction } from "../../services/pytr/mapper.js";
-import {
-  enrichTransactionFromDrafts,
-  enrichTransactionsFromStoredDocuments,
-} from "../../services/enrichment.js";
 import {
   resolveDraftInstruments,
   classifyDraftDuplicates,
   writeResolvedDrafts,
 } from "../../services/materialize-drafts.js";
-import { findOrCreateInstrument } from "../../services/instruments.js";
-import {
-  finalizeReceipts,
-  linkTrReceiptsToTransactions,
-  retainDocumentForTransaction,
-  getDocumentForImport,
-} from "../../storage/receipts.js";
+import { writeGoldContracts } from "./gold-contracts.js";
+import { finalizeConfirmedImport } from "./finalize.js";
 
 const confirmBodySchema = z.object({
   // Target portfolio — required when the import was uploaded without one (upload-first
@@ -269,80 +249,20 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         });
         attempted += draftAttempted;
         skipped += draftSkipped;
-        const written: (typeof transactions.$inferSelect)[] = [...draftRows];
+        const written = [...draftRows];
 
         // Financed gold contracts: create the gold instrument + loan, then insert
         // the derived legs (buy, drawdown, admin/discount fees, due installments),
         // all linked by loanId so the outstanding balance derives in @portfolio/core.
-        const now = new Date();
-        for (let ci = 0; ci < contracts.length; ci++) {
-          const c = contracts[ci];
-          const gold = goldInstrumentForContract(c);
-          const instrument = await findOrCreateInstrument(tx, {
-            symbol: gold.symbol,
-            market: gold.market,
-            assetClass: "gold",
-            unit: "grams",
-            currency: c.currency,
-            name: gold.name,
-            isin: null,
+        if (contracts.length > 0) {
+          const goldResult = await writeGoldContracts(tx, {
+            contracts,
+            targetPortfolioId,
+            importId: imp.id,
+            source,
           });
-          const [loan] = await tx
-            .insert(loans)
-            .values({
-              portfolioId: targetPortfolioId,
-              instrumentId: instrument.id,
-              importId: imp.id,
-              contractNo: c.contractNo ?? null,
-              provider: c.provider ?? "GALERI24",
-              purchasePrice: c.purchasePrice,
-              downPayment: c.downPayment,
-              adminFee: c.adminFee,
-              discount: c.discount,
-              principal: c.principal,
-              marginTotal: c.marginTotal,
-              tenorMonths: c.tenorMonths,
-              monthlyInstallment: c.monthlyInstallment,
-              startDate: toDateKey(c.startDate),
-              schedule: c.schedule.map((r) => ({
-                n: r.n,
-                dueDate: toDateKey(r.dueDate),
-                pokok: r.pokok,
-                sewaModal: r.sewaModal,
-                angsuran: r.angsuran,
-                sisaPokok: r.sisaPokok,
-              })),
-              costBasisMode: c.costBasisMode,
-              currency: c.currency,
-            })
-            .returning();
-
-          const legs = buildContractLegs(c, now);
-          for (let li = 0; li < legs.length; li++) {
-            const leg = legs[li];
-            attempted++;
-            const externalId = `import:${imp.id}:loan:${ci}:${li}`;
-            const [row] = await tx
-              .insert(transactions)
-              .values({
-                portfolioId: targetPortfolioId,
-                instrumentId: leg.role === "gold_buy" ? instrument.id : null,
-                type: leg.type,
-                quantity: leg.quantity,
-                price: leg.price,
-                fees: leg.fees,
-                currency: leg.currency,
-                executedAt: leg.executedAt,
-                source,
-                importId: imp.id,
-                loanId: loan.id,
-                externalId,
-              })
-              .onConflictDoNothing()
-              .returning();
-            if (row) written.push(row);
-            else request.log.debug({ externalId }, "duplicate skipped");
-          }
+          written.push(...goldResult.written);
+          attempted += goldResult.attempted;
         }
 
         const staged = Array.isArray(parsed.drafts) ? parsed.drafts : [];
@@ -436,98 +356,19 @@ export function registerConfirmImportRoute(app: FastifyInstance) {
         return written;
       });
 
-      // For TR imports: link each staged document to its confirmed transaction so that
-      // `GET .../document-url` works by transactionId (not just importId).
-      // Must run BEFORE finalizeReceipts (which flips status staged→retained or deletes).
-      if (isPytr && created.length > 0) {
-        const links = created
-          .filter((r): r is typeof r & { externalId: string } => Boolean(r.externalId))
-          .map((r) => ({ sourceEventId: r.externalId, transactionId: r.id }));
-        if (links.length > 0) {
-          await linkTrReceiptsToTransactions(app, { importId: imp.id, links });
-        }
-        // Auto-enrich: fold settlement-PDF tax/fee detail into the newly-confirmed
-        // transactions. Must run BEFORE finalizeReceipts (which may delete the staged
-        // bytes that enrichment reads). Best-effort: swallow errors so enrichment failure
-        // never blocks the confirm response.
-        try {
-          await enrichTransactionsFromStoredDocuments(
-            app,
-            created.map((r) => r.id),
-          );
-        } catch (err) {
-          request.log.warn({ err }, "auto TR enrichment failed (non-fatal)");
-        }
-      }
-
-      // Finalize receipt storage: keep if the portfolio has documentRetention=true,
-      // else delete the staged bytes (privacy-by-default). Best-effort (#231).
-      const portfolio = await ownedPortfolio(app, id, targetPortfolioId);
-      const retain = portfolio?.documentRetention ?? false;
-
-      // Auto-enrich: for each draft classified as "enrichment" in duplicateCheck, fold its
-      // fields into the matched existing transaction and link/retain the staged PDF.
-      // Must run BEFORE finalizeReceipts so the staged bytes are still available.
-      // Best-effort: a failure here never blocks the confirm response.
-      let enriched = 0;
-      if (enrichmentMatches.length > 0) {
-        try {
-          for (const { draftIndex, matchedTransactionId } of enrichmentMatches) {
-            const { draft: d } = resolved[draftIndex];
-            await enrichTransactionFromDrafts(matchedTransactionId, app.db, [d], {
-              importId: imp.id,
-              importSource: source,
-            });
-            if (retain) {
-              // Link and retain the staged PDF to the target transaction so it surfaces
-              // in the transaction-detail view (#259 orphan fix). The 1:1 case: single
-              // PDF upload → single matched tx → set documents.transactionId.
-              await retainDocumentForTransaction(app, {
-                importId: imp.id,
-                transactionId: matchedTransactionId,
-                portfolioId: targetPortfolioId,
-              });
-            }
-            enriched++;
-          }
-          request.log.info({ importId: imp.id, enriched }, "confirm: auto-enrichment applied");
-        } catch (err) {
-          request.log.warn({ err }, "confirm: auto-enrichment failed (non-fatal)");
-        }
-      }
-
-      await finalizeReceipts(app, {
+      const { enriched } = await finalizeConfirmedImport(app, {
         importId: imp.id,
-        portfolioId: targetPortfolioId,
-        retain,
+        targetPortfolioId,
+        created,
+        isPytr,
+        isDkbPdf,
+        isTrPdf,
+        source,
+        enrichmentMatches,
+        resolved,
+        userId: id,
+        requestLog: request.log,
       });
-
-      // For DKB/TR-PDF imports: link every source row to the retained document so the
-      // per-source download button works (both new transactions and enrichment matches).
-      // The document is always a single file per import (one PDF → many source rows),
-      // so we map importId → retained doc id and batch-update in one query.
-      if ((isDkbPdf || isTrPdf) && retain) {
-        try {
-          const retainedDoc = await getDocumentForImport(app, imp.id);
-          if (retainedDoc) {
-            await app.db
-              .update(transactionSources)
-              .set({ documentId: retainedDoc.id })
-              .where(
-                and(eq(transactionSources.importId, imp.id), isNull(transactionSources.documentId)),
-              );
-            request.log.debug(
-              { importId: imp.id, docId: retainedDoc.id },
-              "confirm: linked PDF source rows to retained document",
-            );
-          }
-        } catch (err) {
-          request.log.warn(
-            { err },
-            "confirm: failed to link PDF source rows to document (non-fatal)",
-          );
-        }
-      }
 
       request.log.info(
         {

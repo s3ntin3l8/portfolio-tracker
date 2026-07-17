@@ -1,18 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import { useApiClient } from "@/lib/api";
-import { formatMoneyCompact, bannerAnomalies } from "@/lib/utils";
+import { bannerAnomalies, anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
 import { useTableSort } from "@/lib/table-sort";
 import { useLongPressSelect } from "@/lib/use-long-press-select";
-import {
-  computeAllBanner,
-  computeIncomeBanner,
-  computeTradeBanner,
-} from "@/lib/transaction-banners";
 import { toast } from "sonner";
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { EditTransactionSheet } from "@/components/edit-transaction-sheet";
@@ -34,7 +29,14 @@ import { ReassignMergeDialogs } from "./transactions-table/reassign-merge";
 import { DesktopTable } from "./transactions-table/desktop";
 import { MobileView } from "./transactions-table/mobile";
 import { LoadMoreSection } from "./transactions-table/load-more";
-import { anomalyLabel, type AnomalyTranslator } from "@/lib/utils";
+import {
+  useAnomalyMap,
+  useTransactionUrlNav,
+  useTransactionBanners,
+  useTransactionPagination,
+  useTransactionViewState,
+} from "./transactions-table/hooks";
+import { groupByDay } from "./transactions-table/grouping";
 
 export type { TxRow } from "./transactions-table/types";
 export { SOURCE_ICON } from "./transactions-table/types";
@@ -44,8 +46,6 @@ export {
   txAmountDisplay,
   txNetAmountDisplay,
 } from "./transactions-table/utils";
-
-const PAGE_SIZE = 25;
 
 export function TransactionsTable({
   rows,
@@ -88,82 +88,60 @@ export function TransactionsTable({
 
   const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<TxRow>(TX_COLS);
 
-  // Build a lookup: transactionId → worst-severity anomaly for that row.
-  const anomalyByTxId = useMemo(() => {
-    const m = new Map<string, Anomaly>();
-    for (const a of anomalies) {
-      if (!a.transactionId) continue;
-      const existing = m.get(a.transactionId);
-      if (!existing || (existing.severity === "warning" && a.severity === "error")) {
-        m.set(a.transactionId, a);
-      }
-    }
-    return m;
-  }, [anomalies]);
+  const anomalyByTxId = useAnomalyMap(anomalies);
+  const navigateWithParam = useTransactionUrlNav();
 
-  const flaggedCount = anomalyByTxId.size;
+  const { accumulatedRows, loadingMore, handleLoadMore, visibleCount, setVisibleCount } =
+    useTransactionPagination(rows, total, typeFilter, yearFilterProp, searchQuery, portfolioId);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
-  const [showFlagged, setShowFlagged] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [detailTx, setDetailTx] = useState<TxRow | null>(null);
-  const [editTx, setEditTx] = useState<TxRow | null>(null);
 
-  // Server-side "Load more": accumulate pages from the API as the user clicks "Load more".
-  const [accumulatedRows, setAccumulatedRows] = useState<TxRow[]>(rows);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [prevRows, setPrevRows] = useState(rows);
-  if (prevRows !== rows) {
-    setPrevRows(rows);
-    setAccumulatedRows(rows);
-    setCurrentPage(1);
-  }
-
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-
-  const [reassignRows, setReassignRows] = useState<TxRow[] | null>(null);
-  const [mergeRows, setMergeRows] = useState<[TxRow, TxRow] | null>(null);
-
-  const tr = useTranslations("Transactions.reassign");
-
-  const clearSelection = () => {
-    setSelected(new Set());
-    setSelectionMode(false);
-  };
-
-  // Long-press selection using the shared hook.
   const { selectionMode, setSelectionMode, longPressHandlers, consumeLongPress } =
     useLongPressSelect((id) => {
       setSelected((prev) => new Set(prev).add(id));
     });
 
-  const draftCount = useMemo(() => rows.filter((r) => r.status === "draft").length, [rows]);
+  const {
+    draftFilter,
+    setDraftFilter,
+    showFlagged,
+    setShowFlagged,
+    detailTx,
+    setDetailTx,
+    clearSelection,
+    flaggedCount,
+    draftCount,
+  } = useTransactionViewState(
+    rows,
+    anomalyByTxId,
+    accumulatedRows,
+    sortKey,
+    setSelectionMode,
+    setVisibleCount,
+    setSelected,
+  );
 
-  if (showFlagged && flaggedCount === 0) {
-    setShowFlagged(false);
-  }
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [editTx, setEditTx] = useState<TxRow | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [reassignRows, setReassignRows] = useState<TxRow[] | null>(null);
+  const [mergeRows, setMergeRows] = useState<[TxRow, TxRow] | null>(null);
 
-  if (draftFilter === "drafts" && draftCount === 0) {
-    setDraftFilter("all");
-  }
+  const tr = useTranslations("Transactions.reassign");
 
-  if (detailTx) {
-    const freshDetailTx = accumulatedRows.find((r) => r.id === detailTx.id) ?? null;
-    if (freshDetailTx !== detailTx) {
-      setDetailTx(freshDetailTx);
-    }
-  }
+  const tBanner = useTranslations("Transactions.banners");
+  const activeBannerMode: "all" | "income" | "buy" | "sell" | null =
+    typeFilter == null ? "all" : (typeFilter as "all" | "income" | "buy" | "sell");
 
-  const viewSignature = `${draftFilter}|${showFlagged}|${sortKey}`;
-  const [prevViewSignature, setPrevViewSignature] = useState(viewSignature);
-  if (viewSignature !== prevViewSignature) {
-    setPrevViewSignature(viewSignature);
-    setVisibleCount(PAGE_SIZE);
-  }
+  const { allBanner, incomeBanner, tradeBanner } = useTransactionBanners(
+    activeBannerMode,
+    summary,
+    rows,
+    scopeCurrency,
+    locale,
+    tBanner,
+  );
 
   const yearOptions = useMemo(
     () =>
@@ -189,98 +167,6 @@ export function TransactionsTable({
     typeFilter != null ||
     yearFilterProp != null ||
     draftFilter !== "all";
-
-  const tBanner = useTranslations("Transactions.banners");
-  const activeBannerMode: "all" | "income" | "buy" | "sell" | null =
-    typeFilter == null ? "all" : (typeFilter as "all" | "income" | "buy" | "sell");
-
-  const allBanner = useMemo(() => {
-    if (activeBannerMode !== "all") return null;
-    if (summary) {
-      return {
-        currency: scopeCurrency,
-        tiles: [
-          {
-            label: tBanner("invested"),
-            value: summary.totalInvested
-              ? formatMoneyCompact(Number(summary.totalInvested), scopeCurrency, locale)
-              : "—",
-            sub: "",
-            tone: "neutral" as const,
-          },
-          {
-            label: tBanner("proceeds"),
-            value: summary.totalProceeds
-              ? formatMoneyCompact(Number(summary.totalProceeds), scopeCurrency, locale)
-              : "—",
-            sub: "",
-            tone: "neutral" as const,
-          },
-          {
-            label: tBanner("incomeYtd"),
-            value: summary.totalIncome
-              ? formatMoneyCompact(Number(summary.totalIncome), scopeCurrency, locale)
-              : "—",
-            sub: "",
-            tone: "neutral" as const,
-          },
-        ],
-        mix: [],
-      };
-    }
-    return computeAllBanner(rows, scopeCurrency, locale, {
-      invested: tBanner("invested"),
-      proceeds: tBanner("proceeds"),
-      incomeYtd: tBanner("incomeYtd"),
-      buysCount: (n) => tBanner("buysCount", { count: n }),
-      sellsCount: (n) => tBanner("sellsCount", { count: n }),
-      vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
-      buys: tBanner("buys"),
-      sells: tBanner("sells"),
-      income: tBanner("income"),
-    });
-  }, [activeBannerMode, summary, rows, scopeCurrency, locale, tBanner]);
-  const incomeBanner = useMemo(() => {
-    if (activeBannerMode !== "income") return null;
-    return computeIncomeBanner(rows, scopeCurrency, locale, {
-      vsLastYear: (pct) => tBanner("vsLastYear", { pct }),
-      new: tBanner("newIncome"),
-      perMonth: (amount) => tBanner("perMonth", { amount }),
-      dividends: tBanner("dividends"),
-      couponsInterest: tBanner("couponsInterest"),
-      other: tBanner("otherIncome"),
-    });
-  }, [activeBannerMode, rows, scopeCurrency, locale, tBanner]);
-  const tradeBanner = useMemo(() => {
-    if (activeBannerMode !== "buy" && activeBannerMode !== "sell") return null;
-    if (summary) {
-      const total = activeBannerMode === "buy" ? summary.totalInvested : summary.totalProceeds;
-      if (!total) return null;
-      const money = (n: number) => formatMoneyCompact(n, scopeCurrency, locale);
-      return {
-        currency: scopeCurrency,
-        total: money(Number(total)),
-        count: rows.filter((r) => r.type === activeBannerMode).length,
-        avg: "—",
-        bySymbol: [],
-      };
-    }
-    return computeTradeBanner(rows, activeBannerMode, scopeCurrency, locale);
-  }, [activeBannerMode, summary, rows, scopeCurrency, locale]);
-
-  const navigateWithParam = useCallback(
-    (key: string, value: string | undefined) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
-      params.set("page", "1");
-      router.push(`/transactions?${params.toString()}`);
-    },
-    [router, searchParams],
-  );
 
   const portfolioAnomalies = useMemo(() => bannerAnomalies(anomalies), [anomalies]);
 
@@ -419,55 +305,7 @@ export function TransactionsTable({
       }),
     [locale],
   );
-  const dayGroups = useMemo(() => {
-    const groups: { day: string; label: string; rows: TxRow[] }[] = [];
-    for (const tx of windowedRows) {
-      const day = tx.executedAt.slice(0, 10);
-      const last = groups[groups.length - 1];
-      if (last && last.day === day) last.rows.push(tx);
-      else groups.push({ day, label: dayFmt.format(new Date(tx.executedAt)), rows: [tx] });
-    }
-    return groups;
-  }, [windowedRows, dayFmt]);
-
-  const handleLoadMore = useCallback(async () => {
-    if (visibleCount < sortedRows.length) {
-      setVisibleCount((n) => n + PAGE_SIZE);
-      return;
-    }
-    if (accumulatedRows.length < (total ?? 0)) {
-      setLoadingMore(true);
-      try {
-        const params = new URLSearchParams({
-          page: String(currentPage + 1),
-          pageSize: "25",
-        });
-        if (typeFilter) params.set("type", typeFilter);
-        if (yearFilterProp) params.set("year", yearFilterProp);
-        if (searchQuery) params.set("q", searchQuery);
-        const basePath = portfolioId
-          ? `/api/backend/portfolios/${portfolioId}/transactions`
-          : "/api/backend/networth/transactions";
-        const res = await fetch(`${basePath}?${params}`);
-        const data = await res.json();
-        setAccumulatedRows((prev) => [...prev, ...data.rows]);
-        setCurrentPage((p) => p + 1);
-        setVisibleCount((n) => n + data.rows.length);
-      } finally {
-        setLoadingMore(false);
-      }
-    }
-  }, [
-    visibleCount,
-    sortedRows.length,
-    accumulatedRows.length,
-    total,
-    currentPage,
-    typeFilter,
-    yearFilterProp,
-    searchQuery,
-    portfolioId,
-  ]);
+  const dayGroups = useMemo(() => groupByDay(windowedRows, dayFmt), [windowedRows, dayFmt]);
 
   const showEmpty = visibleRows.length === 0;
 
@@ -611,7 +449,7 @@ export function TransactionsTable({
         windowedCount={windowedRows.length}
         sortedTotal={sortedRows.length}
         total={total}
-        onLoadMore={handleLoadMore}
+        onLoadMore={() => handleLoadMore(sortedRows.length)}
       />
 
       <TransactionDetailSheet
