@@ -117,7 +117,11 @@ export function TransactionsTable({
   // already known from `anomalyByTxId` — so the toggle surfaces every flagged row
   // regardless of pagination/type/year/search scope.
   const flaggedIds = useMemo(() => [...anomalyByTxId.keys()], [anomalyByTxId]);
-  const flaggedIdsKey = flaggedIds.join(",");
+  // Scoped by `portfolioId` too (not just the id set) so switching portfolios while flagged
+  // mode stays on always refetches — an id-set collision across portfolios is practically
+  // impossible (UUIDs), but keying on scope + ids rather than ids alone removes the
+  // possibility outright instead of relying on that.
+  const flaggedIdsKey = `${portfolioId ?? ""}:${flaggedIds.join(",")}`;
   const [flaggedRows, setFlaggedRows] = useState<TxRow[] | null>(null);
   const [flaggedLoading, setFlaggedLoading] = useState(false);
   const [loadedFlaggedKey, setLoadedFlaggedKey] = useState<string | null>(null);
@@ -665,7 +669,10 @@ export function TransactionsTable({
         loadingMore={loadingMore}
         windowedCount={windowedRows.length}
         sortedTotal={sortedRows.length}
-        total={total}
+        // `total` is the whole-scope pagination total (unrelated to the flagged count, see
+        // the `hasMore` comment above) — omit it in flagged mode so the "Showing X of Y"
+        // footer falls back to `sortedTotal` (the flagged count) instead of e.g. "25 of 947".
+        total={showFlagged ? undefined : total}
         onLoadMore={handleLoadMore}
       />
 
