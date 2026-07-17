@@ -28,7 +28,6 @@ repos:
         name: eslint
         entry: npm run lint
         language: system
-        types: [ts, tsx, javascript, jsx]
         pass_filenames: false
         stages: [pre-commit]
 
