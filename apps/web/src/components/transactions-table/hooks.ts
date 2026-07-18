@@ -99,19 +99,19 @@ export function useTransactionBanners(
         mix: [
           {
             label: tBanner("buys"),
-            value: money(investedTotal),
+            value: summary.totalInvested ? money(investedTotal) : "—",
             pct: barPct(investedTotal, max),
             color: BANNER_PALETTE[0],
           },
           {
             label: tBanner("sells"),
-            value: money(proceedsTotal),
+            value: summary.totalProceeds ? money(proceedsTotal) : "—",
             pct: barPct(proceedsTotal, max),
             color: BANNER_PALETTE[1],
           },
           {
             label: tBanner("income"),
-            value: money(incomeTotal),
+            value: summary.totalIncome ? money(incomeTotal) : "—",
             pct: barPct(incomeTotal, max),
             color: BANNER_PALETTE[3],
           },
@@ -149,6 +149,9 @@ export function useTransactionBanners(
       const total = activeBannerMode === "buy" ? summary.totalInvested : summary.totalProceeds;
       if (!total) return null;
       const money = (n: number) => formatMoneyCompact(n, scopeCurrency, locale);
+      // avg and bySymbol reflect only the currently-loaded page, not the
+      // full transaction set — the summary total above is cross-page accurate,
+      // but the server doesn't provide per-symbol aggregation or avg to match.
       const fromRows = computeTradeBanner(rows, activeBannerMode, scopeCurrency, locale);
       if (fromRows) {
         return { ...fromRows, total: money(Number(total)) };
