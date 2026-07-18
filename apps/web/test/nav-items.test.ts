@@ -18,7 +18,7 @@ describe("navActiveKey", () => {
     expect(navActiveKey("/savings")).toBe("reports");
     expect(navActiveKey("/trades")).toBe("reports");
     expect(navActiveKey("/portfolios")).toBe("profile");
-    expect(navActiveKey("/admin")).toBe("profile");
+    expect(navActiveKey("/admin")).toBe("admin");
   });
 
   it("falls back to holdings for unknown routes", () => {

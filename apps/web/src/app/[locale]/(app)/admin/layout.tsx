@@ -106,15 +106,6 @@ export default async function AdminLayout({
     <SettingsShell
       navItems={navItems}
       indexHref="/admin"
-      railTop={
-        <Link
-          href="/settings"
-          className="flex items-center gap-2 rounded-[18px] border border-border bg-card px-3 py-2.5 text-xs font-bold text-muted-foreground shadow-card transition-colors hover:text-foreground"
-        >
-          <ChevronLeft className="size-[15px]" />
-          {t("title")}
-        </Link>
-      }
       landingTop={
         <div className="mb-4 flex items-center gap-3">
           <Link

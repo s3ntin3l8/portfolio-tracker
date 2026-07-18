@@ -48,6 +48,7 @@ export function navActiveKey(pathname: string): string {
   )
     return "reports";
   if (under("/insights")) return "insights";
-  if (under("/settings") || under("/portfolios") || under("/admin")) return "profile";
+  if (under("/admin")) return "admin";
+  if (under("/settings") || under("/portfolios")) return "profile";
   return "holdings";
 }

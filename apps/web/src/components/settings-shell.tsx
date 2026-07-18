@@ -18,6 +18,8 @@ export interface ShellNavItem {
   bg: string;
   /** Small uppercase pill next to the title (e.g. "ADMIN"). */
   badge?: string;
+  /** Hides this item from the desktop rail (but keeps it in mobile landing). */
+  hideFromRail?: boolean;
 }
 
 const CARD_SHADOW = "shadow-card";
@@ -77,33 +79,35 @@ export function SettingsShell({
       <div className="hidden md:sticky md:top-4 md:flex md:flex-col md:gap-3 md:self-start">
         {railTop}
         <nav className={cn("rounded-[18px] bg-card p-2", CARD_SHADOW)}>
-          {navItems.map((item) => {
-            const active = item.key === activeKey;
-            return (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={cn(
-                  "my-0.5 flex items-center gap-2.5 rounded-[12px] px-2.5 py-2.5 text-[13px] font-bold transition-colors",
-                  active ? "bg-background" : "hover:bg-background/60",
-                )}
-              >
-                <span
-                  className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] [&>svg]:size-4"
-                  style={{ background: item.bg, color: item.color }}
+          {navItems
+            .filter((item) => !item.hideFromRail)
+            .map((item) => {
+              const active = item.key === activeKey;
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={cn(
+                    "my-0.5 flex items-center gap-2.5 rounded-[12px] px-2.5 py-2.5 text-[13px] font-bold transition-colors",
+                    active ? "bg-background" : "hover:bg-background/60",
+                  )}
                 >
-                  {item.icon}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
-                {item.badge && (
-                  <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-primary">
-                    {item.badge}
+                  <span
+                    className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] [&>svg]:size-4"
+                    style={{ background: item.bg, color: item.color }}
+                  >
+                    {item.icon}
                   </span>
-                )}
-                <ChevronRight className="size-4 shrink-0 text-text-3" />
-              </Link>
-            );
-          })}
+                  <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                  {item.badge && (
+                    <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-extrabold tracking-wide text-primary">
+                      {item.badge}
+                    </span>
+                  )}
+                  <ChevronRight className="size-4 shrink-0 text-text-3" />
+                </Link>
+              );
+            })}
           {railExtra}
         </nav>
         {railBottom}

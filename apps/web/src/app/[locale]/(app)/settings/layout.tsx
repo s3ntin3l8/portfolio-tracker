@@ -88,6 +88,7 @@ export default async function SettingsLayout({
       color: "#2A6FDB",
       bg: "rgba(42,111,219,.14)",
       badge: t("adminBadge"),
+      hideFromRail: true,
     });
     groups.push([navItems[navItems.length - 1]]);
   }
