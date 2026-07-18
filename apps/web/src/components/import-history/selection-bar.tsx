@@ -11,9 +11,6 @@ export interface SelectionBarProps {
   confirmingBulk: boolean;
   bulkBusy: boolean;
   selectedConfirmedTx: number;
-  allSelected: boolean;
-  onToggleAllVisible: () => void;
-  onSetSelectionMode: (v: boolean) => void;
   onBulkDelete: () => void;
   onSetConfirmingBulk: (v: boolean) => void;
   onExitSelection: () => void;
@@ -25,19 +22,11 @@ export function SelectionBar({
   confirmingBulk,
   bulkBusy,
   selectedConfirmedTx,
-  allSelected,
-  onToggleAllVisible,
-  onSetSelectionMode,
   onBulkDelete,
   onSetConfirmingBulk,
   onExitSelection,
 }: SelectionBarProps) {
   const t = useTranslations("ImportHistory");
-  // The parent passes these but SelectionBar only reads them via the parent wrapper —
-  // eslint folks see them as unused but they're structurally required by consumers:
-  void allSelected;
-  void onToggleAllVisible;
-  void onSetSelectionMode;
   if (!selectionMode) return null;
 
   return (

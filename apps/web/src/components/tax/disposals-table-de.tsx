@@ -2,7 +2,6 @@
 
 import { Fragment } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,10 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SortableTableHead } from "@/components/ui/sortable-table-head";
-import type { TaxDisposalLot, TaxDisposalRow } from "@/lib/server-api";
-import { cn, formatMoney } from "@/lib/utils";
+import type { TaxDisposalRow } from "@/lib/server-api";
+import { formatMoney } from "@/lib/utils";
 import { useTableSort, type ColDef } from "@/lib/table-sort";
 import { useExpandedRows } from "./use-expanded-rows";
+import { DisposalCell, LotRow } from "./disposal-cells";
 import type { TaxTranslator } from "./tax-cards";
 
 const DISPOSAL_COLS: ColDef<TaxDisposalRow>[] = [
@@ -24,77 +24,6 @@ const DISPOSAL_COLS: ColDef<TaxDisposalRow>[] = [
   { key: "proceeds", get: (r) => Number(r.proceeds), type: "numeric" },
   { key: "gain", get: (r) => Number(r.gain), type: "numeric" },
 ];
-
-/** The "Disposal" cell for an aggregate row — symbol + sell date, plus (when the
- *  disposal spans more than one FIFO lot) a muted "avg buy → sell · N lots" sub-line
- *  and a chevron affordance. Single-lot disposals render exactly as before. */
-function DisposalCell({
-  row,
-  money,
-  t,
-  isOpen,
-}: {
-  row: TaxDisposalRow;
-  money: (n: string | number) => string;
-  t: TaxTranslator;
-  isOpen: boolean;
-}) {
-  const hasLots = row.lots.length > 1;
-  return (
-    <TableCell>
-      <div className={cn("relative", hasLots && "pl-4")}>
-        {hasLots && (
-          <ChevronRight
-            className={cn(
-              "absolute -left-0.5 top-0.5 size-3.5 text-muted-foreground transition-transform",
-              isOpen && "rotate-90",
-            )}
-          />
-        )}
-        <span className="font-medium">{row.symbol}</span>{" "}
-        <span className="text-xs text-muted-foreground">{row.when}</span>
-        {hasLots && (
-          <div className="text-xs text-muted-foreground">
-            {t("disposals.lotsLine", {
-              buy: money(row.avgBuyPrice),
-              sell: money(row.sellPrice),
-              count: row.lots.length,
-            })}
-          </div>
-        )}
-      </div>
-    </TableCell>
-  );
-}
-
-/** One consumed FIFO lot, rendered under its expanded aggregate row. `secondaryValue`
- *  is already money-formatted — the German table passes the lot's gain, the
- *  Indonesian table passes the lot's proceeds-based 0.1% tax share. */
-function LotRow({
-  lot,
-  money,
-  secondaryValue,
-  secondaryClassName,
-}: {
-  lot: TaxDisposalLot;
-  money: (n: string | number) => string;
-  secondaryValue: string;
-  secondaryClassName?: string;
-}) {
-  return (
-    <TableRow className="bg-muted/40 text-xs hover:bg-muted/40">
-      <TableCell className="pl-9 text-muted-foreground">
-        {lot.acqDate} · {lot.quantity} @ {money(lot.buyPrice)} → {money(lot.sellPrice)}
-      </TableCell>
-      <TableCell className="tabular text-right text-muted-foreground">
-        {money(lot.proceeds)}
-      </TableCell>
-      <TableCell className={cn("tabular text-right", secondaryClassName)}>
-        {secondaryValue}
-      </TableCell>
-    </TableRow>
-  );
-}
 
 /** "Realized gains · Abgeltungsteuer" disposal table — one row per aggregate disposal
  *  (an ETF bought in several tranches, sold in one order collapses to a single row

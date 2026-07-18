@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, Check, Eye, EyeOff } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { useApiCall } from "@/lib/use-api-call";
+import { useCredentialDialog } from "@/components/admin/use-credential-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,43 +30,26 @@ export function SecretCell({
   onClear: () => Promise<void>;
 }) {
   const t = useTranslations("Admin");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-
-  const [saveState, save] = useApiCall(
-    useCallback(async () => {
-      if (!apiKey.trim()) return;
-      await onSet({ apiKey: apiKey.trim() });
-      setDialogOpen(false);
-    }, [apiKey, onSet]),
-    { fallbackMessage: t("credentialError") },
-  );
-  const [clearState, clear] = useApiCall(
-    useCallback(async () => {
+  const {
+    dialogOpen,
+    apiKey,
+    setApiKey,
+    showKey,
+    setShowKey,
+    busy,
+    error,
+    handleDialogChange,
+    handleSave,
+    handleClear,
+  } = useCredentialDialog({
+    onSave: async (value) => {
+      await onSet({ apiKey: value });
+    },
+    onClear: async () => {
       await onClear();
-    }, [onClear]),
-    { fallbackMessage: t("credentialError") },
-  );
-
-  const busy = saveState.busy || clearState.busy;
-  const error = saveState.error || clearState.error;
-
-  function handleDialogChange(open: boolean) {
-    setDialogOpen(open);
-    if (!open) {
-      setApiKey("");
-      setShowKey(false);
-    }
-  }
-
-  async function handleSave() {
-    void save();
-  }
-
-  async function handleClear() {
-    void clear();
-  }
+    },
+    errorMessage: t("credentialError"),
+  });
 
   if (!encryptionEnabled) {
     return (

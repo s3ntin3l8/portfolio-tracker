@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Eye, EyeOff, Pencil, ShieldOff, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import type { AdminVisionProvider, ProviderCredentialInput } from "@portfolio/api-client";
-import { useApiCall } from "@/lib/use-api-call";
+import { useCredentialDialog } from "@/components/admin/use-credential-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,47 +28,34 @@ export function VisionCredentialCell({
   onClear: (id: string) => Promise<void>;
 }) {
   const t = useTranslations("Admin");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
 
   // Ollama is a URL-based provider — edit a URL, not an API key.
   const isUrlProvider = provider.id === "ollama";
   const hasCredential = isUrlProvider ? provider.hasUrl : provider.hasKey;
 
-  const [setState, handleSet] = useApiCall(
-    useCallback(
-      async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!apiKey.trim()) return;
-        const body: ProviderCredentialInput = isUrlProvider
-          ? { urlOverride: apiKey.trim() }
-          : { apiKey: apiKey.trim() };
-        await onSet(provider.id, body);
-        setApiKey("");
-        setDialogOpen(false);
-      },
-      [apiKey, isUrlProvider, provider.id, onSet],
-    ),
-    { fallbackMessage: t("credentialError") },
-  );
-  const [clearState, handleClear] = useApiCall(
-    useCallback(async () => {
+  const {
+    dialogOpen,
+    apiKey,
+    setApiKey,
+    showKey,
+    setShowKey,
+    busy,
+    error,
+    handleDialogChange,
+    handleSave,
+    handleClear,
+  } = useCredentialDialog({
+    onSave: async (value) => {
+      const body: ProviderCredentialInput = isUrlProvider
+        ? { urlOverride: value }
+        : { apiKey: value };
+      await onSet(provider.id, body);
+    },
+    onClear: async () => {
       await onClear(provider.id);
-    }, [provider.id, onClear]),
-    { fallbackMessage: t("credentialError") },
-  );
-
-  const busy = setState.busy || clearState.busy;
-  const error = setState.error || clearState.error;
-
-  function handleDialogChange(open: boolean) {
-    setDialogOpen(open);
-    if (!open) {
-      setApiKey("");
-      setShowKey(false);
-    }
-  }
+    },
+    errorMessage: t("credentialError"),
+  });
 
   // Encryption disabled — only key-based (non-URL) providers need encryption.
   if (!encryptionEnabled && !isUrlProvider) {
@@ -127,7 +113,13 @@ export function VisionCredentialCell({
             <DialogHeader>
               <DialogTitle>{provider.label}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSet} className="space-y-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSave();
+              }}
+              className="space-y-3"
+            >
               <div className="relative">
                 <Input
                   type={isUrlProvider ? "url" : showKey ? "text" : "password"}

@@ -165,9 +165,6 @@ export function ImportHistory({
         confirmingBulk={confirmingBulk}
         bulkBusy={bulkBusy}
         selectedConfirmedTx={selectedConfirmedTx}
-        allSelected={allSelected}
-        onToggleAllVisible={toggleAllVisible}
-        onSetSelectionMode={setSelectionMode}
         onBulkDelete={bulkDelete}
         onSetConfirmingBulk={setConfirmingBulk}
         onExitSelection={exitSelection}
