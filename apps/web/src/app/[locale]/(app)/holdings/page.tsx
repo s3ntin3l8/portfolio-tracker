@@ -188,7 +188,7 @@ export default async function HoldingsPage({
       </div>
       <p className="text-sm text-muted-foreground">
         {result.status === "ok" && holdings.length > 0
-          ? t("subtitleCount", { count: holdings.length })
+          ? t(currency === "IDR" ? "subtitleCountIdx" : "subtitleCount", { count: holdings.length })
           : t("subtitle")}
       </p>
     </div>
