@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "@/i18n/navigation";
+import { useRouter, usePathname } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import { useApiClient } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
@@ -63,6 +63,7 @@ export function TransactionsTable({
   searchQuery,
   portfolioId,
   total,
+  instrumentId,
 }: {
   rows: TxRow[];
   showPortfolio?: boolean;
@@ -81,11 +82,13 @@ export function TransactionsTable({
   searchQuery?: string;
   portfolioId?: string;
   total?: number;
+  instrumentId?: string;
 }) {
   const ta = useTranslations("Anomalies");
   const locale = useLocale();
   const api = useApiClient();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const { sortKey, sortDir, toggle: toggleSort, sort } = useTableSort<TxRow>(TX_COLS);
@@ -113,6 +116,7 @@ export function TransactionsTable({
       searchQuery,
       portfolioId,
       showFlagged,
+      instrumentId,
     );
 
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -414,7 +418,7 @@ export function TransactionsTable({
             params.delete("q");
           }
           params.set("page", "1");
-          router.push(`/transactions?${params.toString()}`);
+          router.push(`${pathname}?${params.toString()}`);
         }}
       />
 

@@ -6,10 +6,7 @@ import {
   type InstrumentPriceRange,
   type InstrumentDetail,
   type InstrumentScope,
-  type TransactionWithPortfolio,
 } from "./_shared";
-import { loadTransactionsAcrossPortfolios } from "./transactions";
-import { loadPortfolio } from "./portfolios";
 
 export async function loadInstrument(
   id: string,
@@ -40,22 +37,6 @@ export async function loadInstrumentScope(
       : null;
 
   const aggregate = (await getSelectedPortfolioId()) === null;
-  let transactions: TransactionWithPortfolio[] = [];
-  if (aggregate) {
-    const result = await loadTransactionsAcrossPortfolios();
-    if (result.status === "ok") {
-      transactions = result.transactions.filter((t) => t.instrumentId === instrumentId);
-    }
-  } else {
-    const result = await loadPortfolio((api, portfolio) =>
-      api.listTransactions(portfolio.id, holdingsView.displayCurrency),
-    );
-    if (result.status === "ok") {
-      transactions = result.data
-        .filter((t) => t.instrumentId === instrumentId)
-        .map((t) => ({ ...t, portfolioName: result.portfolio.name }));
-    }
-  }
 
   const totalMarketValueDisplay =
     holdingsView.status === "ok"
@@ -67,7 +48,6 @@ export async function loadInstrumentScope(
 
   return {
     holding,
-    transactions,
     aggregate,
     displayCurrency: holdingsView.displayCurrency,
     totalMarketValueDisplay,

@@ -20,7 +20,7 @@ import { InstrumentFundamentalsCard } from "@/components/instrument-fundamentals
 import { InstrumentIncomeCard } from "@/components/instrument-income-card";
 import { CorporateActionsManager } from "@/components/corporate-actions-manager";
 import { InstrumentEditDialog } from "@/components/instrument-edit-dialog";
-import { TransactionsTable } from "@/components/transactions-table";
+import { TransactionsTable, type TxRow } from "@/components/transactions-table";
 import { InstrumentLotsTable } from "@/components/instrument-lots-table";
 import {
   loadInstrument,
@@ -29,16 +29,22 @@ import {
   loadIncomeStats,
   loadPreferences,
   loadMe,
+  loadTransactionsPaginated,
+  loadNetworthTransactionsPaginated,
+  getSelectedPortfolioId,
 } from "@/lib/server-api";
 import { formatMoney, formatPercent, rowAnomalyCounts } from "@/lib/utils";
 import { lastPriceInfo } from "@/lib/instrument-price";
 
 const TIMING = typeof process !== "undefined" && process.env?.TIMING_ENABLED === "true";
+const PAGE_SIZE = 25;
 
 export default async function InstrumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams?: Promise<{ page?: string; type?: string; year?: string; q?: string }>;
 }) {
   // eslint-disable-next-line react-hooks/purity
   const t0 = TIMING ? performance.now() : 0;
@@ -47,6 +53,12 @@ export default async function InstrumentPage({
   const t = await getTranslations("Instrument");
   const ta = await getTranslations("Anomalies");
   const tc = await getTranslations("AssetClass");
+
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp?.page ?? "1"));
+  const typeFilter = sp?.type ?? undefined;
+  const yearFilter = sp?.year ?? undefined;
+  const searchQuery = sp?.q ?? undefined;
 
   // Cost basis is a single global preference — thread it into loadInstrumentScope,
   // which previously silently defaulted to purchase_price regardless of the user's
@@ -60,16 +72,41 @@ export default async function InstrumentPage({
   const anomaliesPromise = loadAnomalies();
   const incomeStatsPromise = loadIncomeStats();
   const mePromise = loadMe();
+  const selectedIdPromise = getSelectedPortfolioId();
 
   const prefs = await prefsPromise;
   const costBasis = prefs?.costBasisMode ?? "purchase_price";
 
-  const [data, scope, allAnomalies, incomeStatsResult] = await Promise.all([
+  // Same aggregate-vs-single-portfolio branch Activity uses for its own paginated fetch —
+  // scoped down to this instrument via `instrumentId` so filter chips/year/search/"Load more"
+  // all operate server-side on this instrument's own transactions, not the whole scope (#585).
+  const selectedId = await selectedIdPromise;
+  const aggregate = selectedId === null;
+  const txPromise = aggregate
+    ? loadNetworthTransactionsPaginated(page, PAGE_SIZE, typeFilter, yearFilter, searchQuery, id)
+    : loadTransactionsPaginated(
+        selectedId!,
+        page,
+        PAGE_SIZE,
+        undefined,
+        typeFilter,
+        yearFilter,
+        searchQuery,
+        id,
+      );
+
+  const [data, scope, allAnomalies, incomeStatsResult, txResult] = await Promise.all([
     instrumentPromise,
     loadInstrumentScope(id, costBasis),
     anomaliesPromise,
     incomeStatsPromise,
+    txPromise,
   ]);
+
+  const txRows: TxRow[] = txResult.status === "ok" ? txResult.rows : [];
+  const txTotal = txResult.status === "ok" ? txResult.total : 0;
+  const txYears = txResult.status === "ok" ? (txResult.years ?? []) : [];
+  const hasActiveTxFilter = Boolean(typeFilter || yearFilter || searchQuery);
 
   if (TIMING) {
     // eslint-disable-next-line react-hooks/purity
@@ -307,48 +344,55 @@ export default async function InstrumentPage({
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle>{t("transactions")}</CardTitle>
-            {(instrumentAnomalyErrors > 0 || instrumentAnomalyWarnings > 0) && (
-              <span
-                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                  instrumentAnomalyErrors > 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                }`}
-              >
-                {instrumentAnomalyErrors > 0 ? (
-                  <AlertCircle className="size-3" />
-                ) : (
-                  <AlertTriangle className="size-3" />
-                )}
-                {instrumentAnomalyErrors > 0
-                  ? ta("bannerError", { count: instrumentAnomalyErrors })
-                  : ta("bannerWarning", { count: instrumentAnomalyWarnings })}
-              </span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="px-0">
-          {scope.transactions.length > 0 ? (
-            <TransactionsTable
-              rows={scope.transactions}
-              showPortfolio={scope.aggregate}
-              anomalies={instrumentAnomalies}
-              showFilterBanners={false}
-              scopeCurrency={scope.displayCurrency}
-            />
-          ) : (
-            <EmptyState
-              icon={Receipt}
-              title={t("noTransactions")}
-              description={t("noTransactionsBody")}
-            />
+      {/* Flat heading + TransactionsTable, matching Activity's own layout exactly (#585) —
+          no outer Card here: DesktopTable already renders its own card-styled box, so
+          wrapping it in a second Card doubled the boxing and flushed the filter chips/search
+          bar against the outer card's edge instead of reading as a toolbar above the table. */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">{t("transactions")}</h2>
+          {(instrumentAnomalyErrors > 0 || instrumentAnomalyWarnings > 0) && (
+            <span
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                instrumentAnomalyErrors > 0
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+              }`}
+            >
+              {instrumentAnomalyErrors > 0 ? (
+                <AlertCircle className="size-3" />
+              ) : (
+                <AlertTriangle className="size-3" />
+              )}
+              {instrumentAnomalyErrors > 0
+                ? ta("bannerError", { count: instrumentAnomalyErrors })
+                : ta("bannerWarning", { count: instrumentAnomalyWarnings })}
+            </span>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        {txTotal > 0 || hasActiveTxFilter ? (
+          <TransactionsTable
+            rows={txRows}
+            showPortfolio={aggregate}
+            anomalies={instrumentAnomalies}
+            showFilterBanners={false}
+            scopeCurrency={scope.displayCurrency}
+            years={txYears}
+            typeFilter={typeFilter}
+            yearFilter={yearFilter}
+            searchQuery={searchQuery}
+            portfolioId={selectedId ?? undefined}
+            total={txTotal}
+            instrumentId={id}
+          />
+        ) : (
+          <EmptyState
+            icon={Receipt}
+            title={t("noTransactions")}
+            description={t("noTransactionsBody")}
+          />
+        )}
+      </div>
 
       <Card>
         <CardHeader>

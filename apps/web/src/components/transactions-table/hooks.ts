@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "@/i18n/navigation";
+import { useRouter, usePathname } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import { formatMoneyCompact } from "@/lib/utils";
 import { useApiClient } from "@/lib/api";
@@ -34,6 +34,7 @@ export function useAnomalyMap(anomalies: Anomaly[]) {
 
 export function useTransactionUrlNav() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   return useCallback(
     (key: string, value: string | undefined) => {
@@ -44,9 +45,9 @@ export function useTransactionUrlNav() {
         params.delete(key);
       }
       params.set("page", "1");
-      router.push(`/transactions?${params.toString()}`);
+      router.push(`${pathname}?${params.toString()}`);
     },
-    [router, searchParams],
+    [router, pathname, searchParams],
   );
 }
 
@@ -178,6 +179,7 @@ export function useTransactionPagination(
   searchQuery: string | undefined,
   portfolioId: string | undefined,
   showFlagged: boolean,
+  instrumentId: string | undefined,
 ) {
   const [accumulatedRows, setAccumulatedRows] = useState<TxRow[]>(rows);
   const [currentPage, setCurrentPage] = useState(1);
@@ -208,6 +210,7 @@ export function useTransactionPagination(
           if (typeFilter) params.set("type", typeFilter);
           if (yearFilterProp) params.set("year", yearFilterProp);
           if (searchQuery) params.set("q", searchQuery);
+          if (instrumentId) params.set("instrumentId", instrumentId);
           const basePath = portfolioId
             ? `/api/backend/portfolios/${portfolioId}/transactions`
             : "/api/backend/networth/transactions";
@@ -231,6 +234,7 @@ export function useTransactionPagination(
       searchQuery,
       portfolioId,
       showFlagged,
+      instrumentId,
     ],
   );
 
