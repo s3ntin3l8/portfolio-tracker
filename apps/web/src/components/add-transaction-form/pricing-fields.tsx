@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
 import { Field } from "./field";
+import { NumberField } from "./number-field";
+import { computeTxTotal, formatMoney, totalLabelKey } from "./totals";
 
 const INCOME_TYPES = ["dividend", "coupon"] as const;
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
@@ -29,6 +31,9 @@ interface PricingFieldsProps {
   date: string;
   setDate: (v: string) => void;
   t: (key: string) => string;
+  /** Suppresses the inline total card — the desktop Summary rail shows the same total
+   *  instead (`add-transaction-form/summary-rail.tsx`). Defaults to showing it (mobile). */
+  isDesktop?: boolean;
 }
 
 export function PricingFields({
@@ -51,6 +56,7 @@ export function PricingFields({
   date,
   setDate,
   t,
+  isDesktop = false,
 }: PricingFieldsProps) {
   const isAcquisition = isTradeType(type);
   const isShareReceipt = isShareReceiptType(type);
@@ -63,15 +69,16 @@ export function PricingFields({
   const showTax = isAcquisition || isIncome;
   const priceRequired = !isShareReceipt && !isTransfer;
 
+  const total = computeTxTotal(type, quantity, price, fees, tax);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {showQuantity && (
         <Field label={isGold ? t("grams") : t("quantity")} htmlFor="tx-qty">
-          <Input
+          <NumberField
             id="tx-qty"
-            inputMode="decimal"
             value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
+            onValueChange={setQuantity}
             required
             min="0.000001"
           />
@@ -89,11 +96,10 @@ export function PricingFields({
         }
         htmlFor="tx-price"
       >
-        <Input
+        <NumberField
           id="tx-price"
-          inputMode="decimal"
           value={price}
-          onChange={(e) => setPrice(e.target.value)}
+          onValueChange={setPrice}
           required={priceRequired}
           placeholder={isTransfer ? t("transferBasisPlaceholder") : undefined}
         />
@@ -106,24 +112,25 @@ export function PricingFields({
       </Field>
       {showFees && (
         <Field label={t("fees")} htmlFor="tx-fees">
-          <Input
-            id="tx-fees"
-            inputMode="decimal"
-            value={fees}
-            onChange={(e) => setFees(e.target.value)}
-          />
+          <NumberField id="tx-fees" value={fees} onValueChange={setFees} />
         </Field>
       )}
       {showTax && (
         <Field label={t("tax")} htmlFor="tx-tax">
-          <Input
-            id="tx-tax"
-            inputMode="decimal"
-            value={tax}
-            onChange={(e) => setTax(e.target.value)}
-            placeholder="0"
-          />
+          <NumberField id="tx-tax" value={tax} onValueChange={setTax} placeholder="0" />
         </Field>
+      )}
+      {/* Live estimated-total line — suppressed on desktop, where the Summary rail
+          (`summary-rail.tsx`) shows the same figure alongside the rest of the form. */}
+      {total && !isDesktop && (
+        <div className="col-span-2 mt-1 flex items-center justify-between rounded-[14px] border border-border bg-card-2 px-4 py-3.5">
+          <span className="text-[13px] font-semibold text-text-2">
+            {t(totalLabelKey(total.kind))}
+          </span>
+          <span className="text-[18px] font-extrabold text-foreground">
+            {formatMoney(total.total, currency)}
+          </span>
+        </div>
       )}
       {isIncome && (
         <Field label={t("shares")} htmlFor="tx-shares">

@@ -20,11 +20,23 @@ import { NewEntryTabs, type NewEntryTab } from "@/components/new-entry-tabs";
 import type { AddTransactionInitial } from "@/components/add-transaction-form";
 import { useRouter, usePathname } from "@/i18n/navigation";
 import { useApiClient } from "@/lib/api";
+import { useMediaQuery } from "@/lib/use-media-query";
 import type { ImportTargetPortfolio } from "@/components/import-flow/types";
 import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
 import { HolderFormDialog } from "@/components/holder-form-dialog";
+import { PortfolioFormBody } from "@/components/portfolio-form-dialog/body";
+import { HolderFormBody } from "@/components/holder-form-dialog/body";
 import { MethodCard } from "@/components/add-transaction-menu/method-card";
 import { loadHarvestPrefill } from "@/components/add-transaction-menu/helpers";
+import { DesktopShell, type DesktopStep } from "@/components/add-transaction-menu/desktop-shell";
+
+/** Mobile's step model plus the desktop-only rail destinations ("events" hosts the
+ *  corporate-action/merger 2-way switch; "portfolio"/"holder" are the inline create
+ *  forms). Mobile only ever sets the first three — see `AddTransactionMenu`. */
+type Step = "choose" | "manual" | "import" | "events" | "portfolio" | "holder";
+
+/** Entry-mode-specific dropzone copy for the import flow — see `UseImportFlowProps`. */
+type ImportEntryMode = "screenshot" | "csv" | "file";
 
 /**
  * The unified add-entry launcher, transcribed from `Pocket Prototype.dc.html`'s
@@ -54,12 +66,14 @@ export function AddTransactionMenu({
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const isDesktop = useMediaQuery("(min-width: 860px)");
 
   const [addOpen, setAddOpen] = useState(false);
-  const [step, setStep] = useState<"choose" | "manual" | "import">("choose");
+  const [step, setStep] = useState<Step>("choose");
   const [portfolios, setPortfolios] = useState<ImportTargetPortfolio[] | null>(null);
   const [defaultPortfolioId, setDefaultPortfolioId] = useState("");
   const [manualDefaultTab, setManualDefaultTab] = useState<NewEntryTab>("transaction");
+  const [importEntryMode, setImportEntryMode] = useState<ImportEntryMode>("file");
   const [initialTransaction, setInitialTransaction] = useState<AddTransactionInitial | undefined>(
     undefined,
   );
@@ -79,6 +93,19 @@ export function AddTransactionMenu({
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
+
+  // The rail's "events"/"portfolio"/"holder" destinations only exist on desktop — if the
+  // viewport shrinks below 860px while one is open, fall back to the mobile chooser rather
+  // than rendering a step the mobile Sheet's own branches don't know about.
+  useEffect(() => {
+    if (isDesktop) return;
+    if (step === "events" || step === "portfolio" || step === "holder") {
+      // Deriving `step` from a matchMedia breakpoint crossing, not synchronizing with an
+      // external system.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStep("choose");
+    }
+  }, [isDesktop, step]);
 
   // A screenshot shared into the app lands on /transactions?shared=1 (see sw.ts); the
   // "Import screenshot" PWA shortcut lands on ?import=1. Either auto-opens the import sheet
@@ -116,20 +143,24 @@ export function AddTransactionMenu({
       if (cancelled) return;
       const targetPortfolioId = loaded[0]?.id ?? "";
 
+      let targetTab: NewEntryTab = "transaction";
       if (harvestInstrumentParam) {
         const prefill = await loadHarvestPrefill(api, harvestInstrumentParam, targetPortfolioId);
         if (cancelled) return;
         setInitialTransaction(prefill ?? undefined);
         setManualDefaultTab("transaction");
       } else {
+        targetTab =
+          entryParam === "corporate-action" || entryParam === "merger" ? entryParam : "transaction";
         setInitialTransaction(undefined);
-        setManualDefaultTab(
-          entryParam === "corporate-action" || entryParam === "merger" ? entryParam : "transaction",
-        );
+        setManualDefaultTab(targetTab);
       }
       setEntryNonce((n) => n + 1);
       setAddOpen(true);
-      setStep("manual");
+      // On desktop, a corporate-action/merger deep link routes to the rail's "Instrument
+      // event" destination instead of "Add transaction" (which is transaction-only there —
+      // see `NewEntryTabs`' `visibleTabs` wiring below).
+      setStep(isDesktop && targetTab !== "transaction" ? "events" : "manual");
       router.replace(pathname);
     })();
 
@@ -154,20 +185,28 @@ export function AddTransactionMenu({
     return mapped;
   }
 
-  async function openImport() {
+  async function openImport(entryMode: ImportEntryMode = "file") {
     await loadPortfolios();
+    setImportEntryMode(entryMode);
     setAddOpen(true);
     setStep("import");
   }
 
   async function openManual() {
     await loadPortfolios();
-    // Plain manual entry (the "Add manually" card) always starts a blank Transaction
-    // tab — reset any leftover deep-link prefill from a previous open.
+    // Plain manual entry (the "Add manually" card / desktop rail's "Add transaction") always
+    // starts a blank Transaction tab — reset any leftover deep-link prefill from a previous
+    // open.
     setInitialTransaction(undefined);
     setManualDefaultTab("transaction");
     setEntryNonce((n) => n + 1);
     setStep("manual");
+  }
+
+  /** Desktop rail only — "Instrument event" hosts corporate-action/merger. */
+  async function openEvents() {
+    await loadPortfolios();
+    setStep("events");
   }
 
   function onAddOpenChange(open: boolean) {
@@ -178,6 +217,15 @@ export function AddTransactionMenu({
     }
   }
 
+  /** Desktop nav-rail click → the corresponding step, reusing the same open/prefill logic
+   *  the mobile chooser cards use for "import"/"manual" so behavior stays identical. */
+  function onSelectDesktopStep(next: DesktopStep) {
+    if (next === "import") void openImport("file");
+    else if (next === "manual") void openManual();
+    else if (next === "events") void openEvents();
+    else setStep(next);
+  }
+
   // Invalidates the local portfolio/holder cache after a dialog creates or edits one,
   // so the next sheet interaction re-fetches fresh data.
   function onDialogSuccess() {
@@ -185,29 +233,9 @@ export function AddTransactionMenu({
     setHasHolders(true);
   }
 
-  return (
+  // ---- Mobile (<860px): the existing bottom sheet, unchanged ----
+  const mobileSheet = (
     <>
-      <Button
-        aria-label={tm("addTransaction")}
-        onClick={() => onAddOpenChange(true)}
-        className={autoOpenFromParams ? "hidden md:inline-flex" : undefined}
-      >
-        <Plus className="size-4" />
-        <span className="hidden sm:inline">{tm("addMenu.add")}</span>
-      </Button>
-      {autoOpenFromParams &&
-        mounted &&
-        createPortal(
-          <Button
-            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-[18px] shadow-lg md:hidden"
-            aria-label={tm("addTransaction")}
-            onClick={() => onAddOpenChange(true)}
-          >
-            <Plus className="size-6" />
-          </Button>,
-          document.body,
-        )}
-
       {/* One sheet, three steps (choose/manual/import) swapped via `step` — swapping content
           in place (rather than closing this sheet and opening a second `Drawer.Root`) avoids
           a vaul body-scroll-lock race that left the import step unopenable (#471). Not
@@ -252,14 +280,14 @@ export function AddTransactionMenu({
                   description={tm("addMenu.screenshotDesc")}
                   tone="green"
                   tag={tm("addMenu.recommended")}
-                  onClick={() => void openImport()}
+                  onClick={() => void openImport("screenshot")}
                 />
                 <MethodCard
                   icon={FileSpreadsheet}
                   title={tm("addMenu.csv")}
                   description={tm("addMenu.csvDesc")}
                   tone="violet"
-                  onClick={() => void openImport()}
+                  onClick={() => void openImport("csv")}
                 />
                 <MethodCard
                   icon={PenLine}
@@ -324,12 +352,118 @@ export function AddTransactionMenu({
                   portfolios={portfolios}
                   defaultPortfolioId={defaultPortfolioId}
                   onClose={() => onAddOpenChange(false)}
+                  entryMode={importEntryMode}
                 />
               )}
             </div>
           )}
         </SheetContent>
       </Sheet>
+    </>
+  );
+
+  // ---- Desktop (≥860px): centered modal, left nav rail, no chooser/back-button step ----
+  const effStep: DesktopStep = step === "choose" ? "manual" : step;
+  const desktopHeaderTitle =
+    effStep === "manual"
+      ? tm("addMenu.railAddTransaction")
+      : effStep === "events"
+        ? tm("addMenu.railInstrumentEvent")
+        : effStep === "portfolio"
+          ? tm("addMenu.createPortfolio")
+          : effStep === "holder"
+            ? tm("addMenu.createAccountHolder")
+            : ti("title");
+
+  const desktopContent =
+    effStep === "manual" ? (
+      portfolios && (
+        <NewEntryTabs
+          key={entryNonce}
+          portfolios={portfolios}
+          initialPortfolioId={defaultPortfolioId}
+          defaultTab="transaction"
+          initialTransaction={initialTransaction}
+          stickyFooter
+          isAdmin={isAdmin}
+          isDesktop
+          hideTabList
+          visibleTabs={["transaction"]}
+        />
+      )
+    ) : effStep === "events" ? (
+      portfolios && (
+        <NewEntryTabs
+          key={entryNonce}
+          portfolios={portfolios}
+          initialPortfolioId={defaultPortfolioId}
+          defaultTab={manualDefaultTab === "merger" ? "merger" : "corporate-action"}
+          stickyFooter
+          isAdmin={isAdmin}
+          isDesktop
+          visibleTabs={["corporate-action", "merger"]}
+        />
+      )
+    ) : effStep === "portfolio" ? (
+      <PortfolioFormBody mode="create" onSuccess={onDialogSuccess} onDone={openManual} />
+    ) : effStep === "holder" ? (
+      <HolderFormBody
+        mode="create"
+        onSuccess={() => {
+          onDialogSuccess();
+          void openManual();
+        }}
+      />
+    ) : (
+      portfolios && (
+        <ImportFlowClient
+          portfolios={portfolios}
+          defaultPortfolioId={defaultPortfolioId}
+          onClose={() => onAddOpenChange(false)}
+          entryMode={importEntryMode}
+        />
+      )
+    );
+
+  const desktopShell = (
+    <DesktopShell
+      open={addOpen}
+      onOpenChange={onAddOpenChange}
+      step={effStep}
+      onSelectStep={onSelectDesktopStep}
+      headerTitle={desktopHeaderTitle}
+      centered={effStep !== "manual"}
+      dismissible={effStep !== "import"}
+      showFooter={effStep !== "import"}
+      onCancel={() => onAddOpenChange(false)}
+    >
+      {desktopContent}
+    </DesktopShell>
+  );
+
+  return (
+    <>
+      <Button
+        aria-label={tm("addTransaction")}
+        onClick={() => onAddOpenChange(true)}
+        className={autoOpenFromParams ? "hidden md:inline-flex" : undefined}
+      >
+        <Plus className="size-4" />
+        <span className="hidden sm:inline">{tm("addMenu.add")}</span>
+      </Button>
+      {autoOpenFromParams &&
+        mounted &&
+        createPortal(
+          <Button
+            className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-6 z-40 size-14 rounded-[18px] shadow-lg md:hidden"
+            aria-label={tm("addTransaction")}
+            onClick={() => onAddOpenChange(true)}
+          >
+            <Plus className="size-6" />
+          </Button>,
+          document.body,
+        )}
+      {isDesktop ? desktopShell : mobileSheet}
     </>
   );
 }
