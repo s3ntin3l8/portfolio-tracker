@@ -90,7 +90,10 @@ export function OnboardingFlow() {
   const th = resolveTheme(isDark, isDesktop);
   const isDone = step === 5;
   const showChrome = !isDone;
-  const showBack = step > 0 && step < 5 && !(step === 4 && addDataView !== "cards");
+  // Verbatim `step > 0 && step < 5` from the design — this also covers the TR
+  // connect sub-step (still step 4), where `handleBack` special-cases returning to
+  // the add-data cards instead of stepping back to Portfolio.
+  const showBack = step > 0 && step < 5;
   const showPrimaryCta = step < 4;
 
   const stepMetaByIndex = [

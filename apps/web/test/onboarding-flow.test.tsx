@@ -227,6 +227,12 @@ describe("OnboardingFlow", () => {
     fireEvent.click(screen.getByText(messages.Onboarding.addData.connectTitle));
     await waitFor(() => expect(screen.getByTestId("tr-connect-flow")).toBeInTheDocument());
     expect(screen.queryByText(messages.Onboarding.addData.manualTitle)).not.toBeInTheDocument();
+
+    // Regression guard: Back from the TR sub-step must return to the add-data cards,
+    // not be hidden or fall through to the Portfolio step.
+    fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.getByText(messages.Onboarding.addData.manualTitle)).toBeInTheDocument();
+    expect(screen.queryByTestId("tr-connect-flow")).not.toBeInTheDocument();
   });
 
   describe("mobile", () => {
