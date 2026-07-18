@@ -1,0 +1,153 @@
+/* Verbatim from Onboarding.dc.html — keyframes, step-fade wrapper, and the three
+   themed input variants (dark / light / mobile-dark-translucent). Do not restyle. */
+
+.inL {
+  width: 100%;
+  font: 500 14.5px "Plus Jakarta Sans";
+  color: #11211a;
+  background: #fff;
+  border: 1px solid #e1e8e4;
+  border-radius: 12px;
+  padding: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.inL:focus {
+  border-color: #0e9f6e;
+}
+.inL::placeholder {
+  color: #aab6af;
+}
+
+.inD {
+  width: 100%;
+  font: 500 14.5px "Plus Jakarta Sans";
+  color: #e7ede9;
+  background: #141b17;
+  border: 1px solid #2a342e;
+  border-radius: 12px;
+  padding: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.inD:focus {
+  border-color: #0e9f6e;
+}
+.inD::placeholder {
+  color: #66746b;
+}
+
+.inA {
+  width: 100%;
+  font: 500 14.5px "Plus Jakarta Sans";
+  color: #e7ede9;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+.inA:focus {
+  border-color: #38e1a4;
+}
+.inA::placeholder {
+  color: #8a988f;
+}
+
+/* Error state: reuses the same input classes' border/radius/padding — only the
+   border color + a helper-text line beneath are added (no new visual language). */
+.inputError {
+  border-color: #e5484d !important;
+}
+.errorText {
+  font: 500 11.5px "Plus Jakarta Sans";
+  color: #e5484d;
+  margin: 6px 2px 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.stepAnim {
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes driftGlow {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(24px, -34px);
+  }
+}
+
+@keyframes swayWave {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-14px, -26px) scale(1.035);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes fadeStep {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+
+.driftGlow {
+  animation: driftGlow 14s ease-in-out infinite;
+}
+.driftGlowReverse {
+  animation: driftGlow 17s ease-in-out infinite reverse;
+}
+.driftGlowIntro {
+  animation: driftGlow 13s ease-in-out infinite;
+}
+.driftGlowIntroReverse {
+  animation: driftGlow 16s ease-in-out infinite reverse;
+}
+.swayWaveBrand {
+  animation:
+    fadeIn 0.25s ease,
+    swayWave 9s ease-in-out infinite;
+}
+.swayWaveIntro {
+  animation: swayWave 15s ease-in-out infinite;
+}
+.fadeStep {
+  animation: fadeStep 0.4s ease both;
+}
+.floaty {
+  animation: floaty 5.5s ease-in-out infinite;
+}

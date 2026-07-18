@@ -24,6 +24,7 @@ export function registerUsersRoutes(app: FastifyInstance) {
           email: users.email,
           name: users.name,
           createdAt: users.createdAt,
+          onboardingCompletedAt: users.onboardingCompletedAt,
           portfolioCount: sql<number>`count(distinct ${portfolios.id})`,
           transactionCount: sql<number>`count(distinct ${transactions.id})`,
           documentCount: sql<number>`count(distinct ${documents.id})`,
@@ -74,6 +75,28 @@ export function registerUsersRoutes(app: FastifyInstance) {
       });
 
       return { revoked: Number(count) };
+    },
+  );
+
+  app.post(
+    "/admin/users/:id/reset-onboarding",
+    {
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+      preHandler: app.requireAdmin,
+    },
+    async (request) => {
+      const { id } = request.params as { id: string };
+
+      await app.db.update(users).set({ onboardingCompletedAt: null }).where(eq(users.id, id));
+
+      await app.db.insert(adminAuditLog).values({
+        actorSub: request.user!.authSub,
+        action: "reset_user_onboarding",
+        target: id,
+        meta: {},
+      });
+
+      return { reset: true };
     },
   );
 

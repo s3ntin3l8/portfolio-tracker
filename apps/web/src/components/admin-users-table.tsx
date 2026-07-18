@@ -71,7 +71,11 @@ export async function AdminUsersTable({ users }: { users: AdminUser[] }) {
                   {u.tokenCount}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <AdminUserActions userId={u.id} email={u.email} />
+                  <AdminUserActions
+                    userId={u.id}
+                    email={u.email}
+                    onboardingCompleted={u.onboardingCompletedAt !== null}
+                  />
                 </td>
               </tr>
             ))}
@@ -105,7 +109,11 @@ export async function AdminUsersTable({ users }: { users: AdminUser[] }) {
               </span>
             </div>
             <div className="mt-2">
-              <AdminUserActions userId={u.id} email={u.email} />
+              <AdminUserActions
+                userId={u.id}
+                email={u.email}
+                onboardingCompleted={u.onboardingCompletedAt !== null}
+              />
             </div>
           </div>
         ))}

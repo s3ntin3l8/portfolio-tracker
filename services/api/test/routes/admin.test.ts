@@ -645,6 +645,7 @@ describe("admin provider config", () => {
     for (const url of [
       "/admin/users",
       "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens",
+      "/admin/users/00000000-0000-0000-0000-000000000000/reset-onboarding",
       "/admin/users/00000000-0000-0000-0000-000000000000/delete",
     ]) {
       const res = await app.inject({ method: url === "/admin/users" ? "GET" : "POST", url });
@@ -658,6 +659,7 @@ describe("admin provider config", () => {
     for (const url of [
       "/admin/users",
       "/admin/users/00000000-0000-0000-0000-000000000000/revoke-tokens",
+      "/admin/users/00000000-0000-0000-0000-000000000000/reset-onboarding",
       "/admin/users/00000000-0000-0000-0000-000000000000/delete",
     ]) {
       const res = await app.inject({
@@ -834,6 +836,46 @@ describe("admin provider config", () => {
       .where(eq(apiTokens.userId, id));
     expect(remaining).toHaveLength(0);
 
+    await app.db.delete(users).where(eq(users.id, id));
+  });
+
+  it("resets a user's onboarding-completed flag and records an audit entry", async () => {
+    const id = await ensureUser("reset-onboarding-test");
+    await app.db.update(users).set({ onboardingCompletedAt: new Date() }).where(eq(users.id, id));
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/users/${id}/reset-onboarding`,
+      headers: auth(await token("admin-reset-onboarding", [ADMIN_GROUP])),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ reset: true });
+
+    const [row] = await app.db
+      .select({ onboardingCompletedAt: users.onboardingCompletedAt })
+      .from(users)
+      .where(eq(users.id, id));
+    expect(row.onboardingCompletedAt).toBeNull();
+
+    const log = await app.db
+      .select()
+      .from(adminAuditLog)
+      .where(eq(adminAuditLog.action, "reset_user_onboarding"))
+      .orderBy(sql`${adminAuditLog.at} desc`)
+      .limit(1);
+    expect(log[0]?.target).toBe(id);
+
+    await app.db.delete(users).where(eq(users.id, id));
+  });
+
+  it("reset-onboarding is forbidden for non-admins", async () => {
+    const id = await ensureUser("reset-onboarding-nonadmin", false);
+    const res = await app.inject({
+      method: "POST",
+      url: `/admin/users/${id}/reset-onboarding`,
+      headers: auth(await token("reset-onboarding-nonadmin")),
+    });
+    expect(res.statusCode).toBe(403);
     await app.db.delete(users).where(eq(users.id, id));
   });
 
