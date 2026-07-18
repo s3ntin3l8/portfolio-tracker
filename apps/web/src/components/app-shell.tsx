@@ -196,7 +196,7 @@ export function AppShell({
           <PullToRefresh scrollContainerRef={scrollContainerRef}>
             <main className="@container mx-auto w-full max-w-[1600px] flex-1 px-4 pb-[max(11rem,calc(env(safe-area-inset-bottom)+11rem))] pt-4 sm:px-6 sm:pt-6 md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
               <InstallPrompt />
-              <RouteTransition>{children}</RouteTransition>
+              <RouteTransition scrollContainerRef={scrollContainerRef}>{children}</RouteTransition>
             </main>
           </PullToRefresh>
         </div>
