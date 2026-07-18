@@ -210,64 +210,6 @@ export function useTransactionPagination(
   return { accumulatedRows, loadingMore, handleLoadMore, visibleCount, setVisibleCount };
 }
 
-export function useTransactionViewState(
-  rows: TxRow[],
-  anomalyByTxId: Map<string, Anomaly>,
-  accumulatedRows: TxRow[],
-  sortKey: string | null,
-  setSelectionMode: (v: boolean) => void,
-  setVisibleCount: React.Dispatch<React.SetStateAction<number>>,
-  setSelected: React.Dispatch<React.SetStateAction<Set<string>>>,
-) {
-  const [draftFilter, setDraftFilter] = useState<"all" | "drafts">("all");
-  const [showFlagged, setShowFlagged] = useState(false);
-  const [detailTx, setDetailTx] = useState<TxRow | null>(null);
-
-  const flaggedCount = anomalyByTxId.size;
-  const draftCount = useMemo(() => rows.filter((r) => r.status === "draft").length, [rows]);
-
-  if (showFlagged && flaggedCount === 0) {
-    setShowFlagged(false);
-  }
-
-  if (draftFilter === "drafts" && draftCount === 0) {
-    setDraftFilter("all");
-  }
-
-  if (detailTx) {
-    const freshDetailTx = accumulatedRows.find((r) => r.id === detailTx.id) ?? null;
-    if (freshDetailTx !== detailTx) {
-      setDetailTx(freshDetailTx);
-    }
-  }
-
-  const clearSelection = useCallback(() => {
-    setSelected(new Set());
-    setSelectionMode(false);
-  }, [setSelected, setSelectionMode]);
-
-  const viewSignature = `${draftFilter}|${showFlagged}|${sortKey}`;
-
-  const [prevViewSignature, setPrevViewSignature] = useState("");
-  if (viewSignature !== prevViewSignature) {
-    setPrevViewSignature(viewSignature);
-    setVisibleCount(PAGE_SIZE);
-  }
-
-  return {
-    draftFilter,
-    setDraftFilter,
-    showFlagged,
-    setShowFlagged,
-    detailTx,
-    setDetailTx,
-    clearSelection,
-    flaggedCount,
-    draftCount,
-    viewSignature,
-  };
-}
-
 export function useFlaggedRows(
   showFlagged: boolean,
   anomalyByTxId: Map<string, Anomaly>,

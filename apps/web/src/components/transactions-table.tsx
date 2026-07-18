@@ -142,7 +142,8 @@ export function TransactionsTable({
   }
 
   if (detailTx) {
-    const freshDetailTx = accumulatedRows.find((r) => r.id === detailTx.id) ?? null;
+    const source = showFlagged ? (flaggedRows ?? []) : accumulatedRows;
+    const freshDetailTx = source.find((r) => r.id === detailTx.id) ?? null;
     if (freshDetailTx !== detailTx) {
       setDetailTx(freshDetailTx);
     }
