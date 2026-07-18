@@ -1,8 +1,5 @@
 import { isTradeType, isTransferType } from "@portfolio/core";
-
-// Mirrors the form's own local INCOME_TYPES (narrower than @portfolio/core's isIncomeType —
-// excludes interest/bonus_cash, which the form buckets under Cash) — see pricing-fields.tsx.
-const INCOME_TYPES = ["dividend", "coupon"] as const;
+import { INCOME_TYPES } from "./constants";
 
 export type TxTotalKind = "trade-buy" | "trade-sell" | "transfer" | "income";
 

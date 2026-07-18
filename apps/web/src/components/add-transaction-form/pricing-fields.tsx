@@ -7,8 +7,8 @@ import { Select } from "@/components/ui/select";
 import { Field } from "./field";
 import { NumberField } from "./number-field";
 import { computeTxTotal, formatMoney, totalLabelKey } from "./totals";
+import { INCOME_TYPES } from "./constants";
 
-const INCOME_TYPES = ["dividend", "coupon"] as const;
 const CURRENCIES = ["IDR", "USD", "EUR", "SGD"];
 
 interface PricingFieldsProps {
