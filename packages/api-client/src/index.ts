@@ -2154,12 +2154,14 @@ export function createApiClient(config: ApiClientConfig) {
       type?: string,
       year?: string,
       q?: string,
+      instrumentId?: string,
     ) => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (convertTo) params.set("convertTo", convertTo);
       if (type) params.set("type", type);
       if (year) params.set("year", year);
       if (q) params.set("q", q);
+      if (instrumentId) params.set("instrumentId", instrumentId);
       return request<{
         rows: Transaction[];
         total: number;
@@ -2175,11 +2177,13 @@ export function createApiClient(config: ApiClientConfig) {
       type?: string,
       year?: string,
       q?: string,
+      instrumentId?: string,
     ) => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (type) params.set("type", type);
       if (year) params.set("year", year);
       if (q) params.set("q", q);
+      if (instrumentId) params.set("instrumentId", instrumentId);
       return request<{ rows: Transaction[]; total: number; years?: string[] }>(
         "GET",
         `/networth/transactions?${params}`,

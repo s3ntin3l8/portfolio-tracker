@@ -258,7 +258,6 @@ export interface InstrumentDetail {
 
 export interface InstrumentScope {
   holding: HoldingValuation | null;
-  transactions: TransactionWithPortfolio[];
   aggregate: boolean;
   displayCurrency: string;
   totalMarketValueDisplay: number | null;

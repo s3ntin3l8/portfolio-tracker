@@ -4,6 +4,11 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
 
 const refresh = vi.fn();
+const push = vi.fn();
+// Mutable per-test "current route" — defaults to Activity's own path. Tests that need to
+// prove the instrument page's filter chips/search stay in place (rather than hardcoding
+// `/transactions`, #585) override this before rendering.
+let mockPathname = "/transactions";
 const bulkDeleteTransactions = vi.fn(async () => ({ deleted: 1 }));
 const deleteTransaction = vi.fn(async () => undefined);
 const setTransactionStatus = vi.fn(async () => ({}));
@@ -37,8 +42,12 @@ const listTransactionsByIds = vi.fn(async (_portfolioId: string, _ids: string[])
 const listNetworthTransactionsByIds = vi.fn(async (_ids: string[]) => [] as TxRow[]);
 
 vi.mock("@/i18n/navigation", () => ({
-  useRouter: () => ({ refresh }),
+  useRouter: () => ({ refresh, push }),
+  usePathname: () => mockPathname,
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
 }));
 // A stable object — some components (e.g. MergeDialog) depend on `api` in a useEffect,
 // and a fresh object literal on every call would re-trigger that effect on every render.
@@ -254,6 +263,8 @@ describe("TransactionsTable", () => {
     refresh.mockClear();
     bulkDeleteTransactions.mockClear();
     reassignTransactions.mockClear();
+    push.mockClear();
+    mockPathname = "/transactions";
   });
 
   it("reassigns a single row to another portfolio", async () => {
@@ -887,6 +898,26 @@ describe("TransactionsTable", () => {
       const rows = screen.getAllByRole("row").slice(1);
       expect(rows.length).toBe(3);
     });
+
+    // Regression (#585): a chip click used to hardcode `router.push('/transactions?...')`,
+    // so clicking a filter on the instrument detail page navigated away to Activity instead
+    // of filtering in place. It must now push to whatever route currently hosts the table.
+    it("a chip click navigates to the current pathname, not a hardcoded /transactions", () => {
+      mockPathname = "/instruments/abc123";
+      renderFilterTable();
+      fireEvent.click(
+        screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }),
+      );
+      expect(push).toHaveBeenCalledWith("/instruments/abc123?type=buy&page=1");
+    });
+
+    it("a chip click on Activity itself still pushes to /transactions", () => {
+      renderFilterTable();
+      fireEvent.click(
+        screen.getByRole("button", { name: messages.Transactions.banners.chipSells }),
+      );
+      expect(push).toHaveBeenCalledWith("/transactions?type=sell&page=1");
+    });
   });
 
   describe("load more pagination", () => {
@@ -1003,6 +1034,58 @@ describe("TransactionsTable", () => {
         ),
       );
       expect(fetchSpy.mock.calls[0][0]).not.toContain("/portfolios/");
+
+      vi.unstubAllGlobals();
+    });
+
+    // Regression (#585): "Load more" used to hardcode a portfolio-wide/networth-wide fetch
+    // with no instrument scoping, so it would have pulled in unrelated instruments' rows if
+    // ever reached from the instrument detail page. It must carry `instrumentId` through.
+    it("includes instrumentId in the aggregate Load more fetch when scoped to an instrument", async () => {
+      const spy = vi.fn(async () => ({
+        json: async () => ({ rows: [], total: 60 }),
+      })) as unknown as typeof fetch;
+      vi.stubGlobal("fetch", spy);
+      const fetchSpy = spy as unknown as ReturnType<typeof vi.fn>;
+
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable rows={manyRows(25)} total={60} instrumentId="instr-1" />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: tb.loadMore }));
+
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining("instrumentId=instr-1")),
+      );
+      expect(fetchSpy.mock.calls[0][0]).toContain("/api/backend/networth/transactions?");
+
+      vi.unstubAllGlobals();
+    });
+
+    it("includes instrumentId in the portfolio-scoped Load more fetch when scoped to an instrument", async () => {
+      const spy = vi.fn(async () => ({
+        json: async () => ({ rows: [], total: 60 }),
+      })) as unknown as typeof fetch;
+      vi.stubGlobal("fetch", spy);
+      const fetchSpy = spy as unknown as ReturnType<typeof vi.fn>;
+
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable
+            rows={manyRows(25)}
+            total={60}
+            portfolioId="p1"
+            instrumentId="instr-1"
+          />
+        </NextIntlClientProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: tb.loadMore }));
+
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining("instrumentId=instr-1")),
+      );
+      expect(fetchSpy.mock.calls[0][0]).toContain("/api/backend/portfolios/p1/transactions?");
 
       vi.unstubAllGlobals();
     });

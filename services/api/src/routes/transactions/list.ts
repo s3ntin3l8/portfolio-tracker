@@ -31,6 +31,7 @@ export function registerListRoutes(app: FastifyInstance) {
       year?: string;
       q?: string;
       ids?: string;
+      instrumentId?: string;
     };
   }>(
     "/portfolios/:portfolioId/transactions",
@@ -49,9 +50,11 @@ export function registerListRoutes(app: FastifyInstance) {
       const yearFilter = request.query.year;
       const searchQuery = request.query.q;
       const idsFilter = parseIdsParam(request.query.ids);
+      const instrumentIdFilter = request.query.instrumentId;
 
       const conditions = [eq(transactions.portfolioId, request.params.portfolioId)];
       if (idsFilter) conditions.push(inArray(transactions.id, idsFilter));
+      if (instrumentIdFilter) conditions.push(eq(transactions.instrumentId, instrumentIdFilter));
       if (typeFilter === "buy") conditions.push(inArray(transactions.type, ACQUISITION_TYPES));
       if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
       if (typeFilter === "income") conditions.push(inArray(transactions.type, INCOME_TYPES));
@@ -83,6 +86,7 @@ export function registerListRoutes(app: FastifyInstance) {
           typeFilter || "",
           yearFilter || "",
           searchQuery || "",
+          instrumentIdFilter || "",
         );
         const cached = await withDerivationCache(transactionsCache, ck, async () => {
           const merged = await app.db
@@ -147,10 +151,13 @@ export function registerListRoutes(app: FastifyInstance) {
             t0,
           );
         });
+        const yearConditions = [eq(transactions.portfolioId, request.params.portfolioId)];
+        if (instrumentIdFilter)
+          yearConditions.push(eq(transactions.instrumentId, instrumentIdFilter));
         const years = await app.db
           .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
           .from(transactions)
-          .where(eq(transactions.portfolioId, request.params.portfolioId))
+          .where(and(...yearConditions))
           .orderBy(sql`1 DESC`);
         const yearList = years.map((r) => String(r.year));
         return { rows: cached.rows, total: cached.total, summary: cached.summary, years: yearList };
@@ -185,6 +192,7 @@ export function registerListRoutes(app: FastifyInstance) {
       year?: string;
       q?: string;
       ids?: string;
+      instrumentId?: string;
     };
   }>("/networth/transactions", { preHandler: app.authenticate }, async (request, _reply) => {
     request.timingName = "GET /networth/transactions";
@@ -198,6 +206,7 @@ export function registerListRoutes(app: FastifyInstance) {
     const yearFilter = request.query.year;
     const searchQuery = request.query.q;
     const idsFilter = parseIdsParam(request.query.ids);
+    const instrumentIdFilter = request.query.instrumentId;
 
     const pfs = await app.db
       .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
@@ -210,6 +219,7 @@ export function registerListRoutes(app: FastifyInstance) {
 
     const conditions = [inArray(transactions.portfolioId, pfIds)];
     if (idsFilter) conditions.push(inArray(transactions.id, idsFilter));
+    if (instrumentIdFilter) conditions.push(eq(transactions.instrumentId, instrumentIdFilter));
     if (typeFilter === "buy") conditions.push(inArray(transactions.type, ACQUISITION_TYPES));
     if (typeFilter === "sell") conditions.push(eq(transactions.type, "sell"));
     if (typeFilter === "income") conditions.push(inArray(transactions.type, INCOME_TYPES));
@@ -240,6 +250,7 @@ export function registerListRoutes(app: FastifyInstance) {
         typeFilter ?? "",
         yearFilter ?? "",
         searchQuery ?? "",
+        instrumentIdFilter ?? "",
       );
       const cached = await withDerivationCache(networthTransactionsCache, ck, async () => {
         const merged = await app.db
@@ -266,10 +277,12 @@ export function registerListRoutes(app: FastifyInstance) {
         const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
         return { rows: enriched, total };
       });
+      const yearConditions = [inArray(transactions.portfolioId, pfIds)];
+      if (instrumentIdFilter) yearConditions.push(eq(transactions.instrumentId, instrumentIdFilter));
       const years = await app.db
         .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
         .from(transactions)
-        .where(inArray(transactions.portfolioId, pfIds))
+        .where(and(...yearConditions))
         .orderBy(sql`1 DESC`);
       const yearList = years.map((r) => String(r.year));
       request.timingMeta = {
