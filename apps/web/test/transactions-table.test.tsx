@@ -1206,6 +1206,53 @@ describe("TransactionsTable", () => {
       expect(listNetworthTransactionsByIds).toHaveBeenCalledWith([offPageId]);
     });
 
+    it("opens the detail sheet when clicking a flagged row in the 'Show flagged only' view (regression #580: reconciliation effect searched accumulatedRows instead of flaggedRows)", async () => {
+      const offPageId = "off-page-flagged-580";
+      const offPageRow: TxRow = {
+        id: offPageId,
+        portfolioId: "p1",
+        type: "transfer_in",
+        quantity: "1",
+        price: "0",
+        fees: "0",
+        tax: null,
+        fxRate: null,
+        currency: "IDR",
+        executedAt: "2020-01-01T00:00:00.000Z",
+        source: "manual",
+        instrument: { symbol: "OFFPAGE", name: "Off Page Co" },
+      };
+      listNetworthTransactionsByIds.mockImplementation(async (ids: string[]) =>
+        [offPageRow].filter((r) => ids.includes(r.id)),
+      );
+
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <TransactionsTable
+            rows={ANOMALY_ROWS}
+            anomalies={[
+              {
+                code: "missing_transfer_basis" as const,
+                severity: "warning" as const,
+                scope: "transaction" as const,
+                transactionId: offPageId,
+              },
+            ]}
+          />
+        </NextIntlClientProvider>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: messages.Anomalies.showFlagged }));
+      await waitFor(() => expect(screen.getByText("Off Page Co")).toBeInTheDocument());
+
+      // Click the flagged row to open the detail sheet.
+      fireEvent.click(screen.getByText("Off Page Co"));
+
+      // The detail sheet must stay open — pre-fix the reconciliation effect searched
+      // accumulatedRows (which doesn't contain the off-page row) and immediately closed it.
+      expect(screen.getByRole("button", { name: messages.Manage.edit })).toBeInTheDocument();
+    });
+
     it("auto-clears the flagged filter when the last flagged transaction is dismissed", async () => {
       const { rerender } = render(
         <NextIntlClientProvider locale="en" messages={messages}>
