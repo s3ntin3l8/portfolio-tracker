@@ -1639,14 +1639,14 @@ describe("TransactionsTable", () => {
     it("switches to the Income banner when the Income chip is selected", () => {
       renderFilterTable({ typeFilter: "income" });
       expect(screen.queryByText(b.invested)).toBeNull();
-      expect(screen.getByText(b.receivedYtd)).toBeInTheDocument();
+      expect(screen.getByText(b.projected12mo)).toBeInTheDocument();
       expect(screen.getByText(b.bySource)).toBeInTheDocument();
     });
 
     it("switches to the Buys banner when the Buys chip is selected", () => {
       renderFilterTable({ typeFilter: "buy" });
       expect(screen.queryByText(b.invested)).toBeNull();
-      expect(screen.getByText(b.investedAllTime)).toBeInTheDocument();
+      expect(screen.getByText(b.averageOrder)).toBeInTheDocument();
       expect(screen.getByText(b.mostBought)).toBeInTheDocument();
     });
 

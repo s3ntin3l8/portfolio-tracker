@@ -1378,7 +1378,8 @@
       "chipBuys": "Buys",
       "chipSells": "Sells",
       "chipIncome": "Income",
-      "chipIssues": "Needs review · {count}"
+      "chipIssues": "Needs review · {count}",
+      "allTime": "All time"
     },
     "subtitleCount": "{count} transactions",
     "transactionCol": "Transaction",

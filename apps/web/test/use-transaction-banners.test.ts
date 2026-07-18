@@ -46,29 +46,30 @@ describe("useTransactionBanners", () => {
       expect(result.current.allBanner!.mix.length).toBeGreaterThan(0);
     });
 
-    it("computes mix from summary totals when summary is present", () => {
+    it("builds tiles from summary totals and leaves mix empty", () => {
       const summary = { totalInvested: "50000", totalProceeds: "30000", totalIncome: "5000" };
       const { result } = renderHook(() =>
-        useTransactionBanners("all", summary, rows, "EUR", "de", tBanner),
+        useTransactionBanners("all", summary, rows, "EUR", "de", tBanner, undefined),
       );
       const b = result.current.allBanner!;
-      expect(b.mix.length).toBe(3);
-      expect(b.mix[0].value).toContain("50.000");
+      expect(b.mix.length).toBe(0);
+      expect(b.tiles.length).toBe(3);
+      expect(b.tiles[0].value).toContain("50.000");
     });
 
-    it("shows em dash for mix value when summary field is null", () => {
+    it("shows em dash for tile values when a summary field is null", () => {
       const summary = { totalInvested: null, totalProceeds: "0", totalIncome: null } as unknown as {
         totalInvested: string;
         totalProceeds: string;
         totalIncome: string;
       };
       const { result } = renderHook(() =>
-        useTransactionBanners("all", summary, rows, "EUR", "de", tBanner),
+        useTransactionBanners("all", summary, rows, "EUR", "de", tBanner, undefined),
       );
       const b = result.current.allBanner!;
-      expect(b.mix[0].value).toBe("—");
-      expect(b.mix[1].value).not.toBe("—");
-      expect(b.mix[2].value).toBe("—");
+      expect(b.tiles[0].value).toBe("—");
+      expect(b.tiles[1].value).not.toBe("—");
+      expect(b.tiles[2].value).toBe("—");
     });
 
     it("returns null when mode is not all", () => {

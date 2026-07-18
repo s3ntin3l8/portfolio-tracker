@@ -33,4 +33,5 @@ export const networthContributionsCache = createStore<ContributionStats>();
 export const networthTransactionsCache = createStore<{
   rows: unknown[];
   total: number;
+  summary?: { totalInvested: string; totalProceeds: string; totalIncome: string };
 }>();

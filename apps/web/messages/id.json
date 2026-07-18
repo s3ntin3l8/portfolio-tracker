@@ -1376,7 +1376,8 @@
       "chipBuys": "Beli",
       "chipSells": "Jual",
       "chipIncome": "Pendapatan",
-      "chipIssues": "Perlu ditinjau · {count}"
+      "chipIssues": "Perlu ditinjau · {count}",
+      "allTime": "Sepanjang waktu"
     },
     "subtitleCount": "{count} transaksi",
     "transactionCol": "Transaksi",

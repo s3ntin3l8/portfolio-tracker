@@ -65,9 +65,7 @@ export function AllFilterBanner({
 }) {
   return (
     <div className={CARD}>
-      {/* Invested / Proceeds / Income stay on one line even on mobile (3 columns); the
-          cash-flow-mix breakdown wraps to a full-width row below. */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-5 lg:items-center">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
         {data.tiles.map((t, i) => (
           <StatBlock
             key={i}
@@ -78,43 +76,37 @@ export function AllFilterBanner({
             bordered={i > 0}
           />
         ))}
-        <Breakdown label={cashFlowMixLabel}>
-          {data.mix.map((m, i) => (
-            <FlowBreakdownRow key={i} {...m} />
-          ))}
-        </Breakdown>
+        {data.mix.length > 0 && (
+          <Breakdown label={cashFlowMixLabel}>
+            {data.mix.map((m, i) => (
+              <FlowBreakdownRow key={i} {...m} />
+            ))}
+          </Breakdown>
+        )}
       </div>
     </div>
   );
 }
 
-/** "Income" filter banner: Received · YTD + Projected · 12mo, plus a "By source" breakdown. */
+/** "Income" filter banner: Projected · 12mo + "By source" breakdown. The YTD
+ *  received figure is always visible in the "All" banner, so this skips the redundant tile. */
 export function IncomeFilterBanner({
   data,
-  receivedLabel,
   projectedLabel,
   bySourceLabel,
 }: {
   data: IncomeBannerData;
-  receivedLabel: string;
   projectedLabel: string;
   bySourceLabel: string;
 }) {
   return (
     <div className={CARD}>
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
-        <StatBlock
-          label={receivedLabel}
-          value={data.ytd}
-          sub={data.trendLabel}
-          tone={data.trendTone}
-        />
+      <div className="grid grid-cols-1 gap-2.5 sm:gap-4 lg:grid-cols-3 lg:items-center">
         <StatBlock
           label={projectedLabel}
           value={data.projected}
           sub={data.projectedNote}
           tone="neutral"
-          bordered
         />
         <Breakdown label={bySourceLabel}>
           {data.bySource.length > 0 ? (
@@ -128,33 +120,23 @@ export function IncomeFilterBanner({
   );
 }
 
-/** "Buys"/"Sells" filter banner: total + order count, average order, per-symbol breakdown. */
+/** "Buys"/"Sells" filter banner: average order + per-symbol breakdown. The headline
+ *  total is always visible in the "All" banner, so this skips the redundant stat tile. */
 export function TradeFilterBanner({
   data,
-  totalLabel,
-  ordersNote,
   averageLabel,
   averageNote,
   headingLabel,
 }: {
   data: TradeBannerData;
-  totalLabel: string;
-  ordersNote: string;
   averageLabel: string;
   averageNote: string;
   headingLabel: string;
 }) {
   return (
     <div className={CARD}>
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4 lg:items-center">
-        <StatBlock label={totalLabel} value={data.total} sub={ordersNote} tone="neutral" />
-        <StatBlock
-          label={averageLabel}
-          value={data.avg}
-          sub={averageNote}
-          tone="neutral"
-          bordered
-        />
+      <div className="grid grid-cols-1 gap-2.5 sm:gap-4 lg:grid-cols-3 lg:items-center">
+        <StatBlock label={averageLabel} value={data.avg} sub={averageNote} tone="neutral" />
         <Breakdown label={headingLabel}>
           {data.bySymbol.map((m, i) => (
             <FlowBreakdownRow key={i} {...m} />
