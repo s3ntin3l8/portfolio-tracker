@@ -38,6 +38,9 @@ __pycache__/
 .claude/projects/
 .superpowers
 
+# Git worktrees
+.worktrees/
+
 # Claude Design sync (see .design-sync/NOTES.md) — staged scripts, build output,
 # and machine-generated cache; the durable set (config.json, NOTES.md,
 # conventions.md, previews/, overrides/) stays tracked.

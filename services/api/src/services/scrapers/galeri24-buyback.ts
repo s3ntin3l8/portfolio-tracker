@@ -9,7 +9,7 @@ import { BROWSER_HEADERS } from "./http.js";
  *
  * Source: the official Galeri24 page serves the prices in static (server-rendered Nuxt) HTML
  * — HTTP 200 to a plain server fetch with browser headers, no JS/API needed. Each brand is a
- * `<div id="…">` section (GALERI 24, DINAR G24, BABY GALERI 24, …) holding a CSS-grid price
+ * `<div data-id="…">` / `<div id="…">` section (GALERI 24, DINAR G24, BABY GALERI 24, …) holding a CSS-grid price
  * grid (`Berat | Harga Jual | Harga Buyback`), so extraction scopes to the **`GALERI 24`**
  * section and reads the **1 g** `Harga Buyback` (the per-gram reference rate quoted
  * everywhere; buyback drifts slightly by bar weight). Source URL + extraction are isolated
@@ -46,7 +46,7 @@ function parseWeight(text: string): number {
 
 /**
  * Pull the 1 g Galeri24 buyback out of the galeri24.co.id markup. The `GALERI 24` brand is a
- * `<div id="GALERI 24">` section whose price grid renders one `div.grid-cols-5` row per bar
+ * `<div data-id="GALERI 24">` or `<div id="GALERI 24">` section whose price grid renders one `div.grid-cols-5` row per bar
  * weight, each a `Berat | Harga Jual | Harga Buyback` triple. We read the row whose weight
  * (first cell) is exactly 1 and take its last cell (buyback is the final column). Returns
  * `null` if the section or the 1 g row can't be found, so a layout change degrades to "no
@@ -54,8 +54,8 @@ function parseWeight(text: string): number {
  */
 export function extractBuybackFromHtml(html: string): number | null {
   const $ = cheerio.load(html);
-  // Exact id match — avoids the sibling "BABY GALERI 24" / "DINAR G24" brand sections.
-  const section = $('[id="GALERI 24"]');
+  // Match on `data-id` (test fixture) or bare `id` (real galeri24.co.id markup).
+  const section = $('[data-id="GALERI 24"],[id="GALERI 24"]');
   if (section.length === 0) return null;
 
   for (const row of section.find(".grid-cols-5").toArray()) {

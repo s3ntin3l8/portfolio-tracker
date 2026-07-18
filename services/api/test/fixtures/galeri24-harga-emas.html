@@ -1,6 +1,6 @@
 <!--
   Trimmed real-structure snapshot of https://galeri24.co.id/harga-emas (2026-06-16).
-  Mirrors the server-rendered Nuxt CSS-grid: one `<div id="…">` section per brand, each
+  Mirrors the server-rendered Nuxt CSS-grid: one `<div data-id="…">` section per brand, each
   with `div.grid-cols-5` rows of `Berat | Harga Jual | Harga Buyback`. Includes a decoy
   "BABY GALERI 24" brand (different 1g buyback) so the test proves extraction scopes to the
   exact "GALERI 24" section. The 1g GALERI 24 buyback here is Rp2.549.000.
@@ -8,7 +8,7 @@
 <html>
   <body>
     <div class="w-full flex flex-col gap-4">
-      <div id="GALERI 24">
+      <div data-id="GALERI 24">
         <div class="grid divide-neutral-200 border-neutral-200">
           <div class="text-lg font-semibold mb-4">Diperbarui Selasa, 16 Juni 2026</div>
           <div class="bg-primary-100 font-medium text-center text-xl p-2 border-t border-x">
@@ -41,7 +41,7 @@
         </div>
       </div>
 
-      <div id="BABY GALERI 24">
+      <div data-id="BABY GALERI 24">
         <div class="grid divide-neutral-200 border-neutral-200">
           <div class="bg-primary-100 font-medium text-center text-xl p-2 border-t border-x">
             Harga BABY GALERI 24

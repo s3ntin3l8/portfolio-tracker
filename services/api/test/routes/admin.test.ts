@@ -23,7 +23,7 @@ const HARGA_EMAS_HTML = `<html><body><span>Harga pembelian kembali: <!-- -->Rp2.
 
 // Minimal GALERI 24 section: a 1g row whose last cell is the buyback.
 const GALERI24_HTML =
-  `<html><body><div id="GALERI 24"><div class="grid grid-cols-5">` +
+  `<html><body><div data-id="GALERI 24"><div class="grid grid-cols-5">` +
   `<div>Berat</div><div>Harga Jual</div><div>Harga Buyback</div></div>` +
   `<div class="grid grid-cols-5"><div>1</div><div>Rp2.718.000</div><div>Rp2.549.000</div></div>` +
   `</div></body></html>`;

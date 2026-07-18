@@ -30,6 +30,7 @@ const SOURCES = {
 async function download(url: string, dest: string): Promise<void> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
+  // codeql[js/http-to-file-access] URLs are hardcoded constants, not user input
   await writeFile(dest, Buffer.from(await res.arrayBuffer()));
   console.log(`  ✓ ${url.split("/").pop()}`);
 }
