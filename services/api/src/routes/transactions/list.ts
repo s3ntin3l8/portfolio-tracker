@@ -278,7 +278,8 @@ export function registerListRoutes(app: FastifyInstance) {
         return { rows: enriched, total };
       });
       const yearConditions = [inArray(transactions.portfolioId, pfIds)];
-      if (instrumentIdFilter) yearConditions.push(eq(transactions.instrumentId, instrumentIdFilter));
+      if (instrumentIdFilter)
+        yearConditions.push(eq(transactions.instrumentId, instrumentIdFilter));
       const years = await app.db
         .select({ year: sql<number>`DISTINCT EXTRACT(YEAR FROM ${transactions.executedAt})` })
         .from(transactions)

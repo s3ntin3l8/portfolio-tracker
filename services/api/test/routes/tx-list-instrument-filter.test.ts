@@ -45,8 +45,20 @@ describe("?instrumentId= filter on the transaction list routes (#585)", () => {
     const [a, b] = await app.db
       .insert(instruments)
       .values([
-        { symbol: "INSTA", market: "IDX", assetClass: "equity", currency: "IDR", name: "Instrument A" },
-        { symbol: "INSTB", market: "IDX", assetClass: "equity", currency: "IDR", name: "Instrument B" },
+        {
+          symbol: "INSTA",
+          market: "IDX",
+          assetClass: "equity",
+          currency: "IDR",
+          name: "Instrument A",
+        },
+        {
+          symbol: "INSTB",
+          market: "IDX",
+          assetClass: "equity",
+          currency: "IDR",
+          name: "Instrument B",
+        },
       ])
       .returning();
     instrumentA = a.id;

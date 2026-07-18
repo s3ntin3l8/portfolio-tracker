@@ -905,9 +905,7 @@ describe("TransactionsTable", () => {
     it("a chip click navigates to the current pathname, not a hardcoded /transactions", () => {
       mockPathname = "/instruments/abc123";
       renderFilterTable();
-      fireEvent.click(
-        screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: messages.Transactions.banners.chipBuys }));
       expect(push).toHaveBeenCalledWith("/instruments/abc123?type=buy&page=1");
     });
 
