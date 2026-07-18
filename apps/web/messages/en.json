@@ -360,6 +360,9 @@
     "revokeTokens": "Revoke tokens",
     "revokeTokensConfirm": "Revoke all personal access tokens for {email}? They will need to log in again to mint new ones.",
     "revokeTokensDone": "Revoked {count} token(s).",
+    "resetOnboarding": "Reset onboarding",
+    "resetOnboardingConfirm": "Reset the onboarding flow for {email}? They will see the onboarding steps again the next time they log in.",
+    "resetOnboardingDone": "Onboarding reset.",
     "deleteUser": "Delete user",
     "deleteUserConfirm": "Permanently delete {email} and all their data? This cannot be undone.",
     "deleteUserDone": "User deleted.",
@@ -1945,5 +1948,220 @@
     "description": "These reached the importer but have no mapping yet, so they're excluded from your balances until added to the mapper.",
     "unparseable": "(no event type)",
     "debug": "Debug details"
+  },
+  "Onboarding": {
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "back": "Back",
+    "skipSetup": "Skip setup",
+    "steps": {
+      "welcome": {
+        "kicker": "WELCOME",
+        "title": "Welcome to Pocket",
+        "sub": "A few quick steps to set up your first portfolio — about a minute."
+      },
+      "holder": {
+        "kicker": "WHO OWNS THIS?",
+        "title": "Set up an account holder",
+        "sub": "Holders are shared across portfolios — add more any time."
+      },
+      "tax": {
+        "kicker": "ABOUT YOU",
+        "title": "Where are you taxed?",
+        "sub": "This decides how gains, dividends and allowances are calculated. Change it later in Settings if needed."
+      },
+      "portfolio": {
+        "kicker": "YOUR FIRST PORTFOLIO",
+        "title": "Create a portfolio",
+        "sub": "Name it, note the brokerage, pick a currency, and tell us how cash should count."
+      },
+      "addData": {
+        "kicker": "ALMOST THERE",
+        "title": "Add your data",
+        "sub": "Connect a broker, import a file, or start fresh. You can always do this later."
+      }
+    },
+    "primaryCta": {
+      "getStarted": "Get started",
+      "continue": "Continue",
+      "createPortfolio": "Create portfolio"
+    },
+    "brand": {
+      "welcome": {
+        "headline": "Every asset, one clear number.",
+        "sub": "Stocks, funds, gold and cash — tracked in one honest figure.",
+        "bullets": [
+          "Every position across your portfolios",
+          "Every buy, sell, dividend and cash flow",
+          "Transactions are the source of truth"
+        ]
+      },
+      "holder": {
+        "headline": "One holder, any number of portfolios.",
+        "sub": "Track your own accounts, a child's, or someone else's — separately or together.",
+        "bullets": [
+          "Holders are shared across all your portfolios",
+          "Birth year powers the savings forecast",
+          "Add more holders any time in Settings"
+        ]
+      },
+      "tax": {
+        "headline": "Tax logic that fits where you live.",
+        "sub": "Germany or Indonesia — Pocket applies the right rules automatically.",
+        "bulletDe": "Sparerpauschbetrag tracking + Abgeltungsteuer harvest suggestions",
+        "bulletId": "0.1% on sales, 10% on dividends — withheld at source",
+        "bulletChange": "Change this anytime in Settings"
+      },
+      "portfolio": {
+        "headline": "Cash-aware from day one.",
+        "sub": "Decide up front whether cash counts toward this portfolio's value.",
+        "bulletCurrency": "Any currency — IDR, USD, EUR, SGD",
+        "bulletCashIn": "Idle cash counts toward net worth",
+        "bulletCashOut": "Cash boundary keeps invest-only portfolios clean",
+        "bulletBrokerage": "Link a brokerage now, or add it later"
+      },
+      "addData": {
+        "headline": "However your data arrives.",
+        "sub": "Direct sync, a CSV export, a screenshot, or by hand — Pocket adapts.",
+        "bullets": [
+          "AI reads your broker app — screenshots, PDFs, CSV",
+          "Imports arrive as drafts you review, then confirm",
+          "Trade Republic syncs via push-approval — no password stored"
+        ]
+      },
+      "done": {
+        "headline": "You're all set.",
+        "sub": "Welcome to Pocket.",
+        "bullet": "Encrypted in transit · Read-only by default"
+      }
+    },
+    "welcome": {
+      "previewLabel": "Net worth",
+      "previewValue": "€42.500",
+      "previewPill": "Preview",
+      "previewCaption": "A preview of your dashboard — once your data's in.",
+      "tourSectionLabel": "What you'll find inside",
+      "tour": {
+        "holdings": {
+          "label": "Holdings",
+          "desc": "Every position, one clear number."
+        },
+        "activity": {
+          "label": "Activity",
+          "desc": "Every transaction — imported, synced or logged by hand."
+        },
+        "reports": {
+          "label": "Reports",
+          "desc": "Income, tax, savings and your full trade history."
+        },
+        "insights": {
+          "label": "Insights",
+          "desc": "Allocation, performance and forecasts."
+        },
+        "profile": {
+          "label": "Profile",
+          "desc": "Accounts, connections and preferences."
+        }
+      }
+    },
+    "holder": {
+      "nameLabel": "Holder name",
+      "namePlaceholder": "e.g. Björn",
+      "nameRequired": "Holder name is required.",
+      "birthYearLabel": "Birth year",
+      "birthYearPlaceholder": "e.g. 1990",
+      "birthYearHelper": "Used for the savings forecast.",
+      "birthYearInvalid": "Enter a year between {min} and {max}."
+    },
+    "tax": {
+      "de": {
+        "name": "Germany",
+        "desc": "Realization-based capital gains tax (Abgeltungsteuer), Sparerpauschbetrag allowance."
+      },
+      "id": {
+        "name": "Indonesia",
+        "desc": "Final tax on realized gains and interest income."
+      }
+    },
+    "portfolio": {
+      "nameLabel": "Portfolio name",
+      "namePlaceholder": "e.g. Trade Republic",
+      "nameRequired": "Portfolio name is required.",
+      "brokerageLabel": "Brokerage",
+      "brokerageOptional": "(optional)",
+      "brokeragePlaceholder": "e.g. Trade Republic",
+      "currencyLabel": "Base currency",
+      "cashLabel": "What kind of account is this?",
+      "cashInvestOnly": "Invest-only",
+      "cashInvestOnlyDesc": "Cash sits outside — only securities count toward value.",
+      "cashSavings": "Savings or deposit",
+      "cashSavingsDesc": "Cash counts toward this portfolio's value.",
+      "cashHelper": "You can change this later in portfolio settings.",
+      "createError": "Something went wrong creating your portfolio. Please try again."
+    },
+    "addData": {
+      "connectTitle": "Connect Trade Republic",
+      "connectDesc": "Sync balances and transactions automatically.",
+      "importTitle": "Import a CSV or screenshot",
+      "importDesc": "Upload a statement or snap a photo.",
+      "manualTitle": "Add manually",
+      "manualDesc": "Log a transaction yourself.",
+      "skipTitle": "Skip for now",
+      "skipDesc": "Head straight to your portfolio.",
+      "trLoading": "Loading…",
+      "trUnavailable": "Trade Republic connection isn't available right now — try again from Settings later.",
+      "importSheetTitle": "Import",
+      "manualSheetTitle": "Add manually"
+    },
+    "done": {
+      "heading": "You're all set",
+      "readySub": "Your portfolio is ready. Welcome to Pocket.",
+      "skippedSub": "Welcome to Pocket. Create a portfolio any time to start tracking.",
+      "cta": "Go to Holdings"
+    },
+    "mobileIntro": {
+      "skip": "Skip",
+      "getStarted": "Get started",
+      "haveAccount": "I already have an account",
+      "netWorthLabel": "Net worth",
+      "netWorthValue": "€42.500",
+      "netWorthPill": "+3,2%",
+      "slide1": {
+        "headline": "Every asset, one clear number.",
+        "sub": "Stocks, funds, gold and cash — tracked in one honest figure, wherever you're taxed.",
+        "bullets": [
+          "Every position across all your portfolios",
+          "Transactions are the source of truth",
+          "Live net worth the moment data lands"
+        ]
+      },
+      "slide2": {
+        "headline": "One holder, any number of portfolios.",
+        "sub": "Track your own accounts, a child's, or someone else's — separately or together.",
+        "bullets": [
+          "Holders are shared across every portfolio",
+          "Birth year powers the savings forecast",
+          "Add more holders any time in Settings"
+        ]
+      },
+      "slide3": {
+        "headline": "Tax logic that fits where you live.",
+        "sub": "Germany or Indonesia — Pocket applies the right rules automatically.",
+        "bullets": [
+          "Sparerpauschbetrag + Abgeltungsteuer for Germany",
+          "Final-tax handling for Indonesia",
+          "Change your regime anytime in Settings"
+        ]
+      },
+      "slide4": {
+        "headline": "However your data arrives.",
+        "sub": "Direct sync, a CSV export, a screenshot, or by hand — Pocket adapts.",
+        "bullets": [
+          "AI reads broker apps — screenshots, PDFs, CSV",
+          "Imports arrive as drafts you confirm",
+          "Trade Republic syncs via push-approval"
+        ]
+      }
+    }
   }
 }

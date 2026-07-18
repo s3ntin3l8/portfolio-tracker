@@ -39,6 +39,19 @@ export async function meRoute(app: FastifyInstance) {
     return row;
   });
 
+  // Marks onboarding as finished (or explicitly skipped) — called from either the
+  // onboarding flow's completion/exit points. Idempotent; an admin can null this back
+  // out via /admin/users/:id/reset-onboarding to let a user replay the flow.
+  app.post("/me/onboarding/complete", { preHandler: app.authenticate }, async (request) => {
+    const id = request.userId;
+    const [row] = await app.db
+      .update(users)
+      .set({ onboardingCompletedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return row;
+  });
+
   // List the caller's personal access tokens (metadata only — the secret is shown
   // exactly once, at creation).
   app.get("/me/tokens", { preHandler: app.authenticate }, async (request) => {

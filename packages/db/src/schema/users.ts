@@ -6,6 +6,10 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   name: text("name"),
   displayCurrency: text("display_currency").notNull().default("IDR"),
+  // Null until the onboarding flow finishes (or is explicitly skipped) — gates the
+  // post-login redirect into /onboarding. Nullable-reset by an admin (reset-onboarding)
+  // so the flow can be replayed for a given user.
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 

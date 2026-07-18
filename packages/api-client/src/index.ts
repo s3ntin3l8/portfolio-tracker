@@ -37,6 +37,8 @@ export interface User {
   email: string;
   name: string | null;
   displayCurrency: string;
+  /** Null until the onboarding flow finishes (or is explicitly skipped). */
+  onboardingCompletedAt: string | null;
   /** Derived from the Authentik admin group each request; gates the admin UI. */
   isAdmin: boolean;
 }
@@ -188,6 +190,7 @@ export interface AdminUser {
   email: string;
   name: string | null;
   createdAt: string;
+  onboardingCompletedAt: string | null;
   portfolioCount: number;
   transactionCount: number;
   documentCount: number;
@@ -1948,6 +1951,7 @@ export function createApiClient(config: ApiClientConfig) {
   return {
     me: () => request<User>("GET", "/me"),
     updateMe: (input: UserUpdate) => request<User>("PATCH", "/me", input),
+    completeOnboarding: () => request<User>("POST", "/me/onboarding/complete"),
 
     // Personal access tokens (programmatic API access scoped to the user).
     listApiTokens: () => request<ApiToken[]>("GET", "/me/tokens"),
@@ -2025,6 +2029,11 @@ export function createApiClient(config: ApiClientConfig) {
       request<{ revoked: number }>("POST", `/admin/users/${encodeURIComponent(id)}/revoke-tokens`),
     adminDeleteUser: (id: string) =>
       request<{ deleted: boolean }>("POST", `/admin/users/${encodeURIComponent(id)}/delete`),
+    adminResetUserOnboarding: (id: string) =>
+      request<{ reset: boolean }>(
+        "POST",
+        `/admin/users/${encodeURIComponent(id)}/reset-onboarding`,
+      ),
 
     getNetWorth: (
       costBasis?: "purchase_price" | "total_paid",

@@ -7,7 +7,16 @@ import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
-export function AdminUserActions({ userId, email }: { userId: string; email: string }) {
+export function AdminUserActions({
+  userId,
+  email,
+  onboardingCompleted = true,
+}: {
+  userId: string;
+  email: string;
+  /** Only offer the reset when onboarding has actually been completed/skipped. */
+  onboardingCompleted?: boolean;
+}) {
   const t = useTranslations("Admin");
   const router = useRouter();
   const api = useApiClient();
@@ -32,6 +41,26 @@ export function AdminUserActions({ userId, email }: { userId: string; email: str
           router.refresh();
         }}
       />
+      {onboardingCompleted && (
+        <ConfirmActionDialog
+          trigger={
+            <Button variant="outline" size="sm">
+              {t("resetOnboarding")}
+            </Button>
+          }
+          title={t("resetOnboarding")}
+          description={t("resetOnboardingConfirm", { email })}
+          entityLabel={email}
+          confirmLabel={t("resetOnboarding")}
+          confirmVariant="default"
+          requiresTyping={false}
+          onConfirm={async () => {
+            await api.adminResetUserOnboarding(userId);
+            toast.success(t("resetOnboardingDone"));
+            router.refresh();
+          }}
+        />
+      )}
       <ConfirmActionDialog
         trigger={
           <Button variant="destructive" size="sm">

@@ -54,6 +54,15 @@ export default async function AppLayout({
     loadNetWorth(),
   ]);
 
+  // Gate new users into onboarding until they finish it (or explicitly skip it) —
+  // `onboardingCompletedAt` is set by either path (see /onboarding). Only gate when
+  // `me` actually resolved (auth configured and the row exists); the migration
+  // backfills every pre-existing user so this never retroactively bounces someone
+  // with real portfolios back into onboarding.
+  if (me && me.onboardingCompletedAt == null) {
+    redirect(`/${locale}/onboarding`);
+  }
+
   // Only surface holders with ≥2 portfolios in the switcher (a 1-portfolio holder
   // is equivalent to selecting that portfolio directly via the portfolios section).
   const qualHolders = qualifyingHolders(selection.portfolios, holders).map((h) => ({

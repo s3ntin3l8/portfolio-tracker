@@ -26,6 +26,7 @@ describe("UpdateProfileForm", () => {
         email: "a@b.c",
         name: "Anya",
         displayCurrency: "IDR",
+        onboardingCompletedAt: null,
         isAdmin: false,
       })),
     };

@@ -360,6 +360,9 @@
     "revokeTokens": "Cabut token",
     "revokeTokensConfirm": "Cabut semua token akses pribadi untuk {email}? Mereka harus login lagi untuk membuat token baru.",
     "revokeTokensDone": "{count} token dicabut.",
+    "resetOnboarding": "Setel ulang orientasi",
+    "resetOnboardingConfirm": "Setel ulang alur orientasi untuk {email}? Mereka akan melihat langkah-langkah orientasi lagi saat login berikutnya.",
+    "resetOnboardingDone": "Orientasi disetel ulang.",
     "deleteUser": "Hapus pengguna",
     "deleteUserConfirm": "Hapus {email} dan semua data mereka secara permanen? Tindakan ini tidak dapat dibatalkan.",
     "deleteUserDone": "Pengguna dihapus.",
@@ -1943,5 +1946,220 @@
     "description": "Ini sampai ke pengimpor tetapi belum memiliki pemetaan, sehingga dikecualikan dari saldo Anda hingga ditambahkan ke mapper.",
     "unparseable": "(tanpa jenis transaksi)",
     "debug": "Detail debug"
+  },
+  "Onboarding": {
+    "themeLight": "Terang",
+    "themeDark": "Gelap",
+    "back": "Kembali",
+    "skipSetup": "Lewati pengaturan",
+    "steps": {
+      "welcome": {
+        "kicker": "SELAMAT DATANG",
+        "title": "Selamat datang di Pocket",
+        "sub": "Beberapa langkah singkat untuk menyiapkan portofolio pertama Anda — sekitar satu menit."
+      },
+      "holder": {
+        "kicker": "MILIK SIAPA INI?",
+        "title": "Siapkan pemilik akun",
+        "sub": "Pemilik akun digunakan bersama di semua portofolio — tambahkan lagi kapan saja."
+      },
+      "tax": {
+        "kicker": "TENTANG ANDA",
+        "title": "Di mana Anda dikenai pajak?",
+        "sub": "Ini menentukan cara keuntungan, dividen, dan potongan pajak dihitung. Anda bisa mengubahnya nanti di Pengaturan."
+      },
+      "portfolio": {
+        "kicker": "PORTOFOLIO PERTAMA ANDA",
+        "title": "Buat portofolio",
+        "sub": "Beri nama, catat pialangnya, pilih mata uang, dan beri tahu kami cara kas dihitung."
+      },
+      "addData": {
+        "kicker": "HAMPIR SELESAI",
+        "title": "Tambahkan data Anda",
+        "sub": "Hubungkan broker, impor berkas, atau mulai dari awal. Anda selalu bisa melakukannya nanti."
+      }
+    },
+    "primaryCta": {
+      "getStarted": "Mulai",
+      "continue": "Lanjutkan",
+      "createPortfolio": "Buat portofolio"
+    },
+    "brand": {
+      "welcome": {
+        "headline": "Setiap aset, satu angka yang jelas.",
+        "sub": "Saham, reksa dana, emas, dan kas — dilacak dalam satu angka yang jujur.",
+        "bullets": [
+          "Setiap posisi di semua portofolio Anda",
+          "Setiap pembelian, penjualan, dividen, dan arus kas",
+          "Transaksi adalah sumber kebenaran"
+        ]
+      },
+      "holder": {
+        "headline": "Satu pemilik, portofolio sebanyak apa pun.",
+        "sub": "Lacak akun Anda sendiri, milik anak, atau orang lain — secara terpisah atau bersama-sama.",
+        "bullets": [
+          "Pemilik akun digunakan bersama di semua portofolio Anda",
+          "Tahun lahir mendukung proyeksi tabungan",
+          "Tambahkan pemilik akun lagi kapan saja di Pengaturan"
+        ]
+      },
+      "tax": {
+        "headline": "Logika pajak yang sesuai tempat tinggal Anda.",
+        "sub": "Jerman atau Indonesia — Pocket menerapkan aturan yang tepat secara otomatis.",
+        "bulletDe": "Pelacakan Sparerpauschbetrag + saran harvesting Abgeltungsteuer",
+        "bulletId": "0,1% atas penjualan, 10% atas dividen — dipotong di sumber",
+        "bulletChange": "Ubah ini kapan saja di Pengaturan"
+      },
+      "portfolio": {
+        "headline": "Sadar-kas sejak awal.",
+        "sub": "Tentukan dari awal apakah kas dihitung dalam nilai portofolio ini.",
+        "bulletCurrency": "Mata uang apa pun — IDR, USD, EUR, SGD",
+        "bulletCashIn": "Kas menganggur ikut dihitung dalam kekayaan bersih",
+        "bulletCashOut": "Batas kas menjaga portofolio investasi tetap bersih",
+        "bulletBrokerage": "Hubungkan pialang sekarang, atau tambahkan nanti"
+      },
+      "addData": {
+        "headline": "Bagaimanapun data Anda tiba.",
+        "sub": "Sinkronisasi langsung, ekspor CSV, tangkapan layar, atau input manual — Pocket menyesuaikan.",
+        "bullets": [
+          "AI membaca aplikasi broker — tangkapan layar, PDF, CSV",
+          "Impor tiba sebagai draf yang Anda tinjau, lalu konfirmasi",
+          "Trade Republic disinkronkan lewat persetujuan push — tanpa kata sandi tersimpan"
+        ]
+      },
+      "done": {
+        "headline": "Semua sudah siap.",
+        "sub": "Selamat datang di Pocket.",
+        "bullet": "Terenkripsi saat transit · Hanya-baca secara default"
+      }
+    },
+    "welcome": {
+      "previewLabel": "Kekayaan bersih",
+      "previewValue": "Rp42.500.000",
+      "previewPill": "Pratinjau",
+      "previewCaption": "Pratinjau dasbor Anda — setelah data Anda masuk.",
+      "tourSectionLabel": "Yang akan Anda temukan di dalam",
+      "tour": {
+        "holdings": {
+          "label": "Posisi",
+          "desc": "Setiap posisi, satu angka yang jelas."
+        },
+        "activity": {
+          "label": "Aktivitas",
+          "desc": "Setiap transaksi — diimpor, disinkronkan, atau dicatat manual."
+        },
+        "reports": {
+          "label": "Laporan",
+          "desc": "Pendapatan, pajak, tabungan, dan riwayat perdagangan lengkap."
+        },
+        "insights": {
+          "label": "Wawasan",
+          "desc": "Alokasi, kinerja, dan proyeksi."
+        },
+        "profile": {
+          "label": "Profil",
+          "desc": "Akun, koneksi, dan preferensi."
+        }
+      }
+    },
+    "holder": {
+      "nameLabel": "Nama pemilik",
+      "namePlaceholder": "mis. Björn",
+      "nameRequired": "Nama pemilik wajib diisi.",
+      "birthYearLabel": "Tahun lahir",
+      "birthYearPlaceholder": "mis. 1990",
+      "birthYearHelper": "Digunakan untuk proyeksi tabungan.",
+      "birthYearInvalid": "Masukkan tahun antara {min} dan {max}."
+    },
+    "tax": {
+      "de": {
+        "name": "Jerman",
+        "desc": "Pajak capital gain berbasis realisasi (Abgeltungsteuer), potongan Sparerpauschbetrag."
+      },
+      "id": {
+        "name": "Indonesia",
+        "desc": "Pajak final atas keuntungan yang direalisasikan dan pendapatan bunga."
+      }
+    },
+    "portfolio": {
+      "nameLabel": "Nama portofolio",
+      "namePlaceholder": "mis. Trade Republic",
+      "nameRequired": "Nama portofolio wajib diisi.",
+      "brokerageLabel": "Pialang",
+      "brokerageOptional": "(opsional)",
+      "brokeragePlaceholder": "mis. Trade Republic",
+      "currencyLabel": "Mata uang dasar",
+      "cashLabel": "Jenis akun apa ini?",
+      "cashInvestOnly": "Khusus investasi",
+      "cashInvestOnlyDesc": "Kas berada di luar — hanya sekuritas yang dihitung dalam nilai.",
+      "cashSavings": "Tabungan atau deposito",
+      "cashSavingsDesc": "Kas dihitung dalam nilai portofolio ini.",
+      "cashHelper": "Anda dapat mengubah ini nanti di pengaturan portofolio.",
+      "createError": "Terjadi kesalahan saat membuat portofolio Anda. Silakan coba lagi."
+    },
+    "addData": {
+      "connectTitle": "Hubungkan Trade Republic",
+      "connectDesc": "Sinkronkan saldo dan transaksi secara otomatis.",
+      "importTitle": "Impor CSV atau tangkapan layar",
+      "importDesc": "Unggah laporan atau ambil foto.",
+      "manualTitle": "Tambahkan manual",
+      "manualDesc": "Catat transaksi sendiri.",
+      "skipTitle": "Lewati untuk saat ini",
+      "skipDesc": "Langsung menuju portofolio Anda.",
+      "trLoading": "Memuat…",
+      "trUnavailable": "Koneksi Trade Republic sedang tidak tersedia — coba lagi nanti di Pengaturan.",
+      "importSheetTitle": "Impor",
+      "manualSheetTitle": "Tambahkan manual"
+    },
+    "done": {
+      "heading": "Semua sudah siap",
+      "readySub": "Portofolio Anda sudah siap. Selamat datang di Pocket.",
+      "skippedSub": "Selamat datang di Pocket. Buat portofolio kapan saja untuk mulai melacak.",
+      "cta": "Ke Posisi"
+    },
+    "mobileIntro": {
+      "skip": "Lewati",
+      "getStarted": "Mulai",
+      "haveAccount": "Saya sudah punya akun",
+      "netWorthLabel": "Kekayaan bersih",
+      "netWorthValue": "Rp42.500.000",
+      "netWorthPill": "+3,2%",
+      "slide1": {
+        "headline": "Setiap aset, satu angka yang jelas.",
+        "sub": "Saham, reksa dana, emas, dan kas — dilacak dalam satu angka yang jujur, di mana pun Anda dikenai pajak.",
+        "bullets": [
+          "Setiap posisi di semua portofolio Anda",
+          "Transaksi adalah sumber kebenaran",
+          "Kekayaan bersih langsung terlihat begitu data masuk"
+        ]
+      },
+      "slide2": {
+        "headline": "Satu pemilik, portofolio sebanyak apa pun.",
+        "sub": "Lacak akun Anda sendiri, milik anak, atau orang lain — secara terpisah atau bersama-sama.",
+        "bullets": [
+          "Pemilik akun digunakan bersama di setiap portofolio",
+          "Tahun lahir mendukung proyeksi tabungan",
+          "Tambahkan pemilik akun lagi kapan saja di Pengaturan"
+        ]
+      },
+      "slide3": {
+        "headline": "Logika pajak yang sesuai tempat tinggal Anda.",
+        "sub": "Jerman atau Indonesia — Pocket menerapkan aturan yang tepat secara otomatis.",
+        "bullets": [
+          "Sparerpauschbetrag + Abgeltungsteuer untuk Jerman",
+          "Penanganan pajak final untuk Indonesia",
+          "Ubah rezim pajak Anda kapan saja di Pengaturan"
+        ]
+      },
+      "slide4": {
+        "headline": "Bagaimanapun data Anda tiba.",
+        "sub": "Sinkronisasi langsung, ekspor CSV, tangkapan layar, atau input manual — Pocket menyesuaikan.",
+        "bullets": [
+          "AI membaca aplikasi broker — tangkapan layar, PDF, CSV",
+          "Impor tiba sebagai draf yang Anda konfirmasi",
+          "Trade Republic disinkronkan lewat persetujuan push"
+        ]
+      }
+    }
   }
 }
