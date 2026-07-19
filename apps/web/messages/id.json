@@ -1357,7 +1357,6 @@
       "sells": "Jual",
       "income": "Pendapatan",
       "cashFlowMix": "Komposisi arus kas",
-      "receivedYtd": "Diterima · YTD",
       "projected12mo": "Proyeksi · 12bln",
       "perMonth": "≈ {amount}/bln",
       "newIncome": "Baru",
@@ -1365,9 +1364,7 @@
       "dividends": "Dividen",
       "couponsInterest": "Kupon & bunga",
       "otherIncome": "Pendapatan lain",
-      "investedAllTime": "Diinvestasikan · sepanjang waktu",
-      "proceedsAllTime": "Hasil penjualan · sepanjang waktu",
-      "ordersCount": "{count, plural, other {# transaksi}}",
+
       "averageOrder": "Rata-rata transaksi",
       "capitalDeployed": "modal dialokasikan",
       "capitalReturned": "modal dikembalikan",
@@ -1376,7 +1373,8 @@
       "chipBuys": "Beli",
       "chipSells": "Jual",
       "chipIncome": "Pendapatan",
-      "chipIssues": "Perlu ditinjau · {count}"
+      "chipIssues": "Perlu ditinjau · {count}",
+      "allTime": "Sepanjang waktu"
     },
     "subtitleCount": "{count} transaksi",
     "transactionCol": "Transaksi",

@@ -4,7 +4,13 @@ import { portfolios, transactions } from "@portfolio/db";
 import { ACQUISITION_TYPES, INCOME_TYPES } from "@portfolio/core";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { parsePagination, cacheKey } from "../helpers.js";
-import { yearRange, transactionsCache, networthTransactionsCache } from "./shared.js";
+import {
+  yearRange,
+  summaryWindowAggregates,
+  summaryAggregates,
+  transactionsCache,
+  networthTransactionsCache,
+} from "./shared.js";
 import { enrichRows, enrichAggregateRows } from "./list-enrichment.js";
 
 // Fetch-by-id support for the "Show flagged only" / "Needs review" filter (#562): the
@@ -93,9 +99,7 @@ export function registerListRoutes(app: FastifyInstance) {
             .select({
               ...getTableColumns(transactions),
               __total: sql<number>`count(*) over ()`,
-              __totalInvested: sql<string>`coalesce(sum(case when ${transactions.type} in ('buy','savings_plan') then ${transactions.price}::numeric * ${transactions.quantity}::numeric + ${transactions.fees}::numeric else 0 end) over (), '0')`,
-              __totalProceeds: sql<string>`coalesce(sum(case when ${transactions.type} = 'sell' then ${transactions.price}::numeric * ${transactions.quantity}::numeric - ${transactions.fees}::numeric else 0 end) over (), '0')`,
-              __totalIncome: sql<string>`coalesce(sum(case when ${transactions.type} in ('dividend','coupon','interest','bonus_cash') then ${transactions.price}::numeric * ${transactions.quantity}::numeric else 0 end) over (), '0')`,
+              ...summaryWindowAggregates(transactions),
             })
             .from(transactions)
             .where(and(...conditions))
@@ -124,11 +128,7 @@ export function registerListRoutes(app: FastifyInstance) {
                 .where(and(...conditions))
                 .then((r) => Number(r[0].count)),
               app.db
-                .select({
-                  totalInvested: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('buy','savings_plan') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric + ${transactions.fees}::numeric ELSE 0 END), '0')`,
-                  totalProceeds: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} = 'sell' THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric - ${transactions.fees}::numeric ELSE 0 END), '0')`,
-                  totalIncome: sql<string>`COALESCE(SUM(CASE WHEN ${transactions.type} IN ('dividend','coupon','interest','bonus_cash') THEN ${transactions.price}::numeric * ${transactions.quantity}::numeric ELSE 0 END), '0')`,
-                })
+                .select({ ...summaryAggregates(transactions) })
                 .from(transactions)
                 .where(and(...conditions))
                 .then((r) => r[0]),
@@ -254,7 +254,11 @@ export function registerListRoutes(app: FastifyInstance) {
       );
       const cached = await withDerivationCache(networthTransactionsCache, ck, async () => {
         const merged = await app.db
-          .select({ ...getTableColumns(transactions), __total: sql<number>`count(*) over ()` })
+          .select({
+            ...getTableColumns(transactions),
+            __total: sql<number>`count(*) over ()`,
+            ...summaryWindowAggregates(transactions),
+          })
           .from(transactions)
           .where(and(...conditions))
           .orderBy(desc(transactions.executedAt))
@@ -262,20 +266,37 @@ export function registerListRoutes(app: FastifyInstance) {
           .offset((page - 1) * pageSize);
 
         let total: number;
+        let summaryRows: { totalInvested: string; totalProceeds: string; totalIncome: string };
         let rows: (typeof transactions.$inferSelect)[];
         if (merged.length > 0) {
           total = Number(merged[0].__total);
-          rows = merged.map(({ __total, ...r }) => r);
+          summaryRows = {
+            totalInvested: merged[0].__totalInvested,
+            totalProceeds: merged[0].__totalProceeds,
+            totalIncome: merged[0].__totalIncome,
+          };
+          rows = merged.map(
+            ({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r,
+          );
         } else {
-          total = await app.db
-            .select({ count: count() })
-            .from(transactions)
-            .where(and(...conditions))
-            .then((r) => Number(r[0].count));
+          const [c, s] = await Promise.all([
+            app.db
+              .select({ count: count() })
+              .from(transactions)
+              .where(and(...conditions))
+              .then((r) => Number(r[0].count)),
+            app.db
+              .select({ ...summaryAggregates(transactions) })
+              .from(transactions)
+              .where(and(...conditions))
+              .then((r) => r[0]),
+          ]);
+          total = c;
+          summaryRows = s;
           rows = [];
         }
         const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
-        return { rows: enriched, total };
+        return { rows: enriched, total, summary: summaryRows };
       });
       const yearConditions = [inArray(transactions.portfolioId, pfIds)];
       if (instrumentIdFilter)
@@ -292,7 +313,12 @@ export function registerListRoutes(app: FastifyInstance) {
         total: cached.total,
         portfolioCount: pfs.length,
       };
-      return { rows: cached.rows, total: cached.total, years: yearList };
+      return {
+        rows: cached.rows,
+        total: cached.total,
+        summary: cached.summary,
+        years: yearList,
+      };
     }
 
     const rows = await app.db

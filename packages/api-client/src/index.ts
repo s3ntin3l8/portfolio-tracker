@@ -2184,10 +2184,12 @@ export function createApiClient(config: ApiClientConfig) {
       if (year) params.set("year", year);
       if (q) params.set("q", q);
       if (instrumentId) params.set("instrumentId", instrumentId);
-      return request<{ rows: Transaction[]; total: number; years?: string[] }>(
-        "GET",
-        `/networth/transactions?${params}`,
-      );
+      return request<{
+        rows: Transaction[];
+        total: number;
+        summary?: { totalInvested: string; totalProceeds: string; totalIncome: string };
+        years?: string[];
+      }>("GET", `/networth/transactions?${params}`);
     },
     /** Fetch exactly the given transaction ids, enriched the same way as a normal page —
      *  regardless of pagination/type/year/search scope. Used by "Show flagged only" (#562)

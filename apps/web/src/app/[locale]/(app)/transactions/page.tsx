@@ -69,7 +69,10 @@ export default async function TransactionsPage({
     status = result.status;
     rows = result.rows;
     total = result.total;
-    if (result.status === "ok") txYears = result.years ?? [];
+    if (result.status === "ok") {
+      txSummary = result.summary ?? null;
+      txYears = result.years ?? [];
+    }
     scopeCurrency = me?.displayCurrency ?? "IDR";
     anomalies = anomalyResult;
   } else {

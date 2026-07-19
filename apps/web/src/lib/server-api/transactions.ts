@@ -47,7 +47,13 @@ export async function loadNetworthTransactionsPaginated(
   q?: string,
   instrumentId?: string,
 ): Promise<
-  | { status: "ok"; rows: Transaction[]; total: number; years?: string[] }
+  | {
+      status: "ok";
+      rows: Transaction[];
+      total: number;
+      summary?: { totalInvested: string; totalProceeds: string; totalIncome: string };
+      years?: string[];
+    }
   | { status: "unavailable"; rows: []; total: 0 }
 > {
   const api = await getServerApi();
@@ -61,7 +67,13 @@ export async function loadNetworthTransactionsPaginated(
       q,
       instrumentId,
     );
-    return { status: "ok", rows: data.rows, total: data.total, years: data.years };
+    return {
+      status: "ok",
+      rows: data.rows,
+      total: data.total,
+      summary: data.summary,
+      years: data.years,
+    };
   } catch {
     return { status: "unavailable", rows: [], total: 0 };
   }

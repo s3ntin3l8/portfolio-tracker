@@ -173,6 +173,7 @@ export function TransactionsTable({
     scopeCurrency,
     locale,
     tBanner,
+    yearFilterProp,
   );
 
   const yearOptions = useMemo(
@@ -369,7 +370,6 @@ export function TransactionsTable({
       {showFilterBanners && incomeBanner && (
         <IncomeFilterBanner
           data={incomeBanner}
-          receivedLabel={tBanner("receivedYtd")}
           projectedLabel={tBanner("projected12mo")}
           bySourceLabel={tBanner("bySource")}
         />
@@ -379,8 +379,6 @@ export function TransactionsTable({
         (activeBannerMode === "buy" || activeBannerMode === "sell") && (
           <TradeFilterBanner
             data={tradeBanner}
-            totalLabel={tBanner(activeBannerMode === "buy" ? "investedAllTime" : "proceedsAllTime")}
-            ordersNote={tBanner("ordersCount", { count: tradeBanner.count })}
             averageLabel={tBanner("averageOrder")}
             averageNote={tBanner(
               activeBannerMode === "buy" ? "capitalDeployed" : "capitalReturned",

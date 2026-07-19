@@ -62,17 +62,14 @@ describe("IncomeFilterBanner", () => {
     bySource: [{ label: "Dividends", value: "Rp 700", pct: 70, color: "#0E9F6E" }],
   };
 
-  it("renders Received/Projected stats and the By-source breakdown", () => {
+  it("renders Projected stats and the By-source breakdown", () => {
     render(
       <IncomeFilterBanner
         data={data}
-        receivedLabel="Received · YTD"
         projectedLabel="Projected · 12mo"
         bySourceLabel="By source"
       />,
     );
-    expect(screen.getByText("Received · YTD")).toBeInTheDocument();
-    expect(screen.getByText("Rp 1.000")).toBeInTheDocument();
     expect(screen.getByText("Projected · 12mo")).toBeInTheDocument();
     expect(screen.getByText("Rp 1.200")).toBeInTheDocument();
     expect(screen.getByText("By source")).toBeInTheDocument();
@@ -83,7 +80,6 @@ describe("IncomeFilterBanner", () => {
     render(
       <IncomeFilterBanner
         data={{ ...data, bySource: [] }}
-        receivedLabel="Received · YTD"
         projectedLabel="Projected · 12mo"
         bySourceLabel="By source"
       />,
@@ -104,20 +100,17 @@ describe("TradeFilterBanner", () => {
     ],
   };
 
-  it("renders totals and the per-symbol breakdown", () => {
+  it("renders average order and the per-symbol breakdown", () => {
     render(
       <TradeFilterBanner
         data={data}
-        totalLabel="Invested · all time"
-        ordersNote="2 orders"
         averageLabel="Average order"
         averageNote="capital deployed"
         headingLabel="Most bought"
       />,
     );
-    expect(screen.getByText("Invested · all time")).toBeInTheDocument();
-    expect(screen.getByText("Rp 6.000")).toBeInTheDocument();
-    expect(screen.getByText("2 orders")).toBeInTheDocument();
+    expect(screen.getByText("Average order")).toBeInTheDocument();
+    expect(screen.getByText("Rp 3.000")).toBeInTheDocument();
     expect(screen.getByText("Most bought")).toBeInTheDocument();
     expect(screen.getByText("TLKM")).toBeInTheDocument();
     expect(screen.getByText("BBCA")).toBeInTheDocument();

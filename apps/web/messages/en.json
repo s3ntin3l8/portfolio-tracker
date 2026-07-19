@@ -1359,7 +1359,6 @@
       "sells": "Sells",
       "income": "Income",
       "cashFlowMix": "Cash flow mix",
-      "receivedYtd": "Received · YTD",
       "projected12mo": "Projected · 12mo",
       "perMonth": "≈ {amount}/mo",
       "newIncome": "New",
@@ -1367,9 +1366,7 @@
       "dividends": "Dividends",
       "couponsInterest": "Coupons & interest",
       "otherIncome": "Other income",
-      "investedAllTime": "Invested · all time",
-      "proceedsAllTime": "Proceeds · all time",
-      "ordersCount": "{count, plural, one {# order} other {# orders}}",
+
       "averageOrder": "Average order",
       "capitalDeployed": "capital deployed",
       "capitalReturned": "capital returned",
@@ -1378,7 +1375,8 @@
       "chipBuys": "Buys",
       "chipSells": "Sells",
       "chipIncome": "Income",
-      "chipIssues": "Needs review · {count}"
+      "chipIssues": "Needs review · {count}",
+      "allTime": "All time"
     },
     "subtitleCount": "{count} transactions",
     "transactionCol": "Transaction",

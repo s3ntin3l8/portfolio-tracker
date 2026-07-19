@@ -9,8 +9,6 @@ import {
   computeAllBanner,
   computeIncomeBanner,
   computeTradeBanner,
-  barPct,
-  BANNER_PALETTE,
 } from "@/lib/transaction-banners";
 import type { AllBannerData, IncomeBannerData, TradeBannerData } from "@/lib/transaction-banners";
 import type { Anomaly } from "@portfolio/api-client";
@@ -62,11 +60,14 @@ export function useTransactionBanners(
   scopeCurrency: string,
   locale: string,
   tBanner: (key: string, values?: Record<string, string | number | Date> | undefined) => string,
+  yearFilter?: string,
 ): {
   allBanner: AllBannerData | null;
   incomeBanner: IncomeBannerData | null;
   tradeBanner: TradeBannerData | null;
 } {
+  const periodLabel = yearFilter ?? tBanner("allTime");
+
   const allBanner = useMemo(() => {
     if (activeBannerMode !== "all") return null;
     if (summary) {
@@ -74,49 +75,29 @@ export function useTransactionBanners(
       const investedTotal = Number(summary.totalInvested ?? 0);
       const proceedsTotal = Number(summary.totalProceeds ?? 0);
       const incomeTotal = Number(summary.totalIncome ?? 0);
-      const max = Math.max(investedTotal, proceedsTotal, incomeTotal, 1);
       return {
         currency: scopeCurrency,
         tiles: [
           {
             label: tBanner("invested"),
             value: summary.totalInvested ? money(investedTotal) : "—",
-            sub: "",
+            sub: periodLabel,
             tone: "neutral" as const,
           },
           {
             label: tBanner("proceeds"),
             value: summary.totalProceeds ? money(proceedsTotal) : "—",
-            sub: "",
+            sub: periodLabel,
             tone: "neutral" as const,
-          },
-          {
-            label: tBanner("incomeYtd"),
-            value: summary.totalIncome ? money(incomeTotal) : "—",
-            sub: "",
-            tone: "neutral" as const,
-          },
-        ],
-        mix: [
-          {
-            label: tBanner("buys"),
-            value: summary.totalInvested ? money(investedTotal) : "—",
-            pct: barPct(investedTotal, max),
-            color: BANNER_PALETTE[0],
-          },
-          {
-            label: tBanner("sells"),
-            value: summary.totalProceeds ? money(proceedsTotal) : "—",
-            pct: barPct(proceedsTotal, max),
-            color: BANNER_PALETTE[1],
           },
           {
             label: tBanner("income"),
             value: summary.totalIncome ? money(incomeTotal) : "—",
-            pct: barPct(incomeTotal, max),
-            color: BANNER_PALETTE[3],
+            sub: periodLabel,
+            tone: "neutral" as const,
           },
         ],
+        mix: [],
       };
     }
     return computeAllBanner(rows, scopeCurrency, locale, {
@@ -130,7 +111,7 @@ export function useTransactionBanners(
       sells: tBanner("sells"),
       income: tBanner("income"),
     });
-  }, [activeBannerMode, summary, rows, scopeCurrency, locale, tBanner]);
+  }, [activeBannerMode, summary, rows, scopeCurrency, locale, tBanner, periodLabel]);
 
   const incomeBanner = useMemo(() => {
     if (activeBannerMode !== "income") return null;
