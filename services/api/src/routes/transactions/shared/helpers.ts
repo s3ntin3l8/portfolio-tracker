@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   corporateActions,
   instruments,
@@ -28,6 +28,38 @@ export function yearRange(year: number): { start: Date; end: Date } {
   return {
     start: new Date(Date.UTC(year, 0, 1)),
     end: new Date(Date.UTC(year + 1, 0, 1)),
+  };
+}
+
+/** CASE expressions shared by the window-function and aggregate variants of the
+ *  summary totals (Invested/Proceeds/Income). Kept in one place so the formulas
+ *  can't silently drift between the per-portfolio and networth SQL queries. */
+function investedCase(t: typeof transactions): ReturnType<typeof sql> {
+  return sql`case when ${t.type} in ('buy','savings_plan') then ${t.price}::numeric * ${t.quantity}::numeric + ${t.fees}::numeric else 0 end`;
+}
+function proceedsCase(t: typeof transactions): ReturnType<typeof sql> {
+  return sql`case when ${t.type} = 'sell' then ${t.price}::numeric * ${t.quantity}::numeric - ${t.fees}::numeric else 0 end`;
+}
+function incomeCase(t: typeof transactions): ReturnType<typeof sql> {
+  return sql`case when ${t.type} in ('dividend','coupon','interest','bonus_cash') then ${t.price}::numeric * ${t.quantity}::numeric else 0 end`;
+}
+
+/** Window-function summary aggregates (ride alongside LIMIT/OFFSET via OVER()).
+ *  The keys are prefixed `__` so callers can strip them from the result rows. */
+export function summaryWindowAggregates(t: typeof transactions) {
+  return {
+    __totalInvested: sql<string>`coalesce(sum(${investedCase(t)}) over (), '0')`,
+    __totalProceeds: sql<string>`coalesce(sum(${proceedsCase(t)}) over (), '0')`,
+    __totalIncome: sql<string>`coalesce(sum(${incomeCase(t)}) over (), '0')`,
+  };
+}
+
+/** Aggregate-only summary (used in the fallback query for empty result pages). */
+export function summaryAggregates(t: typeof transactions) {
+  return {
+    totalInvested: sql<string>`COALESCE(SUM(${investedCase(t)}), '0')`,
+    totalProceeds: sql<string>`COALESCE(SUM(${proceedsCase(t)}), '0')`,
+    totalIncome: sql<string>`COALESCE(SUM(${incomeCase(t)}), '0')`,
   };
 }
 

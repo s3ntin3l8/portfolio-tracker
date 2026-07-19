@@ -639,6 +639,104 @@ describe("auth + portfolios + transactions", () => {
     expect(page10.json().total).toBe(3);
   });
 
+  it("reports correct summary totals from /networth/transactions across multiple portfolios", async () => {
+    const t = await token("networth-summary-user");
+    const pf1 = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Networth summary PF1", baseCurrency: "idr" },
+      })
+    ).json().id;
+    const pf2 = (
+      await app.inject({
+        method: "POST",
+        url: "/portfolios",
+        headers: auth(t),
+        payload: { name: "Networth summary PF2", baseCurrency: "idr" },
+      })
+    ).json().id;
+
+    const [inst] = await app.db
+      .insert(instruments)
+      .values({
+        symbol: "NSUM",
+        market: "IDX",
+        assetClass: "equity",
+        currency: "IDR",
+        name: "Networth Summary Test Co",
+      })
+      .returning();
+
+    // pf1: 2 buys (10×1000 each) + 1 sell (10×1200) + 1 dividend (0×50)
+    for (const [type, price] of [
+      ["buy", "1000"],
+      ["buy", "1000"],
+      ["sell", "1200"],
+      ["dividend", "50"],
+    ] as const) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/portfolios/${pf1}/transactions`,
+        headers: auth(t),
+        payload: {
+          type,
+          instrumentId: inst.id,
+          quantity: type === "dividend" ? "0" : "10",
+          price,
+          currency: "IDR",
+          executedAt: "2025-03-01T00:00:00.000Z",
+        },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+    // pf2: 1 buy (5×2000)
+    await app.inject({
+      method: "POST",
+      url: `/portfolios/${pf2}/transactions`,
+      headers: auth(t),
+      payload: {
+        type: "buy",
+        instrumentId: inst.id,
+        quantity: "5",
+        price: "2000",
+        currency: "IDR",
+        executedAt: "2025-06-01T00:00:00.000Z",
+      },
+    });
+
+    // --- normal page ---
+    const page1 = await app.inject({
+      method: "GET",
+      url: "/networth/transactions?page=1&pageSize=10",
+      headers: auth(t),
+    });
+    expect(page1.statusCode).toBe(200);
+    const body1 = page1.json();
+    expect(body1.total).toBe(5);
+    expect(body1.summary).toMatchObject({
+      // pf1: 2×10×1000 = 20000, pf2: 1×5×2000 = 10000 → 30000
+      totalInvested: "30000",
+      // pf1: 1×10×1200 = 12000
+      totalProceeds: "12000",
+      // pf1: 1×0×50 = 0
+      totalIncome: "0",
+    });
+
+    // --- out-of-range page (fallback path) ---
+    const page10 = await app.inject({
+      method: "GET",
+      url: "/networth/transactions?page=10&pageSize=10",
+      headers: auth(t),
+    });
+    expect(page10.statusCode).toBe(200);
+    const body10 = page10.json();
+    expect(body10.rows).toHaveLength(0);
+    expect(body10.total).toBe(5);
+    expect(body10.summary).toEqual(body1.summary);
+  });
+
   it("returns a type/year-filter-independent `years` list from /networth/transactions", async () => {
     // Regression: the year filter chip on the Activity screen relies on `years` covering
     // every year with transactions, not just the years present in the currently filtered
