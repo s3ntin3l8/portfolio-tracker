@@ -23,9 +23,9 @@
     "repair:instruments": "tsx --env-file=../../.env src/db/repair-eu-instruments.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1085.0",
-    "@aws-sdk/s3-request-presigner": "^3.1085.0",
-    "@fastify/compress": "^9.0.0",
+    "@aws-sdk/client-s3": "^3.1090.0",
+    "@aws-sdk/s3-request-presigner": "^3.1090.0",
+    "@fastify/compress": "^9.1.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/env": "^7.0.0",
     "@fastify/helmet": "^13.1.0",
@@ -39,12 +39,12 @@
     "cheerio": "^1.0.0",
     "decimal.js": "^10.4.3",
     "drizzle-orm": "^0.45.2",
-    "fast-xml-parser": "^5.10.0",
+    "fast-xml-parser": "^5.10.1",
     "fastify": "^5.10.0",
     "fastify-plugin": "^6.0.0",
     "fflate": "^0.8.3",
     "jose": "^6.2.3",
-    "pg-boss": "^12.26.0",
+    "pg-boss": "^12.26.1",
     "pino": "^10.3.1",
     "pino-roll": "^4.0.0",
     "postgres": "^3.4.5",
@@ -58,7 +58,7 @@
     "aws-sdk-client-mock": "^4.1.0",
     "aws-sdk-client-mock-vitest": "^7.1.0",
     "form-auto-content": "^3.2.1",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
