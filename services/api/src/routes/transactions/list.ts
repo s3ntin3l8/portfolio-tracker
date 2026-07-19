@@ -1,13 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { and, count, desc, eq, getTableColumns, gte, inArray, lt, sql } from "drizzle-orm";
-import { portfolios, transactions } from "@portfolio/db";
+import { portfolios, transactions, users } from "@portfolio/db";
 import { ACQUISITION_TYPES, INCOME_TYPES } from "@portfolio/core";
 import { withDerivationCache } from "../../lib/derivation-cache.js";
 import { parsePagination, cacheKey } from "../helpers.js";
 import {
   yearRange,
-  summaryWindowAggregates,
-  summaryAggregates,
+  computeConvertedSummary,
   transactionsCache,
   networthTransactionsCache,
 } from "./shared.js";
@@ -93,48 +92,37 @@ export function registerListRoutes(app: FastifyInstance) {
           yearFilter || "",
           searchQuery || "",
           instrumentIdFilter || "",
+          request.portfolio.baseCurrency,
         );
         const cached = await withDerivationCache(transactionsCache, ck, async () => {
-          const merged = await app.db
-            .select({
-              ...getTableColumns(transactions),
-              __total: sql<number>`count(*) over ()`,
-              ...summaryWindowAggregates(transactions),
-            })
-            .from(transactions)
-            .where(and(...conditions))
-            .orderBy(desc(transactions.executedAt))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
+          const [merged, summaryRows] = await Promise.all([
+            app.db
+              .select({
+                ...getTableColumns(transactions),
+                __total: sql<number>`count(*) over ()`,
+              })
+              .from(transactions)
+              .where(and(...conditions))
+              .orderBy(desc(transactions.executedAt))
+              .limit(pageSize)
+              .offset((page - 1) * pageSize),
+            // The summary always folds to the portfolio's own baseCurrency, independent of
+            // `convertTo` (which only tags rows with a client-side display rate, #465) —
+            // no current caller requests the summary in a different currency.
+            computeConvertedSummary(app, conditions, request.portfolio.baseCurrency, request.log),
+          ]);
 
           let cnt: number;
-          let summaryRows: { totalInvested: string; totalProceeds: string; totalIncome: string };
           let _rows: (typeof transactions.$inferSelect)[];
           if (merged.length > 0) {
             cnt = Number(merged[0].__total);
-            summaryRows = {
-              totalInvested: merged[0].__totalInvested,
-              totalProceeds: merged[0].__totalProceeds,
-              totalIncome: merged[0].__totalIncome,
-            };
-            _rows = merged.map(
-              ({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r,
-            );
+            _rows = merged.map(({ __total, ...r }) => r);
           } else {
-            const [c, s] = await Promise.all([
-              app.db
-                .select({ count: count() })
-                .from(transactions)
-                .where(and(...conditions))
-                .then((r) => Number(r[0].count)),
-              app.db
-                .select({ ...summaryAggregates(transactions) })
-                .from(transactions)
-                .where(and(...conditions))
-                .then((r) => r[0]),
-            ]);
-            cnt = c;
-            summaryRows = s;
+            cnt = await app.db
+              .select({ count: count() })
+              .from(transactions)
+              .where(and(...conditions))
+              .then((r) => Number(r[0].count));
             _rows = [];
           }
           return enrichRows(
@@ -208,12 +196,20 @@ export function registerListRoutes(app: FastifyInstance) {
     const idsFilter = parseIdsParam(request.query.ids);
     const instrumentIdFilter = request.query.instrumentId;
 
-    const pfs = await app.db
-      .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
-      .from(portfolios)
-      .where(eq(portfolios.userId, id));
+    const [pfs, [u]] = await Promise.all([
+      app.db
+        .select({ id: portfolios.id, name: portfolios.name, baseCurrency: portfolios.baseCurrency })
+        .from(portfolios)
+        .where(eq(portfolios.userId, id)),
+      app.db
+        .select({ displayCurrency: users.displayCurrency })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1),
+    ]);
     if (pfs.length === 0) return paginate ? { rows: [], total: 0 } : [];
 
+    const displayCurrency = u?.displayCurrency ?? "IDR";
     const pfIds = pfs.map((p) => p.id);
     const nameById = new Map(pfs.map((p) => [p.id, p.name]));
 
@@ -251,48 +247,34 @@ export function registerListRoutes(app: FastifyInstance) {
         yearFilter ?? "",
         searchQuery ?? "",
         instrumentIdFilter ?? "",
+        displayCurrency,
       );
       const cached = await withDerivationCache(networthTransactionsCache, ck, async () => {
-        const merged = await app.db
-          .select({
-            ...getTableColumns(transactions),
-            __total: sql<number>`count(*) over ()`,
-            ...summaryWindowAggregates(transactions),
-          })
-          .from(transactions)
-          .where(and(...conditions))
-          .orderBy(desc(transactions.executedAt))
-          .limit(pageSize)
-          .offset((page - 1) * pageSize);
+        const [merged, summaryRows] = await Promise.all([
+          app.db
+            .select({
+              ...getTableColumns(transactions),
+              __total: sql<number>`count(*) over ()`,
+            })
+            .from(transactions)
+            .where(and(...conditions))
+            .orderBy(desc(transactions.executedAt))
+            .limit(pageSize)
+            .offset((page - 1) * pageSize),
+          computeConvertedSummary(app, conditions, displayCurrency, request.log),
+        ]);
 
         let total: number;
-        let summaryRows: { totalInvested: string; totalProceeds: string; totalIncome: string };
         let rows: (typeof transactions.$inferSelect)[];
         if (merged.length > 0) {
           total = Number(merged[0].__total);
-          summaryRows = {
-            totalInvested: merged[0].__totalInvested,
-            totalProceeds: merged[0].__totalProceeds,
-            totalIncome: merged[0].__totalIncome,
-          };
-          rows = merged.map(
-            ({ __total, __totalInvested, __totalProceeds, __totalIncome, ...r }) => r,
-          );
+          rows = merged.map(({ __total, ...r }) => r);
         } else {
-          const [c, s] = await Promise.all([
-            app.db
-              .select({ count: count() })
-              .from(transactions)
-              .where(and(...conditions))
-              .then((r) => Number(r[0].count)),
-            app.db
-              .select({ ...summaryAggregates(transactions) })
-              .from(transactions)
-              .where(and(...conditions))
-              .then((r) => r[0]),
-          ]);
-          total = c;
-          summaryRows = s;
+          total = await app.db
+            .select({ count: count() })
+            .from(transactions)
+            .where(and(...conditions))
+            .then((r) => Number(r[0].count));
           rows = [];
         }
         const enriched = await enrichAggregateRows(app, rows, nameById, request.log);
