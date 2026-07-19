@@ -92,22 +92,30 @@ export async function computeConvertedSummary(
   const currencies = [...new Set(groups.map((g) => g.currency))];
   const days = [...new Set(groups.map((g) => g.day))];
   const ratesByDate = await getFxRatesForDates(app.db, currencies, targetCurrency, days);
+  // One rate function per day — groups sharing a day share the same fx lookup.
+  const fxByDay = new Map(
+    days.map((d) => [d, makeFxRateFn(ratesByDate.get(d) ?? {}, targetCurrency)]),
+  );
 
+  const missing: { currency: string; day: string }[] = [];
   let totalInvested = new Decimal(0);
   let totalProceeds = new Decimal(0);
   let totalIncome = new Decimal(0);
   for (const g of groups) {
     if (g.currency !== targetCurrency && !ratesByDate.get(g.day)?.[g.currency]) {
-      log?.warn(
-        { currency: g.currency, targetCurrency, day: g.day },
-        "computeConvertedSummary: no FX rate for bucket, falling back to 1:1",
-      );
+      missing.push({ currency: g.currency, day: g.day });
     }
-    const rates = ratesByDate.get(g.day) ?? {};
-    const fx = makeFxRateFn(rates, targetCurrency);
+    const fx = fxByDay.get(g.day)!;
     totalInvested = totalInvested.plus(convert(g.totalInvested, g.currency, targetCurrency, fx));
     totalProceeds = totalProceeds.plus(convert(g.totalProceeds, g.currency, targetCurrency, fx));
     totalIncome = totalIncome.plus(convert(g.totalIncome, g.currency, targetCurrency, fx));
+  }
+  // One aggregated warning per request, not one per unrated bucket.
+  if (missing.length > 0) {
+    log?.warn(
+      { targetCurrency, missing },
+      "computeConvertedSummary: no FX rate for some buckets, falling back to 1:1",
+    );
   }
 
   return {

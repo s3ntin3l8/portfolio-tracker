@@ -92,6 +92,7 @@ export function registerListRoutes(app: FastifyInstance) {
           yearFilter || "",
           searchQuery || "",
           instrumentIdFilter || "",
+          request.portfolio.baseCurrency,
         );
         const cached = await withDerivationCache(transactionsCache, ck, async () => {
           const [merged, summaryRows] = await Promise.all([
