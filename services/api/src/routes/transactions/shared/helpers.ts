@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { Decimal } from "decimal.js";
 import {
   corporateActions,
   instruments,
@@ -16,12 +17,14 @@ import {
   type CoreTransaction,
   type ReconciliationGap,
   detectAnomalies,
+  convert,
 } from "@portfolio/core";
 import { getMarketData } from "../../../services/market-data.js";
 import { valuePortfolioCached, type InstrumentMeta } from "../../../services/valuation.js";
 import { toCoreTxns } from "../../../services/tx-core.js";
 import { netManualAdjustments } from "../../../services/pytr/reconcile.js";
 import { withDerivationCache } from "../../../lib/derivation-cache.js";
+import { getFxRatesForDates, makeFxRateFn } from "../../../services/fx.js";
 import { anomaliesCache } from "./caches.js";
 
 export function yearRange(year: number): { start: Date; end: Date } {
@@ -44,22 +47,73 @@ function incomeCase(t: typeof transactions): ReturnType<typeof sql> {
   return sql`case when ${t.type} in ('dividend','coupon','interest','bonus_cash') then ${t.price}::numeric * ${t.quantity}::numeric else 0 end`;
 }
 
-/** Window-function summary aggregates (ride alongside LIMIT/OFFSET via OVER()).
- *  The keys are prefixed `__` so callers can strip them from the result rows. */
-export function summaryWindowAggregates(t: typeof transactions) {
-  return {
-    __totalInvested: sql<string>`coalesce(sum(${investedCase(t)}) over (), '0')`,
-    __totalProceeds: sql<string>`coalesce(sum(${proceedsCase(t)}) over (), '0')`,
-    __totalIncome: sql<string>`coalesce(sum(${incomeCase(t)}) over (), '0')`,
-  };
+export interface TransactionSummary {
+  totalInvested: string;
+  totalProceeds: string;
+  totalIncome: string;
 }
 
-/** Aggregate-only summary (used in the fallback query for empty result pages). */
-export function summaryAggregates(t: typeof transactions) {
+/**
+ * FX-correct summary totals (Invested/Proceeds/Income), folded to `targetCurrency`.
+ *
+ * The naive `SUM(price*quantity)` mixes currencies when rows span more than one
+ * `transactions.currency` (issue #593) — a EUR + IDR networth view, or a single
+ * portfolio holding a foreign-currency instrument. Grouping by `(currency, trade-day)`
+ * lets each bucket convert at *that day's* historical rate rather than today's spot
+ * rate, matching the row-level `displayRate` convention (#465) and avoiding baking
+ * currency drift into "Total Invested" (never manufacture phantom gains).
+ *
+ * Runs as an independent aggregate query — not tied to pagination — so it's correct
+ * across the full filtered set, not just the current page.
+ */
+export async function computeConvertedSummary(
+  app: FastifyInstance,
+  conditions: SQL[],
+  targetCurrency: string,
+  log?: FastifyBaseLogger,
+): Promise<TransactionSummary> {
+  const dayExpr = sql<string>`(${transactions.executedAt} AT TIME ZONE 'UTC')::date::text`;
+  const groups = await app.db
+    .select({
+      currency: transactions.currency,
+      day: dayExpr,
+      totalInvested: sql<string>`COALESCE(SUM(${investedCase(transactions)}), '0')`,
+      totalProceeds: sql<string>`COALESCE(SUM(${proceedsCase(transactions)}), '0')`,
+      totalIncome: sql<string>`COALESCE(SUM(${incomeCase(transactions)}), '0')`,
+    })
+    .from(transactions)
+    .where(and(...conditions))
+    .groupBy(transactions.currency, dayExpr);
+
+  if (groups.length === 0) {
+    return { totalInvested: "0", totalProceeds: "0", totalIncome: "0" };
+  }
+
+  const currencies = [...new Set(groups.map((g) => g.currency))];
+  const days = [...new Set(groups.map((g) => g.day))];
+  const ratesByDate = await getFxRatesForDates(app.db, currencies, targetCurrency, days);
+
+  let totalInvested = new Decimal(0);
+  let totalProceeds = new Decimal(0);
+  let totalIncome = new Decimal(0);
+  for (const g of groups) {
+    if (g.currency !== targetCurrency && !ratesByDate.get(g.day)?.[g.currency]) {
+      log?.warn(
+        { currency: g.currency, targetCurrency, day: g.day },
+        "computeConvertedSummary: no FX rate for bucket, falling back to 1:1",
+      );
+    }
+    const rates = ratesByDate.get(g.day) ?? {};
+    const fx = makeFxRateFn(rates, targetCurrency);
+    totalInvested = totalInvested.plus(convert(g.totalInvested, g.currency, targetCurrency, fx));
+    totalProceeds = totalProceeds.plus(convert(g.totalProceeds, g.currency, targetCurrency, fx));
+    totalIncome = totalIncome.plus(convert(g.totalIncome, g.currency, targetCurrency, fx));
+  }
+
   return {
-    totalInvested: sql<string>`COALESCE(SUM(${investedCase(t)}), '0')`,
-    totalProceeds: sql<string>`COALESCE(SUM(${proceedsCase(t)}), '0')`,
-    totalIncome: sql<string>`COALESCE(SUM(${incomeCase(t)}), '0')`,
+    totalInvested: totalInvested.toString(),
+    totalProceeds: totalProceeds.toString(),
+    totalIncome: totalIncome.toString(),
   };
 }
 
