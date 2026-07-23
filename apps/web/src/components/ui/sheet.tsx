@@ -112,8 +112,14 @@ const SheetClose = Drawer.Close;
 
 /** DOM node for a persistent, non-scrolling footer region rendered by `SheetContent`
  *  (side="bottom") — see `useSheetFooter`. `null` outside a Sheet (or for `side="full"`,
- *  which doesn't render one). */
-const SheetFooterContext = React.createContext<HTMLDivElement | null>(null);
+ *  which doesn't render one).
+ *
+ *  Exported (not just the `useSheetFooter` hook) so the desktop Dialog-based Add Transaction
+ *  shell (`add-transaction-menu/desktop-shell.tsx`) can provide this same context with its
+ *  own footer node — every form that already portals its submit button via `useSheetFooter`
+ *  then works unchanged inside a Dialog too, with no new hook and no other Sheet consumer
+ *  touched. */
+export const SheetFooterContext = React.createContext<HTMLDivElement | null>(null);
 
 /** A form rendered inside a Sheet can portal its submit button into the sheet's
  *  persistent footer region instead of rendering `position: sticky` deep inside the

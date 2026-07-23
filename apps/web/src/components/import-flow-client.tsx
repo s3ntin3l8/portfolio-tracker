@@ -35,10 +35,13 @@ export function ImportFlowClient({
   portfolios,
   defaultPortfolioId,
   onClose,
+  entryMode,
 }: {
   portfolios: ImportTargetPortfolio[];
   defaultPortfolioId: string;
   onClose?: () => void;
+  /** See `UseImportFlowProps.entryMode` — selects the dropzone's title/hint copy. */
+  entryMode?: "screenshot" | "csv" | "file";
 }) {
   const client = useImportClient();
   const { run } = useImportTasks();
@@ -70,6 +73,7 @@ export function ImportFlowClient({
       initialFile={sharedFile}
       onSubmit={run}
       onClose={onClose}
+      entryMode={entryMode}
     />
   );
 }

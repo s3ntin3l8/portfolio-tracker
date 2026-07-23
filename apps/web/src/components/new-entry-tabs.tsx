@@ -23,6 +23,8 @@ export type NewEntryTab = "transaction" | "corporate-action" | "merger";
  * broker. Shared by the two portfolio-scoped tabs (transaction, merger), hidden with a
  * single portfolio, and absent from the corporate-action tab (an action is instrument-global).
  */
+const ALL_TABS: NewEntryTab[] = ["transaction", "corporate-action", "merger"];
+
 export function NewEntryTabs({
   portfolios,
   initialPortfolioId,
@@ -30,6 +32,11 @@ export function NewEntryTabs({
   initialTransaction,
   stickyFooter = false,
   isAdmin = false,
+  isDesktop = false,
+  value,
+  onValueChange,
+  hideTabList = false,
+  visibleTabs = ALL_TABS,
 }: {
   portfolios: PickablePortfolio[];
   initialPortfolioId: string;
@@ -42,11 +49,26 @@ export function NewEntryTabs({
    *  it off (a bottom-pinned bar there would sit under the fixed bottom-nav). */
   stickyFooter?: boolean;
   isAdmin?: boolean;
+  /** Desktop modal shell — see `AddTransactionForm`'s `isDesktop`. Threaded through to every
+   *  sub-form so their submit buttons/layout match the desktop chrome. */
+  isDesktop?: boolean;
+  /** Controlled active tab — the desktop nav rail drives this directly instead of the
+   *  in-sheet `TabsList` (which is hidden via `hideTabList` on desktop). Uncontrolled
+   *  (`defaultTab`) when omitted — mobile's existing behavior. */
+  value?: NewEntryTab;
+  onValueChange?: (tab: NewEntryTab) => void;
+  /** Suppress the in-body segmented tab control — the desktop rail's "Instrument event"
+   *  destination hosts corporate-action/merger as a 2-way switch of its own instead. */
+  hideTabList?: boolean;
+  /** Restrict which tabs are mounted — e.g. the desktop rail's "Add transaction" destination
+   *  only ever shows the transaction tab. Defaults to all three (mobile's existing set). */
+  visibleTabs?: NewEntryTab[];
 }) {
   const tt = useTranslations("Manage.tx");
   const tca = useTranslations("CorpAction");
   const tmg = useTranslations("Merger");
   const [portfolioId, setPortfolioId] = useState(initialPortfolioId);
+  const activePortfolio = portfolios.find((p) => p.id === portfolioId) ?? portfolios[0];
 
   const picker =
     portfolios.length > 1 ? (
@@ -62,36 +84,65 @@ export function NewEntryTabs({
       </div>
     ) : null;
 
+  const tabsProps = value
+    ? { value, onValueChange: (v: string) => onValueChange?.(v as NewEntryTab) }
+    : { defaultValue: defaultTab };
+
   return (
-    <Tabs defaultValue={defaultTab}>
+    <Tabs {...tabsProps}>
       {/* Full-width, evenly-distributed segmented control (#472 — was left-clustered under
-          the shared TabsList's `inline-flex` default). */}
-      <TabsList className="flex w-full">
-        <TabsTrigger value="transaction" className="flex-1">
-          {tt("tabTransaction")}
-        </TabsTrigger>
-        <TabsTrigger value="corporate-action" className="flex-1">
-          {tca("link")}
-        </TabsTrigger>
-        <TabsTrigger value="merger" className="flex-1">
-          {tmg("link")}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="transaction" className="space-y-4">
-        {picker}
-        <AddTransaction
-          portfolioId={portfolioId}
-          initial={initialTransaction}
-          stickyFooter={stickyFooter}
-        />
-      </TabsContent>
-      <TabsContent value="corporate-action">
-        <RecordCorporateAction stickyFooter={stickyFooter} isAdmin={isAdmin} />
-      </TabsContent>
-      <TabsContent value="merger" className="space-y-4">
-        {picker}
-        <RecordMerger portfolioId={portfolioId} stickyFooter={stickyFooter} />
-      </TabsContent>
+          the shared TabsList's `inline-flex` default). Hidden on desktop, where the nav rail
+          (or the events step's own 2-way switch) replaces it. */}
+      {!hideTabList && (
+        <TabsList className="flex w-full">
+          {visibleTabs.includes("transaction") && (
+            <TabsTrigger value="transaction" className="flex-1">
+              {tt("tabTransaction")}
+            </TabsTrigger>
+          )}
+          {visibleTabs.includes("corporate-action") && (
+            <TabsTrigger value="corporate-action" className="flex-1">
+              {tca("link")}
+            </TabsTrigger>
+          )}
+          {visibleTabs.includes("merger") && (
+            <TabsTrigger value="merger" className="flex-1">
+              {tmg("link")}
+            </TabsTrigger>
+          )}
+        </TabsList>
+      )}
+      {visibleTabs.includes("transaction") && (
+        <TabsContent value="transaction" className="space-y-4">
+          {picker}
+          <AddTransaction
+            portfolioId={portfolioId}
+            portfolio={activePortfolio}
+            initial={initialTransaction}
+            stickyFooter={stickyFooter}
+            isDesktop={isDesktop}
+          />
+        </TabsContent>
+      )}
+      {visibleTabs.includes("corporate-action") && (
+        <TabsContent value="corporate-action">
+          <RecordCorporateAction
+            stickyFooter={stickyFooter}
+            isAdmin={isAdmin}
+            isDesktop={isDesktop}
+          />
+        </TabsContent>
+      )}
+      {visibleTabs.includes("merger") && (
+        <TabsContent value="merger" className="space-y-4">
+          {picker}
+          <RecordMerger
+            portfolioId={portfolioId}
+            stickyFooter={stickyFooter}
+            isDesktop={isDesktop}
+          />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
