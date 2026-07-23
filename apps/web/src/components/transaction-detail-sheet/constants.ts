@@ -35,6 +35,12 @@ export const TYPE_BADGE: Record<string, { icon: LucideIcon; bg: string; fg: stri
 
 export const DEFAULT_BADGE = { icon: Receipt, bg: "var(--border)", fg: "var(--text-mute)" };
 
+/** Types whose breakdown uses the v2 design's income labels (Shares/Per share/Gross/Net
+ *  income) instead of the trade ones (Quantity/Price·unit/Amount/Net Amount) — see
+ *  `cards.tsx`'s `BreakdownCard`. A single named export so the set is discoverable and
+ *  easy to extend (e.g. if `interest`/`bonus_cash` ever gain the same breakdown shape). */
+export const INCOME_BREAKDOWN_TYPES = ["dividend", "coupon"] as const;
+
 export const SOURCE_PILL: Record<string, { bg: string; fg: string }> = {
   screenshot: { bg: "rgba(124,92,252,.16)", fg: "#7C5CFC" },
   csv: { bg: "rgba(13,148,136,.16)", fg: "#0D9488" },

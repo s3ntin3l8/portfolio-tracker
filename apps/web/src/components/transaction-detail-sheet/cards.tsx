@@ -5,7 +5,7 @@ import { cn, formatSignedMoney } from "@/lib/utils";
 import { BrokerageIcon } from "@/components/brokerage-icon";
 import { SOURCE_ICON } from "@/components/transactions-table";
 import { TAX_COMPONENT_LABELS } from "@/components/transaction-sources-section";
-import { SOURCE_PILL, DEFAULT_PILL } from "./constants";
+import { SOURCE_PILL, DEFAULT_PILL, INCOME_BREAKDOWN_TYPES } from "./constants";
 
 export function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -147,7 +147,7 @@ export function BreakdownCard({
   numFmt: Intl.NumberFormat;
   locale: string;
 }) {
-  const isIncome = type === "dividend" || type === "coupon";
+  const isIncome = (INCOME_BREAKDOWN_TYPES as readonly string[]).includes(type);
 
   return (
     <DetailCard>
