@@ -1529,7 +1529,19 @@
       "groupShareReceipt": "Share receipt",
       "groupTransfer": "Transfer",
       "groupIncome": "Income",
-      "groupCash": "Cash"
+      "groupCash": "Cash",
+      "bucketTrade": "Trade",
+      "bucketIncome": "Income",
+      "bucketTransfer": "Transfer",
+      "bucketCash": "Cash",
+      "bucketSubtypeAction": "Action",
+      "bucketSubtypeType": "Type",
+      "bucketSubtypeDirection": "Direction",
+      "bucketSubtypeCategory": "Category",
+      "details": "Details",
+      "extrasFees": "Add fees",
+      "extrasFeesTax": "Add fees / tax",
+      "customInstrumentToggle": "Can't find it? Add a custom instrument"
     },
     "reassign": "Reassign"
   },

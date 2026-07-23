@@ -10,12 +10,14 @@ import type {
 } from "@portfolio/api-client";
 import { isTradeType, isShareReceiptType, isTransferType } from "@portfolio/core";
 import {
-  ACQUISITION_TYPES,
-  SHARE_RECEIPT_TYPES,
   INCOME_TYPES,
   CASH_TYPES,
-  TRANSFER_TYPES,
   ASSET_CLASSES,
+  BUCKET_DEFAULT_TYPE,
+  BUCKET_TYPES,
+  BUCKET_SUBTYPE_LABEL_KEY,
+  bucketForType,
+  type Bucket,
   type SelectableType,
   type TxType,
   marketForAssetClass,
@@ -84,7 +86,15 @@ export function useTransactionForm({
 
   const isEdit = Boolean(transactionId);
   const [type, setType] = useState<TxType>(() => (initial?.type as TxType) ?? "buy");
-  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  // The bucket switcher's active pill. A legacy share-receipt type (bonus/split/rights —
+  // no longer creatable here, see `SHARE_RECEIPT_TYPES`) maps to no bucket; the switcher
+  // then shows none active, but the amount/details fields still render correctly for
+  // editing that existing transaction (`showQuantity` etc. don't depend on `bucket`).
+  const [bucket, setBucketState] = useState<Bucket | null>(() =>
+    // A fresh form defaults to Trade/Buy; an edit of an existing legacy share-receipt
+    // type (no longer creatable — see `SHARE_RECEIPT_TYPES`) maps to no bucket at all.
+    initial ? bucketForType(initial.type) : "trade",
+  );
   const [kind, setKind] = useState(() => initial?.kind ?? "");
   const [currency, setCurrency] = useState(() => initial?.currency ?? "IDR");
   const [date, setDate] = useState(() => initial?.executedAt?.slice(0, 10) ?? "");
@@ -130,16 +140,30 @@ export function useTransactionForm({
   const [goldSourceList, setGoldSourceList] = useState<GoldSource[]>([]);
   const [goldMarket, setGoldMarket] = useState("");
 
+  // "Can't find it? Add a custom instrument" collapsible (instrument-field.tsx) — closed
+  // by default, per the v2 design; opened automatically when editing an existing
+  // transaction whose instrument was never resolved to a saved/discovered match.
+  const [customOpen, setCustomOpen] = useState(() => Boolean(!initial?.instrumentId && initial));
+  // "Add fees / tax" collapsible (pricing-fields.tsx) — closed by default, opened
+  // automatically in edit mode when the transaction already carries a nonzero fee or tax
+  // so editing doesn't hide already-filled data behind a click.
+  const [extrasOpen, setExtrasOpen] = useState(
+    () =>
+      Boolean(initial?.fees && initial.fees !== "0") ||
+      Boolean(initial?.tax && initial.tax !== "0"),
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () =>
+      Boolean(initial?.fxRate) ||
+      Boolean(initial?.kind) ||
+      Boolean(initial?.shares) ||
+      Boolean(initial?.perShare) ||
+      Boolean(initial?.nativeCurrency) ||
+      Boolean(initial?.grossNative),
+  );
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const typeGroups: { label: string; items: readonly string[] }[] = [
-    { label: t("groupTrade"), items: ACQUISITION_TYPES },
-    { label: t("groupShareReceipt"), items: SHARE_RECEIPT_TYPES },
-    { label: t("groupTransfer"), items: TRANSFER_TYPES },
-    { label: t("groupIncome"), items: INCOME_TYPES },
-    { label: t("groupCash"), items: CASH_TYPES },
-  ];
 
   const isAcquisition = isTradeType(type);
   const isShareReceipt = isShareReceiptType(type);
@@ -153,8 +177,39 @@ export function useTransactionForm({
   const hasInstrument = !isCash;
   const showQuantity = isAcquisition || isShareReceipt || isTransfer;
   const showFees = isAcquisition;
-  const showTax = isAcquisition || isIncome;
+  // Only a sale or an income event ever withholds tax — a buy never does (v2 design).
+  const showTax = type === "sell" || isIncome;
   const isGold = hasInstrument && (selected ? selected.assetClass : assetClass) === "gold";
+
+  // Income tax sits inline in the Amount group; an acquisition's fees/tax sit behind the
+  // "Add fees / tax" collapsible (only relevant — i.e. rendered at all — for a trade).
+  const showInlineTax = isIncome;
+  const relevantExtras = isAcquisition;
+  const showExtrasFields = relevantExtras && extrasOpen;
+  const showExtrasBtn = relevantExtras && !extrasOpen;
+  const extrasLabelKey = showTax ? "extrasFeesTax" : "extrasFees";
+
+  const subTypeLabelKey = bucket ? BUCKET_SUBTYPE_LABEL_KEY[bucket] : "bucketSubtypeAction";
+  const subTypes = bucket ? BUCKET_TYPES[bucket] : [];
+
+  function setBucket(next: Bucket) {
+    setBucketState(next);
+    setType(BUCKET_DEFAULT_TYPE[next]);
+  }
+
+  const priceLabel = isTransfer
+    ? "transferBasis"
+    : isGold && showQuantity
+      ? "pricePerGram"
+      : showQuantity
+        ? "price"
+        : "amount";
+  const priceHint = isTransfer
+    ? "transferBasisHint"
+    : type === "adjustment"
+      ? "adjustmentHint"
+      : null;
+  const priceRequired = !isShareReceipt && !isTransfer;
 
   useEffect(() => {
     let active = true;
@@ -206,21 +261,16 @@ export function useTransactionForm({
     setQuery("");
     setResults([]);
     setDiscovered([]);
+    // Deliberate deviation from the v2 design's own demo state machine (which leaves this
+    // collapsed): the prefilled symbol/name/currency fields live behind it, so leaving it
+    // closed would silently hide what was just auto-filled.
+    setCustomOpen(true);
   }
 
   function handleSelectSaved(instrument: Instrument) {
     setSelected(instrument);
     setResults([]);
     setDiscovered([]);
-  }
-
-  function handleSelectType(ty: string) {
-    setType(ty as TxType);
-    setTypePickerOpen(false);
-  }
-
-  function handleToggleTypePicker() {
-    setTypePickerOpen((o) => !o);
   }
 
   async function resolveInstrumentId(): Promise<string | null> {
@@ -309,8 +359,10 @@ export function useTransactionForm({
     isEdit,
     type,
     setType,
-    typePickerOpen,
-    setTypePickerOpen,
+    bucket,
+    setBucket,
+    subTypeLabelKey,
+    subTypes,
     kind,
     setKind,
     currency,
@@ -361,7 +413,6 @@ export function useTransactionForm({
     setGoldMarket,
     busy,
     error,
-    typeGroups,
     isAcquisition,
     isShareReceipt,
     isTransfer,
@@ -372,11 +423,22 @@ export function useTransactionForm({
     showFees,
     showTax,
     isGold,
+    showInlineTax,
+    showExtrasFields,
+    showExtrasBtn,
+    extrasLabelKey,
+    extrasOpen,
+    setExtrasOpen,
+    customOpen,
+    setCustomOpen,
+    advancedOpen,
+    setAdvancedOpen,
+    priceLabel,
+    priceHint,
+    priceRequired,
     runSearch,
     prefillFrom,
     handleSelectSaved,
-    handleSelectType,
-    handleToggleTypePicker,
     submit,
   };
 }

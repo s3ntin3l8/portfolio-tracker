@@ -1527,7 +1527,19 @@
       "groupShareReceipt": "Penerimaan saham",
       "groupTransfer": "Transfer",
       "groupIncome": "Pendapatan",
-      "groupCash": "Kas"
+      "groupCash": "Kas",
+      "bucketTrade": "Perdagangan",
+      "bucketIncome": "Pendapatan",
+      "bucketTransfer": "Transfer",
+      "bucketCash": "Kas",
+      "bucketSubtypeAction": "Aksi",
+      "bucketSubtypeType": "Jenis",
+      "bucketSubtypeDirection": "Arah",
+      "bucketSubtypeCategory": "Kategori",
+      "details": "Detail",
+      "extrasFees": "Tambah biaya",
+      "extrasFeesTax": "Tambah biaya / pajak",
+      "customInstrumentToggle": "Tidak ditemukan? Tambahkan instrumen kustom"
     },
     "reassign": "Pindahkan"
   },

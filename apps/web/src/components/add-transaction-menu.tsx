@@ -29,6 +29,9 @@ import { HolderFormBody } from "@/components/holder-form-dialog/body";
 import { MethodCard } from "@/components/add-transaction-menu/method-card";
 import { loadHarvestPrefill } from "@/components/add-transaction-menu/helpers";
 import { DesktopShell, type DesktopStep } from "@/components/add-transaction-menu/desktop-shell";
+import { EventsTabSwitch } from "@/components/add-transaction-menu/events-tab-switch";
+
+type EventsTab = "corporate-action" | "merger";
 
 /** Mobile's step model plus the desktop-only rail destinations ("events" hosts the
  *  corporate-action/merger 2-way switch; "portfolio"/"holder" are the inline create
@@ -62,6 +65,8 @@ export function AddTransactionMenu({
 } = {}) {
   const tm = useTranslations("Manage");
   const ti = useTranslations("Import");
+  const tca = useTranslations("CorpAction");
+  const tmg = useTranslations("Merger");
   const api = useApiClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -73,6 +78,10 @@ export function AddTransactionMenu({
   const [portfolios, setPortfolios] = useState<ImportTargetPortfolio[] | null>(null);
   const [defaultPortfolioId, setDefaultPortfolioId] = useState("");
   const [manualDefaultTab, setManualDefaultTab] = useState<NewEntryTab>("transaction");
+  // The desktop rail's "Instrument event" destination hosts its own Corp. action/Merger
+  // 2-way switch (`EventsTabSwitch`) instead of `NewEntryTabs`' internal `TabsList`
+  // (`hideTabList`) — this is that switch's controlled value.
+  const [eventsTab, setEventsTab] = useState<EventsTab>("corporate-action");
   const [importEntryMode, setImportEntryMode] = useState<ImportEntryMode>("file");
   const [initialTransaction, setInitialTransaction] = useState<AddTransactionInitial | undefined>(
     undefined,
@@ -157,6 +166,7 @@ export function AddTransactionMenu({
       }
       setEntryNonce((n) => n + 1);
       setAddOpen(true);
+      if (targetTab === "corporate-action" || targetTab === "merger") setEventsTab(targetTab);
       // On desktop, a corporate-action/merger deep link routes to the rail's "Instrument
       // event" destination instead of "Add transaction" (which is transaction-only there —
       // see `NewEntryTabs`' `visibleTabs` wiring below).
@@ -204,8 +214,9 @@ export function AddTransactionMenu({
   }
 
   /** Desktop rail only — "Instrument event" hosts corporate-action/merger. */
-  async function openEvents() {
+  async function openEvents(tab: EventsTab = "corporate-action") {
     await loadPortfolios();
+    setEventsTab(tab);
     setStep("events");
   }
 
@@ -393,16 +404,25 @@ export function AddTransactionMenu({
       )
     ) : effStep === "events" ? (
       portfolios && (
-        <NewEntryTabs
-          key={entryNonce}
-          portfolios={portfolios}
-          initialPortfolioId={defaultPortfolioId}
-          defaultTab={manualDefaultTab === "merger" ? "merger" : "corporate-action"}
-          stickyFooter
-          isAdmin={isAdmin}
-          isDesktop
-          visibleTabs={["corporate-action", "merger"]}
-        />
+        <>
+          <EventsTabSwitch
+            value={eventsTab}
+            onChange={setEventsTab}
+            labels={{ corporateAction: tca("link"), merger: tmg("link") }}
+          />
+          <NewEntryTabs
+            key={entryNonce}
+            portfolios={portfolios}
+            initialPortfolioId={defaultPortfolioId}
+            value={eventsTab}
+            onValueChange={(tab) => setEventsTab(tab as EventsTab)}
+            stickyFooter
+            isAdmin={isAdmin}
+            isDesktop
+            hideTabList
+            visibleTabs={["corporate-action", "merger"]}
+          />
+        </>
       )
     ) : effStep === "portfolio" ? (
       <PortfolioFormBody mode="create" onSuccess={onDialogSuccess} onDone={openManual} />

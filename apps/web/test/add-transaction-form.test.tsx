@@ -69,10 +69,34 @@ const EDIT_INITIAL = {
   executedAt: "2026-02-03T00:00:00.000Z",
 };
 
-// The type picker is a collapsible chip palette: open it, then click the type chip.
-function selectType(label: string) {
-  fireEvent.click(screen.getByRole("button", { name: m.type }));
+// ---------------------------------------------------------------------------
+// UX helpers for the v2 bucket-switcher form: pick a bucket (Trade/Income/
+// Transfer/Cash), then (if not the bucket's default) the sub-type chip; open
+// the "Can't find it? Add a custom instrument" / "Add fees / tax" / "Advanced"
+// collapsibles on demand.
+// ---------------------------------------------------------------------------
+
+function selectBucket(label: string) {
   fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
+function selectSubType(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+}
+
+function openCustomInstrument() {
+  fireEvent.click(screen.getByRole("button", { name: m.customInstrumentToggle }));
+}
+
+function openExtras() {
+  const btn =
+    screen.queryByRole("button", { name: m.extrasFeesTax }) ??
+    screen.getByRole("button", { name: m.extrasFees });
+  fireEvent.click(btn);
+}
+
+function openAdvanced() {
+  fireEvent.click(screen.getByRole("button", { name: m.advanced }));
 }
 
 describe("AddTransactionForm", () => {
@@ -80,6 +104,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     const onSuccess = renderForm(client);
 
+    // Trade/Buy is the default bucket+type — just reveal the custom-instrument fields.
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.symbol), {
       target: { value: "bbca" },
     });
@@ -133,11 +159,11 @@ describe("AddTransactionForm", () => {
     const client = makeClient({ createInstrument: vi.fn(async () => gold) });
     renderForm(client);
 
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "gold" } });
 
     // The symbol/search fields are replaced by the gold source + label.
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
-    expect(screen.queryByLabelText(m.search)).toBeNull();
     await screen.findByRole("option", { name: "Antam buyback" });
 
     fireEvent.change(screen.getByLabelText(m.goldLabel), {
@@ -177,6 +203,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "gold" } });
     await screen.findByRole("option", { name: "Antam buyback" });
     fireEvent.change(screen.getByLabelText(m.grams), { target: { value: "1" } });
@@ -204,7 +231,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    // Equity is the default kind; leave the symbol empty.
+    // Equity is the default kind; leave the symbol empty (never even opening the
+    // custom-instrument collapsible — the guard doesn't depend on it being open).
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText(m.price), { target: { value: "100" } });
     fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
@@ -221,8 +249,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.deposit);
-    // Instrument section is hidden for cash types.
+    selectBucket(messages.Manage.tx.bucketCash);
+    // Instrument section is hidden for cash types; Deposit is the Cash bucket's default.
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
 
     fireEvent.change(screen.getByLabelText(m.amount), {
@@ -252,7 +280,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.adjustment);
+    selectBucket(messages.Manage.tx.bucketCash);
+    selectSubType(messages.TxType.adjustment);
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
     expect(screen.getByText(m.adjustmentHint)).toBeInTheDocument();
 
@@ -306,7 +335,7 @@ describe("AddTransactionForm", () => {
     );
   });
 
-  it("auto-fills the new-instrument fields from a market-data match", async () => {
+  it("auto-fills the new-instrument fields from a market-data match (and opens the custom-instrument fields to show them)", async () => {
     const client = makeClient({
       lookupInstruments: vi.fn(async () => [
         {
@@ -329,7 +358,10 @@ describe("AddTransactionForm", () => {
     const match = await screen.findByRole("button", { name: /Apple Inc/ });
     fireEvent.click(match);
 
-    // Fields are prefilled (and editable) from the discovery result.
+    // Fields are prefilled (and editable) from the discovery result — the custom-instrument
+    // collapsible opens automatically so the prefill is actually visible, a deliberate
+    // deviation from the design's own demo state machine (which leaves it closed — see the
+    // PR description).
     expect(screen.getByLabelText(m.symbol)).toHaveValue("AAPL");
     expect(screen.getByLabelText(m.name)).toHaveValue("Apple Inc");
     expect(screen.getByLabelText(m.currency)).toHaveValue("USD");
@@ -362,6 +394,7 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.kind), { target: { value: "crypto" } });
     fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "btc" } });
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Bitcoin" } });
@@ -394,8 +427,10 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.coupon);
+    selectBucket(messages.Manage.tx.bucketIncome);
+    selectSubType(messages.TxType.coupon);
     // Coupon is instrument income, not cash — the instrument section stays.
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.symbol), {
       target: { value: "sr021" },
     });
@@ -454,10 +489,12 @@ describe("AddTransactionForm", () => {
     );
   });
 
-  it("sends tax and notes/tags in the payload for a buy", async () => {
+  it("sends tax and notes/tags in the payload for a sell (a buy never withholds tax — v2 design)", async () => {
     const client = makeClient();
     renderForm(client);
 
+    selectSubType(messages.TxType.sell);
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "BBCA" } });
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "BCA" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "10" } });
@@ -465,6 +502,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-03-01" },
     });
+    openExtras();
     fireEvent.change(screen.getByLabelText(m.tax), { target: { value: "50" } });
     fireEvent.change(screen.getByLabelText(m.notes), { target: { value: "rebalance run" } });
     fireEvent.change(screen.getByLabelText(m.tags), { target: { value: "rebalance, idt" } });
@@ -485,8 +523,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.deposit);
-    // Tax field should not appear (isTrade is false for deposit).
+    selectBucket(messages.Manage.tx.bucketCash);
+    // Tax field should not appear (deposit is a cash type, not a sale or income).
     expect(screen.queryByLabelText(m.tax)).toBeNull();
 
     fireEvent.change(screen.getByLabelText(m.amount), { target: { value: "1000000" } });
@@ -506,39 +544,64 @@ describe("AddTransactionForm", () => {
   // New type coverage (the expanded type list)
   // ---------------------------------------------------------------------------
 
-  it("savings_plan shows quantity, price and fees like a buy", () => {
+  it("savings_plan shows quantity and price, fees behind the collapsible, no tax (only sell/income withhold tax)", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.savings_plan);
-    expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
-    expect(screen.getByLabelText(m.price)).toBeInTheDocument();
-    expect(screen.getByLabelText(m.fees)).toBeInTheDocument();
-    expect(screen.getByLabelText(m.tax)).toBeInTheDocument();
-  });
-
-  it("bonus shows quantity and price but no fees (share receipt)", () => {
-    const client = makeClient();
-    renderForm(client);
-
-    selectType(messages.TxType.bonus);
+    selectSubType(messages.TxType.savings_plan);
     expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
     expect(screen.getByLabelText(m.price)).toBeInTheDocument();
     expect(screen.queryByLabelText(m.fees)).toBeNull();
+    // Buy/savings_plan never withholds tax — the collapsible's own label reflects that
+    // ("Add fees", not "Add fees / tax").
+    expect(screen.getByRole("button", { name: m.extrasFees })).toBeInTheDocument();
+    openExtras();
+    expect(screen.getByLabelText(m.fees)).toBeInTheDocument();
     expect(screen.queryByLabelText(m.tax)).toBeNull();
   });
 
-  it("dividend shows instrument and tax but no quantity or fees (income)", () => {
+  it("an existing legacy 'bonus' transaction (no longer creatable — see Instrument events) still renders correctly in edit mode", () => {
+    const client = makeClient();
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AddTransactionForm
+          client={client}
+          portfolioId="p1"
+          transactionId="t-legacy-bonus"
+          initial={{ ...EDIT_INITIAL, type: "bonus" }}
+          onSuccess={vi.fn()}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // No bucket is active for a type the switcher no longer offers — but the amount
+    // fields (quantity/price, no fees/tax) still render correctly for editing.
+    for (const label of [
+      messages.Manage.tx.bucketTrade,
+      messages.Manage.tx.bucketIncome,
+      messages.Manage.tx.bucketTransfer,
+      messages.Manage.tx.bucketCash,
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "false");
+    }
+    expect(screen.getByLabelText(m.quantity)).toBeInTheDocument();
+    expect(screen.getByLabelText(m.price)).toBeInTheDocument();
+    expect(screen.queryByLabelText(m.fees)).toBeNull();
+    expect(screen.queryByRole("button", { name: m.extrasFees })).toBeNull();
+    expect(screen.queryByRole("button", { name: m.extrasFeesTax })).toBeNull();
+  });
+
+  it("dividend shows instrument and inline tax but no quantity or fees (income)", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.dividend);
+    selectBucket(messages.Manage.tx.bucketIncome);
     // Instrument section present (income, not cash).
     expect(screen.getByLabelText(m.search)).toBeInTheDocument();
     // No quantity or fees.
     expect(screen.queryByLabelText(m.quantity)).toBeNull();
     expect(screen.queryByLabelText(m.fees)).toBeNull();
-    // Tax retained for income types.
+    // Tax is inline for income — no collapsible needed.
     expect(screen.getByLabelText(m.tax)).toBeInTheDocument();
   });
 
@@ -546,7 +609,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.interest);
+    selectBucket(messages.Manage.tx.bucketCash);
+    selectSubType(messages.TxType.interest);
     expect(screen.queryByLabelText(m.symbol)).toBeNull();
     expect(screen.queryByLabelText(m.search)).toBeNull();
     expect(screen.queryByLabelText(m.quantity)).toBeNull();
@@ -556,7 +620,8 @@ describe("AddTransactionForm", () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.bonus_cash);
+    selectBucket(messages.Manage.tx.bucketCash);
+    selectSubType(messages.TxType.bonus_cash);
     expect(screen.queryByLabelText(m.search)).toBeNull();
     expect(screen.queryByLabelText(m.quantity)).toBeNull();
   });
@@ -596,11 +661,12 @@ describe("AddTransactionForm", () => {
     );
   });
 
-  it("sets kind in the payload when a sub-type is chosen", async () => {
+  it("sets kind in the payload when a sub-type is chosen (Advanced collapsible)", async () => {
     const client = makeClient();
     renderForm(client);
 
-    selectType(messages.TxType.savings_plan);
+    selectSubType(messages.TxType.savings_plan);
+    openCustomInstrument();
     fireEvent.change(screen.getByLabelText(m.symbol), { target: { value: "MSFT" } });
     fireEvent.change(screen.getByLabelText(m.name), { target: { value: "Microsoft" } });
     fireEvent.change(screen.getByLabelText(m.quantity), { target: { value: "2" } });
@@ -608,6 +674,7 @@ describe("AddTransactionForm", () => {
     fireEvent.change(screen.getByLabelText(m.date, { selector: "input" }), {
       target: { value: "2026-05-01" },
     });
+    openAdvanced();
     fireEvent.change(screen.getByLabelText(m.subType), { target: { value: "saveback" } });
     fireEvent.click(screen.getByRole("button", { name: m.submit }));
 
@@ -628,6 +695,8 @@ describe("AddTransactionForm", () => {
           transactionId="t9"
           initial={{
             ...EDIT_INITIAL,
+            // A buy never withholds tax (v2 design) — use sell to round-trip a nonzero tax.
+            type: "sell",
             tax: "25",
             fxRate: "15500",
             description: "import note",
@@ -638,6 +707,8 @@ describe("AddTransactionForm", () => {
       </NextIntlClientProvider>,
     );
 
+    // A nonzero stored tax auto-opens the fees/tax collapsible in edit mode (so editing
+    // never silently hides already-filled data behind a click).
     expect(screen.getByLabelText(m.tax)).toHaveValue("25");
     expect(screen.getByLabelText(m.notes)).toHaveValue("import note");
     expect(screen.getByLabelText(m.tags)).toHaveValue("tax-loss, idx");
