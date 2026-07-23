@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../messages/en.json";
@@ -468,5 +468,82 @@ describe("TransactionDetailSheet", () => {
     };
     renderSheet({ tx: txNoDoc });
     expect(screen.getByText(messages.Transactions.sourcesSection.notRetained)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2 design: header subtitle "{date} · {portfolio}", desktop centered Dialog
+// branch (#587), and type-aware breakdown labels (income vs. trade).
+// ---------------------------------------------------------------------------
+
+describe("TransactionDetailSheet — v2 design fidelity", () => {
+  afterEach(() => {
+    // Restore jsdom's default (matches: false) so later tests aren't affected.
+    window.matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  });
+
+  it("shows '{date} · {portfolio}' as the header subtitle", () => {
+    renderSheet();
+    expect(screen.getByText("Mar 15, 2026 · Main")).toBeInTheDocument();
+  });
+
+  it("falls back to just the date when no portfolio name is known", () => {
+    renderSheet({ tx: { ...TX, portfolioName: undefined } });
+    // The header subtitle (a <p>) is distinct from the Details card's own Date row, which
+    // also renders "Mar 15, 2026" — match on the subtitle's own element specifically.
+    const subtitle = screen.getByText(
+      (content, element) => element?.tagName === "P" && content === "Mar 15, 2026",
+    );
+    expect(subtitle).toBeInTheDocument();
+  });
+
+  it("renders as a centered Dialog on desktop (≥860px) instead of a bottom Sheet", () => {
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    renderSheet();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // The desktop close button has no drag handle — the mobile Sheet's shows one.
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("labels a dividend's breakdown rows Shares/Per share/Gross/Net income (not Quantity/Price/Amount/Net Amount)", () => {
+    const dividend: TxRow = {
+      ...TX,
+      type: "dividend",
+      quantity: "0",
+      price: "150000",
+      fees: "0",
+      tax: "15000",
+      shares: "100",
+      perShare: "1500",
+    };
+    renderSheet({ tx: dividend });
+    expect(screen.getByText(messages.Transactions.shares)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.perShare)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.gross)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.netIncome)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.taxWithheld)).toBeInTheDocument();
+    expect(screen.queryByText(messages.Transactions.quantity)).toBeNull();
+    expect(screen.queryByText(messages.Transactions.netAmount)).toBeNull();
+  });
+
+  it("keeps Quantity/Price · unit/Amount/Net Amount labels for a buy", () => {
+    renderSheet();
+    expect(screen.getByText(messages.Transactions.quantity)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.priceUnit)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.amount)).toBeInTheDocument();
+    expect(screen.getByText(messages.Transactions.netAmount)).toBeInTheDocument();
   });
 });
