@@ -15,6 +15,9 @@ export interface UploadStepProps {
   error: string | null;
   reImportFile: File | null;
   onReImport: (file: File) => void;
+  /** Selects the title/hint copy below — see `UseImportFlowProps.entryMode`. Defaults to
+   *  the generic "file" copy (unchanged from before this prop existed). */
+  entryMode?: "screenshot" | "csv" | "file";
 }
 
 export function UploadStep({
@@ -27,8 +30,21 @@ export function UploadStep({
   error,
   reImportFile,
   onReImport,
+  entryMode = "file",
 }: UploadStepProps) {
   const t = useTranslations("Import");
+  const title =
+    entryMode === "screenshot"
+      ? t("dropzone.titleScreenshot")
+      : entryMode === "csv"
+        ? t("dropzone.titleCsv")
+        : t("dropzone.title");
+  const hint =
+    entryMode === "screenshot"
+      ? t("dropzone.hintScreenshot")
+      : entryMode === "csv"
+        ? t("dropzone.hintCsv")
+        : t("dropzone.hint");
 
   return (
     <div className="space-y-4">
@@ -50,8 +66,8 @@ export function UploadStep({
           <span className="font-medium text-primary">{t("dropzone.dropHere")}</span>
         ) : (
           <>
-            <span className="font-medium">{t("dropzone.title")}</span>
-            <span className="text-sm text-muted-foreground">{t("dropzone.hint")}</span>
+            <span className="font-medium">{title}</span>
+            <span className="text-sm text-muted-foreground">{hint}</span>
             <span className="mt-1 inline-flex items-center gap-2 text-sm text-primary">
               <Upload className="size-4" />
               {t("dropzone.cta")}

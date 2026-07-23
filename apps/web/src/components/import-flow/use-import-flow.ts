@@ -39,6 +39,9 @@ export interface UseImportFlowProps {
   initialFile?: File | null;
   onSubmit?: (task: ImportTask) => void;
   onClose?: () => void;
+  /** Selects the upload dropzone's title/hint copy (`UploadStep`) — purely presentational,
+   *  the parser itself stays file-type-driven. Defaults to the generic "file" copy. */
+  entryMode?: "screenshot" | "csv" | "file";
 }
 
 export interface UseImportFlowReturn {

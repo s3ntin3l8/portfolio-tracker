@@ -29,12 +29,16 @@ export function RecordCorporateActionForm({
   onSuccess,
   stickyFooter = false,
   isAdmin = false,
+  isDesktop = false,
 }: {
   client: RecordCorpActionClient;
   onSuccess?: () => void;
   /** See `AddTransactionForm` — sheet contexts only. */
   stickyFooter?: boolean;
   isAdmin?: boolean;
+  /** See `AddTransactionForm`'s `SubmitButton` — compact button, no border-t wrapper (the
+   *  desktop footer bar itself supplies that, alongside Cancel). */
+  isDesktop?: boolean;
 }) {
   const t = useTranslations("CorpAction");
   const tt = useTranslations("TxType");
@@ -306,20 +310,33 @@ export function RecordCorporateActionForm({
         )}
       </form>
       {useFooterPortal &&
-        createPortal(
-          <div className="border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button
-              type="submit"
-              form={formId}
-              disabled={busy}
-              className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
-            >
-              {busy && <Spinner size="sm" />}
-              {busy ? t("submitting") : t("submit")}
-            </Button>
-          </div>,
-          footerEl,
-        )}
+        (isDesktop
+          ? createPortal(
+              <Button
+                type="submit"
+                form={formId}
+                disabled={busy}
+                className="h-auto rounded-[13px] px-[26px] py-[13px] text-[14px] font-bold"
+              >
+                {busy && <Spinner size="sm" />}
+                {busy ? t("submitting") : t("submit")}
+              </Button>,
+              footerEl,
+            )
+          : createPortal(
+              <div className="border-t border-border bg-background px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                <Button
+                  type="submit"
+                  form={formId}
+                  disabled={busy}
+                  className="h-auto w-full rounded-[15px] py-[15px] text-[15px] font-bold"
+                >
+                  {busy && <Spinner size="sm" />}
+                  {busy ? t("submitting") : t("submit")}
+                </Button>
+              </div>,
+              footerEl,
+            ))}
     </>
   );
 }

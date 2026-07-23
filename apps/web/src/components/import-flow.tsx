@@ -103,6 +103,7 @@ export function ImportFlow(props: UseImportFlowProps = {}) {
           error={error}
           reImportFile={reImportFile}
           onReImport={(file) => handleFiles([file], true)}
+          entryMode={props.entryMode}
         />
       )}
 
