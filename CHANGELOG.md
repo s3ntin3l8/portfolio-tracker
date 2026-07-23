@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.5](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.4...v0.1.5) (2026-07-23)
+
+
+### Features
+
+* Add/Edit Transaction v2 — responsive modal + bucket switcher ([#583](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/583)) ([078ef07](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/078ef07d875d35a1dc3b55b8dc2dccb4959a2097))
+* Admin modal — intercepting [@modal](https://github.com/modal) route (Admin Settings v2) ([#608](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/608)) ([e9bfa2c](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/e9bfa2c2f9c54df74fcb5de32bf1aeb55dc84cfb))
+* Settings modal — intercepting [@modal](https://github.com/modal) route (ProfileSettings v2) ([#606](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/606)) ([b530335](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/b53033546e244c03c58431734429c77fbec2f3fa))
+* Transaction Detail v2 — desktop Dialog + label/subtitle fidelity ([#605](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/605)) ([1e6e9f5](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/1e6e9f53ae610f740baa462e4e65acbcade970b0))
+
 ## [0.1.4](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.3...v0.1.4) (2026-07-19)
 
 
