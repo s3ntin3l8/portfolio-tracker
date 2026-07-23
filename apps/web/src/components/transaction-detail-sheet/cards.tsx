@@ -5,7 +5,7 @@ import { cn, formatSignedMoney } from "@/lib/utils";
 import { BrokerageIcon } from "@/components/brokerage-icon";
 import { SOURCE_ICON } from "@/components/transactions-table";
 import { TAX_COMPONENT_LABELS } from "@/components/transaction-sources-section";
-import { SOURCE_PILL, DEFAULT_PILL } from "./constants";
+import { SOURCE_PILL, DEFAULT_PILL, INCOME_BREAKDOWN_TYPES } from "./constants";
 
 export function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -109,6 +109,7 @@ export function HeroAmount({
 }
 
 export function BreakdownCard({
+  type,
   qty,
   price,
   currency,
@@ -126,6 +127,9 @@ export function BreakdownCard({
   numFmt,
   locale,
 }: {
+  /** Drives the v2 design's type-specific labels — income (dividend/coupon) shows
+   *  Shares/Per share/Gross/Net income instead of Quantity/Price·unit/Amount/Net amount. */
+  type: string;
   qty: number;
   price: string;
   currency: string;
@@ -143,10 +147,12 @@ export function BreakdownCard({
   numFmt: Intl.NumberFormat;
   locale: string;
 }) {
+  const isIncome = (INCOME_BREAKDOWN_TYPES as readonly string[]).includes(type);
+
   return (
     <DetailCard>
       {(qty !== 0 || shares != null) && (
-        <DetailRow label={t("quantity")}>
+        <DetailRow label={isIncome ? t("shares") : t("quantity")}>
           {qty !== 0
             ? numFmt.format(qty)
             : sharesEstimated
@@ -155,7 +161,7 @@ export function BreakdownCard({
         </DetailRow>
       )}
       {(qty !== 0 || perShare != null) && (
-        <DetailRow label={t("price")}>
+        <DetailRow label={isIncome ? t("perShare") : t("priceUnit")}>
           {qty !== 0
             ? m(Number(price), currency)
             : sharesEstimated
@@ -168,12 +174,16 @@ export function BreakdownCard({
       {grossNative != null && nativeCurrency && (
         <DetailRow label={t("grossNative")}>{m(Number(grossNative), nativeCurrency)}</DetailRow>
       )}
-      <DetailRow label={t("amount")}>{m(amount, currency)}</DetailRow>
+      <DetailRow label={isIncome ? t("gross") : t("amount")}>{m(amount, currency)}</DetailRow>
       {Number(fees) !== 0 && <DetailRow label={t("fees")}>{m(Number(fees), currency)}</DetailRow>}
       {tax != null && Number(tax) !== 0 && (
-        <DetailRow label={t("tax")}>{m(Number(tax), currency)}</DetailRow>
+        <DetailRow label={t("taxWithheld")}>{m(Number(tax), currency)}</DetailRow>
       )}
-      <DetailRow label={t("netAmount")} strong color={netAmount > 0 ? "text-success" : undefined}>
+      <DetailRow
+        label={isIncome ? t("netIncome") : t("netAmount")}
+        strong
+        color={netAmount > 0 ? "text-success" : undefined}
+      >
         {formatSignedMoney(netAmount, currency, locale)}
       </DetailRow>
     </DetailCard>

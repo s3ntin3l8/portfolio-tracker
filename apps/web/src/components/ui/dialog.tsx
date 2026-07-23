@@ -36,9 +36,8 @@ function DialogContent({
   hideClose = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  /** Suppress the built-in top-right close button — for the desktop Add Transaction shell,
-   *  which renders its own close/back affordances in the nav rail / header (mirrors
-   *  `SheetContent`'s `hideClose`). */
+  /** Suppress the built-in top-right close button — for shells that render their own
+   *  close/back affordances in a custom header (mirrors `SheetContent`'s `hideClose`). */
   hideClose?: boolean;
 }) {
   return (
