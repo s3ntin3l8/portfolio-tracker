@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.6...v0.1.7) (2026-07-24)
+
+
+### Bug Fixes
+
+* **web:** disable Zod JIT to suppress CSP unsafe-eval violation ([463aac3](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/463aac3bd7ce47ddbd7aa6412445e07f420e9415))
+
 ## [0.1.6](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.5...v0.1.6) (2026-07-24)
 
 
