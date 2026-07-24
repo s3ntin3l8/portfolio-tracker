@@ -13,13 +13,16 @@ describe("SettingsModalShell", () => {
     back.mockClear();
   });
 
-  it("renders the title and children", () => {
+  it("renders the dialog (labelled by title) and children — no mobile title bar", () => {
+    // Design: mobile has no modal chrome at all (no title bar, no close X) — you leave via
+    // the bottom nav or a section's own back arrow (both rendered inside `children`).
+    // `title` still labels the dialog for a11y even though it's never shown as visible text.
     render(
       <SettingsModalShell title="Settings">
         <p>section content</p>
       </SettingsModalShell>,
     );
-    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
     expect(screen.getByText("section content")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
   });
@@ -30,7 +33,7 @@ describe("SettingsModalShell", () => {
         <p>section content</p>
       </SettingsModalShell>,
     );
-    // Two close buttons render (mobile header + desktop corner); either closes the same way.
+    // Only the desktop corner close button renders now — mobile has no close affordance.
     const [closeButton] = screen.getAllByRole("button", { name: "Close" });
     fireEvent.click(closeButton);
     expect(back).toHaveBeenCalledTimes(1);

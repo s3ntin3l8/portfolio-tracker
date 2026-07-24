@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ApiToken } from "@portfolio/api-client";
 import { ApiTokensManager, type ApiTokensClient } from "../src/components/api-tokens-manager";
 import messages from "../messages/en.json";
+
+const m = messages.Settings;
 
 const existing: ApiToken = {
   id: "tok-1",
@@ -23,6 +25,12 @@ function renderManager(client: ApiTokensClient, initialTokens: ApiToken[] = []) 
   );
 }
 
+/** Opens the create-token modal (design: "Create token" pill below the row list). */
+function openCreateModal() {
+  fireEvent.click(screen.getByRole("button", { name: m.tokensCreate }));
+  return within(screen.getByRole("dialog"));
+}
+
 beforeEach(() => {
   Object.assign(navigator, {
     clipboard: { writeText: vi.fn(async () => undefined) },
@@ -30,7 +38,16 @@ beforeEach(() => {
 });
 
 describe("ApiTokensManager", () => {
-  it("creates a token and shows the secret once", async () => {
+  it("renders each token as a card row with a scope pill — no data table", () => {
+    renderManager({ listApiTokens: vi.fn(), createApiToken: vi.fn(), deleteApiToken: vi.fn() }, [
+      existing,
+    ]);
+    expect(screen.getByText("old-cli")).toBeInTheDocument();
+    expect(screen.getByText(m.tokensScopeRead)).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("creates a token via the modal and shows the secret once", async () => {
     const created = { ...existing, id: "tok-2", name: "dev-cli", token: "pt_supersecret" };
     const client: ApiTokensClient = {
       listApiTokens: vi.fn(async () => [existing, { ...created, token: undefined } as never]),
@@ -39,15 +56,14 @@ describe("ApiTokensManager", () => {
     };
     renderManager(client, [existing]);
 
-    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
-      target: { value: "dev-cli" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    const dialog = openCreateModal();
+    expect(dialog.getByText(m.tokensCreateTitle)).toBeInTheDocument();
+    fireEvent.change(dialog.getByLabelText(m.tokensName), { target: { value: "dev-cli" } });
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCreate }));
 
     await waitFor(() => expect(screen.getByText("pt_supersecret")).toBeInTheDocument());
     expect(client.createApiToken).toHaveBeenCalledWith({ name: "dev-cli", scope: "read" });
-    // The one-time warning is shown.
-    expect(screen.getByText(messages.Settings.tokensCreatedWarning)).toBeInTheDocument();
+    expect(screen.getByText(m.tokensCreatedWarning)).toBeInTheDocument();
   });
 
   it("copies the secret and confirms via the Clipboard API", async () => {
@@ -60,16 +76,14 @@ describe("ApiTokensManager", () => {
     };
     renderManager(client);
 
-    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
-      target: { value: "c" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    const dialog = openCreateModal();
+    fireEvent.change(dialog.getByLabelText(m.tokensName), { target: { value: "c" } });
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCreate }));
     await screen.findByText("pt_copyme");
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCopy }));
+    fireEvent.click(screen.getByRole("button", { name: m.tokensCopy }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("pt_copyme"));
-    // Visual confirmation appears.
-    await screen.findByText(messages.Settings.tokensCopied);
+    await screen.findByText(m.tokensCopied);
   });
 
   it("falls back to execCommand when the Clipboard API is unavailable (insecure context)", async () => {
@@ -84,18 +98,17 @@ describe("ApiTokensManager", () => {
     };
     renderManager(client);
 
-    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
-      target: { value: "c" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    const dialog = openCreateModal();
+    fireEvent.change(dialog.getByLabelText(m.tokensName), { target: { value: "c" } });
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCreate }));
     await screen.findByText("pt_fallback");
 
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCopy }));
+    fireEvent.click(screen.getByRole("button", { name: m.tokensCopy }));
     await waitFor(() => expect(exec).toHaveBeenCalledWith("copy"));
-    await screen.findByText(messages.Settings.tokensCopied);
+    await screen.findByText(m.tokensCopied);
   });
 
-  it("passes an expiry when provided", async () => {
+  it("passes an expiry when an Expires chip is selected", async () => {
     const client: ApiTokensClient = {
       listApiTokens: vi.fn(async () => []),
       createApiToken: vi.fn(async () => ({ ...existing, token: "pt_x" })),
@@ -103,13 +116,10 @@ describe("ApiTokensManager", () => {
     };
     renderManager(client);
 
-    fireEvent.change(screen.getByLabelText(messages.Settings.tokensName), {
-      target: { value: "temp" },
-    });
-    fireEvent.change(screen.getByLabelText(messages.Settings.tokensExpiry), {
-      target: { value: "30" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensCreate }));
+    const dialog = openCreateModal();
+    fireEvent.change(dialog.getByLabelText(m.tokensName), { target: { value: "temp" } });
+    fireEvent.click(dialog.getByRole("radio", { name: m.tokensExpiry30 }));
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCreate }));
 
     await waitFor(() =>
       expect(client.createApiToken).toHaveBeenCalledWith({
@@ -118,6 +128,47 @@ describe("ApiTokensManager", () => {
         expiresInDays: 30,
       }),
     );
+  });
+
+  it("defaults to no-expiry note and switches on selecting a day chip", () => {
+    renderManager({ listApiTokens: vi.fn(), createApiToken: vi.fn(), deleteApiToken: vi.fn() });
+    const dialog = openCreateModal();
+    expect(dialog.getByText(m.tokensExpiryNoteNever)).toBeInTheDocument();
+
+    fireEvent.click(dialog.getByRole("radio", { name: m.tokensExpiry90 }));
+    expect(dialog.getByText("Stops working automatically after 90 days.")).toBeInTheDocument();
+  });
+
+  it("selects a Read & write scope chip", async () => {
+    const client: ApiTokensClient = {
+      listApiTokens: vi.fn(async () => []),
+      createApiToken: vi.fn(async () => ({ ...existing, token: "pt_w" })),
+      deleteApiToken: vi.fn(),
+    };
+    renderManager(client);
+
+    const dialog = openCreateModal();
+    fireEvent.change(dialog.getByLabelText(m.tokensName), { target: { value: "writer" } });
+    fireEvent.click(dialog.getByRole("radio", { name: m.tokensScopeWrite }));
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCreate }));
+
+    await waitFor(() =>
+      expect(client.createApiToken).toHaveBeenCalledWith({ name: "writer", scope: "write" }),
+    );
+  });
+
+  it("closes the modal via Cancel without creating a token", () => {
+    const client: ApiTokensClient = {
+      listApiTokens: vi.fn(),
+      createApiToken: vi.fn(),
+      deleteApiToken: vi.fn(),
+    };
+    renderManager(client);
+
+    const dialog = openCreateModal();
+    fireEvent.click(dialog.getByRole("button", { name: m.tokensCancel }));
+    expect(screen.queryByText(m.tokensCreateTitle)).not.toBeInTheDocument();
+    expect(client.createApiToken).not.toHaveBeenCalled();
   });
 
   it("revokes a token and removes it from the list", async () => {
@@ -129,35 +180,9 @@ describe("ApiTokensManager", () => {
     renderManager(client, [existing]);
 
     expect(screen.getByText("old-cli")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: messages.Settings.tokensRevoke }));
+    fireEvent.click(screen.getByRole("button", { name: m.tokensRevoke }));
 
     await waitFor(() => expect(client.deleteApiToken).toHaveBeenCalledWith("tok-1"));
     await waitFor(() => expect(screen.queryByText("old-cli")).not.toBeInTheDocument());
-  });
-
-  it("sorts tokens by Name on click", () => {
-    const old: ApiToken = { ...existing, name: "old-cli" };
-    const newer: ApiToken = { ...existing, id: "tok-2", name: "zeta-cli" };
-    renderManager(
-      {
-        listApiTokens: vi.fn(async () => [old, newer]),
-        createApiToken: vi.fn(),
-        deleteApiToken: vi.fn(),
-      },
-      [old, newer],
-    );
-    const nameBtn = screen.getByRole("button", { name: /Name/i });
-    fireEvent.click(nameBtn);
-    const dataRows = screen.getAllByRole("row").slice(1);
-    // Asc: old-cli first, zeta-cli second.
-    expect(dataRows[0]).toHaveTextContent("old-cli");
-    expect(dataRows[1]).toHaveTextContent("zeta-cli");
-    expect(nameBtn.closest("th")).toHaveAttribute("aria-sort", "ascending");
-    fireEvent.click(nameBtn);
-    const dataRowsDesc = screen.getAllByRole("row").slice(1);
-    // Desc: zeta-cli first, old-cli second.
-    expect(dataRowsDesc[0]).toHaveTextContent("zeta-cli");
-    expect(dataRowsDesc[1]).toHaveTextContent("old-cli");
-    expect(nameBtn.closest("th")).toHaveAttribute("aria-sort", "descending");
   });
 });

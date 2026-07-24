@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { ShieldCheck } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -66,7 +66,7 @@ export async function AccountSection({
       </div>
 
       <div className="flex items-center gap-2.5 rounded-xl bg-card px-4 py-3 text-xs text-muted-foreground shadow-card">
-        <ShieldCheck className="size-4 shrink-0" />
+        <Lock className="size-4 shrink-0" />
         <span>{t("authVia", { email: me?.email ?? "" })}</span>
       </div>
       <AppVersion
