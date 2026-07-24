@@ -19,9 +19,8 @@ describe("SettingsModalShell", () => {
         <p>section content</p>
       </SettingsModalShell>,
     );
-    expect(screen.getByText("Settings")).toBeInTheDocument();
-    expect(screen.getByText("section content")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByText("section content")).toBeInTheDocument();
   });
 
   it("calls router.back() when the close button is clicked", () => {

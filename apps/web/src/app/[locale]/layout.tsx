@@ -1,3 +1,7 @@
+// Must be first: sets Zod jitless=true before any schema module is loaded,
+// preventing the CSP unsafe-eval violation from Zod's new Function probe.
+import "@/lib/zod-config";
+
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { Plus_Jakarta_Sans, DM_Mono } from "next/font/google";
