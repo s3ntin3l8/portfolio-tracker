@@ -76,12 +76,13 @@ export async function DataConnectionsSection({
           {sources.map((s) => (
             <div key={s.key} className="flex items-center gap-3 px-4 py-3">
               {s.key === "import" ? (
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                  <FileInput className="size-[18px]" />
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <FileInput className="size-5" />
                 </span>
               ) : (
                 <BrokerageIcon
                   brokerage={s.key === "tr" ? "Trade Republic" : "Interactive Brokers"}
+                  className="size-10 rounded-xl"
                 />
               )}
               <div className="min-w-0 flex-1">
