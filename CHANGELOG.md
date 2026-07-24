@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.5...v0.1.6) (2026-07-24)
+
+
+### Features
+
+* add .crs/dock.json for mullion dev launcher ([#614](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/614)) ([367a616](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/367a616ece8b3382345644d50bda41959e0627f1))
+
+
+### Bug Fixes
+
+* **web:** dedupe concurrent Authentik refresh-token rotation ([#616](https://github.com/s3ntin3l8/pocket-portfolio-tracker/issues/616)) ([3b6a251](https://github.com/s3ntin3l8/pocket-portfolio-tracker/commit/3b6a2515861952de96635fd14407408827115970))
+
 ## [0.1.5](https://github.com/s3ntin3l8/pocket-portfolio-tracker/compare/v0.1.4...v0.1.5) (2026-07-23)
 
 
