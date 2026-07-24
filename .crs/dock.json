@@ -1,0 +1,10 @@
+{
+  "controls": [
+    {
+      "id": "dev",
+      "title": "Dev Server",
+      "command": "make dev",
+      "height": 20
+    }
+  ]
+}
