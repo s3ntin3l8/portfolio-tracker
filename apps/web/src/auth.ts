@@ -31,6 +31,103 @@ function tokenEndpoint(): Promise<string> {
   return tokenEndpointPromise;
 }
 
+interface RefreshResult {
+  accessToken?: string;
+  expiresAt?: number;
+  refreshToken?: string;
+  error?: "RefreshTransientError" | "RefreshAccessTokenError";
+}
+
+/** Actually rotate an access token via Authentik's token endpoint. Never throws — every
+ *  failure mode (network error, non-2xx response, unexpected exception) resolves to a
+ *  `RefreshResult` carrying the same error codes `jwt()` used to set inline. */
+async function rotateRefreshToken(refreshToken: string): Promise<RefreshResult> {
+  try {
+    let res: Response;
+    try {
+      res = await fetch(await tokenEndpoint(), {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          client_id: process.env.AUTHENTIK_CLIENT_ID ?? "",
+          client_secret: process.env.AUTHENTIK_CLIENT_SECRET ?? "",
+        }),
+      });
+    } catch (err) {
+      // Network offline / DNS / connection failure is transient
+      console.warn("[auth] refresh failed due to network error:", err);
+      return { error: "RefreshTransientError" };
+    }
+
+    const refreshed = (await res.json()) as {
+      access_token?: string;
+      expires_in?: number;
+      refresh_token?: string;
+      error?: string;
+    };
+    if (!res.ok || !refreshed.access_token) {
+      // No secrets — just the HTTP status and Authentik's error code so the dev
+      // log distinguishes a rotation failure (`invalid_grant`) from other causes.
+      console.warn(`[auth] refresh failed: ${res.status} ${refreshed.error ?? "unknown_error"}`);
+      return { error: res.status >= 500 ? "RefreshTransientError" : "RefreshAccessTokenError" };
+    }
+
+    return {
+      accessToken: refreshed.access_token,
+      expiresAt: Math.floor(Date.now() / 1000) + (refreshed.expires_in ?? 0),
+      // Authentik rotates refresh tokens — keep the new one when provided.
+      refreshToken: refreshed.refresh_token,
+    };
+  } catch (err) {
+    console.error("[auth] unexpected error during token refresh:", err);
+    return { error: "RefreshAccessTokenError" };
+  }
+}
+
+// Authentik's refresh tokens are single-use: rotating one invalidates it. Auth.js's
+// `jwt` callback can run concurrently for the same session — the 60s poll
+// (session-provider.tsx), a window-focus refetch, and every other open tab can all
+// observe the same stale token cookie at once and each try to rotate it. Without
+// dedup, the first request rotates successfully and the rest replay the now-dead
+// refresh token, which Authentik treats as reuse and revokes the *entire* token
+// family — surfacing as `RefreshAccessTokenError` and bouncing the user to a fresh
+// login (see #613's real root cause: this double-spend, not an RSC cookie-drop).
+// Keying by the pre-rotation refresh token and sharing one in-flight promise across
+// all concurrent callers fixes that: everyone converges on the same rotated tokens
+// instead of racing Authentik.
+const inflightRefreshes = new Map<string, Promise<RefreshResult>>();
+// Keep a successful result around briefly after it settles so a straggler request —
+// one that read the pre-rotation cookie just after the winning request already
+// started — still joins it instead of kicking off a second, now-doomed rotation.
+// Shorter than the 60s poll interval so it can't mask a *new* legitimate rotation.
+const SUCCESS_RETENTION_MS = 30_000;
+
+function rotateRefreshTokenOnce(refreshToken: string): Promise<RefreshResult> {
+  const existing = inflightRefreshes.get(refreshToken);
+  if (existing) return existing;
+
+  const promise = rotateRefreshToken(refreshToken).then((result) => {
+    // Evict immediately on failure so the next call can retry; on success, linger
+    // briefly so stragglers reuse the result instead of re-spending the dead token.
+    if (result.error) {
+      inflightRefreshes.delete(refreshToken);
+    } else {
+      setTimeout(() => {
+        // Only clear if this is still the entry we set — a defensive no-op guard,
+        // since the key (the old refresh token) is never reused once rotated.
+        if (inflightRefreshes.get(refreshToken) === promise) {
+          inflightRefreshes.delete(refreshToken);
+        }
+      }, SUCCESS_RETENTION_MS);
+    }
+    return result;
+  });
+  inflightRefreshes.set(refreshToken, promise);
+  return promise;
+}
+
 export const authConfig: NextAuthConfig = {
   // Self-hosted behind a reverse proxy (Proxmox / same origin as Authentik): trust
   // the forwarded host so Auth.js derives the right callback origin and cookie
@@ -88,56 +185,19 @@ export const authConfig: NextAuthConfig = {
         return token;
       }
 
-      // Expired: rotate the access token using the refresh token.
-      try {
-        let res: Response;
-        try {
-          res = await fetch(await tokenEndpoint(), {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: refreshToken,
-              client_id: process.env.AUTHENTIK_CLIENT_ID ?? "",
-              client_secret: process.env.AUTHENTIK_CLIENT_SECRET ?? "",
-            }),
-          });
-        } catch (err) {
-          // Network offline / DNS / connection failure is transient
-          console.warn("[auth] refresh failed due to network error:", err);
-          token.error = "RefreshTransientError";
-          return token;
-        }
-
-        const refreshed = (await res.json()) as {
-          access_token?: string;
-          expires_in?: number;
-          refresh_token?: string;
-          error?: string;
-        };
-        if (!res.ok || !refreshed.access_token) {
-          // No secrets — just the HTTP status and Authentik's error code so the dev
-          // log distinguishes a rotation failure (`invalid_grant`) from other causes.
-          console.warn(
-            `[auth] refresh failed: ${res.status} ${refreshed.error ?? "unknown_error"}`,
-          );
-          if (res.status >= 500) {
-            token.error = "RefreshTransientError";
-          } else {
-            token.error = "RefreshAccessTokenError";
-          }
-          return token;
-        }
-
-        token.accessToken = refreshed.access_token;
-        token.expiresAt = Math.floor(Date.now() / 1000) + (refreshed.expires_in ?? 0);
-        // Authentik rotates refresh tokens — keep the new one when provided.
-        if (refreshed.refresh_token) token.refreshToken = refreshed.refresh_token;
-        delete token.error;
-      } catch (err) {
-        console.error("[auth] unexpected error during token refresh:", err);
-        token.error = "RefreshAccessTokenError";
+      // Expired: rotate the access token using the refresh token. Single-flighted (see
+      // rotateRefreshTokenOnce) so concurrent callers sharing this same refresh token
+      // — the 60s poll, a focus refetch, another tab — converge on one rotation instead
+      // of each spending the single-use refresh token themselves.
+      const result = await rotateRefreshTokenOnce(refreshToken);
+      if (result.error) {
+        token.error = result.error;
+        return token;
       }
+      token.accessToken = result.accessToken;
+      token.expiresAt = result.expiresAt;
+      if (result.refreshToken) token.refreshToken = result.refreshToken;
+      delete token.error;
       return token;
     },
     session({ session, token }) {
