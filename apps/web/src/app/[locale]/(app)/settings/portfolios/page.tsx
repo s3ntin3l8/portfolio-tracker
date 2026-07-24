@@ -2,13 +2,13 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Briefcase, Plus } from "lucide-react";
 import { SectionHeader } from "@/components/section-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { PortfolioFormDialog } from "@/components/portfolio-form-dialog";
-import { PortfolioCardMenu } from "@/components/portfolio-card-menu";
-import { PortfolioCardLink } from "@/components/portfolio-card-link";
+import { Button } from "@/components/ui/button";
+import { PortfolioCardLink, PortfolioCardChevron } from "@/components/portfolio-card-link";
+import { PortfolioSyncWatcher } from "@/components/portfolio-sync-watcher";
 import { AccountHoldersManager } from "@/components/account-holders-manager";
 import { BrokerageIcon } from "@/components/brokerage-icon";
+import { Link } from "@/i18n/navigation";
 import {
   loadAccountHolders,
   loadPortfolios,
@@ -87,8 +87,19 @@ export default async function SettingsPortfoliosPage({
                   key={portfolio.id}
                   className="relative flex flex-col rounded-[18px] border-border shadow-card transition-colors hover:bg-accent/50"
                 >
-                  {/* Overlay button — sets the pf cookie and navigates to /holdings */}
+                  {/* Overlay link — the whole card opens the inline edit page (design:
+                      chevron affordance, no `⋯` menu). */}
                   <PortfolioCardLink portfolioId={portfolio.id} name={portfolio.name} />
+                  {/* Headless — keeps the SYNCING…/CONNECTED badge below auto-updating; the
+                      manual "Sync now" trigger now lives on the edit page instead. */}
+                  <PortfolioSyncWatcher
+                    trSync={
+                      isTrConnected ? { initialSyncing: connection?.syncing ?? false } : undefined
+                    }
+                    ibkrSync={
+                      isIbkrConnected ? { initialSyncing: ibkrConn?.syncing ?? false } : undefined
+                    }
+                  />
                   <CardContent className="flex flex-1 flex-col p-[17px]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -102,22 +113,7 @@ export default async function SettingsPortfoliosPage({
                           )}
                         </div>
                       </div>
-                      {/* Interactive controls — z-20 to sit above the overlay link */}
-                      <div className="relative z-20 flex shrink-0 items-center gap-1">
-                        <PortfolioCardMenu
-                          portfolio={portfolio}
-                          trSync={
-                            isTrConnected
-                              ? { initialSyncing: connection?.syncing ?? false }
-                              : undefined
-                          }
-                          ibkrSync={
-                            isIbkrConnected
-                              ? { initialSyncing: ibkrConn?.syncing ?? false }
-                              : undefined
-                          }
-                        />
-                      </div>
+                      <PortfolioCardChevron />
                     </div>
                     {statusLabel && (
                       <div className="mt-2.5">
@@ -167,21 +163,16 @@ export default async function SettingsPortfoliosPage({
               );
             })}
 
-            <PortfolioFormDialog
-              mode="create"
-              trigger={
-                <button
-                  type="button"
-                  className="flex min-h-[170px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-[1.5px] border-dashed border-border p-[18px] text-center text-muted-foreground transition-colors hover:bg-accent/40"
-                >
-                  <span className="flex size-[42px] items-center justify-center rounded-[13px] bg-success/15 text-success">
-                    <Plus className="size-[22px]" />
-                  </span>
-                  <span className="text-sm font-bold text-foreground">{tf("new")}</span>
-                  <span className="text-xs text-muted-foreground">{t("newPortfolioHint")}</span>
-                </button>
-              }
-            />
+            <Link
+              href="/settings/portfolios/new"
+              className="flex min-h-[170px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-[1.5px] border-dashed border-border p-[18px] text-center text-muted-foreground transition-colors hover:bg-accent/40"
+            >
+              <span className="flex size-[42px] items-center justify-center rounded-[13px] bg-success/15 text-success">
+                <Plus className="size-[22px]" />
+              </span>
+              <span className="text-sm font-bold text-foreground">{tf("new")}</span>
+              <span className="text-xs text-muted-foreground">{t("newPortfolioHint")}</span>
+            </Link>
           </div>
         ) : (
           <EmptyState
@@ -189,15 +180,12 @@ export default async function SettingsPortfoliosPage({
             title={te("noPortfolioTitle")}
             description={te("noPortfolioBody")}
             action={
-              <PortfolioFormDialog
-                mode="create"
-                trigger={
-                  <Button>
-                    <Plus className="size-4" />
-                    {tf("new")}
-                  </Button>
-                }
-              />
+              <Button asChild>
+                <Link href="/settings/portfolios/new">
+                  <Plus className="size-4" />
+                  {tf("new")}
+                </Link>
+              </Button>
             }
           />
         )}

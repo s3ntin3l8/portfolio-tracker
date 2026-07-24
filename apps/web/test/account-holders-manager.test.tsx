@@ -1,19 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { AccountHolder } from "@portfolio/api-client";
 import messages from "../messages/en.json";
-
-const refresh = vi.fn();
-const createAccountHolder = vi.fn(async () => ({}) as never);
-const updateAccountHolder = vi.fn(async () => ({}) as never);
-const deleteAccountHolder = vi.fn(async () => undefined);
-
-vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("@/lib/api", () => ({
-  useApiClient: () => ({ createAccountHolder, updateAccountHolder, deleteAccountHolder }),
-}));
-
 import { AccountHoldersManager } from "../src/components/account-holders-manager";
 
 const m = messages.AccountHolders;
@@ -41,13 +30,6 @@ const emma: AccountHolder = {
 };
 
 describe("AccountHoldersManager", () => {
-  beforeEach(() => {
-    refresh.mockClear();
-    createAccountHolder.mockClear();
-    updateAccountHolder.mockClear();
-    deleteAccountHolder.mockClear();
-  });
-
   it("shows the empty state when there are no holders", () => {
     renderManager();
     expect(screen.getByText(m.empty)).toBeInTheDocument();
@@ -59,83 +41,26 @@ describe("AccountHoldersManager", () => {
     expect(screen.getByText(`${mf.holderTypeChild} · 2017`)).toBeInTheDocument();
   });
 
-  it("creates a new child holder with a birth year", async () => {
-    renderManager();
-    fireEvent.click(screen.getByRole("button", { name: m.add }));
-
-    fireEvent.change(screen.getByLabelText(mf.holderName), { target: { value: "Luca" } });
-    fireEvent.click(screen.getByRole("radio", { name: mf.holderTypeChild }));
-    fireEvent.change(screen.getByLabelText(mf.birthYear), { target: { value: "2019" } });
-    // The dialog's submit button is the only one labelled with the add text.
-    fireEvent.click(screen.getAllByRole("button", { name: m.add }).at(-1)!);
-
-    await waitFor(() =>
-      expect(createAccountHolder).toHaveBeenCalledWith({
-        name: "Luca",
-        type: "child",
-        birthYear: 2019,
-        taxAllowanceAnnual: null,
-        capitalGainsTaxRate: null,
-        churchTax: false,
-        taxResidence: null,
-      }),
+  // Design (ProfileSettings.dc.html): each holder row is a `›`-chevron link to the inline
+  // "Edit account holder" page — no `⋯` menu, no in-place dialog.
+  it("links each holder row to its inline edit page", () => {
+    renderManager([emma]);
+    expect(screen.getByRole("link", { name: /Emma/ })).toHaveAttribute(
+      "href",
+      "/settings/portfolios/holder/h1",
     );
-    expect(refresh).toHaveBeenCalled();
   });
 
-  it("edits a holder via the ⋯ menu", async () => {
-    renderManager([emma]);
-    // Radix opens its menu on keyboard/pointer, not a synthetic click.
-    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
-    fireEvent.click(screen.getByRole("menuitem", { name: m.edit }));
-
-    // The edit form opens prefilled; change the name and save.
-    fireEvent.change(screen.getByLabelText(mf.holderName), { target: { value: "Emma R." } });
-    fireEvent.click(screen.getByRole("button", { name: mf.save }));
-
-    await waitFor(() =>
-      expect(updateAccountHolder).toHaveBeenCalledWith(
-        "h1",
-        expect.objectContaining({ name: "Emma R." }),
-      ),
-    );
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  it("removes a holder from the edit modal after the two-step confirm", async () => {
-    renderManager([emma]);
-    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
-    fireEvent.click(screen.getByRole("menuitem", { name: m.edit }));
-
-    // The edit sheet carries its own "Delete holder" action (mirrors the portfolio sheet).
-    fireEvent.click(screen.getByRole("button", { name: m.delete }));
-    expect(deleteAccountHolder).not.toHaveBeenCalled();
-    expect(screen.getByText(m.deleteWarning)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: m.confirmDelete }));
-    await waitFor(() => expect(deleteAccountHolder).toHaveBeenCalledWith("h1"));
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  it("deletes a holder only after confirming in the modal", async () => {
-    renderManager([emma]);
-    fireEvent.keyDown(screen.getByRole("button", { name: "More options" }), { key: "Enter" });
-    fireEvent.click(screen.getByRole("menuitem", { name: m.delete }));
-
-    // The confirm modal is shown; nothing is deleted until the user confirms.
-    expect(deleteAccountHolder).not.toHaveBeenCalled();
-    expect(screen.getByText(m.deleteWarning)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: m.confirmDelete }));
-    await waitFor(() => expect(deleteAccountHolder).toHaveBeenCalledWith("h1"));
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  // Regression test for #472: the submit button is sticky-pinned in the sheet context
-  it("wraps the submit button in a sticky footer in the dialog form", () => {
+  it('links "Add holder" to the inline create page', () => {
     renderManager();
-    fireEvent.click(screen.getByRole("button", { name: m.add }));
-    const submitBtn = screen.getAllByRole("button", { name: m.add }).at(-1)!;
-    expect(submitBtn.closest(".sticky")).not.toBeNull();
+    expect(screen.getByRole("link", { name: m.add })).toHaveAttribute(
+      "href",
+      "/settings/portfolios/holder/new",
+    );
+  });
+
+  it("renders no overflow menu or dialog trigger on a holder row", () => {
+    renderManager([emma]);
+    expect(screen.queryByRole("button", { name: "More options" })).not.toBeInTheDocument();
   });
 });

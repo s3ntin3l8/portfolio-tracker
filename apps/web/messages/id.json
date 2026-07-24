@@ -571,6 +571,7 @@
     "delete": "Hapus pemilik",
     "deleteWarning": "Portofolio yang memakai pemilik ini akan menjadi tidak terhubung.",
     "confirmDelete": "Hapus",
+    "detailsSection": "Detail",
     "taxProfileSection": "Profil pajak (DE)",
     "taxResidence": "Domisili pajak",
     "taxAllowance": "Batas bebas pajak tahunan (Sparerpauschbetrag)",
